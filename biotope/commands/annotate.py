@@ -367,12 +367,23 @@ def interactive(file_path: str | None = None, prefill_metadata: str | None = Non
     # Initialize metadata with pre-filled values if provided
     dynamic_metadata = json.loads(prefill_metadata) if prefill_metadata else {}
 
+    # Load project-level metadata for pre-filling if we're in a biotope project
+    biotope_root = find_biotope_root()
+    if biotope_root:
+        from biotope.utils import load_project_metadata
+        project_metadata = load_project_metadata(biotope_root)
+        
+        # Merge project metadata with any provided prefill metadata
+        # Project metadata takes precedence for common fields
+        for key, value in project_metadata.items():
+            if key not in dynamic_metadata:
+                dynamic_metadata[key] = value
+
     # Merge with standard context and structure
     metadata = merge_metadata(dynamic_metadata)
 
     # Handle staged files
     if staged:
-        biotope_root = find_biotope_root()
         if not biotope_root:
             click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
             raise click.Abort
@@ -404,6 +415,14 @@ def interactive(file_path: str | None = None, prefill_metadata: str | None = Non
                 ]
             }
             
+            # Merge with project metadata
+            if biotope_root:
+                from biotope.utils import load_project_metadata
+                project_metadata = load_project_metadata(biotope_root)
+                for key, value in project_metadata.items():
+                    if key not in file_metadata:
+                        file_metadata[key] = value
+            
             # Run interactive annotation for this file
             _run_interactive_annotation(console, file_path, file_metadata, biotope_root)
         
@@ -411,7 +430,6 @@ def interactive(file_path: str | None = None, prefill_metadata: str | None = Non
 
     # Handle incomplete files
     if incomplete:
-        biotope_root = find_biotope_root()
         if not biotope_root:
             click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
             raise click.Abort
@@ -454,6 +472,14 @@ def interactive(file_path: str | None = None, prefill_metadata: str | None = Non
                 "distribution": existing_metadata.get("distribution", [])
             }
             
+            # Merge with project metadata for missing fields
+            if biotope_root:
+                from biotope.utils import load_project_metadata
+                project_metadata = load_project_metadata(biotope_root)
+                for key, value in project_metadata.items():
+                    if key not in file_info and key not in existing_metadata:
+                        file_info[key] = value
+            
             # Run interactive annotation for this file (updating existing)
             _run_interactive_annotation(console, metadata_file, file_info, biotope_root, update_existing=True)
         
@@ -473,6 +499,29 @@ def interactive(file_path: str | None = None, prefill_metadata: str | None = Non
 
     console.print(Markdown("This wizard will help you document your scientific dataset with standardized metadata."))
     console.print()
+
+    # Show project metadata info if available
+    if biotope_root:
+        from biotope.utils import load_project_metadata
+        project_metadata = load_project_metadata(biotope_root)
+        if project_metadata:
+            console.print("[bold green]Project Metadata Available[/]")
+            console.print("─" * 50)
+            console.print("The following project-level metadata will be used as defaults:")
+            
+            table = Table(show_header=False)
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+            
+            for key, value in project_metadata.items():
+                if key == "creator" and isinstance(value, dict):
+                    display_value = value.get("name", str(value))
+                else:
+                    display_value = str(value)
+                table.add_row(key, display_value)
+            
+            console.print(table)
+            console.print()
 
     # Section: Basic Information
     console.print("[bold green]Basic Dataset Information[/]")

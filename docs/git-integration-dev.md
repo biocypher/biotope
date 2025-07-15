@@ -12,6 +12,7 @@ Biotope implements a **Git-on-Top** strategy where all version control operation
 2. **No Custom Version Control**: Zero custom commit history, branching, or remote handling
 3. **Separation of Concerns**: Data files in `data/`, metadata in `.biotope/datasets/`
 4. **Croissant ML Integration**: Metadata follows Croissant ML standard with validation
+5. **Project Metadata Management**: Project-level metadata stored in `.biotope/config/biotope.yaml` for annotation pre-fill
 
 ### Project Structure
 
@@ -20,7 +21,8 @@ your-project/
 ├── .git/                  # Git repository (handled by Git)
 ├── .biotope/              # Git-tracked metadata
 │   ├── datasets/          # Croissant ML JSON-LD files
-│   ├── config/            # Biotope configuration
+│   ├── config/            # Biotope configuration (Git-like approach)
+│   │   └── biotope.yaml   # Consolidated configuration and project metadata
 │   ├── workflows/         # Bioinformatics workflows
 │   └── logs/              # Command execution logs
 ├── data/                  # Data files (not in Git)
@@ -43,11 +45,93 @@ def _init_git_repo(directory: Path) -> None:
     subprocess.run(["git", "init"], cwd=directory, check=True)
     subprocess.run(["git", "add", "."], cwd=directory, check=True)
     subprocess.run(["git", "commit", "-m", "Initial biotope project setup"], cwd=directory, check=True)
+
+def _collect_project_metadata() -> Dict:
+    """Collect project-level metadata for annotation pre-fill."""
+    metadata = {}
+    if click.confirm("Would you like to collect project-level metadata for annotation pre-fill?"):
+        metadata["description"] = click.prompt("Project description")
+        metadata["url"] = click.prompt("Project URL")
+        metadata["creator"] = {
+            "name": click.prompt("Creator name"),
+            "email": click.prompt("Creator email")
+        }
+        metadata["license"] = click.prompt("License")
+        metadata["citation"] = click.prompt("Citation")
+    return metadata
+
+def _create_biotope_config(biotope_root: Path, config: Dict) -> None:
+    """Create biotope configuration file with project metadata."""
+    config_dir = biotope_root / ".biotope" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    
+    config_data = {
+        "project_name": config.get("project_name"),
+        "git_integration": config.get("git_integration", True),
+        "knowledge_graph": config.get("knowledge_graph", {}),
+        "project_metadata": config.get("project_metadata", {}),
+        "annotation_validation": config.get("annotation_validation", {})
+    }
+    
+    with open(config_dir / "biotope.yaml", "w") as f:
+        yaml.dump(config_data, f, default_flow_style=False)
 ```
 
 - Creates `.biotope/` directory structure
 - Initializes Git repository with `subprocess.run(["git", "init"])`
+- Collects project-level metadata for annotation pre-fill
 - Creates initial commit with project setup
+- Conditionally shows output format selection only when knowledge graph is enabled
+
+#### `biotope config` (`biotope/commands/config.py`)
+
+```python
+def set_project_metadata() -> None:
+    """Set project-level metadata for annotation pre-fill."""
+    biotope_root = find_biotope_root()
+    if not biotope_root:
+        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
+        raise click.Abort
+    
+    config = load_biotope_config(biotope_root)
+    project_metadata = config.get("project_metadata", {})
+    
+    # Interactive metadata collection
+    project_metadata["description"] = click.prompt("Project description", default=project_metadata.get("description", ""))
+    project_metadata["url"] = click.prompt("Project URL", default=project_metadata.get("url", ""))
+    project_metadata["creator"] = {
+        "name": click.prompt("Creator name", default=project_metadata.get("creator", {}).get("name", "")),
+        "email": click.prompt("Creator email", default=project_metadata.get("creator", {}).get("email", ""))
+    }
+    project_metadata["license"] = click.prompt("License", default=project_metadata.get("license", ""))
+    project_metadata["citation"] = click.prompt("Citation", default=project_metadata.get("citation", ""))
+    
+    # Update configuration
+    config["project_metadata"] = project_metadata
+    save_biotope_config(biotope_root, config)
+
+def show_project_metadata() -> None:
+    """Display current project-level metadata configuration."""
+    biotope_root = find_biotope_root()
+    if not biotope_root:
+        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
+        raise click.Abort
+    
+    config = load_biotope_config(biotope_root)
+    project_metadata = config.get("project_metadata", {})
+    
+    console = Console()
+    console.print("\n[bold blue]Project Metadata Configuration[/]")
+    console.print(f"Description: {project_metadata.get('description', 'Not set')}")
+    console.print(f"URL: {project_metadata.get('url', 'Not set')}")
+    console.print(f"Creator: {project_metadata.get('creator', {}).get('name', 'Not set')} ({project_metadata.get('creator', {}).get('email', 'Not set')})")
+    console.print(f"License: {project_metadata.get('license', 'Not set')}")
+    console.print(f"Citation: {project_metadata.get('citation', 'Not set')}")
+```
+
+- Manages project-level metadata for annotation pre-fill
+- Provides interactive metadata collection and display
+- Stores metadata in `.biotope/config/biotope.yaml`
 
 #### `biotope commit` (`biotope/commands/commit.py`)
 
@@ -156,6 +240,139 @@ def _get_recorded_checksum(file_path: Path, biotope_root: Path) -> Optional[str]
 - Reads checksums from Croissant ML metadata files
 - Validates data integrity against recorded checksums
 - No version control functionality
+
+## Project Metadata Integration
+
+### Configuration Management
+
+Project metadata is managed through a centralized configuration system:
+
+```python
+def load_biotope_config(biotope_root: Path) -> Dict:
+    """Load biotope configuration with project metadata."""
+    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    if not config_path.exists():
+        return {}
+    
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, IOError):
+        return {}
+    
+    return config
+
+def save_biotope_config(biotope_root: Path, config: Dict) -> None:
+    """Save biotope configuration with project metadata."""
+    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(config_path, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
+```
+
+### Annotation Pre-fill Integration
+
+The annotation system integrates project metadata for pre-filling:
+
+```python
+def load_project_metadata(biotope_root: Path) -> Dict:
+    """Load project-level metadata from biotope configuration for pre-filling annotations."""
+    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    if not config_path.exists():
+        return {}
+    
+    try:
+        import yaml
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, IOError):
+        return {}
+    
+    # Extract project metadata from configuration
+    project_metadata = config.get("project_metadata", {})
+    
+    # Convert to Croissant format for pre-filling
+    croissant_metadata = {}
+    
+    if project_metadata.get("description"):
+        croissant_metadata["description"] = project_metadata["description"]
+    if project_metadata.get("url"):
+        croissant_metadata["url"] = project_metadata["url"]
+    if project_metadata.get("creator"):
+        croissant_metadata["creator"] = project_metadata["creator"]
+    if project_metadata.get("license"):
+        croissant_metadata["license"] = project_metadata["license"]
+    if project_metadata.get("citation"):
+        croissant_metadata["citation"] = project_metadata["citation"]
+    
+    return croissant_metadata
+```
+
+### Configuration File Structure
+
+The `.biotope/config/biotope.yaml` file structure (Git-like approach):
+
+```yaml
+version: "1.0"
+croissant_schema_version: "1.0"
+default_metadata_template: "scientific"
+data_storage:
+  type: "local"
+  path: "data"
+checksum_algorithm: "sha256"
+auto_stage: true
+commit_message_template: "Update metadata: {description}"
+
+# Project information (consolidated internal metadata)
+project_info:
+  name: "my-project"
+  created_at: "2024-01-01T00:00:00Z"
+  biotope_version: "0.1.0"
+  last_modified: "2024-01-01T00:00:00Z"
+  builds: []
+  knowledge_sources: []
+
+# Project-level metadata for annotation pre-fill
+project_metadata:
+  description: "Project description"
+  url: "https://example.com/project"
+  creator:
+    name: "John Doe"
+    email: "john@example.com"
+  license: "MIT"
+  citation: "Doe, J. (2024). Project Title. Journal Name."
+
+# Validation configuration
+annotation_validation:
+  enabled: true
+  minimum_required_fields:
+    - "name"
+    - "description"
+    - "creator"
+    - "dateCreated"
+    - "distribution"
+  field_validation:
+    name:
+      type: "string"
+      min_length: 1
+    description:
+      type: "string"
+      min_length: 10
+    creator:
+      type: "object"
+      required_keys: ["name"]
+    dateCreated:
+      type: "string"
+      format: "date"
+    distribution:
+      type: "array"
+      min_length: 1
+  remote_config:
+    url: "https://cluster.example.com/validation.yaml"
+    cache_duration: 3600
+    fallback: true
+```
 
 ## Git Integration Patterns
 

@@ -39,10 +39,11 @@ def init(dir: Path) -> None:  # noqa: A002
 
     # Knowledge sources
     knowledge_sources = []
-    if click.confirm("Would you like to add knowledge sources now?", default=True):
+    use_knowledge_graph = click.confirm("Would you like to install a knowledge graph now?", default=False)
+    if use_knowledge_graph:
         while True:
             source = click.prompt(
-                "\nEnter knowledge source (or press enter to finish)",
+                "\nEnter knowledge source or press enter to finish.",
                 type=str,
                 default="",
                 show_default=False,
@@ -56,28 +57,135 @@ def init(dir: Path) -> None:  # noqa: A002
             )
             knowledge_sources.append({"name": source, "type": source_type})
 
-    # Output preferences
-    output_format = click.prompt(
-        "\nPreferred output format",
-        type=click.Choice(["neo4j", "csv", "json"], case_sensitive=False),
-        default="neo4j",
-    )
+    # Output preferences - only ask if knowledge graph is being used
+    output_format = "neo4j"  # Default
+    if use_knowledge_graph:
+        output_format = click.prompt(
+            "\nPreferred output format",
+            type=click.Choice(["neo4j", "csv", "json"], case_sensitive=False),
+            default="neo4j",
+        )
 
     # LLM integration
-    use_llm = click.confirm("\nWould you like to set up LLM integration?", default=True)
+    use_llm = click.confirm("\nWould you like to set up LLM integration?", default=False)
     if use_llm:
         llm_provider = click.prompt(
             "Which LLM provider would you like to use?",
-            type=click.Choice(["openai", "anthropic", "local"], case_sensitive=False),
+            type=click.Choice(["google", "openai", "anthropic", "local"], case_sensitive=False),
             default="openai",
         )
 
-        if llm_provider in ["openai", "anthropic"]:
+        if llm_provider in ["google", "openai", "anthropic"]:
             api_key = click.prompt(
                 f"Please enter your {llm_provider} API key",
                 type=str,
                 hide_input=True,
             )
+
+    # Project-level metadata collection for pre-filling annotations
+    click.echo("\n[bold blue]Project Metadata Setup[/]")
+    click.echo("The following information will be used to pre-fill metadata forms when creating dataset annotations.")
+    click.echo("You can skip any fields and provide them later during annotation.")
+    
+    collect_project_metadata = click.confirm(
+        "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
+        default=True,
+    )
+    
+    project_metadata = {}
+    if collect_project_metadata:
+        click.echo("\n[bold green]Project Information[/]")
+        click.echo("─" * 50)
+        
+        # Project description
+        project_description = click.prompt(
+            "Project description (what is this project about?)",
+            default="",
+            show_default=False,
+        )
+        if project_description:
+            project_metadata["description"] = project_description
+        
+        # Project URL
+        project_url = click.prompt(
+            "Project URL (if available)",
+            default="",
+            show_default=False,
+        )
+        if project_url:
+            project_metadata["url"] = project_url
+        
+        # Creator/Contact
+        creator = click.prompt(
+            "Primary contact person (email preferred)",
+            default="",
+            show_default=False,
+        )
+        if creator:
+            project_metadata["creator"] = creator
+        
+        # License
+        license_url = click.prompt(
+            "Default license URL",
+            default="https://creativecommons.org/licenses/by/4.0/",
+            show_default=True,
+        )
+        if license_url:
+            project_metadata["license"] = license_url
+        
+        # Citation template
+        citation_template = click.prompt(
+            "Citation template (use {name} and {year} as placeholders)",
+            default="Please cite this dataset as: {name} ({year})",
+            show_default=True,
+        )
+        if citation_template:
+            project_metadata["citation"] = citation_template
+        
+        # Access restrictions
+        has_access_restrictions = click.confirm(
+            "Does this project have default access restrictions?",
+            default=False,
+        )
+        if has_access_restrictions:
+            access_restrictions = click.prompt(
+                "Default access restrictions description",
+                default="",
+                show_default=False,
+            )
+            if access_restrictions:
+                project_metadata["access_restrictions"] = access_restrictions
+        
+        # Legal obligations
+        has_legal_obligations = click.confirm(
+            "Does this project have default legal obligations?",
+            default=False,
+        )
+        if has_legal_obligations:
+            legal_obligations = click.prompt(
+                "Default legal obligations description",
+                default="",
+                show_default=False,
+            )
+            if legal_obligations:
+                project_metadata["legal_obligations"] = legal_obligations
+        
+        # Collaboration partner
+        has_collaboration_partner = click.confirm(
+            "Does this project have a collaboration partner?",
+            default=False,
+        )
+        if has_collaboration_partner:
+            collaboration_partner = click.prompt(
+                "Collaboration partner and institute",
+                default="",
+                show_default=False,
+            )
+            if collaboration_partner:
+                project_metadata["collaboration_partner"] = collaboration_partner
+        
+        # Store project name for consistency
+        project_metadata["project_name"] = project_name
 
     # Create user configuration
     user_config = {
@@ -107,7 +215,7 @@ def init(dir: Path) -> None:  # noqa: A002
     # Create project structure
     try:
         dir.mkdir(parents=True, exist_ok=True)
-        create_project_structure(dir, user_config, metadata)
+        create_project_structure(dir, user_config, metadata, project_metadata)
         
         # Initialize Git if not already initialized
         if not is_git_repo(dir):
@@ -121,23 +229,29 @@ def init(dir: Path) -> None:  # noqa: A002
         )
         click.echo("\nNext steps:")
         click.echo("1. Review the configuration in config/biotope.yaml")
-        click.echo("2. Add your knowledge sources")
+        if use_knowledge_graph:
+            click.echo("2. Add your knowledge sources")
         click.echo("3. Run 'biotope add <file>' to stage data files")
         click.echo("4. Run 'biotope annotate interactive --staged' to create metadata")
         click.echo("5. Run 'biotope commit -m \"message\"' to save changes")
+        
+        if collect_project_metadata and project_metadata:
+            click.echo("\n💡 Project metadata has been saved and will be used to pre-fill annotation forms.")
+            click.echo("   You can update it later with 'biotope config set-project-metadata'")
     except (OSError, yaml.YAMLError) as e:
         click.echo(f"\n❌ Error initializing project: {e!s}", err=True)
         raise click.Abort from e
 
 
-def create_project_structure(directory: Path, config: dict, metadata: dict) -> None:
+def create_project_structure(directory: Path, config: dict, metadata: dict, project_metadata: dict = None) -> None:
     """
     Create the project directory structure and configuration files.
 
     Args:
         directory: Project directory path
         config: User-facing configuration dictionary
-        metadata: Internal metadata dictionary
+        metadata: Internal metadata dictionary (now consolidated into biotope config)
+        project_metadata: Project-level metadata for pre-filling annotations
 
     """
     # Create directory structure - git-on-top layout
@@ -158,16 +272,12 @@ def create_project_structure(directory: Path, config: dict, metadata: dict) -> N
     for d in dirs:
         (directory / d).mkdir(parents=True, exist_ok=True)
 
-    # Create files
+    # Create user-facing config file
     (directory / "config" / "biotope.yaml").write_text(
         yaml.dump(config, default_flow_style=False),
     )
 
-    (directory / ".biotope" / "metadata.yaml").write_text(
-        yaml.dump(metadata, default_flow_style=False),
-    )
-
-    # Create initial biotope config
+    # Create consolidated biotope config (Git-like approach)
     biotope_config = {
         "version": "1.0",
         "croissant_schema_version": "1.0",
@@ -195,8 +305,21 @@ def create_project_structure(directory: Path, config: dict, metadata: dict) -> N
                 "dateCreated": {"type": "string", "format": "date"},
                 "distribution": {"type": "array", "min_length": 1}
             }
+        },
+        # Consolidate internal metadata into config (Git-like approach)
+        "project_info": {
+            "name": metadata.get("project_name"),
+            "created_at": metadata.get("created_at"),
+            "biotope_version": metadata.get("biotope_version"),
+            "last_modified": metadata.get("last_modified"),
+            "builds": metadata.get("builds", []),
+            "knowledge_sources": metadata.get("knowledge_sources", [])
         }
     }
+    
+    # Add project metadata if provided
+    if project_metadata:
+        biotope_config["project_metadata"] = project_metadata
     
     (directory / ".biotope" / "config" / "biotope.yaml").write_text(
         yaml.dump(biotope_config, default_flow_style=False),
@@ -220,7 +343,7 @@ A BioCypher knowledge graph project managed with biotope.
 - `.biotope/`: Biotope project management (Git-tracked)
   - `datasets/`: Croissant ML metadata files
   - `workflows/`: Bioinformatics workflow definitions
-  - `config/`: Biotope configuration
+  - `config/`: Biotope configuration (Git-like approach)
   - `logs/`: Command execution history
 
 ## Git Integration
@@ -247,9 +370,6 @@ You can also use standard Git commands:
 - `git diff .biotope/` - See metadata changes
 """
     (directory / "README.md").write_text(readme_content)
-
-
-
 
 
 def _init_git_repo(directory: Path) -> None:

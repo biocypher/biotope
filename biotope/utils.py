@@ -44,3 +44,55 @@ def is_git_repo(directory: Path) -> bool:
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False 
+
+
+def load_project_metadata(biotope_root: Path) -> dict:
+    """Load project-level metadata from biotope configuration for pre-filling annotations."""
+    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    if not config_path.exists():
+        return {}
+    
+    try:
+        import yaml
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, IOError):
+        return {}
+    
+    # Extract project metadata from configuration
+    project_metadata = config.get("project_metadata", {})
+    
+    # Convert to Croissant format for pre-filling
+    croissant_metadata = {}
+    
+    if project_metadata.get("description"):
+        croissant_metadata["description"] = project_metadata["description"]
+    
+    if project_metadata.get("url"):
+        croissant_metadata["url"] = project_metadata["url"]
+    
+    if project_metadata.get("creator"):
+        croissant_metadata["creator"] = {
+            "@type": "Person",
+            "name": project_metadata["creator"]
+        }
+    
+    if project_metadata.get("license"):
+        croissant_metadata["license"] = project_metadata["license"]
+    
+    if project_metadata.get("citation"):
+        croissant_metadata["citation"] = project_metadata["citation"]
+    
+    if project_metadata.get("project_name"):
+        croissant_metadata["cr:projectName"] = project_metadata["project_name"]
+    
+    if project_metadata.get("access_restrictions"):
+        croissant_metadata["cr:accessRestrictions"] = project_metadata["access_restrictions"]
+    
+    if project_metadata.get("legal_obligations"):
+        croissant_metadata["cr:legalObligations"] = project_metadata["legal_obligations"]
+    
+    if project_metadata.get("collaboration_partner"):
+        croissant_metadata["cr:collaborationPartner"] = project_metadata["collaboration_partner"]
+    
+    return croissant_metadata 

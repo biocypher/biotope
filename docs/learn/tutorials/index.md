@@ -11,35 +11,44 @@ Biotope supports multiple workflows for managing your data and metadata:
 
 ```mermaid
 graph LR
+    subgraph "biotope init workflow"
+        direction TB
+        A[Start] --> B[Initialize Project]
+        B --> C[Set Project Metadata]
+        C --> D[Configure Validation]
+    end
+    
     subgraph "biotope add/get workflow"
         direction TB
-        A[Start] --> B[Add or Download Files]
-        B --> C[Calculate SHA256 Hash]
-        C --> D[Create Basic Metadata]
-        D --> E[Stage in Git]
+        E[Add or Download Files] --> F[Calculate SHA256 Hash]
+        F --> G[Create Basic Metadata]
+        G --> H[Stage in Git]
         
         subgraph "Enhanced Metadata"
             direction TB
-            E --> F[Interactive Annotation]
-            F --> G[Complete Metadata]
+            H --> I[Interactive Annotation]
+            I --> J[Pre-filled with Project Metadata]
+            J --> K[Complete Metadata]
         end
         
-        G --> H[Commit Changes]
-        H --> I[Share with Team]
+        K --> L[Commit Changes]
+        L --> M[Share with Team]
     end
 ```
 
 ### Workflow Description
 
-The `biotope add` and `biotope get` commands are the foundation of Git-integrated metadata management:
+The enhanced biotope workflow now includes project-level metadata management:
 
-1. **Add or Download Files**: Add local files with `biotope add` or download remote files with `biotope get`
-2. **Calculate SHA256 Hash**: Generate checksums for data integrity
-3. **Create Basic Metadata**: Automatically generate initial Croissant ML metadata
-4. **Stage in Git**: Prepare metadata changes for version control
-5. **Enhanced Metadata**: Use `biotope annotate` to add detailed metadata
-6. **Commit Changes**: Save metadata changes with Git
-7. **Share with Team**: Use standard Git workflows for collaboration
+1. **Initialize Project**: Use `biotope init` to set up your project with optional project metadata
+2. **Set Project Metadata**: Configure project-level metadata (description, URL, creator, license, citation) for annotation pre-filling
+3. **Add or Download Files**: Add local files with `biotope add` or download remote files with `biotope get`
+4. **Calculate SHA256 Hash**: Generate checksums for data integrity
+5. **Create Basic Metadata**: Automatically generate initial Croissant ML metadata
+6. **Stage in Git**: Prepare metadata changes for version control
+7. **Enhanced Metadata**: Use `biotope annotate` to add detailed metadata with project metadata pre-fill
+8. **Commit Changes**: Save metadata changes with Git
+9. **Share with Team**: Use standard Git workflows for collaboration
 
 ## Getting Started
 
@@ -48,9 +57,16 @@ The `biotope add` and `biotope get` commands are the foundation of Git-integrate
 To get started with local files, use the Git-integrated workflow:
 
 ```bash
+# Initialize project with project metadata
 biotope init
+
+# Add local data files
 biotope add data/raw/experiment.csv
+
+# Annotate with project metadata pre-fill
 biotope annotate interactive --staged
+
+# Commit changes
 biotope commit -m "Add experiment dataset"
 ```
 
@@ -59,10 +75,35 @@ biotope commit -m "Add experiment dataset"
 To get started with downloaded files, use the download workflow:
 
 ```bash
+# Initialize project (if not already done)
+biotope init
+
+# Download and stage files
 biotope get https://example.com/data/file.csv
+
+# Check status
 biotope status
+
+# Annotate with project metadata pre-fill
 biotope annotate interactive --staged
+
+# Commit changes
 biotope commit -m "Add downloaded dataset"
+```
+
+### Project Metadata Management
+
+Set up project-level metadata for consistent annotation:
+
+```bash
+# Set project metadata during init or later
+biotope config set-project-metadata
+
+# View current project metadata
+biotope config show-project-metadata
+
+# Use in annotation (automatically pre-filled)
+biotope annotate interactive --staged
 ```
 
 ## Tutorials
@@ -71,4 +112,4 @@ For detailed information about each workflow, please refer to the specific tutor
 
 - **[Adding Files](add-files.md)**: Learn how to add local files to your biotope project
 - **[Downloading Files](get-files.md)**: Learn how to download and annotate files from URLs
-- **[Annotating Data](annotate-omics.md)**: Learn how to create detailed metadata for your data
+- **[Annotating Data](annotate-omics.md)**: Learn how to create detailed metadata for your data with project metadata pre-fill

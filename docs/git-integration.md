@@ -43,11 +43,29 @@ your-project/
 ## Commands You'll Use
 
 ### `biotope init`
-Sets up your project and optionally initializes Git.
+Sets up your project and optionally initializes Git. Now includes project-level metadata collection for annotation pre-filling.
 
 ```bash
 biotope init
 # Follow the prompts to configure your project
+# - Project name
+# - Git integration
+# - Knowledge graph (optional)
+# - Project metadata (optional, for annotation pre-fill)
+```
+
+### `biotope config`
+Manage project configuration and metadata settings.
+
+```bash
+# Set project-level metadata for annotation pre-fill
+biotope config set-project-metadata
+
+# View current project metadata
+biotope config show-project-metadata
+
+# Configure validation requirements
+biotope config show-validation
 ```
 
 ### `biotope add`
@@ -125,13 +143,31 @@ biotope push
 
 ## Common Workflows
 
+### Setting Up a New Project
+
+```bash
+# 1. Initialize project with project metadata
+biotope init
+# Enter project name, enable Git, set project metadata
+
+# 2. Add your data files
+biotope add data/raw/experiment.csv
+
+# 3. Create metadata (pre-filled with project metadata)
+biotope annotate interactive --staged
+
+# 4. Commit and share
+biotope commit -m "Add experiment dataset"
+biotope push
+```
+
 ### Adding New Data
 
 ```bash
 # 1. Add your data files
 biotope add data/raw/new-experiment.csv
 
-# 2. Create metadata
+# 2. Create metadata (with project metadata pre-fill)
 biotope annotate interactive --staged
 
 # 3. Commit and share
@@ -165,6 +201,20 @@ biotope annotate interactive --incomplete
 biotope commit -m "Complete metadata for all tracked datasets"
 ```
 
+### Managing Project Metadata
+
+```bash
+# 1. Set or update project metadata
+biotope config set-project-metadata
+# Enter: description, URL, creator, license, citation
+
+# 2. View current project metadata
+biotope config show-project-metadata
+
+# 3. Use in annotation (automatically pre-filled)
+biotope annotate interactive --staged
+```
+
 ### Working with Your Team
 
 ```bash
@@ -180,7 +230,34 @@ biotope commit -m "Add my experiment dataset"
 biotope push
 ```
 
+## Project Metadata Benefits
+
+Setting up project-level metadata provides several benefits:
+
+1. **Faster Annotation**: Forms are pre-filled with project information
+2. **Consistency**: All datasets use the same project metadata
+3. **Team Coordination**: Everyone uses consistent project details
+4. **Reduced Errors**: Less manual entry means fewer typos
+
+### Example Project Metadata
+
+```yaml
+project_metadata:
+  description: "Comprehensive protein structure analysis dataset"
+  url: "https://github.com/team/protein-project"
+  creator:
+    name: "Dr. Jane Smith"
+    email: "jane.smith@university.edu"
+  license: "MIT"
+  citation: "Smith, J. et al. (2024). Protein Structure Dataset. Nature Data."
+```
+
 ## Best Practices
+
+### Project Setup
+- Set project metadata during initialization or early in the project
+- Use consistent project metadata across all team members
+- Update project metadata when project details change
 
 ### Commit Messages
 Write clear, descriptive commit messages:
@@ -211,6 +288,7 @@ data/
 - Run `biotope check-data` regularly to ensure data integrity
 - Use `biotope status` before committing to see what's changing
 - Keep metadata and data in sync
+- Review project metadata periodically with `biotope config show-project-metadata`
 
 ## Troubleshooting
 

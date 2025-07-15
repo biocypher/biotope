@@ -24,6 +24,7 @@ are prototypes for new features. See more information in the API documentation.
 - `biotope view`: Use visual analysis tools to interpret your data and metadata
 - `biotope get`: Download files from a URL and stage them for annotation and version control
 - `biotope annotate`: Annotate your data with consistent metadata in Croissant ML
+- `biotope config`: Manage project configuration and metadata settings
 
 ## Git Integration for Metadata Version Control
 
@@ -47,7 +48,7 @@ Biotope uses a **Git-on-Top** strategy for metadata version control, providing:
 ### Basic Workflow
 
 ```bash
-# Initialize project (with Git)
+# Initialize project (with Git and optional project metadata)
 biotope init
 
 # Add local data files
@@ -59,7 +60,7 @@ biotope get https://example.com/data/experiment.csv
 # Check status
 biotope status
 
-# Create metadata for staged files
+# Create metadata for staged files (with project metadata pre-fill)
 biotope annotate interactive --staged
 
 # Or complete incomplete annotations
@@ -71,6 +72,18 @@ biotope commit -m "Add experiment dataset"
 # View history
 biotope log --oneline
 ```
+
+### Project-Level Metadata
+
+Biotope supports project-level metadata collection during initialization that can be used to pre-fill annotation fields:
+
+- **Description**: Project description and purpose
+- **URL**: Project homepage or repository
+- **Creator**: Project maintainer information
+- **License**: Data usage license
+- **Citation**: How to cite the project
+
+This metadata is stored in `.biotope/config/biotope.yaml` and automatically pre-fills fields when using `biotope annotate interactive`.
 
 ### Documentation
 
@@ -100,6 +113,8 @@ biotope commit -m "Add new dataset from URL"
 ```
 
 This will download the file, stage it for annotation, and fit into the same workflow as local files.
+
+**Project Metadata Pre-fill**: If you've set up project-level metadata during `biotope init`, the annotation form will be pre-filled with this information, making the annotation process faster and more consistent.
 
 After creation, `biotope` can also be used to validate the JSON-LD (CAVE: being
 a prototype, biotope does not yet implement all croissant fields):
