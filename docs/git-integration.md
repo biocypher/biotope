@@ -28,17 +28,28 @@ biotope push
 
 ## How It Works
 
-Biotope stores your metadata in a `.biotope/` folder that Git tracks automatically. Your data files stay in the `data/` folder (not in Git), but biotope keeps track of them through metadata.
+Biotope stores your metadata in a `.biotope/` folder that Git tracks automatically. Your data files stay in the `data/` folder, which is excluded from Git tracking via `.gitignore`. Biotope keeps track of your data files through metadata and checksums.
 
 ```
 your-project/
 ├── .biotope/              # Your metadata (tracked by Git)
-│   └── datasets/          # Metadata files
-├── data/                  # Your data files (not in Git)
+│   └── datasets/          # Metadata files with file references
+├── data/                  # Your data files (excluded from Git)
 │   ├── raw/
 │   └── processed/
+├── .gitignore             # Excludes data/ from Git tracking
 └── .git/                  # Git repository
 ```
+
+### Why Data Files Aren't in Git
+
+Data files are intentionally excluded from Git tracking because:
+
+- **Size**: Scientific data files are often large and would bloat the repository
+- **Metadata Tracking**: Biotope tracks files through metadata in `.biotope/datasets/`
+- **Data Integrity**: SHA256 checksums ensure files haven't been corrupted
+- **Collaboration**: Teams can share metadata without sharing large data files
+- **Flexibility**: Different team members can have different data file locations
 
 ## Commands You'll Use
 
@@ -139,6 +150,46 @@ git log -- .biotope/             # View metadata history
 # Collaboration
 git remote add origin https://github.com/team/project.git
 biotope push
+```
+
+## Understanding .gitignore
+
+Biotope automatically creates a `.gitignore` file that excludes the `data/` directory from Git tracking. This means:
+
+### What's Excluded
+- `data/` - All data files and subdirectories
+- `downloads/` - Downloaded files
+- `tmp/` - Temporary files
+- Common development files (Python cache, IDE files, etc.)
+
+### What's Tracked
+- `.biotope/` - All metadata and configuration
+- `config/` - User configuration files
+- `schemas/` - Knowledge graph schema definitions
+- `outputs/` - Generated outputs (if small enough)
+
+### Benefits
+- **Clean Git Status**: `git status` won't show data files as untracked
+- **Focused Commits**: Only metadata changes appear in Git history
+- **Small Repositories**: Git repositories stay small and fast
+- **Team Collaboration**: Share metadata without sharing large data files
+
+### Working with Data Files
+
+Even though data files aren't in Git, biotope still tracks them:
+
+```bash
+# Add a data file (creates metadata, doesn't add to Git)
+biotope add data/raw/experiment.csv
+
+# Check what's tracked (shows metadata, not data files)
+biotope status
+
+# Verify data integrity
+biotope check-data
+
+# See all tracked files
+git ls-files .biotope/
 ```
 
 ## Common Workflows
@@ -318,6 +369,49 @@ git remote add origin https://github.com/username/repo.git
 # Check for corrupted files
 biotope check-data
 # Re-download or regenerate corrupted files
+```
+
+### Data files showing as untracked in Git
+If you see data files in `git status` as untracked:
+
+```bash
+# Check if .gitignore exists and includes data/
+cat .gitignore
+
+# If .gitignore is missing, create it:
+echo "data/" >> .gitignore
+echo "downloads/" >> .gitignore
+echo "tmp/" >> .gitignore
+
+# Or re-run biotope init to create a proper .gitignore
+```
+
+### Want to track some data files in Git
+If you need to track specific data files in Git (e.g., small configuration files):
+
+```bash
+# Force add specific files (overrides .gitignore)
+git add -f data/config/small_config.csv
+
+# Or modify .gitignore to be more specific
+# Instead of "data/", use:
+# data/*.csv
+# data/*.txt
+# !data/config/
+```
+
+### Moving data files
+When you move data files, update the metadata:
+
+```bash
+# Move the file
+mv data/raw/old_location.csv data/raw/new_location.csv
+
+# Re-add the file in its new location
+biotope add data/raw/new_location.csv --force
+
+# Commit the metadata change
+biotope commit -m "Move data file to new location"
 ```
 
 ## What's Different from Git?

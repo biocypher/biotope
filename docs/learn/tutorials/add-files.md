@@ -79,6 +79,8 @@ This tells you:
 - Their checksums for data integrity
 - What to do next in your workflow
 
+**Important**: The data file itself is not added to Git - only the metadata is tracked. The `data/` directory is excluded from Git via `.gitignore` to keep repositories small and focused on metadata.
+
 ## Working with Different Path Types
 
 ### Relative Paths (Recommended)
@@ -221,6 +223,50 @@ Later, you can verify your files haven't been corrupted:
 
 ```bash
 biotope check-data
+```
+
+## Git and Data Files
+
+### Understanding the Separation
+
+Biotope separates data files from Git tracking:
+
+- **Data files**: Stored in `data/` directory, excluded from Git via `.gitignore`
+- **Metadata**: Stored in `.biotope/datasets/`, tracked by Git
+- **Checksums**: Embedded in metadata to ensure data integrity
+
+### Benefits of This Approach
+
+```bash
+# Clean Git status (no data files cluttering output)
+git status
+
+# Only metadata changes appear in history
+git log --oneline
+
+# Small repository size (no large data files)
+du -sh .git
+
+# Easy collaboration (share metadata, not data)
+git push origin main
+```
+
+### Working with Data Files
+
+Even though data files aren't in Git, biotope still tracks them:
+
+```bash
+# Add a file (creates metadata, doesn't add to Git)
+biotope add data/raw/experiment.csv
+
+# Check what's tracked (metadata only)
+biotope status
+
+# Verify data integrity
+biotope check-data
+
+# See all tracked metadata files
+git ls-files .biotope/
 ```
 
 ## Best Practices

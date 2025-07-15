@@ -240,6 +240,38 @@ class TestInitWithGit:
         for dir_path in old_dirs:
             assert not (tmp_path / dir_path).exists()
 
+    def test_init_creates_gitignore(self, runner, tmp_path):
+        """Test that .gitignore file is created with correct content."""
+        result = runner.invoke(
+            init,
+            ["--dir", str(tmp_path)],
+            input="test-project\nn\nneo4j\nn\ny\n",
+            obj={"version": "0.1.0"},
+        )
+        
+        assert result.exit_code == 0
+        
+        # Check that .gitignore exists
+        gitignore_file = tmp_path / ".gitignore"
+        assert gitignore_file.exists()
+        
+        # Check that it contains the expected content
+        gitignore_content = gitignore_file.read_text()
+        
+        # Should exclude data directory
+        assert "data/" in gitignore_content
+        assert "downloads/" in gitignore_content
+        assert "tmp/" in gitignore_content
+        
+        # Should exclude common development files
+        assert "__pycache__/" in gitignore_content
+        assert ".DS_Store" in gitignore_content
+        assert ".vscode/" in gitignore_content
+        
+        # Should have explanatory comments
+        assert "# Biotope data files (not tracked in Git)" in gitignore_content
+        assert "# Data files are tracked through metadata in .biotope/datasets/" in gitignore_content
+
     def test_init_git_workflow_instructions(self, runner, tmp_path):
         """Test that Git workflow instructions are included."""
         result = runner.invoke(

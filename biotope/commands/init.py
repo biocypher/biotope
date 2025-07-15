@@ -325,6 +325,76 @@ def create_project_structure(directory: Path, config: dict, metadata: dict, proj
         yaml.dump(biotope_config, default_flow_style=False),
     )
 
+    # Create .gitignore file to exclude data files and other common files
+    gitignore_content = """# Biotope data files (not tracked in Git)
+# Data files are tracked through metadata in .biotope/datasets/
+data/
+downloads/
+tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+"""
+    (directory / ".gitignore").write_text(gitignore_content)
+
     # Note: No custom refs needed - Git handles all version control
 
     # Create README
@@ -335,7 +405,7 @@ A BioCypher knowledge graph project managed with biotope.
 ## Project Structure
 
 - `config/`: User configuration files
-- `data/`: Data files
+- `data/`: Data files (not tracked in Git)
   - `raw/`: Raw input data
   - `processed/`: Processed data
 - `schemas/`: Knowledge schema definitions
@@ -352,6 +422,11 @@ This project uses Git for metadata version control. The `.biotope/` directory is
 - Version control your metadata changes
 - Collaborate with others on metadata
 - Use standard Git tools and workflows
+
+**Note**: Data files in the `data/` directory are intentionally excluded from Git tracking via `.gitignore`. This is because:
+- Data files are often large and would bloat the repository
+- Data files are tracked through metadata in `.biotope/datasets/`
+- Checksums ensure data integrity without storing the actual files
 
 ## Getting Started
 

@@ -23,6 +23,8 @@ This will:
 
 **Note:** The annotation process is now a separate, explicit step. After downloading, you should run `biotope annotate --staged` to create or complete the metadata, and then commit your changes.
 
+**Important:** The downloaded data file is excluded from Git tracking via `.gitignore`. Only the metadata is version controlled, keeping repositories small and focused.
+
 ## Command Options
 
 The `get` command supports the following options:

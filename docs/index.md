@@ -48,16 +48,16 @@ Biotope uses a **Git-on-Top** strategy for metadata version control, providing:
 ### Basic Workflow
 
 ```bash
-# Initialize project (with Git and optional project metadata)
+# Initialize project (with Git, .gitignore, and optional project metadata)
 biotope init
 
-# Add local data files
+# Add local data files (creates metadata, excludes from Git)
 biotope add data/raw/experiment.csv
 
 # Or download and stage remote files
 biotope get https://example.com/data/experiment.csv
 
-# Check status
+# Check status (shows metadata changes, not data files)
 biotope status
 
 # Create metadata for staged files (with project metadata pre-fill)
@@ -66,12 +66,14 @@ biotope annotate interactive --staged
 # Or complete incomplete annotations
 biotope annotate interactive --incomplete
 
-# Commit changes
+# Commit changes (metadata only, data files excluded via .gitignore)
 biotope commit -m "Add experiment dataset"
 
 # View history
 biotope log --oneline
 ```
+
+**Note**: Data files are automatically excluded from Git tracking via `.gitignore`. Only metadata is version controlled, keeping repositories small and focused.
 
 ### Project-Level Metadata
 
