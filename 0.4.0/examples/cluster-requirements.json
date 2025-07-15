@@ -1,0 +1,38 @@
+{
+  "cluster_name": "Example HPC Cluster",
+  "description": "Requirements for biotope projects on this cluster",
+  "required_pattern": "cluster-strict",
+  "required_fields": [
+    "name",
+    "description", 
+    "creator",
+    "dateCreated",
+    "distribution",
+    "license",
+    "project_id"
+  ],
+  "require_remote_validation": true,
+  "field_validation": {
+    "project_id": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}-[0-9]{4}$",
+      "description": "Must be in format XX-YYYY (e.g., AB-2024)"
+    },
+    "license": {
+      "type": "string",
+      "min_length": 5,
+      "description": "Must specify a valid license"
+    }
+  },
+  "storage_requirements": {
+    "require_retention_policy": true,
+    "max_retention_days": 2555,
+    "require_backup_location": true
+  },
+  "compliance_notes": [
+    "All projects must use cluster-specific validation",
+    "Project IDs must follow institutional format",
+    "Data retention policies must be specified",
+    "Remote validation must be configured"
+  ]
+} 
