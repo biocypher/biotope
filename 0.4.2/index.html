@@ -948,23 +948,26 @@
 <p>Biotope is still under development and the API is subject to change.
 The package is currently only meant for developer use and prototyping.</p>
 </div>
-<p>The <em>Biotope</em> CLI integration is our attempt to integrate BioCypher ecosystem
+<p>The <em>Biotope</em> CLI integration is our attempt to integrate our open source ecosystem
 packages into an accessible suite for scientific knowledge management. We are
 first approaching the project from a CLI perspective, as this is the most basic
 technology for prototyping automated workflows. We aim to extend this towards
 other user-interfaces, such as web apps, in the future.</p>
 <p><em>Biotope</em> contains various modules for different tasks, some of which are
-straightfoward applications of existing BioCypher packages, while others
+straightfoward applications of existing ecosystem packages, while others
 are prototypes for new features. See more information in the API documentation.</p>
 <ul>
-<li><code>biotope init</code>: Initialize a new project in the BioCypher suite</li>
-<li><code>biotope build</code>: Build a BioCypher knowledge representation</li>
-<li><code>biotope chat</code>: Chat with a BioCypher project (BioChatter)</li>
-<li><code>biotope read</code>: Extract information from unstructured modalities (BioGather)</li>
-<li><code>biotope view</code>: Use visual analysis tools to interpret your data and metadata</li>
+<li><code>biotope init</code>: Initialize a new project</li>
+<li><code>biotope status/add/commit/log/push/pull</code>: Manage metadata in a git-like fashion</li>
 <li><code>biotope get</code>: Download files from a URL and stage them for annotation and version control</li>
 <li><code>biotope annotate</code>: Annotate your data with consistent metadata in Croissant ML</li>
+<li><code>biotope check-data</code>: Perform consistency checks for file integrity</li>
 <li><code>biotope config</code>: Manage project configuration and metadata settings</li>
+<li><code>biotope build</code>: Build a <a href="https://biocypher.org">BioCypher</a> knowledge representation</li>
+<li><code>biotope chat</code>: Chat with a project using <a href="https://biochatter.org">BioChatter</a></li>
+<li><code>biotope agent</code>: Plan agentic workflows using <a href="https://biochatter.org">BioChatter</a></li>
+<li><code>biotope read</code>: Extract information from unstructured modalities (BioGather)</li>
+<li><code>biotope view</code>: Use visual analysis tools to interpret your data and metadata</li>
 </ul>
 <h2 id="git-integration-for-metadata-version-control">Git Integration for Metadata Version Control<a class="headerlink" href="#git-integration-for-metadata-version-control" title="Permanent link">&para;</a></h2>
 <p>Biotope uses a <strong>Git-on-Top</strong> strategy for metadata version control, providing:</p>
