@@ -90,7 +90,7 @@ def check_all_files(biotope_root: Path) -> List[Dict]:
     # Check files in datasets
     datasets_dir = biotope_root / ".biotope" / "datasets"
     if datasets_dir.exists():
-        for dataset_file in datasets_dir.glob("*.jsonld"):
+        for dataset_file in datasets_dir.rglob("*.jsonld"):
             try:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
@@ -118,7 +118,7 @@ def _get_recorded_checksum(file_path: Path, biotope_root: Path) -> Optional[str]
     # Check datasets directory
     datasets_dir = biotope_root / ".biotope" / "datasets"
     if datasets_dir.exists():
-        for dataset_file in datasets_dir.glob("*.jsonld"):
+        for dataset_file in datasets_dir.rglob("*.jsonld"):
             try:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
