@@ -20,7 +20,7 @@ def test_init_basic():
     with runner.isolated_filesystem():
         result = runner.invoke(
             init,
-            input="test-project\nn\nn\n",
+            input="test-project\nn\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
         assert result.exit_code == 0
@@ -63,7 +63,7 @@ def test_init_with_project_metadata():
             "n\n"  # no collaboration partner
             "y\n"  # yes to Git
         )
-        
+
         result = runner.invoke(
             init,
             input=input_data,
@@ -96,7 +96,7 @@ def test_init_without_project_metadata():
             "n\n"  # no to project metadata
             "y\n"  # yes to Git
         )
-        
+
         result = runner.invoke(
             init,
             input=input_data,
@@ -127,7 +127,7 @@ def test_init_with_knowledge_graph():
             "n\n"  # no to project metadata
             "y\n"  # yes to Git
         )
-        
+
         result = runner.invoke(
             init,
             input=input_data,
@@ -151,7 +151,7 @@ def test_init_with_llm():
         # Configure with OpenAI
         result = runner.invoke(
             init,
-            input="test-project\nn\nneo4j\ny\nopenai\nsk-test123\n",
+            input="test-project\ny\n\nneo4j\ny\nopenai\nsk-test123\nn\ny\n",
             obj={"version": "0.1.0"},
         )
         assert result.exit_code == 0
@@ -182,7 +182,7 @@ def test_init_custom_directory():
         result = runner.invoke(
             init,
             ["--dir", "custom_dir"],
-            input="test-project\nn\nneo4j\nn\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
         assert result.exit_code == 0
@@ -196,7 +196,7 @@ def test_init_metadata():
     with runner.isolated_filesystem():
         result = runner.invoke(
             init,
-            input="test-project\nn\nneo4j\nn\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
         assert result.exit_code == 0
