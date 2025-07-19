@@ -202,8 +202,9 @@ def test_add_file_absolute_path(git_repo, sample_file):
     result = _add_file(target_file, git_repo, datasets_dir, False)
     assert result is True
     
-    # Check that metadata file was created
-    metadata_file = datasets_dir / f"{target_file.stem}.jsonld"
+    # Check that metadata file was created with directory structure
+    relative_path = target_file.relative_to(git_repo)
+    metadata_file = datasets_dir / relative_path.with_suffix('.jsonld')
     assert metadata_file.exists()
     
     # Check metadata content
@@ -242,8 +243,8 @@ def test_add_file_relative_path(git_repo):
         result = _add_file(relative_path, git_repo, datasets_dir, False)
         assert result is True
         
-        # Check that metadata file was created
-        metadata_file = datasets_dir / f"{relative_path.stem}.jsonld"
+        # Check that metadata file was created with directory structure
+        metadata_file = datasets_dir / relative_path.with_suffix('.jsonld')
         assert metadata_file.exists()
         
         # Check metadata content

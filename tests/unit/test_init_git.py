@@ -43,12 +43,16 @@ class TestInitWithGit:
         with patch("subprocess.run", side_effect=mock_subprocess_run) as mock_run:
             # Test is_git_repo function
             from biotope.utils import is_git_repo
-            assert not is_git_repo(tmp_path)  # Should return False when git rev-parse fails
-            
+
+            assert not is_git_repo(
+                tmp_path
+            )  # Should return False when git rev-parse fails
+
             # Test _init_git_repo function
             from biotope.commands.init import _init_git_repo
+
             _init_git_repo(tmp_path)
-            
+
             # Check that git commands were called
             called_commands = [call[0][0][:2] for call in mock_run.call_args_list]
             assert ["git", "init"] in called_commands
@@ -56,26 +60,28 @@ class TestInitWithGit:
             assert ["git", "commit"] in called_commands
 
     def test_init_without_git_auto_init(self, runner, tmp_path):
-        """Test init without automatic Git initialization."""
+        """Test init without automatic Git initialization (should abort)."""
         with patch("click.confirm", return_value=False):
             result = runner.invoke(
                 init,
                 ["--dir", str(tmp_path)],
-                input="test-project\nn\nneo4j\nn\ny\n",
+                input="test-project\ny\n\nneo4j\nn\nn\ny\n",
                 obj={"version": "0.1.0"},
             )
-            
-            assert result.exit_code == 0
-            assert "Biotope established successfully!" in result.output
-            assert "Git repository initialized" not in result.output
-            
-            # Check that Git was not initialized
-            assert not (tmp_path / ".git").exists()
+
+            assert result.exit_code != 0  # Should abort when Git is declined
+            assert "Git is necessary to use biotope" in result.output
+            assert "Biotope established successfully!" not in result.output
+
+            # Check that biotope project was not created
+            assert not (tmp_path / ".biotope").exists()
 
     def test_init_existing_git_repo(self, runner, tmp_path):
         """Test init in existing Git repository (env-independent)."""
+
         def mock_subprocess_run(args, **kwargs):
             from subprocess import CalledProcessError
+
             mock_result = Mock()
             mock_result.returncode = 0
             if args[:3] == ["git", "rev-parse", "--git-dir"]:
@@ -88,7 +94,7 @@ class TestInitWithGit:
             result = runner.invoke(
                 init,
                 ["--dir", str(tmp_path)],
-                input="test-project\nn\nneo4j\nn\ny\n",
+                input="test-project\ny\n\nneo4j\nn\nn\ny\n",
                 obj={"version": "0.1.0"},
             )
             assert result.exit_code == 0
@@ -98,6 +104,7 @@ class TestInitWithGit:
 
     def test_init_git_not_available(self, runner, tmp_path):
         """Test init when Git is not available (env-independent)."""
+
         def mock_subprocess_side_effect(args, **kwargs):
             if args[:3] == ["git", "rev-parse", "--git-dir"]:
                 raise FileNotFoundError("git not found")
@@ -116,11 +123,12 @@ class TestInitWithGit:
             # Test the git integration functions directly
             from biotope.utils import is_git_repo
             from biotope.commands.init import _init_git_repo
+
             # Test is_git_repo function
             assert not is_git_repo(tmp_path)  # Should return False when git not found
             # Test _init_git_repo function - should handle FileNotFoundError gracefully
             _init_git_repo(tmp_path)  # Should not raise an exception
-            
+
             # Verify that the warning message would be printed (we can't easily test this without CLI)
             # The important thing is that the function doesn't crash
 
@@ -129,12 +137,12 @@ class TestInitWithGit:
         result = runner.invoke(
             init,
             ["--dir", str(tmp_path)],
-            input="test-project\nn\nneo4j\nn\ny\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
-        
+
         assert result.exit_code == 0
-        
+
         # Check enhanced directory structure
         expected_dirs = [
             ".biotope",
@@ -148,7 +156,7 @@ class TestInitWithGit:
             "schemas",
             "outputs",
         ]
-        
+
         for dir_path in expected_dirs:
             assert (tmp_path / dir_path).exists()
 
@@ -157,19 +165,19 @@ class TestInitWithGit:
         result = runner.invoke(
             init,
             ["--dir", str(tmp_path)],
-            input="test-project\nn\nneo4j\nn\ny\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
-        
+
         assert result.exit_code == 0
-        
+
         # Check biotope config
         config_file = tmp_path / ".biotope" / "config" / "biotope.yaml"
         assert config_file.exists()
-        
+
         with open(config_file) as f:
             config = yaml.safe_load(f)
-        
+
         expected_keys = [
             "version",
             "croissant_schema_version",
@@ -177,9 +185,9 @@ class TestInitWithGit:
             "data_storage",
             "checksum_algorithm",
             "auto_stage",
-            "commit_message_template"
+            "commit_message_template",
         ]
-        
+
         for key in expected_keys:
             assert key in config
 
@@ -188,18 +196,18 @@ class TestInitWithGit:
         result = runner.invoke(
             init,
             ["--dir", str(tmp_path)],
-            input="test-project\nn\nneo4j\nn\ny\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
-        
+
         assert result.exit_code == 0
-        
+
         readme_file = tmp_path / "README.md"
         assert readme_file.exists()
-        
+
         with open(readme_file) as f:
             content = f.read()
-        
+
         # Check for Git integration section
         assert "Git Integration" in content
         assert "biotope add" in content
@@ -212,12 +220,12 @@ class TestInitWithGit:
         result = runner.invoke(
             init,
             ["--dir", str(tmp_path)],
-            input="test-project\nn\nneo4j\nn\ny\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
-        
+
         assert result.exit_code == 0
-        
+
         # These directories should exist in Git-on-Top approach
         expected_dirs = [
             ".biotope",
@@ -226,17 +234,17 @@ class TestInitWithGit:
             ".biotope/workflows",
             ".biotope/logs",
         ]
-        
+
         for dir_path in expected_dirs:
             assert (tmp_path / dir_path).exists()
-        
+
         # These directories should NOT exist (no custom version control)
         old_dirs = [
             ".biotope/staging",
             ".biotope/objects",
             ".biotope/refs",
         ]
-        
+
         for dir_path in old_dirs:
             assert not (tmp_path / dir_path).exists()
 
@@ -245,45 +253,48 @@ class TestInitWithGit:
         result = runner.invoke(
             init,
             ["--dir", str(tmp_path)],
-            input="test-project\nn\nneo4j\nn\ny\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
-        
+
         assert result.exit_code == 0
-        
+
         # Check that .gitignore exists
         gitignore_file = tmp_path / ".gitignore"
         assert gitignore_file.exists()
-        
+
         # Check that it contains the expected content
         gitignore_content = gitignore_file.read_text()
-        
+
         # Should exclude data directory
         assert "data/" in gitignore_content
         assert "downloads/" in gitignore_content
         assert "tmp/" in gitignore_content
-        
+
         # Should exclude common development files
         assert "__pycache__/" in gitignore_content
         assert ".DS_Store" in gitignore_content
         assert ".vscode/" in gitignore_content
-        
+
         # Should have explanatory comments
         assert "# Biotope data files (not tracked in Git)" in gitignore_content
-        assert "# Data files are tracked through metadata in .biotope/datasets/" in gitignore_content
+        assert (
+            "# Data files are tracked through metadata in .biotope/datasets/"
+            in gitignore_content
+        )
 
     def test_init_git_workflow_instructions(self, runner, tmp_path):
         """Test that Git workflow instructions are included."""
         result = runner.invoke(
             init,
             ["--dir", str(tmp_path)],
-            input="test-project\nn\nneo4j\nn\ny\n",
+            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
             obj={"version": "0.1.0"},
         )
-        
+
         assert result.exit_code == 0
-        
+
         # Check that Git workflow instructions are in output
         assert "biotope add <file>" in result.output
         assert "biotope annotate interactive --staged" in result.output
-        assert "biotope commit -m \"message\"" in result.output 
+        assert 'biotope commit -m "message"' in result.output

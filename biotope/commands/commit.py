@@ -90,7 +90,7 @@ def _validate_metadata_files(biotope_root: Path) -> bool:
     if not datasets_dir.exists():
         return True  # No datasets to validate
     
-    for dataset_file in datasets_dir.glob("*.jsonld"):
+    for dataset_file in datasets_dir.rglob("*.jsonld"):
         try:
             with open(dataset_file) as f:
                 metadata = json.load(f)

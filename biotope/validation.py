@@ -306,7 +306,7 @@ def get_all_tracked_files(biotope_root: Path) -> List[str]:
         return []
     
     tracked_files = []
-    for metadata_file in datasets_dir.glob("*.jsonld"):
+    for metadata_file in datasets_dir.rglob("*.jsonld"):
         # Get the relative path from biotope_root
         relative_path = metadata_file.relative_to(biotope_root)
         tracked_files.append(str(relative_path))

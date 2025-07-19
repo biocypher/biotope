@@ -40,7 +40,9 @@ def init(dir: Path) -> None:  # noqa: A002
 
     # Knowledge sources
     knowledge_sources = []
-    use_knowledge_graph = click.confirm("Would you like to install a knowledge graph now?", default=False)
+    use_knowledge_graph = click.confirm(
+        "Would you like to install a knowledge graph now?", default=False
+    )
     if use_knowledge_graph:
         while True:
             source = click.prompt(
@@ -68,11 +70,15 @@ def init(dir: Path) -> None:  # noqa: A002
         )
 
     # LLM integration
-    use_llm = click.confirm("\nWould you like to set up LLM integration?", default=False)
+    use_llm = click.confirm(
+        "\nWould you like to set up LLM integration?", default=False
+    )
     if use_llm:
         llm_provider = click.prompt(
             "Which LLM provider would you like to use?",
-            type=click.Choice(["google", "openai", "anthropic", "local"], case_sensitive=False),
+            type=click.Choice(
+                ["google", "openai", "anthropic", "local"], case_sensitive=False
+            ),
             default="openai",
         )
 
@@ -86,19 +92,21 @@ def init(dir: Path) -> None:  # noqa: A002
     # Project-level metadata collection for pre-filling annotations
     console = Console()
     console.print("\n[bold blue]Project Metadata Setup[/]")
-    console.print("The following information will be used to pre-fill metadata forms when creating dataset annotations.")
+    console.print(
+        "The following information will be used to pre-fill metadata forms when creating dataset annotations."
+    )
     console.print("You can skip any fields and provide them later during annotation.")
-    
+
     collect_project_metadata = click.confirm(
         "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
         default=True,
     )
-    
+
     project_metadata = {}
     if collect_project_metadata:
         console.print("\n[bold green]Project Information[/]")
         console.print("─" * 50)
-        
+
         # Project description
         project_description = click.prompt(
             "Project description (what is this project about?)",
@@ -107,7 +115,7 @@ def init(dir: Path) -> None:  # noqa: A002
         )
         if project_description:
             project_metadata["description"] = project_description
-        
+
         # Project URL
         project_url = click.prompt(
             "Project URL (if available)",
@@ -116,7 +124,7 @@ def init(dir: Path) -> None:  # noqa: A002
         )
         if project_url:
             project_metadata["url"] = project_url
-        
+
         # Creator/Contact
         creator = click.prompt(
             "Primary contact person (email preferred)",
@@ -125,7 +133,7 @@ def init(dir: Path) -> None:  # noqa: A002
         )
         if creator:
             project_metadata["creator"] = creator
-        
+
         # License
         license_url = click.prompt(
             "Default license URL",
@@ -134,7 +142,7 @@ def init(dir: Path) -> None:  # noqa: A002
         )
         if license_url:
             project_metadata["license"] = license_url
-        
+
         # Citation template
         citation_template = click.prompt(
             "Citation template (use {name} and {year} as placeholders)",
@@ -143,7 +151,7 @@ def init(dir: Path) -> None:  # noqa: A002
         )
         if citation_template:
             project_metadata["citation"] = citation_template
-        
+
         # Access restrictions
         has_access_restrictions = click.confirm(
             "Does this project have default access restrictions?",
@@ -157,7 +165,7 @@ def init(dir: Path) -> None:  # noqa: A002
             )
             if access_restrictions:
                 project_metadata["access_restrictions"] = access_restrictions
-        
+
         # Legal obligations
         has_legal_obligations = click.confirm(
             "Does this project have default legal obligations?",
@@ -171,7 +179,7 @@ def init(dir: Path) -> None:  # noqa: A002
             )
             if legal_obligations:
                 project_metadata["legal_obligations"] = legal_obligations
-        
+
         # Collaboration partner
         has_collaboration_partner = click.confirm(
             "Does this project have a collaboration partner?",
@@ -185,7 +193,7 @@ def init(dir: Path) -> None:  # noqa: A002
             )
             if collaboration_partner:
                 project_metadata["collaboration_partner"] = collaboration_partner
-        
+
         # Store project name for consistency
         project_metadata["project_name"] = project_name
 
@@ -216,15 +224,21 @@ def init(dir: Path) -> None:  # noqa: A002
 
     # Create project structure
     try:
-        dir.mkdir(parents=True, exist_ok=True)
-        create_project_structure(dir, user_config, metadata, project_metadata)
-        
         # Initialize Git if not already initialized
         if not is_git_repo(dir):
-            if click.confirm("\nWould you like to initialize Git for version control?", default=True):
+            if click.confirm(
+                "\nDo you confirm to initialize Git for version control? (it is necessary to use biotope)",
+                default=True,
+            ):
                 _init_git_repo(dir)
                 click.echo("✅ Git repository initialized")
-        
+            else:
+                click.echo("❌ Git is necessary to use biotope")
+                raise click.Abort
+
+        dir.mkdir(parents=True, exist_ok=True)
+        create_project_structure(dir, user_config, metadata, project_metadata)
+
         click.echo("\n✨ Biotope established successfully! ✨")
         click.echo(
             f"\nYour biotope '{project_name}' has been established. Make sure to water regularly.",
@@ -236,16 +250,22 @@ def init(dir: Path) -> None:  # noqa: A002
         click.echo("3. Run 'biotope add <file>' to stage data files")
         click.echo("4. Run 'biotope annotate interactive --staged' to create metadata")
         click.echo("5. Run 'biotope commit -m \"message\"' to save changes")
-        
+
         if collect_project_metadata and project_metadata:
-            click.echo("\n💡 Project metadata has been saved and will be used to pre-fill annotation forms.")
-            click.echo("   You can update it later with 'biotope config set-project-metadata'")
+            click.echo(
+                "\n💡 Project metadata has been saved and will be used to pre-fill annotation forms."
+            )
+            click.echo(
+                "   You can update it later with 'biotope config set-project-metadata'"
+            )
     except (OSError, yaml.YAMLError) as e:
         click.echo(f"\n❌ Error initializing project: {e!s}", err=True)
         raise click.Abort from e
 
 
-def create_project_structure(directory: Path, config: dict, metadata: dict, project_metadata: dict = None) -> None:
+def create_project_structure(
+    directory: Path, config: dict, metadata: dict, project_metadata: dict = None
+) -> None:
     """
     Create the project directory structure and configuration files.
 
@@ -284,10 +304,7 @@ def create_project_structure(directory: Path, config: dict, metadata: dict, proj
         "version": "1.0",
         "croissant_schema_version": "1.0",
         "default_metadata_template": "scientific",
-        "data_storage": {
-            "type": "local",
-            "path": "data"
-        },
+        "data_storage": {"type": "local", "path": "data"},
         "checksum_algorithm": "sha256",
         "auto_stage": True,
         "commit_message_template": "Update metadata: {description}",
@@ -295,18 +312,18 @@ def create_project_structure(directory: Path, config: dict, metadata: dict, proj
             "enabled": True,
             "minimum_required_fields": [
                 "name",
-                "description", 
+                "description",
                 "creator",
                 "dateCreated",
-                "distribution"
+                "distribution",
             ],
             "field_validation": {
                 "name": {"type": "string", "min_length": 1},
                 "description": {"type": "string", "min_length": 10},
                 "creator": {"type": "object", "required_keys": ["name"]},
                 "dateCreated": {"type": "string", "format": "date"},
-                "distribution": {"type": "array", "min_length": 1}
-            }
+                "distribution": {"type": "array", "min_length": 1},
+            },
         },
         # Consolidate internal metadata into config (Git-like approach)
         "project_info": {
@@ -315,14 +332,14 @@ def create_project_structure(directory: Path, config: dict, metadata: dict, proj
             "biotope_version": metadata.get("biotope_version"),
             "last_modified": metadata.get("last_modified"),
             "builds": metadata.get("builds", []),
-            "knowledge_sources": metadata.get("knowledge_sources", [])
-        }
+            "knowledge_sources": metadata.get("knowledge_sources", []),
+        },
     }
-    
+
     # Add project metadata if provided
     if project_metadata:
         biotope_config["project_metadata"] = project_metadata
-    
+
     (directory / ".biotope" / "config" / "biotope.yaml").write_text(
         yaml.dump(biotope_config, default_flow_style=False),
     )
@@ -453,24 +470,17 @@ def _init_git_repo(directory: Path) -> None:
     """Initialize a Git repository in the directory."""
     try:
         import subprocess
-        subprocess.run(
-            ["git", "init"],
-            cwd=directory,
-            check=True
-        )
-        
+
+        subprocess.run(["git", "init"], cwd=directory, check=True)
+
         # Create initial commit
-        subprocess.run(
-            ["git", "add", "."],
-            cwd=directory,
-            check=True
-        )
-        
+        subprocess.run(["git", "add", "."], cwd=directory, check=True)
+
         subprocess.run(
             ["git", "commit", "-m", "Initial biotope project setup"],
             cwd=directory,
-            check=True
+            check=True,
         )
-        
+
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         click.echo(f"⚠️  Warning: Could not initialize Git: {e}")

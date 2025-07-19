@@ -11,6 +11,7 @@ from biotope.commands.config import config as config_cmd
 from biotope.commands.get import get as get_cmd
 from biotope.commands.init import init as init_cmd
 from biotope.commands.log import log as log_cmd
+from biotope.commands.mv import mv as mv_cmd
 from biotope.commands.pull import pull as pull_cmd
 from biotope.commands.push import push as push_cmd
 from biotope.commands.read import read as read_cmd
@@ -46,6 +47,7 @@ cli.add_command(get_cmd, "get")
 
 # Git-inspired version control commands
 cli.add_command(add_cmd, "add")
+cli.add_command(mv_cmd, "mv")
 cli.add_command(status_cmd, "status")
 cli.add_command(commit_cmd, "commit")
 cli.add_command(log_cmd, "log")

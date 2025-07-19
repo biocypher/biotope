@@ -141,8 +141,10 @@ def _add_file(
         ]
     }
     
-    # Save metadata to datasets directory
-    metadata_file = datasets_dir / f"{file_path.stem}.jsonld"
+    # Save metadata to datasets directory with directory structure mirroring
+    relative_path = file_path.relative_to(biotope_root)
+    metadata_file = datasets_dir / relative_path.with_suffix('.jsonld')
+    metadata_file.parent.mkdir(parents=True, exist_ok=True)
     with open(metadata_file, "w") as f:
         json.dump(metadata, f, indent=2)
     
@@ -165,9 +167,9 @@ def is_file_tracked(file_path: Path, biotope_root: Path) -> bool:
     if not file_path.is_absolute():
         file_path = file_path.resolve()
     
-    # Check datasets directory
+    # Check datasets directory recursively
     datasets_dir = biotope_root / ".biotope" / "datasets"
-    for dataset_file in datasets_dir.glob("*.jsonld"):
+    for dataset_file in datasets_dir.rglob("*.jsonld"):
         try:
             with open(dataset_file) as f:
                 metadata = json.load(f)
