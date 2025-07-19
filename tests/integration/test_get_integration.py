@@ -76,7 +76,7 @@ def test_get_command_full_workflow(biotope_project, sample_data_file):
         datasets_dir = biotope_project / ".biotope" / "datasets"
         
         # Should have a metadata file
-        metadata_files = list(datasets_dir.glob("*.jsonld"))
+        metadata_files = list(datasets_dir.rglob("*.jsonld"))
         assert len(metadata_files) == 1
         
         # Check metadata content
@@ -127,7 +127,7 @@ def test_get_command_with_no_add_flag(biotope_project, sample_data_file):
         
         # Check that no metadata was created
         datasets_dir = biotope_project / ".biotope" / "datasets"
-        metadata_files = list(datasets_dir.glob("*.jsonld"))
+        metadata_files = list(datasets_dir.rglob("*.jsonld"))
         assert len(metadata_files) == 0
 
 
@@ -161,7 +161,7 @@ def test_get_command_custom_output_directory(biotope_project, sample_data_file):
         
         # Check that the file was added to biotope project
         datasets_dir = biotope_project / ".biotope" / "datasets"
-        metadata_files = list(datasets_dir.glob("*.jsonld"))
+        metadata_files = list(datasets_dir.rglob("*.jsonld"))
         assert len(metadata_files) == 1
 
 
@@ -242,7 +242,7 @@ def test_get_command_with_content_disposition_header(biotope_project):
         
         # Check that it was added to biotope project
         datasets_dir = biotope_project / ".biotope" / "datasets"
-        metadata_files = list(datasets_dir.glob("*.jsonld"))
+        metadata_files = list(datasets_dir.rglob("*.jsonld"))
         assert len(metadata_files) == 1
         
         with open(metadata_files[0]) as f:
