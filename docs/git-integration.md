@@ -87,6 +87,23 @@ biotope add data/raw/experiment.csv
 biotope add data/raw/ --recursive  # Add entire directory
 ```
 
+### `biotope mv`
+Move tracked data files and update their metadata automatically.
+
+```bash
+biotope mv data/raw/experiment.csv data/processed/experiment.csv
+biotope mv data/raw/old_name.csv data/raw/new_name.csv
+biotope mv data/raw/ --recursive data/archive/  # Move entire directory
+biotope mv data/raw/file.csv data/processed/ --force  # Overwrite if exists
+```
+
+The `mv` command:
+- Moves data files to new locations
+- Updates all metadata files to reflect the new paths
+- Recalculates checksums for moved files
+- Moves metadata files to mirror the new data file structure
+- Stages changes for commit automatically
+
 ### `biotope status`
 Shows what metadata changes are ready to commit.
 
@@ -139,6 +156,7 @@ Since biotope uses Git, all your Git skills work:
 # Branching
 git checkout -b new-experiment
 biotope add data/raw/new-data.csv
+biotope mv data/raw/new-data.csv data/processed/new-data.csv
 biotope commit -m "Add new experiment"
 git checkout main
 git merge new-experiment
@@ -223,6 +241,23 @@ biotope annotate interactive --staged
 
 # 3. Commit and share
 biotope commit -m "Add new experiment: 24 samples, 3 conditions"
+biotope push
+```
+
+### Moving and Reorganizing Data
+
+```bash
+# 1. Move files to new locations
+biotope mv data/raw/experiment.csv data/processed/experiment.csv
+
+# 2. Move entire directories
+biotope mv data/raw/experiment_1/ --recursive data/processed/experiment_1/
+
+# 3. Rename files
+biotope mv data/raw/old_name.csv data/raw/new_name.csv
+
+# 4. Commit the reorganization
+biotope commit -m "Reorganize data: move experiments to processed directory"
 biotope push
 ```
 
@@ -400,18 +435,41 @@ git add -f data/config/small_config.csv
 # !data/config/
 ```
 
-### Moving data files
-When you move data files, update the metadata:
+### Moving files with biotope mv
+The `biotope mv` command automatically handles metadata updates:
 
 ```bash
-# Move the file
-mv data/raw/old_location.csv data/raw/new_location.csv
+# Move a file and update its metadata
+biotope mv data/raw/experiment.csv data/processed/experiment.csv
 
-# Re-add the file in its new location
-biotope add data/raw/new_location.csv --force
+# Move a directory with all its tracked files
+biotope mv data/raw/experiment_1/ --recursive data/processed/experiment_1/
+
+# Force overwrite if destination exists
+biotope mv data/raw/file.csv data/processed/file.csv --force
+```
+
+**Note**: Always use `biotope mv` instead of the system `mv` command for tracked files to ensure metadata stays in sync.
+
+### Moving data files
+When you move data files, use the `biotope mv` command to automatically update metadata:
+
+```bash
+# Move the file and update metadata automatically
+biotope mv data/raw/old_location.csv data/raw/new_location.csv
 
 # Commit the metadata change
 biotope commit -m "Move data file to new location"
+```
+
+Or move entire directories:
+
+```bash
+# Move entire directory with all tracked files
+biotope mv data/raw/experiment_1/ --recursive data/processed/experiment_1/
+
+# Commit the changes
+biotope commit -m "Move experiment_1 to processed directory"
 ```
 
 ## What's Different from Git?
@@ -420,10 +478,11 @@ biotope commit -m "Move data file to new location"
 - **Validation**: Metadata is automatically validated before commits
 - **Checksums**: Data integrity is tracked automatically
 - **Croissant ML**: Metadata follows scientific standards
+- **File Operations**: `biotope mv` automatically updates metadata when moving files
 
 ## What's the Same as Git?
 
-- **Commands**: Same workflow (add, commit, push, pull)
+- **Commands**: Same workflow (add, mv, commit, push, pull)
 - **Options**: Same flags and options work
 - **Collaboration**: Same branching, merging, and remote workflows
 - **History**: Same log, diff, and status functionality

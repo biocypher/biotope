@@ -221,6 +221,134 @@ def _stage_git_changes(biotope_root: Path) -> None:
 - Calculates SHA256 checksums for data integrity
 - Stages changes with `git add .biotope/`
 
+#### `biotope mv` (`biotope/commands/mv.py`)
+
+```python
+def _execute_move(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
+    """Execute the actual move operation."""
+    # Move the actual data file
+    shutil.move(str(source), str(destination))
+    
+    # Update metadata files to reflect new path
+    metadata_files = _find_metadata_files_for_file(source, biotope_root)
+    for metadata_file in metadata_files:
+        _update_metadata_file_path(metadata_file, str(source_rel), str(destination_rel), new_checksum, biotope_root)
+    
+    # Move metadata files to mirror new data file structure
+    new_metadata_path = biotope_root / ".biotope" / "datasets" / destination_rel.with_suffix(".jsonld")
+    shutil.move(str(metadata_file), str(new_metadata_path))
+    
+    # Stage changes for commit
+    _stage_git_changes(biotope_root)
+```
+
+- Moves data files to new locations using `shutil.move()`
+- Updates Croissant ML metadata files to reflect new paths
+- Recalculates SHA256 checksums for moved files
+- Moves metadata files to mirror the new data file structure
+- Stages changes with `git add .biotope/`
+- Supports both file and directory moves (with `--recursive` flag)
+- Validates move operations (no moving outside project, no overwriting without `--force`)
+
+### Move Command Implementation Details
+
+The `biotope mv` command implements several key functions:
+
+#### File Move Operations
+
+```python
+def _execute_move(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
+    """Execute the actual move operation for a single file."""
+    # Create destination directory structure
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Find all metadata files referencing the source file
+    metadata_files = _find_metadata_files_for_file(source, biotope_root)
+    
+    # Move the actual data file
+    shutil.move(str(source), str(destination))
+    
+    # Calculate new checksum for moved file
+    new_checksum = calculate_file_checksum(destination)
+    
+    # Update metadata files and move them to new locations
+    for metadata_file in metadata_files:
+        _update_metadata_file_path(metadata_file, str(source_rel), str(destination_rel), new_checksum, biotope_root)
+        
+        # Move metadata file to mirror new data file structure
+        new_metadata_path = biotope_root / ".biotope" / "datasets" / destination_rel.with_suffix(".jsonld")
+        if new_metadata_path != metadata_file:
+            shutil.move(str(metadata_file), str(new_metadata_path))
+```
+
+#### Directory Move Operations
+
+```python
+def _execute_directory_move(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
+    """Execute move operation for a directory and all its tracked files."""
+    # Find all tracked files in the source directory
+    tracked_files = _find_tracked_files_in_directory(source, biotope_root)
+    
+    # Move the entire directory structure
+    shutil.move(str(source), str(destination))
+    
+    # Handle metadata updates based on move type
+    if is_simple_rename:
+        # For simple renames, rename entire metadata directory structure
+        shutil.move(str(source_metadata_dir), str(destination_metadata_dir))
+    else:
+        # For moves to different locations, handle each file individually
+        for old_file_path in tracked_files:
+            new_file_path = destination / old_file_path.relative_to(source)
+            _update_metadata_for_moved_file(old_file_path, new_file_path, biotope_root)
+```
+
+#### Metadata Update Functions
+
+```python
+def _update_metadata_file_path(metadata_file: Path, old_path: str, new_path: str, new_checksum: str, biotope_root: Path) -> bool:
+    """Update metadata file to reflect new file path and checksum."""
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    
+    updated = False
+    for distribution in metadata.get("distribution", []):
+        if distribution.get("@type") == "sc:FileObject":
+            if distribution.get("contentUrl") == old_path:
+                distribution["contentUrl"] = new_path
+                distribution["sha256"] = new_checksum
+                distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
+                updated = True
+    
+    if updated:
+        with open(metadata_file, "w") as f:
+            json.dump(metadata, f, indent=2)
+    
+    return updated
+```
+
+#### Validation Functions
+
+```python
+def _validate_move_operation(source: Path, destination: Path, biotope_root: Path, force: bool) -> Path:
+    """Validate the move operation before executing."""
+    # Ensure destination is within project bounds
+    try:
+        actual_destination.relative_to(biotope_root)
+    except ValueError:
+        raise click.Abort("Cannot move file outside biotope project")
+    
+    # Prevent moving biotope internal files
+    if str(source_rel).startswith(".biotope/"):
+        raise click.Abort("Cannot move biotope internal files")
+    
+    # Check for destination conflicts
+    if actual_destination.exists() and not force:
+        raise click.Abort("Destination exists. Use --force to overwrite.")
+    
+    return actual_destination
+```
+
 #### `biotope check-data` (`biotope/commands/check_data.py`)
 
 ```python

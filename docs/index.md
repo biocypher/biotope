@@ -22,6 +22,7 @@ are prototypes for new features. See more information in the API documentation.
 - `biotope get`: Download files from a URL and stage them for annotation and version control
 - `biotope annotate`: Annotate your data with consistent metadata in Croissant ML
 - `biotope check-data`: Perform consistency checks for file integrity
+- `biotope mv`: Move tracked files and update metadata automatically
 - `biotope config`: Manage project configuration and metadata settings
 - `biotope build`: Build a [BioCypher](https://biocypher.org) knowledge representation
 - `biotope chat`: Chat with a project using [BioChatter](https://biochatter.org)
@@ -41,6 +42,7 @@ Biotope uses a **Git-on-Top** strategy for metadata version control, providing:
 ### Core Git-Integrated Commands
 
 - `biotope add`: Stage data files for metadata creation
+- `biotope mv`: Move tracked data files and update metadata
 - `biotope get`: Download remote files and stage them for metadata creation
 - `biotope status`: Show current project status
 - `biotope commit`: Commit metadata changes using Git
