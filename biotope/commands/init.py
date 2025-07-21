@@ -225,12 +225,14 @@ def init(dir: Path) -> None:  # noqa: A002
     # Create project structure
     try:
         # Initialize Git if not already initialized
+        git_was_initialized = False
         if not is_git_repo(dir):
             if click.confirm(
-                "\nDo you confirm to initialize Git for version control? (it is necessary to use biotope)",
+                "\nDo you confirm to initialize Git for version control? (It is necessary to use biotope.)",
                 default=True,
             ):
                 _init_git_repo(dir)
+                git_was_initialized = True
                 click.echo("✅ Git repository initialized")
             else:
                 click.echo("❌ Git is necessary to use biotope")
@@ -238,6 +240,10 @@ def init(dir: Path) -> None:  # noqa: A002
 
         dir.mkdir(parents=True, exist_ok=True)
         create_project_structure(dir, user_config, metadata, project_metadata)
+        
+        # Create initial commit with project files if Git was just initialized
+        if git_was_initialized:
+            _create_initial_commit(dir)
 
         click.echo("\n✨ Biotope established successfully! ✨")
         click.echo(
@@ -473,7 +479,16 @@ def _init_git_repo(directory: Path) -> None:
 
         subprocess.run(["git", "init"], cwd=directory, check=True)
 
-        # Create initial commit
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        click.echo(f"⚠️  Warning: Could not initialize Git: {e}")
+
+
+def _create_initial_commit(directory: Path) -> None:
+    """Create initial commit with project files."""
+    try:
+        import subprocess
+
+        # Add all files and create initial commit
         subprocess.run(["git", "add", "."], cwd=directory, check=True)
 
         subprocess.run(
@@ -483,4 +498,4 @@ def _init_git_repo(directory: Path) -> None:
         )
 
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        click.echo(f"⚠️  Warning: Could not initialize Git: {e}")
+        click.echo(f"⚠️  Warning: Could not create initial commit: {e}")

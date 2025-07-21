@@ -48,16 +48,15 @@ class TestInitWithGit:
                 tmp_path
             )  # Should return False when git rev-parse fails
 
-            # Test _init_git_repo function
+            # Test _init_git_repo function (now only initializes Git, doesn't commit)
             from biotope.commands.init import _init_git_repo
 
             _init_git_repo(tmp_path)
 
-            # Check that git commands were called
+            # Check that only git init was called (no add/commit yet)
             called_commands = [call[0][0][:2] for call in mock_run.call_args_list]
             assert ["git", "init"] in called_commands
-            assert ["git", "add"] in called_commands
-            assert ["git", "commit"] in called_commands
+            # Note: git add and commit are now done separately in _create_initial_commit
 
     def test_init_without_git_auto_init(self, runner, tmp_path):
         """Test init without automatic Git initialization (should abort)."""
@@ -298,3 +297,74 @@ class TestInitWithGit:
         assert "biotope add <file>" in result.output
         assert "biotope annotate interactive --staged" in result.output
         assert 'biotope commit -m "message"' in result.output
+
+    def test_init_no_untracked_files_after_setup(self, runner, tmp_path):
+        """Test that no files remain untracked after biotope init."""
+        from subprocess import CalledProcessError
+
+        # Track Git commands and their arguments
+        git_commands = []
+
+        def mock_subprocess_run(args, **kwargs):
+            git_commands.append(args)
+            
+            # Simulate "not a git repo" for rev-parse
+            if args[:3] == ["git", "rev-parse", "--git-dir"]:
+                raise CalledProcessError(1, args)
+            
+            # Simulate successful git commands
+            mock_result = Mock()
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            
+            if args[:2] == ["git", "init"]:
+                pass
+            elif args[:2] == ["git", "add"]:
+                # Verify that git add . is called to add all project files
+                assert args[2] == "."
+            elif args[:2] == ["git", "commit"]:
+                # Verify the commit message
+                assert "Initial biotope project setup" in args
+                mock_result.stdout = "[main abc1234] Initial biotope project setup"
+            
+            return mock_result
+
+        with patch("subprocess.run", side_effect=mock_subprocess_run):
+            result = runner.invoke(
+                init,
+                ["--dir", str(tmp_path)],
+                input="test-project\ny\n\nneo4j\nn\nn\ny\n",
+                obj={"version": "0.1.0"},
+            )
+
+        assert result.exit_code == 0
+        assert "Biotope established successfully!" in result.output
+
+        # Verify the sequence of Git commands
+        # Should be: rev-parse (check), init, add, commit (in that order)
+        assert len(git_commands) >= 4
+        
+        # Check that git rev-parse was called first (to check if repo exists)
+        assert git_commands[0][:2] == ["git", "rev-parse"]
+        
+        # Check that git init was called
+        init_commands = [cmd for cmd in git_commands if cmd[:2] == ["git", "init"]]
+        assert len(init_commands) >= 1
+        
+        # Check that git add . was called to add all project files
+        add_commands = [cmd for cmd in git_commands if cmd[:2] == ["git", "add"]]
+        assert len(add_commands) >= 1
+        assert any(cmd[2] == "." for cmd in add_commands)
+        
+        # Check that git commit was called with the correct message
+        commit_commands = [cmd for cmd in git_commands if cmd[:2] == ["git", "commit"]]
+        assert len(commit_commands) >= 1
+        assert any("Initial biotope project setup" in cmd for cmd in commit_commands)
+        
+        # Verify the correct sequence: rev-parse -> init -> add -> commit
+        rev_parse_index = next(i for i, cmd in enumerate(git_commands) if cmd[:2] == ["git", "rev-parse"])
+        init_index = next(i for i, cmd in enumerate(git_commands) if cmd[:2] == ["git", "init"])
+        add_index = next(i for i, cmd in enumerate(git_commands) if cmd[:2] == ["git", "add"] and cmd[2] == ".")
+        commit_index = next(i for i, cmd in enumerate(git_commands) if cmd[:2] == ["git", "commit"])
+        
+        assert rev_parse_index < init_index < add_index < commit_index
