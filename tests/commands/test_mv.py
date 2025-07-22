@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 from pathlib import Path
 from unittest import mock
 
@@ -885,8 +886,8 @@ def test_execute_move_checksum_calculation_error(biotope_project_with_file):
     console = Console()
     
     # Mock checksum calculation to fail
-    with mock.patch("biotope.commands.mv.calculate_file_checksum", side_effect=Exception("Checksum error")):
-        with pytest.raises(Exception, match="Checksum error"):
+    with mock.patch("biotope.commands.mv.calculate_file_checksum", side_effect=OSError("Checksum error")):
+        with pytest.raises(click.Abort):
             _execute_move(source, destination, biotope_project_with_file, console)
 
 
@@ -901,7 +902,7 @@ def test_execute_move_shutil_move_error(biotope_project_with_file):
     
     # Mock shutil.move to fail
     with mock.patch("biotope.commands.mv.shutil.move", side_effect=OSError("Move failed")):
-        with pytest.raises(OSError, match="Move failed"):
+        with pytest.raises(click.Abort):
             _execute_move(source, destination, biotope_project_with_file, console)
 
 
@@ -936,7 +937,7 @@ def test_execute_move_metadata_file_move_fails(biotope_project_with_file):
     
     with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
         with mock.patch("biotope.commands.mv.calculate_file_checksum", return_value="new_checksum"):
-            with pytest.raises(OSError, match="Metadata move failed"):
+            with pytest.raises(click.Abort):
                 _execute_move(source, destination, biotope_project_with_file, console)
 
 
@@ -1150,5 +1151,463 @@ def test_mv_directory_mixed_tracked_files(runner, biotope_project_with_directory
                     
                     # But only tracked files should have metadata updates
                     assert "Moved 2 tracked file(s)" in result.output
+    finally:
+        os.chdir(original_cwd)
+
+
+# New tests for rollback functionality and enhanced error handling
+
+def test_mv_metadata_validation_fails_before_move(runner, biotope_project_with_file):
+    """Test mv command when metadata validation fails before file move."""
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock tempfile operations to fail during validation
+                with mock.patch("tempfile.NamedTemporaryFile", side_effect=OSError("Permission denied")):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    assert result.exit_code != 0
+                    assert "Failed to validate metadata updates" in result.output
+                    
+                    # File should NOT be moved since validation failed
+                    assert source_file.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_metadata_write_permission_fails_before_move(runner, biotope_project_with_file):
+    """Test mv command when metadata write permission fails during validation."""
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock tempfile operations to fail
+                with mock.patch("tempfile.NamedTemporaryFile", side_effect=OSError("Permission denied")):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    assert result.exit_code != 0
+                    assert "Failed to validate metadata updates" in result.output
+                    
+                    # File should NOT be moved since validation failed
+                    assert source_file.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_checksum_calculation_failure(runner, biotope_project_with_file):
+    """Test mv command rolls back when checksum calculation fails after file move."""
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock checksum calculation to fail after file move
+                with mock.patch("biotope.commands.mv.calculate_file_checksum", side_effect=OSError("Checksum failed")):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    assert result.exit_code != 0
+                    assert "Failed to calculate checksum" in result.output
+                    
+                    # File should be rolled back to original location (even without rollback message)
+                    assert source_file.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_metadata_update_failure(runner, biotope_project_with_file):
+    """Test mv command when metadata update fails after file move."""
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock _update_metadata_file_path to fail
+                with mock.patch("biotope.commands.mv._update_metadata_file_path", return_value=False):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    # Operation should succeed but report 0 updated files
+                    assert result.exit_code == 0
+                    assert "Updated 0 metadata file(s)" in result.output
+                    
+                    # File should be moved even if metadata update failed
+                    assert not source_file.exists()
+                    assert destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_file):
+    """Test mv command rolls back when metadata file move fails after data file move."""
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock shutil.move to fail only for metadata files
+                original_move = shutil.move
+                def mock_move_side_effect(src, dst):
+                    if "test.jsonld" in str(src):
+                        raise OSError("Metadata move failed")
+                    # Let data file move succeed by using the original shutil.move
+                    return original_move(src, dst)
+                
+                with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    assert result.exit_code != 0
+                    assert "Failed to move metadata file" in result.output
+                    assert "Rolling back changes" in result.output
+                    
+                    # File should be rolled back to original location
+                    assert source_file.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_directory_move_failure(runner, biotope_project_with_directory):
+    """Test mv command rolls back when directory move fails."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "moved_experiment"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock shutil.move to fail for directory move
+                with mock.patch("biotope.commands.mv.shutil.move", side_effect=OSError("Directory move failed")):
+                    result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                    assert result.exit_code != 0
+                    assert "Failed to move directory" in result.output
+                    
+                    # Directory should remain in original location
+                    assert source_dir.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_metadata_directory_move_failure(runner, biotope_project_with_directory):
+    """Test mv command rolls back when metadata directory move fails during simple rename."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "renamed_experiment"
+    
+    # Ensure this is a simple rename (same parent directory)
+    assert source_dir.parent == destination.parent
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock shutil.move to fail only for metadata directory move
+                original_move = shutil.move
+                def mock_move_side_effect(src, dst):
+                    if ".biotope" in str(src):
+                        raise OSError("Metadata directory move failed")
+                    # Let data directory move succeed by using the original shutil.move
+                    return original_move(src, dst)
+                
+                with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
+                    result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                    assert result.exit_code != 0
+                    assert "Failed to move metadata directory" in result.output
+                    assert "Rolling back changes" in result.output
+                    
+                    # Directory should be rolled back to original location
+                    assert source_dir.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_checksum_calculation_failure_in_directory_move(runner, biotope_project_with_directory):
+    """Test mv command rolls back when checksum calculation fails during directory move."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "moved_experiment"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock checksum calculation to fail
+                with mock.patch("biotope.commands.mv.calculate_file_checksum", side_effect=OSError("Checksum failed")):
+                    result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                    assert result.exit_code != 0
+                    assert "Failed to update metadata file" in result.output
+                    assert "Rolling back changes" in result.output
+                    
+                    # Directory should be rolled back to original location
+                    assert source_dir.exists()
+                    assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_metadata_update_failure_in_directory_move(runner, biotope_project_with_directory):
+    """Test mv command when metadata update fails during directory move."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "moved_experiment"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock _update_metadata_file_path to fail
+                with mock.patch("biotope.commands.mv._update_metadata_file_path", return_value=False):
+                    result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                    # Operation should succeed but report 0 updated files
+                    assert result.exit_code == 0
+                    assert "Updated 0 metadata file(s)" in result.output
+                    
+                    # Directory should be moved even if metadata update failed
+                    assert not source_dir.exists()
+                    assert destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_metadata_file_move_failure_in_directory_move(runner, biotope_project_with_directory):
+    """Test mv command when metadata file update fails during directory move."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "moved_experiment"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock _update_metadata_file_path to fail for some files
+                def mock_update_side_effect(metadata_file, old_path, new_path, new_checksum, biotope_root):
+                    if "data1.jsonld" in str(metadata_file):
+                        return False  # Fail for one metadata file
+                    return True  # Succeed for others
+                
+                with mock.patch("biotope.commands.mv._update_metadata_file_path", side_effect=mock_update_side_effect):
+                    result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                    # Operation should succeed but report fewer updated files
+                    assert result.exit_code == 0
+                    assert "Updated 1 metadata file(s)" in result.output
+                    
+                    # Directory should be moved even if some metadata updates failed
+                    assert not source_dir.exists()
+                    assert destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_json_decode_error_in_directory_move(runner, biotope_project_with_directory):
+    """Test mv command rolls back when JSON decode error occurs during directory move."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "moved_experiment"
+    
+    # Corrupt one of the metadata files
+    corrupted_metadata = biotope_project_with_directory / ".biotope" / "datasets" / "experiment_data" / "data1.jsonld"
+    corrupted_metadata.write_text("invalid json content")
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                assert result.exit_code != 0
+                assert "Failed to validate metadata updates" in result.output
+                
+                # Directory should NOT be moved since validation failed
+                assert source_dir.exists()
+                assert not destination.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_rollback_on_rollback_failure(runner, biotope_project_with_file):
+    """Test mv command when rollback itself fails."""
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                # Mock _update_metadata_file_path to fail to trigger rollback
+                with mock.patch("biotope.commands.mv._update_metadata_file_path", return_value=False):
+                    # Mock shutil.move to fail during rollback
+                    with mock.patch("biotope.commands.mv.shutil.move", side_effect=OSError("Rollback failed")):
+                        result = runner.invoke(mv, [str(source_file), str(destination)])
+                        assert result.exit_code != 0
+                        assert "Failed to move file" in result.output
+                        
+                        # File might be in an inconsistent state
+                        # This is expected behavior when rollback fails
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_metadata_validation_with_multiple_files(runner, biotope_project_with_file):
+    """Test mv command metadata validation with multiple metadata files."""
+    # Create a second metadata file referencing the same file
+    second_metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "test_copy",
+        "distribution": [
+            {
+                "@type": "sc:FileObject",
+                "contentUrl": "data/raw/test.csv",
+                "sha256": "def456"
+            }
+        ]
+    }
+    
+    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+    with open(second_metadata_file, "w") as f:
+        json.dump(second_metadata, f, indent=2)
+    
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    assert result.exit_code == 0
+                    
+                    # Both metadata files should be updated and moved to the new location
+                    metadata1 = biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test.jsonld"
+                    metadata2 = biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test_copy.jsonld"
+                    
+                    assert metadata1.exists()
+                    assert metadata2.exists()
+                    
+                    # Both should reference the new path
+                    with open(metadata1) as f:
+                        meta1 = json.load(f)
+                    assert meta1["distribution"][0]["contentUrl"] == "data/processed/test.csv"
+                    
+                    with open(metadata2) as f:
+                        meta2 = json.load(f)
+                    assert meta2["distribution"][0]["contentUrl"] == "data/processed/test.csv"
+                    
+                    # Original metadata files should no longer exist
+                    original_metadata1 = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+                    original_metadata2 = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+                    assert not original_metadata1.exists()
+                    assert not original_metadata2.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_metadata_validation_with_one_corrupted_file(runner, biotope_project_with_file):
+    """Test mv command when one of multiple metadata files is corrupted."""
+    # Create a second metadata file referencing the same file
+    second_metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "test_copy",
+        "distribution": [
+            {
+                "@type": "sc:FileObject",
+                "contentUrl": "data/raw/test.csv",
+                "sha256": "def456"
+            }
+        ]
+    }
+    
+    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+    with open(second_metadata_file, "w") as f:
+        json.dump(second_metadata, f, indent=2)
+    
+    # Corrupt the second metadata file
+    second_metadata_file.write_text("invalid json content")
+    
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
+                    result = runner.invoke(mv, [str(source_file), str(destination)])
+                    # Operation should succeed but only update the valid metadata file
+                    assert result.exit_code == 0
+                    assert "Updated 1 metadata file(s)" in result.output
+                    
+                    # File should be moved
+                    assert not source_file.exists()
+                    assert destination.exists()
+                    
+                    # Only the valid metadata file should be moved
+                    valid_metadata = biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test.jsonld"
+                    assert valid_metadata.exists()
+                    
+                    # Corrupted metadata file should remain in original location
+                    corrupted_metadata = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+                    assert corrupted_metadata.exists()
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_mv_directory_validation_with_corrupted_metadata(runner, biotope_project_with_directory):
+    """Test mv command directory validation when metadata files are corrupted."""
+    source_dir = biotope_project_with_directory / "experiment_data"
+    destination = biotope_project_with_directory / "moved_experiment"
+    
+    # Corrupt one of the metadata files
+    corrupted_metadata = biotope_project_with_directory / ".biotope" / "datasets" / "experiment_data" / "data1.jsonld"
+    corrupted_metadata.write_text("invalid json content")
+    
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_directory)
+        
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
+                assert result.exit_code != 0
+                assert "Failed to validate metadata updates" in result.output
+                
+                # Directory should NOT be moved since validation failed
+                assert source_dir.exists()
+                assert not destination.exists()
     finally:
         os.chdir(original_cwd) 

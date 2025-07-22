@@ -154,42 +154,145 @@ def _execute_move(
         click.echo("⚠️  No metadata files found referencing this file")
         return
 
-    # Move the actual data file
-    shutil.move(str(source), str(destination))
-
-    new_checksum = calculate_file_checksum(destination)
-
     # Calculate source and destination relative paths for metadata file naming
     source_rel = source.relative_to(biotope_root)
     destination_rel = destination.relative_to(biotope_root)
 
+    # Pre-validate that we can update all metadata files
+    validation_results = []
+    for metadata_file in metadata_files:
+        # Test if we can read and update the metadata file
+        try:
+            with open(metadata_file) as f:
+                metadata = json.load(f)
+            
+            # Check if the file reference exists in this metadata
+            has_reference = False
+            for distribution in metadata.get("distribution", []):
+                if (
+                    distribution.get("@type") == "sc:FileObject"
+                    and distribution.get("contentUrl") == str(source_rel)
+                ):
+                    has_reference = True
+                    break
+            
+            if has_reference:
+                # Test if we can write to the metadata file
+                test_metadata = metadata.copy()
+                for distribution in test_metadata.get("distribution", []):
+                    if (
+                        distribution.get("@type") == "sc:FileObject"
+                        and distribution.get("contentUrl") == str(source_rel)
+                    ):
+                        distribution["contentUrl"] = str(destination_rel)
+                        distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
+                        break
+                
+                # Test write by writing to a temporary file
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=metadata_file.parent) as temp_file:
+                    json.dump(test_metadata, temp_file, indent=2)
+                    temp_file_path = Path(temp_file.name)
+                
+                # Clean up test file
+                temp_file_path.unlink()
+                validation_results.append((metadata_file, True))
+            else:
+                validation_results.append((metadata_file, False))
+                
+        except (json.JSONDecodeError, IOError, OSError) as e:
+            validation_results.append((metadata_file, False, str(e)))
+
+    # Check if all metadata files can be updated
+    failed_validations = [r for r in validation_results if not r[1]]
+    if failed_validations:
+        console.print(f"[bold red]❌ Failed to validate metadata updates:[/]")
+        for failed in failed_validations:
+            if len(failed) > 2:
+                console.print(f"  - {failed[0]}: {failed[2]}")
+            else:
+                console.print(f"  - {failed[0]}: Unknown error")
+        raise click.Abort
+
+    # Move the actual data file
+    try:
+        shutil.move(str(source), str(destination))
+    except OSError as e:
+        console.print(f"[bold red]❌ Failed to move file: {e}[/]")
+        raise click.Abort
+
+    # Calculate new checksum after move
+    try:
+        new_checksum = calculate_file_checksum(destination)
+    except OSError as e:
+        # Rollback: move file back
+        try:
+            shutil.move(str(destination), str(source))
+        except OSError:
+            console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
+        console.print(f"[bold red]❌ Failed to calculate checksum: {e}[/]")
+        raise click.Abort
+
     updated_files = []
     moved_metadata_files = []
+    rollback_needed = False
 
-    for metadata_file in metadata_files:
-        # Update the content of the metadata file
-        if _update_metadata_file_path(
-            metadata_file,
-            str(source_rel),
-            str(destination_rel),
-            new_checksum,
-            biotope_root,
-        ):
-            updated_files.append(metadata_file)
+    try:
+        for metadata_file in metadata_files:
+            # Update the content of the metadata file
+            if _update_metadata_file_path(
+                metadata_file,
+                str(source_rel),
+                str(destination_rel),
+                new_checksum,
+                biotope_root,
+            ):
+                updated_files.append(metadata_file)
 
-            # Calculate new metadata file path based on the data file's new location
-            new_metadata_path = (
-                biotope_root
-                / ".biotope"
-                / "datasets"
-                / destination_rel.with_suffix(".jsonld")
-            )
+                # Calculate new metadata file path based on the data file's new location
+                # Keep the original metadata file name to avoid conflicts
+                new_metadata_path = (
+                    biotope_root
+                    / ".biotope"
+                    / "datasets"
+                    / destination_rel.parent
+                    / metadata_file.name
+                )
 
-            # Move the metadata file to mirror the new data file structure
-            if new_metadata_path != metadata_file:
-                new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(metadata_file), str(new_metadata_path))
-                moved_metadata_files.append((metadata_file, new_metadata_path))
+                # Move the metadata file to mirror the new data file structure
+                if new_metadata_path != metadata_file:
+                    new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        shutil.move(str(metadata_file), str(new_metadata_path))
+                        moved_metadata_files.append((metadata_file, new_metadata_path))
+                    except OSError as e:
+                        console.print(f"[bold red]❌ Failed to move metadata file: {e}[/]")
+                        rollback_needed = True
+                        break
+
+    except Exception as e:
+        console.print(f"[bold red]❌ Failed to update metadata: {e}[/]")
+        rollback_needed = True
+
+    # Rollback if needed
+    if rollback_needed:
+        console.print("[bold yellow]🔄 Rolling back changes...[/]")
+        
+        # Rollback metadata file moves
+        for old_path, new_path in reversed(moved_metadata_files):
+            try:
+                if new_path.exists():
+                    shutil.move(str(new_path), str(old_path))
+            except OSError as e:
+                console.print(f"[bold red]❌ Failed to rollback metadata file move: {e}[/]")
+        
+        # Rollback data file move
+        try:
+            shutil.move(str(destination), str(source))
+        except OSError as e:
+            console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
+        
+        raise click.Abort
 
     if updated_files or moved_metadata_files:
         stage_git_changes(biotope_root)
@@ -249,103 +352,232 @@ def _execute_directory_move(
         source.parent == destination.parent and source_metadata_dir.exists()
     )
 
-    # Ensure destination directory exists
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    # Move the entire directory structure
-    shutil.move(str(source), str(destination))
-
-    updated_files = []
-    total_files_moved = len(tracked_files)
-
+    # Pre-validate metadata updates
+    validation_results = []
+    
     if is_simple_rename and source_metadata_dir.exists():
-        # For simple renames, rename the entire metadata directory structure
-        destination_metadata_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(source_metadata_dir), str(destination_metadata_dir))
-
-        # Update all metadata files in the renamed directory
-        for metadata_file in destination_metadata_dir.rglob("*.jsonld"):
-            # Read the metadata to find what file it references
+        # Validate simple rename metadata updates
+        for metadata_file in source_metadata_dir.rglob("*.jsonld"):
             try:
                 with open(metadata_file) as f:
                     metadata = json.load(f)
 
-                # Find file objects in the metadata
+                # Check if this metadata file needs updates
+                needs_update = False
                 for distribution in metadata.get("distribution", []):
                     if distribution.get("@type") == "sc:FileObject":
                         old_content_url = distribution.get("contentUrl")
-                        if old_content_url and old_content_url.startswith(
-                            str(source_rel)
-                        ):
-                            # Update the path from source to destination
-                            new_content_url = old_content_url.replace(
-                                str(source_rel), str(destination_rel), 1
-                            )
-                            new_data_file = biotope_root / new_content_url
-
-                            if new_data_file.exists():
-                                new_checksum = calculate_file_checksum(new_data_file)
-                                if _update_metadata_file_path(
-                                    metadata_file,
-                                    old_content_url,
-                                    new_content_url,
-                                    new_checksum,
-                                    biotope_root,
-                                ):
-                                    updated_files.append(metadata_file)
-                                    break  # Only update once per metadata file
-            except (json.JSONDecodeError, IOError):
-                continue
+                        if old_content_url and old_content_url.startswith(str(source_rel)):
+                            needs_update = True
+                            break
+                
+                if needs_update:
+                    # Test write by writing to a temporary file
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=metadata_file.parent) as temp_file:
+                        json.dump(metadata, temp_file, indent=2)
+                        temp_file_path = Path(temp_file.name)
+                    
+                    # Clean up test file
+                    temp_file_path.unlink()
+                    validation_results.append((metadata_file, True))
+                else:
+                    validation_results.append((metadata_file, False))
+                    
+            except (json.JSONDecodeError, IOError, OSError) as e:
+                validation_results.append((metadata_file, False, str(e)))
     else:
-        # For moves to different locations, handle each tracked file individually
+        # Validate complex move metadata updates
         file_metadata_map = {}
         for file_path in tracked_files:
             metadata_files = _find_metadata_files_for_file(file_path, biotope_root)
             if metadata_files:
                 file_metadata_map[file_path] = metadata_files
 
-        moved_metadata_files = []
-
-        # Update metadata for each tracked file that was moved
         for old_file_path, metadata_files in file_metadata_map.items():
-            # Calculate the new file path
-            relative_path = old_file_path.relative_to(source)
-            new_file_path = destination / relative_path
-
-            # Calculate new checksum for the moved file
-            new_checksum = calculate_file_checksum(new_file_path)
-
-            # Calculate relative paths for metadata updates
-            old_rel_path = old_file_path.relative_to(biotope_root)
-            new_rel_path = new_file_path.relative_to(biotope_root)
-
             for metadata_file in metadata_files:
-                # Update the content of the metadata file
-                if _update_metadata_file_path(
-                    metadata_file,
-                    str(old_rel_path),
-                    str(new_rel_path),
-                    new_checksum,
-                    biotope_root,
-                ):
-                    updated_files.append(metadata_file)
+                try:
+                    with open(metadata_file) as f:
+                        metadata = json.load(f)
+                    
+                    # Check if this metadata file needs updates
+                    needs_update = False
+                    old_rel_path = old_file_path.relative_to(biotope_root)
+                    for distribution in metadata.get("distribution", []):
+                        if (
+                            distribution.get("@type") == "sc:FileObject"
+                            and distribution.get("contentUrl") == str(old_rel_path)
+                        ):
+                            needs_update = True
+                            break
+                    
+                    if needs_update:
+                        # Test write by writing to a temporary file
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=metadata_file.parent) as temp_file:
+                            json.dump(metadata, temp_file, indent=2)
+                            temp_file_path = Path(temp_file.name)
+                        
+                        # Clean up test file
+                        temp_file_path.unlink()
+                        validation_results.append((metadata_file, True))
+                    else:
+                        validation_results.append((metadata_file, False))
+                        
+                except (json.JSONDecodeError, IOError, OSError) as e:
+                    validation_results.append((metadata_file, False, str(e)))
 
-                    # Calculate new metadata file path based on the data file's new location
-                    new_metadata_path = (
-                        biotope_root
-                        / ".biotope"
-                        / "datasets"
-                        / new_rel_path.with_suffix(".jsonld")
-                    )
+    # Check if all metadata files can be updated
+    failed_validations = [r for r in validation_results if not r[1]]
+    if failed_validations:
+        console.print(f"[bold red]❌ Failed to validate metadata updates:[/]")
+        for failed in failed_validations:
+            if len(failed) > 2:
+                console.print(f"  - {failed[0]}: {failed[2]}")
+            else:
+                console.print(f"  - {failed[0]}: Unknown error")
+        raise click.Abort
 
-                    # Move the metadata file to mirror the new data file structure
-                    if new_metadata_path != metadata_file:
-                        new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.move(str(metadata_file), str(new_metadata_path))
-                        moved_metadata_files.append((metadata_file, new_metadata_path))
+    # Ensure destination directory exists
+    destination.parent.mkdir(parents=True, exist_ok=True)
 
-        # Clean up empty directories in the old metadata location
-        _cleanup_empty_metadata_directories(source_metadata_dir, biotope_root)
+    # Move the entire directory structure
+    try:
+        shutil.move(str(source), str(destination))
+    except OSError as e:
+        console.print(f"[bold red]❌ Failed to move directory: {e}[/]")
+        raise click.Abort
+
+    updated_files = []
+    total_files_moved = len(tracked_files)
+    rollback_needed = False
+
+    try:
+        if is_simple_rename and source_metadata_dir.exists():
+            # For simple renames, rename the entire metadata directory structure
+            destination_metadata_dir.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(source_metadata_dir), str(destination_metadata_dir))
+            except OSError as e:
+                console.print(f"[bold red]❌ Failed to move metadata directory: {e}[/]")
+                rollback_needed = True
+
+            if not rollback_needed:
+                # Update all metadata files in the renamed directory
+                for metadata_file in destination_metadata_dir.rglob("*.jsonld"):
+                    # Read the metadata to find what file it references
+                    try:
+                        with open(metadata_file) as f:
+                            metadata = json.load(f)
+
+                        # Find file objects in the metadata
+                        for distribution in metadata.get("distribution", []):
+                            if distribution.get("@type") == "sc:FileObject":
+                                old_content_url = distribution.get("contentUrl")
+                                if old_content_url and old_content_url.startswith(
+                                    str(source_rel)
+                                ):
+                                    # Update the path from source to destination
+                                    new_content_url = old_content_url.replace(
+                                        str(source_rel), str(destination_rel), 1
+                                    )
+                                    new_data_file = biotope_root / new_content_url
+
+                                    if new_data_file.exists():
+                                        new_checksum = calculate_file_checksum(new_data_file)
+                                        if _update_metadata_file_path(
+                                            metadata_file,
+                                            old_content_url,
+                                            new_content_url,
+                                            new_checksum,
+                                            biotope_root,
+                                        ):
+                                            updated_files.append(metadata_file)
+                                            break  # Only update once per metadata file
+                    except (json.JSONDecodeError, IOError, OSError) as e:
+                        console.print(f"[bold red]❌ Failed to update metadata file {metadata_file}: {e}[/]")
+                        rollback_needed = True
+                        break
+        else:
+            # For moves to different locations, handle each tracked file individually
+            file_metadata_map = {}
+            for file_path in tracked_files:
+                metadata_files = _find_metadata_files_for_file(file_path, biotope_root)
+                if metadata_files:
+                    file_metadata_map[file_path] = metadata_files
+
+            moved_metadata_files = []
+
+            # Update metadata for each tracked file that was moved
+            for old_file_path, metadata_files in file_metadata_map.items():
+                # Calculate the new file path
+                relative_path = old_file_path.relative_to(source)
+                new_file_path = destination / relative_path
+
+                # Calculate new checksum for the moved file
+                try:
+                    new_checksum = calculate_file_checksum(new_file_path)
+                except OSError as e:
+                    console.print(f"[bold red]❌ Failed to calculate checksum for {new_file_path}: {e}[/]")
+                    rollback_needed = True
+                    break
+
+                # Calculate relative paths for metadata updates
+                old_rel_path = old_file_path.relative_to(biotope_root)
+                new_rel_path = new_file_path.relative_to(biotope_root)
+
+                for metadata_file in metadata_files:
+                    # Update the content of the metadata file
+                    if _update_metadata_file_path(
+                        metadata_file,
+                        str(old_rel_path),
+                        str(new_rel_path),
+                        new_checksum,
+                        biotope_root,
+                    ):
+                        updated_files.append(metadata_file)
+
+                        # Calculate new metadata file path based on the data file's new location
+                        new_metadata_path = (
+                            biotope_root
+                            / ".biotope"
+                            / "datasets"
+                            / new_rel_path.with_suffix(".jsonld")
+                        )
+
+                        # Move the metadata file to mirror the new data file structure
+                        if new_metadata_path != metadata_file:
+                            new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
+                            try:
+                                shutil.move(str(metadata_file), str(new_metadata_path))
+                                moved_metadata_files.append((metadata_file, new_metadata_path))
+                            except OSError as e:
+                                console.print(f"[bold red]❌ Failed to move metadata file: {e}[/]")
+                                rollback_needed = True
+                                break
+
+                if rollback_needed:
+                    break
+
+            # Clean up empty directories in the old metadata location
+            if not rollback_needed:
+                _cleanup_empty_metadata_directories(source_metadata_dir, biotope_root)
+
+    except Exception as e:
+        console.print(f"[bold red]❌ Failed to update metadata: {e}[/]")
+        rollback_needed = True
+
+    # Rollback if needed
+    if rollback_needed:
+        console.print("[bold yellow]🔄 Rolling back changes...[/]")
+        
+        # Rollback directory move
+        try:
+            shutil.move(str(destination), str(source))
+        except OSError as e:
+            console.print(f"[bold red]❌ Failed to rollback directory move. Directory is at {destination}[/]")
+        
+        raise click.Abort
 
     if updated_files:
         stage_git_changes(biotope_root)
