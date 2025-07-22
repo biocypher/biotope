@@ -399,32 +399,64 @@ def interactive(file_path: str | None = None, prefill_metadata: str | None = Non
             file_path = biotope_root / file_info["file_path"]
             console.print(f"\n[bold green]File {i+1}/{len(staged_files)}: {file_path.name}[/]")
             
-            # Pre-fill with file information
-            file_metadata = {
-                "name": file_path.stem,
-                "description": f"Dataset for {file_path.name}",
-                "distribution": [
-                    {
-                        "@type": "sc:FileObject",
-                        "@id": f"file_{file_info['sha256'][:8]}",
-                        "name": file_path.name,
-                        "contentUrl": str(file_path.relative_to(biotope_root)),
-                        "sha256": file_info["sha256"],
-                        "contentSize": file_info["size"]
-                    }
-                ]
-            }
+            # Find the existing metadata file for this data file
+            datasets_dir = biotope_root / ".biotope" / "datasets"
+            relative_path = file_path.relative_to(biotope_root)
+            metadata_file = datasets_dir / relative_path.with_suffix('.jsonld')
             
-            # Merge with project metadata
-            if biotope_root:
-                from biotope.utils import load_project_metadata
-                project_metadata = load_project_metadata(biotope_root)
-                for key, value in project_metadata.items():
-                    if key not in file_metadata:
-                        file_metadata[key] = value
-            
-            # Run interactive annotation for this file
-            _run_interactive_annotation(console, file_path, file_metadata, biotope_root)
+            # Check if metadata file exists
+            if metadata_file.exists():
+                # Load existing metadata to pre-fill
+                try:
+                    with open(metadata_file) as f:
+                        existing_metadata = json.load(f)
+                except (json.JSONDecodeError, IOError):
+                    existing_metadata = {}
+                
+                # Extract file information from existing metadata
+                file_metadata = {
+                    "name": existing_metadata.get("name", file_path.stem),
+                    "description": existing_metadata.get("description", f"Dataset for {file_path.name}"),
+                    "distribution": existing_metadata.get("distribution", [])
+                }
+                
+                # Merge with project metadata
+                if biotope_root:
+                    from biotope.utils import load_project_metadata
+                    project_metadata = load_project_metadata(biotope_root)
+                    for key, value in project_metadata.items():
+                        if key not in file_metadata and key not in existing_metadata:
+                            file_metadata[key] = value
+                
+                # Run interactive annotation for this file (updating existing)
+                _run_interactive_annotation(console, metadata_file, file_metadata, biotope_root, update_existing=True)
+            else:
+                # Pre-fill with file information for new metadata
+                file_metadata = {
+                    "name": file_path.stem,
+                    "description": f"Dataset for {file_path.name}",
+                    "distribution": [
+                        {
+                            "@type": "sc:FileObject",
+                            "@id": f"file_{file_info['sha256'][:8]}",
+                            "name": file_path.name,
+                            "contentUrl": str(file_path.relative_to(biotope_root)),
+                            "sha256": file_info["sha256"],
+                            "contentSize": file_info["size"]
+                        }
+                    ]
+                }
+                
+                # Merge with project metadata
+                if biotope_root:
+                    from biotope.utils import load_project_metadata
+                    project_metadata = load_project_metadata(biotope_root)
+                    for key, value in project_metadata.items():
+                        if key not in file_metadata:
+                            file_metadata[key] = value
+                
+                # Run interactive annotation for this file (creating new)
+                _run_interactive_annotation(console, file_path, file_metadata, biotope_root)
         
         return
 
