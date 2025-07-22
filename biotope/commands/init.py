@@ -353,9 +353,9 @@ def create_project_structure(
     # Create .gitignore file to exclude data files and other common files
     gitignore_content = """# Biotope data files (not tracked in Git)
 # Data files are tracked through metadata in .biotope/datasets/
-data/
-downloads/
-tmp/
+/data/
+/downloads/
+/tmp/
 
 # Python
 __pycache__/
