@@ -447,5 +447,5 @@ def _update_metadata_file_path(
 
         return updated
 
-    except (json.JSONDecodeError, IOError):
+    except (json.JSONDecodeError, IOError, OSError):
         return False
