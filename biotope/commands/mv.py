@@ -10,12 +10,13 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
-from biotope.commands.add import (
+from biotope.utils import (
+    find_biotope_root,
+    is_git_repo,
     calculate_file_checksum,
     is_file_tracked,
-    _stage_git_changes,
+    stage_git_changes,
 )
-from biotope.utils import find_biotope_root, is_git_repo
 
 
 @click.command()
@@ -191,7 +192,7 @@ def _execute_move(
                 moved_metadata_files.append((metadata_file, new_metadata_path))
 
     if updated_files or moved_metadata_files:
-        _stage_git_changes(biotope_root)
+        stage_git_changes(biotope_root)
 
     console.print(
         Panel(
@@ -347,7 +348,7 @@ def _execute_directory_move(
         _cleanup_empty_metadata_directories(source_metadata_dir, biotope_root)
 
     if updated_files:
-        _stage_git_changes(biotope_root)
+        stage_git_changes(biotope_root)
 
     console.print(
         Panel(

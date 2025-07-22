@@ -318,7 +318,7 @@ def test_mv_successful_move(runner, biotope_project_with_file):
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes") as mock_stage:
+                with mock.patch("biotope.commands.mv.stage_git_changes") as mock_stage:
                     result = runner.invoke(mv, [str(source_file), str(destination)])
                     assert result.exit_code == 0
                     assert "Move Complete" in result.output
@@ -362,7 +362,7 @@ def test_mv_force_overwrite(runner, biotope_project_with_file):
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(source_file), str(destination), "--force"])
                     assert result.exit_code == 0
                     assert "Move Complete" in result.output
@@ -411,7 +411,7 @@ def test_mv_creates_destination_directory(runner, biotope_project_with_file):
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(source_file), str(destination)])
                     assert result.exit_code == 0
                     
@@ -507,7 +507,7 @@ def test_mv_to_existing_directory(runner, biotope_project_with_file):
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(source_file), str(destination_dir)])
                     assert result.exit_code == 0
                     
@@ -761,7 +761,7 @@ def test_mv_with_special_characters_in_filename(runner, biotope_project_with_fil
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(special_file), str(destination)])
                     assert result.exit_code == 0
                     
@@ -805,7 +805,7 @@ def test_mv_empty_file(runner, biotope_project_with_file):
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(empty_file), str(destination)])
                     assert result.exit_code == 0
                     
@@ -829,7 +829,7 @@ def test_mv_relative_paths(runner, biotope_project_with_file):
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [source_rel, destination_rel])
                     assert result.exit_code == 0
                     
@@ -860,7 +860,7 @@ def test_mv_metadata_already_exists_at_destination(runner, biotope_project_with_
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(source_file), str(destination)])
                     assert result.exit_code == 0
                     
@@ -1041,7 +1041,7 @@ def test_mv_directory_with_recursive_flag_success(runner, biotope_project_with_d
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes") as mock_stage:
+                with mock.patch("biotope.commands.mv.stage_git_changes") as mock_stage:
                     result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
                     assert result.exit_code == 0
                     assert "Directory Move Complete" in result.output
@@ -1088,7 +1088,7 @@ def test_mv_directory_to_existing_directory(runner, biotope_project_with_directo
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(source_dir), str(destination_dir), "--recursive"])
                     assert result.exit_code == 0
                     
@@ -1139,7 +1139,7 @@ def test_mv_directory_mixed_tracked_files(runner, biotope_project_with_directory
         
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", side_effect=mock_is_tracked):
-                with mock.patch("biotope.commands.mv._stage_git_changes"):
+                with mock.patch("biotope.commands.mv.stage_git_changes"):
                     result = runner.invoke(mv, [str(source_dir), str(destination), "--recursive"])
                     assert result.exit_code == 0
                     
