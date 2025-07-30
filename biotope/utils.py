@@ -9,17 +9,18 @@ from typing import Optional
 import click
 
 
-def find_biotope_root() -> Optional[Path]:
+def find_biotope_root(current: Path | None = None) -> Optional[Path]:
     """
     Find the biotope project root directory.
 
-    Searches upward from the current working directory to find a directory
-    containing a .biotope/ subdirectory.
+    Searches upward from the current working directory or the provided 
+    'current' dir to find a directory containing a .biotope/ subdirectory.
 
     Returns:
         Path to the biotope project root, or None if not found
     """
-    current = Path.cwd()
+    if current is None:
+        current = Path.cwd()
     while current != current.parent:
         if (current / ".biotope").exists():
             return current

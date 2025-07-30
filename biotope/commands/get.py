@@ -10,6 +10,7 @@ import requests
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from biotope.commands.add import _add_file
+from biotope.commands.init import init
 from biotope.utils import find_biotope_root, is_git_repo, stage_git_changes
 
 
@@ -107,9 +108,17 @@ def get(url: str, output_dir: str, no_add: bool) -> None:
     """
     # Find biotope project root
     biotope_root = find_biotope_root()
+    
     if not biotope_root:
-        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
+        # Initialize biotope project in the output directory
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        init(dir=output_path)
+
+        biotope_root = find_biotope_root(current=output_path)
+        click.echo(f"Initialized new biotope project in {biotope_root}")
+        
 
     # Check if we're in a Git repository
     if not is_git_repo(biotope_root):
