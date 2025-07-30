@@ -28,7 +28,12 @@ from biotope.utils import find_biotope_root, is_git_repo
     is_flag=True,
     help="Show only .biotope/ directory changes",
 )
-def status(porcelain: bool, biotope_only: bool) -> None:
+@click.option(
+    "--detailed",
+    is_flag=True,
+    help="Show detailed validation errors for tracked datasets.",
+)
+def status(porcelain: bool, biotope_only: bool, detailed: bool) -> None:
     """
     Show the current status of the biotope project using Git.
     
@@ -38,6 +43,7 @@ def status(porcelain: bool, biotope_only: bool) -> None:
     Args:
         porcelain: Output in machine-readable format
         biotope_only: Show only .biotope/ directory changes
+        detailed: Show detailed validation errors for tracked datasets.
     """
     console = Console()
     
@@ -55,10 +61,10 @@ def status(porcelain: bool, biotope_only: bool) -> None:
     if porcelain:
         _show_porcelain_status(biotope_root, biotope_only)
     else:
-        _show_rich_status(biotope_root, console, biotope_only)
+        _show_rich_status(biotope_root, console, biotope_only, detailed)
 
 
-def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool) -> None:
+def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, detailed: bool) -> None:
     """Show status with rich formatting."""
     
     # Get Git status
@@ -110,6 +116,7 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool) 
     # Show tracked files with annotation status
     tracked_metadata_files = get_all_tracked_files(biotope_root)
     tracked_annotation_status = {}
+    has_incomplete_tracked = False
     if tracked_metadata_files:
         tracked_annotation_status = get_annotation_status_for_files(biotope_root, tracked_metadata_files)
         
@@ -131,7 +138,24 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool) 
             
             table.add_row(dataset_name, annotation_status, status_text)
         console.print(table)
-    
+        
+        has_incomplete_tracked = any(not is_annotated for is_annotated, _ in tracked_annotation_status.values())
+        
+        if detailed:
+            files_with_errors = []
+            for file_path, (is_annotated, errors) in tracked_annotation_status.items():
+                if not is_annotated and errors:
+                    files_with_errors.append((Path(file_path).stem, errors))
+
+            if files_with_errors:
+                console.print(f"\n[bold red]Validation Issues:[/]")
+                for dataset_name, errors in files_with_errors:
+                    console.print(f"  [bold yellow]{dataset_name}:[/]")
+                    for error in errors:
+                        console.print(f"    - {error}")
+        elif has_incomplete_tracked:
+            console.print(f"\n💡 Run 'biotope status --detailed' to see validation issues.")
+
     # Summary
     total_staged = len(git_status["staged"])
     total_modified = len(git_status["modified"])

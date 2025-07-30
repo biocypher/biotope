@@ -1,8 +1,8 @@
 """Tests for status command annotation validation display."""
 
 import json
-from pathlib import Path
 from unittest import mock
+import yaml
 
 import pytest
 from click.testing import CliRunner
@@ -68,7 +68,6 @@ def test_status_shows_annotation_status_for_add_metadata(runner, git_repo):
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -137,7 +136,6 @@ def test_status_shows_annotation_status_for_complete_metadata(runner, git_repo):
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -211,7 +209,6 @@ def test_status_suggests_annotate_for_incomplete_staged_metadata(runner, git_rep
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -284,7 +281,6 @@ def test_status_does_not_suggest_annotate_for_complete_staged_metadata(runner, g
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -364,7 +360,6 @@ def test_status_suggests_annotate_for_incomplete_tracked_metadata(runner, git_re
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -438,7 +433,6 @@ def test_status_does_not_suggest_annotate_for_complete_tracked_metadata(runner, 
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -492,8 +486,8 @@ def test_status_does_not_suggest_annotate_for_complete_tracked_metadata(runner, 
             assert "tracked file" not in result.output and "tracked files" not in result.output
 
 
-def test_status_prioritizes_staged_over_tracked_incomplete(runner, git_repo):
-    """Test that status prioritizes staged incomplete files over tracked incomplete files."""
+def test_status_shows_suggestions_for_both_staged_and_tracked_incomplete(runner, git_repo):
+    """Test that status suggests annotation for both staged and tracked incomplete files if both exist."""
     
     # Create biotope config with default validation
     config = {
@@ -517,7 +511,6 @@ def test_status_prioritizes_staged_over_tracked_incomplete(runner, git_repo):
     }
     
     config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
-    import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -583,10 +576,134 @@ def test_status_prioritizes_staged_over_tracked_incomplete(runner, git_repo):
             os.chdir(git_repo)
             # Run status command in the correct working directory
             result = runner.invoke(status)
-            # Should suggest --staged (not --incomplete) when there are staged files
+            # Should suggest --staged when there are incomplete staged files
             assert result.exit_code == 0
             assert "biotope annotate interactive --staged" in result.output
             assert "staged file" in result.output or "staged files" in result.output
             # Should also suggest --incomplete if both exist
             assert "biotope annotate interactive --incomplete" in result.output
             assert "tracked file" in result.output or "tracked files" in result.output 
+
+def test_status_detailed_shows_errors_for_incomplete_metadata(runner, git_repo):
+    """Test that status --detailed shows validation errors for incomplete metadata."""
+    config = {
+        "annotation_validation": {
+            "enabled": True,
+            "minimum_required_fields": ["name", "description", "creator"],
+        }
+    }
+    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump(config, f)
+
+    incomplete_metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "experiment",
+    }
+    metadata_file = git_repo / ".biotope" / "datasets" / "experiment.jsonld"
+    with open(metadata_file, "w") as f:
+        json.dump(incomplete_metadata, f)
+
+    with mock.patch("biotope.utils.find_biotope_root", return_value=git_repo), \
+         mock.patch("biotope.commands.status._get_git_status", return_value={"staged": [], "modified": [], "untracked": []}):
+        with runner.isolated_filesystem():
+            os.chdir(git_repo)
+            result = runner.invoke(status, ["--detailed"])
+            assert result.exit_code == 0
+            assert "Validation Issues" in result.output
+            assert "description" in result.output
+            assert "creator" in result.output
+
+def test_status_detailed_shows_no_errors_when_validation_disabled(runner, git_repo):
+    """Test that status --detailed shows no validation errors when validation is disabled."""
+    config = {
+        "annotation_validation": {
+            "enabled": False,  # Validation is disabled
+            "minimum_required_fields": ["name", "description", "creator"],
+        }
+    }
+    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump(config, f)
+
+    # This metadata is incomplete based on the rules, but validation is off
+    incomplete_metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "experiment",
+    }
+    metadata_file = git_repo / ".biotope" / "datasets" / "experiment.jsonld"
+    with open(metadata_file, "w") as f:
+        json.dump(incomplete_metadata, f)
+
+    with mock.patch("biotope.utils.find_biotope_root", return_value=git_repo), \
+         mock.patch("biotope.commands.status._get_git_status", return_value={"staged": [], "modified": [], "untracked": []}):
+        with runner.isolated_filesystem():
+            os.chdir(git_repo)
+            result = runner.invoke(status, ["--detailed"])
+            assert result.exit_code == 0
+            assert "Validation Issues" not in result.output
+            assert "Complete" in result.output
+            assert "Incomplete" not in result.output
+
+def test_status_no_detailed_suggests_detailed_for_incomplete_metadata(runner, git_repo):
+    """Test that status without --detailed suggests running with --detailed for incomplete metadata."""
+    config = {
+        "annotation_validation": {
+            "enabled": True,
+            "minimum_required_fields": ["name", "description", "creator"],
+        }
+    }
+    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump(config, f)
+
+    incomplete_metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "experiment",
+    }
+    metadata_file = git_repo / ".biotope" / "datasets" / "experiment.jsonld"
+    with open(metadata_file, "w") as f:
+        json.dump(incomplete_metadata, f)
+
+    with mock.patch("biotope.utils.find_biotope_root", return_value=git_repo), \
+         mock.patch("biotope.commands.status._get_git_status", return_value={"staged": [], "modified": [], "untracked": []}):
+        with runner.isolated_filesystem():
+            os.chdir(git_repo)
+            result = runner.invoke(status)
+            assert result.exit_code == 0
+            assert "Validation Issues" not in result.output
+            assert "biotope status --detailed" in result.output
+
+def test_status_detailed_shows_no_errors_for_complete_metadata(runner, git_repo):
+    """Test that status --detailed shows no validation errors for complete metadata."""
+    config = {
+        "annotation_validation": {
+            "enabled": True,
+            "minimum_required_fields": ["name", "description", "creator"],
+        }
+    }
+    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump(config, f)
+
+    complete_metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "experiment",
+        "description": "A complete description.",
+        "creator": {"name": "Test User"},
+    }
+    metadata_file = git_repo / ".biotope" / "datasets" / "experiment.jsonld"
+    with open(metadata_file, "w") as f:
+        json.dump(complete_metadata, f)
+
+    with mock.patch("biotope.utils.find_biotope_root", return_value=git_repo), \
+         mock.patch("biotope.commands.status._get_git_status", return_value={"staged": [], "modified": [], "untracked": []}):
+        with runner.isolated_filesystem():
+            os.chdir(git_repo)
+            result = runner.invoke(status, ["--detailed"])
+            assert result.exit_code == 0
+            assert "Validation Issues" not in result.output
