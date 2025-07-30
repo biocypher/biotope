@@ -110,7 +110,10 @@ schema. It is available as the `biotope annotate` module. Usage:
 
 ```
 pip install biotope
-biotope annotate interactive
+biotope init
+biotope add data  # assuming your data is in data/
+biotope annotate interactive --staged
+biotope commit -m "added datasets"
 ```
 
 You can also use the `biotope get` command to download files and stage them for annotation and version control:
