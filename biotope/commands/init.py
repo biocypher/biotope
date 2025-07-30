@@ -18,6 +18,10 @@ from biotope.utils import is_git_repo
     default=".",
     help="Directory to initialize biotope project in",
 )
+def init_command(dir: Path) -> None:  # noqa: A002
+    init(dir)
+    
+
 def init(dir: Path) -> None:  # noqa: A002
     """
     Initialize a new biotope with interactive configuration in the specified directory.
