@@ -271,6 +271,43 @@ def test_biocontext_search_sort_relevance(tmp_path, mock_registry_data_with_repo
             assert len(results) > 0
 
 
+def test_biocontext_calculate_relevance_score(tmp_path):
+    """Test relevance score calculation."""
+    registry_manager = RegistryManager(tmp_path)
+    biocontext = BioContextRegistry(registry_manager)
+    
+    # Test server with exact name match
+    server_exact_name = {
+        "name": "Python MCP Server",
+        "description": "A server for Python",
+        "keywords": ["python", "mcp"],
+        "stars": 100
+    }
+    score_exact = biocontext._calculate_relevance_score(server_exact_name, "python")
+    assert score_exact >= 10.0  # Exact name match
+    
+    # Test server with keyword match only
+    server_keyword_only = {
+        "name": "BioMCP",
+        "description": "A bioinformatics server",
+        "keywords": ["python", "bioinformatics"],
+        "stars": 50
+    }
+    score_keyword = biocontext._calculate_relevance_score(server_keyword_only, "python")
+    assert score_keyword >= 4.0  # Keyword match
+    assert score_keyword < score_exact  # Should be lower than exact name match
+    
+    # Test server with no matches
+    server_no_match = {
+        "name": "Reactome MCP",
+        "description": "A pathway server",
+        "keywords": ["reactome", "pathways"],
+        "stars": 25
+    }
+    score_no_match = biocontext._calculate_relevance_score(server_no_match, "python")
+    assert score_no_match < 2.0  # Only star bonus
+
+
 def test_biocontext_get_github_stars_success(tmp_path):
     """Test BioContextRegistry._get_github_stars with successful API call."""
     registry_manager = RegistryManager(tmp_path)
@@ -332,4 +369,39 @@ def test_biocontext_get_github_stars_malformed_url(tmp_path):
     
     stars = biocontext._get_github_stars("https://github.com/invalid")
     
-    assert stars is None 
+    assert stars is None
+
+
+def test_biocontext_get_github_token_from_env(tmp_path):
+    """Test GitHub token retrieval from environment variable."""
+    registry_manager = RegistryManager(tmp_path)
+    biocontext = BioContextRegistry(registry_manager)
+    
+    with patch.dict('os.environ', {'GITHUB_TOKEN': 'test_token'}):
+        token = biocontext._get_github_token()
+        assert token == 'test_token'
+
+
+def test_biocontext_get_github_token_from_config(tmp_path):
+    """Test GitHub token retrieval from biotope config."""
+    registry_manager = RegistryManager(tmp_path)
+    biocontext = BioContextRegistry(registry_manager)
+    
+    # Create a mock config with GitHub token
+    mock_config = {'github_token': 'config_token'}
+    
+    with patch('biotope.validation.load_biotope_config', return_value=mock_config):
+        with patch('biotope.utils.find_biotope_root', return_value=tmp_path):
+            with patch.dict('os.environ', {}, clear=True):  # Clear environment variables
+                token = biocontext._get_github_token()
+                assert token == 'config_token'
+
+
+def test_biocontext_get_github_token_none(tmp_path):
+    """Test GitHub token retrieval when no token is available."""
+    registry_manager = RegistryManager(tmp_path)
+    biocontext = BioContextRegistry(registry_manager)
+    
+    with patch.dict('os.environ', {}, clear=True):
+        token = biocontext._get_github_token()
+        assert token is None 

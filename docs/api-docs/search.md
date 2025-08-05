@@ -126,4 +126,32 @@ biotope add genomoncology/biomcp
 - Rich table formatting for clear output
 - Graceful error handling for network issues
 - Fetches GitHub star counts for popularity ranking
-- Supports sorting by relevance, stars, or name 
+- Supports sorting by relevance, stars, or name
+
+### Relevance Scoring Algorithm
+
+When using `--sort relevance` (default), results are scored based on:
+
+- **Exact name match**: 10.0 points (highest priority)
+- **Partial name match**: 8.0 points
+- **Exact description match**: 5.0 points
+- **Partial description match**: 3.0 points
+- **Exact keyword match**: 4.0 points per keyword
+- **Partial keyword match**: 2.0 points per keyword
+- **Star count bonus**: Up to 2.0 points for popular servers
+
+Results are sorted by score (highest first), then alphabetically by name.
+
+### GitHub Star Counts
+
+Star counts are fetched from GitHub's API. Due to rate limiting, you may need to:
+
+1. **Set GitHub Token**: Add `GITHUB_TOKEN` environment variable
+2. **Configure in Project**: Add `github_token` to your `biotope.yaml` config
+3. **Accept Limitations**: Without authentication, star counts may show "—" when rate limited
+
+Example configuration:
+```yaml
+# In biotope.yaml
+github_token: "ghp_your_token_here"
+``` 
