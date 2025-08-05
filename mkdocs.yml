@@ -40,6 +40,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Project Context: project-context.md
   - Git Integration: git-integration.md
   - Git Integration for Developers: git-integration-dev.md
   - Cluster Compliance: cluster-compliance.md
