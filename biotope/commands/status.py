@@ -35,17 +35,7 @@ from biotope.utils import find_biotope_root, is_git_repo
     help="Show detailed validation errors for tracked datasets.",
 )
 def status(porcelain: bool, biotope_only: bool, detailed: bool) -> None:
-    """
-    Show the current status of the biotope project using Git.
-    
-    Displays Git status for .biotope/ directory changes.
-    Similar to git status but focused on metadata.
-    
-    Args:
-        porcelain: Output in machine-readable format
-        biotope_only: Show only .biotope/ directory changes
-        detailed: Show detailed validation errors for tracked datasets.
-    """
+    """Show the current status of the biotope project using Git."""
     console = Console()
     
     # Find biotope project root

@@ -38,19 +38,7 @@ from biotope.utils import find_biotope_root, is_git_repo
     help="Show only commits affecting .biotope/ directory",
 )
 def log(oneline: bool, max_count: Optional[int], since: Optional[str], author: Optional[str], biotope_only: bool) -> None:
-    """
-    Show commit history using Git.
-    
-    Displays Git log for .biotope/ directory changes.
-    Similar to git log but focused on metadata.
-    
-    Args:
-        oneline: Show one line per commit
-        max_count: Limit the number of commits to output
-        since: Show commits more recent than a specific date
-        author: Show commits by specific author
-        biotope_only: Show only commits affecting .biotope/ directory
-    """
+    """Show commit history using Git."""
     console = Console()
     
     # Find biotope project root
