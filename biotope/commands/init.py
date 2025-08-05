@@ -364,6 +364,10 @@ def create_project_structure(
 /downloads/
 /tmp/
 
+# Biotope cache files (not tracked in Git)
+# Cache contains temporary registry data and other cached content
+.biotope/cache/
+
 # Python
 __pycache__/
 *.py[cod]
