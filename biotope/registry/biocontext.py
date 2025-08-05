@@ -45,7 +45,7 @@ class BioContextRegistry:
                 results.append(server_with_stars)
         
         # Sort results based on sort parameter
-        if sort == "stars":
+        if sort == "impact":
             # Sort by stars (descending), then by name
             results.sort(key=lambda x: (
                 -int(x.get("stars", 0)) if isinstance(x.get("stars"), int) else 0,

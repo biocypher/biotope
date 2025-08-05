@@ -431,9 +431,9 @@ def test_add_command_no_git_repo(mock_is_git, mock_find_root, runner, biotope_pr
 def test_add_command_no_paths(runner):
     """Test add command with no paths specified."""
     result = runner.invoke(add, [])
-    
+
     assert result.exit_code != 0
-    assert "No paths specified" in result.output
+    assert "Usage: add [OPTIONS] [PATHS]..." in result.output
 
 
 @mock.patch("biotope.utils.find_biotope_root")

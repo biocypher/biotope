@@ -18,7 +18,7 @@ from biotope.registry.biotools import BioToolsRegistry
 @click.argument("query", required=False)
 @click.option("--limit", "-n", default=10, help="Number of results to show")
 @click.option("--type", "-t", help="Resource type to search (mcp, biotools)")
-@click.option("--sort", "-s", type=click.Choice(["relevance", "stars", "name"]), default="relevance", help="Sort results by relevance, stars, or name")
+@click.option("--sort", "-s", type=click.Choice(["relevance", "impact", "name"]), default="relevance", help="Sort results by relevance, impact, or name")
 def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> None:
     """
     Search for resources across configured registries.
@@ -127,10 +127,26 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
         except Exception as e:
             click.echo(f"⚠️  bio.tools API error: {e}")
         
-        # Sort combined results by relevance score if available
+        # Sort combined results
         if sort == "relevance":
             all_results.sort(key=lambda x: (
                 -x.get("_relevance_score", 0),
+                x.get("name", "").lower()
+            ))
+        elif sort == "impact":
+            # Sort by impact (stars for MCP, citations for bio.tools)
+            def get_impact_value(result):
+                # MCP servers use "stars", bio.tools use "citations"
+                impact_str = result.get("stars", result.get("citations", "—"))
+                if impact_str == "—":
+                    return 0
+                try:
+                    return int(impact_str)
+                except (ValueError, TypeError):
+                    return 0
+            
+            all_results.sort(key=lambda x: (
+                -get_impact_value(x),
                 x.get("name", "").lower()
             ))
         elif sort == "name":
@@ -155,10 +171,14 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
     table.add_column("Identifier", style="green")
     table.add_column("Description", style="white")
     table.add_column("Keywords", style="yellow")
-    table.add_column("Stars", style="magenta")
     
-    # Add registry type column for combined searches
-    if search_type is None:
+    # Smart column labeling based on search type
+    if search_type == "mcp":
+        table.add_column("Stars", style="magenta")
+    elif search_type == "biotools":
+        table.add_column("Citations", style="magenta")
+    else:  # Combined search
+        table.add_column("Impact", style="magenta")
         table.add_column("Type", style="blue")
     
     for server in results:
@@ -166,18 +186,27 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
         identifier = server.get("identifier", "Unknown")
         description = server.get("description", "No description")
         keywords = ", ".join(server.get("keywords", []))
-        stars = server.get("stars", "—")
+        
+        # Get impact value based on registry type
+        if search_type == "mcp":
+            impact_value = server.get("stars", "—")
+        elif search_type == "biotools":
+            impact_value = server.get("citations", "—")
+        else:  # Combined search
+            # MCP servers use "stars", bio.tools use "citations"
+            impact_value = server.get("stars", server.get("citations", "—"))
         
         # Truncate long descriptions
         if len(description) > 100:
             description = description[:97] + "..."
         
-        if search_type is None:
-            # Show registry type for combined searches
+        if search_type == "mcp":
+            table.add_row(name, identifier, description, keywords, str(impact_value))
+        elif search_type == "biotools":
+            table.add_row(name, identifier, description, keywords, str(impact_value))
+        else:  # Combined search
             registry_type = server.get("_registry_name", "Unknown")
-            table.add_row(name, identifier, description, keywords, str(stars), registry_type)
-        else:
-            table.add_row(name, identifier, description, keywords, str(stars))
+            table.add_row(name, identifier, description, keywords, str(impact_value), registry_type)
     
     console.print(table)
     
@@ -191,4 +220,5 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
         biotools_count = sum(1 for r in results if r.get("_registry_type") == "biotools")
         
         click.echo(f"\n💡 Found {len(results)} resource(s): {mcp_count} MCP server(s), {biotools_count} bioinformatics tool(s)")
+        click.echo("   Impact: GitHub stars for MCP servers, citation counts for bioinformatics tools")
         click.echo("   Use 'biotope add <identifier>' for MCP servers, or visit bio.tools for tool details.") 

@@ -28,7 +28,7 @@ biotope search <query> [OPTIONS]
 
 - `--limit, -n`: Number of results to show (default: 10)
 - `--type, -t`: Resource type to search (mcp, biotools). If not specified, searches all registries
-- `--sort, -s`: Sort results by relevance, stars, or name (default: relevance)
+- `--sort, -s`: Sort results by relevance, impact, or name (default: relevance)
 
 ## Examples
 
@@ -64,12 +64,12 @@ Search for bioinformatics tools only:
 biotope search "sequence alignment" --type biotools
 ```
 
-### Sort by Popularity
+### Sort by Impact
 
-Sort results by GitHub star count (most popular first):
+Sort results by impact (GitHub stars for MCP servers, citations for bioinformatics tools):
 
 ```bash
-biotope search PubMed --sort stars
+biotope search PubMed --sort impact
 ```
 
 ### Sort by Name
@@ -80,6 +80,14 @@ Sort results alphabetically by name:
 biotope search python --sort name
 ```
 
+### Sort by Impact
+
+Sort results by impact (GitHub stars for MCP servers, citations for bioinformatics tools):
+
+```bash
+biotope search python --sort impact
+```
+
 ## Output
 
 The command displays results in a formatted table with the following columns:
@@ -88,7 +96,10 @@ The command displays results in a formatted table with the following columns:
 - **Identifier**: Unique identifier (GitHub repository for MCP servers, biotoolsID for tools)
 - **Description**: Resource description (truncated if > 100 characters)
 - **Keywords**: Associated keywords/tags
-- **Stars**: GitHub star count (for MCP servers) or "—" (for bioinformatics tools)
+- **Impact Metrics**: 
+  - **Stars**: GitHub star count (MCP-only searches)
+  - **Citations**: Citation count (bio.tools-only searches)
+  - **Impact**: GitHub stars for MCP servers, citation counts for bioinformatics tools (combined searches)
 - **Type**: Resource type (shown only when searching all registries)
 
 ## Configuration

@@ -236,8 +236,8 @@ def test_biocontext_search_sort_by_stars(tmp_path, mock_registry_data_with_repos
     
     with patch.object(registry_manager, 'fetch_registry', return_value=mock_registry_data_with_repos):
         with patch.object(biocontext, '_get_github_stars', side_effect=[100, 50, 200]):
-            results = biocontext.search("MCP", sort="stars")  # "MCP" matches all servers
-            
+            results = biocontext.search("MCP", sort="impact")  # "MCP" matches all servers
+
             # Should be sorted by stars (descending)
             assert len(results) == 3
             # First result should have highest star count
@@ -580,4 +580,4 @@ def test_biotools_format_tool_for_display(tmp_path):
     assert "Database search" in formatted["keywords"]
     assert "Sequence alignment" in formatted["keywords"]
     assert formatted["homepage"] == "https://blast.ncbi.nlm.nih.gov/"
-    assert formatted["stars"] == "—"  # bio.tools doesn't have stars 
+    assert formatted["citations"] == "—"  # bio.tools doesn't have citations for this mock 

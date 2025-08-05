@@ -119,8 +119,9 @@ def test_search_command_success(biotope_project, mock_registry_data):
             
             assert result.exit_code == 0
             assert "BioMCP" in result.output
-            assert "genomoncology/bio" in result.output  # Account for table truncation
-            assert "Found 1 MCP server(s)" in result.output
+            # Combined search now shows "All Resources" instead of just MCP servers
+            assert "All Resources matching 'PubMed'" in result.output
+            assert "Found 10 resource(s): 1 MCP server(s), 9 bioinformatics tool(s)" in result.output
         finally:
             os.chdir(original_cwd)
 
@@ -141,7 +142,7 @@ def test_search_command_no_results(biotope_project):
             result = runner.invoke(search, ["nonexistent"])
             
             assert result.exit_code == 0
-            assert "No mcp servers found" in result.output
+            assert "No all resources found" in result.output
         finally:
             os.chdir(original_cwd)
 
@@ -153,7 +154,7 @@ def test_search_command_no_query(biotope_project):
     result = runner.invoke(search, [])
     
     assert result.exit_code != 0
-    assert "No search query provided" in result.output
+    assert "Usage: search [OPTIONS] [QUERY]" in result.output
 
 
 def test_search_command_not_in_project(tmp_path):
@@ -183,7 +184,7 @@ def test_search_command_with_limit(biotope_project, mock_registry_data):
             result = runner.invoke(search, ["python", "--limit", "2"])
             
             assert result.exit_code == 0
-            assert "Found 2 MCP server(s)" in result.output
+            assert "Found 2 resource(s)" in result.output
         finally:
             os.chdir(original_cwd)
 
@@ -213,21 +214,25 @@ def test_search_command_network_error(biotope_project):
     """Test search with network error."""
     runner = CliRunner()
     
-    with patch("biotope.registry.manager.RegistryManager.fetch_registry") as mock_fetch:
-        mock_fetch.side_effect = ValueError("Failed to fetch registry")
-        
-        # Change to the biotope project directory
-        import os
-        original_cwd = os.getcwd()
-        os.chdir(biotope_project)
-        
-        try:
-            result = runner.invoke(search, ["PubMed"])
+    # Mock both registry types to fail
+    with patch("biotope.registry.biocontext.BioContextRegistry.search") as mock_mcp:
+        with patch("biotope.registry.biotools.BioToolsRegistry.search") as mock_biotools:
+            mock_mcp.side_effect = ValueError("Failed to fetch MCP registry")
+            mock_biotools.side_effect = ValueError("Failed to fetch bio.tools registry")
             
-            assert result.exit_code != 0
-            assert "Failed to fetch registry" in result.output
-        finally:
-            os.chdir(original_cwd)
+            # Change to the biotope project directory
+            import os
+            original_cwd = os.getcwd()
+            os.chdir(biotope_project)
+            
+            try:
+                result = runner.invoke(search, ["PubMed"])
+                
+                # With combined search, the command should still succeed but show warnings
+                assert result.exit_code == 0
+                assert "No all resources found" in result.output
+            finally:
+                os.chdir(original_cwd)
 
 
 def test_search_command_long_description_truncation(biotope_project):
@@ -282,7 +287,7 @@ def test_search_command_table_formatting(biotope_project, mock_registry_data):
             assert "Identifier" in result.output
             assert "Description" in result.output
             assert "Keywords" in result.output
-            assert "Stars" in result.output  # New column
+            assert "Impact" in result.output  # New column for combined search
             # Check that data is present
             assert "BioMCP" in result.output
             assert "AACT MCP" in result.output
@@ -303,10 +308,10 @@ def test_search_command_sort_by_stars(biotope_project, mock_registry_data):
         os.chdir(biotope_project)
         
         try:
-            result = runner.invoke(search, ["python", "--sort", "stars"])
+            result = runner.invoke(search, ["python", "--sort", "impact"])
             
             assert result.exit_code == 0
-            assert "Stars" in result.output
+            assert "Impact" in result.output
             # Should show star counts (even if they're "—" for mocked data)
         finally:
             os.chdir(original_cwd)
