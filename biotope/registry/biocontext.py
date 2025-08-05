@@ -7,9 +7,9 @@ from .manager import RegistryManager
 class BioContextRegistry:
     """Handles BioContext registry operations."""
     
-    def __init__(self, registry_manager: RegistryManager):
+    def __init__(self, registry_manager: RegistryManager, url: str = "https://biocontext.ai/registry.json"):
         self.registry_manager = registry_manager
-        self.url = "https://biocontext.ai/registry.json"
+        self.url = url
     
     def search(self, query: str, limit: int = 10) -> List[Dict]:
         """Search BioContext registry for MCP servers."""

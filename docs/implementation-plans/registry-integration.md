@@ -336,18 +336,18 @@ The command displays results in a table format showing:
 - [x] Add basic caching functionality
 
 ### Task 2: Search Command
-- [ ] Implement search command (`biotope/commands/search.py`)
-- [ ] Add search command to CLI (`biotope/cli.py`)
-- [ ] Create comprehensive tests (`tests/commands/test_search.py`)
+- [x] Implement search command (`biotope/commands/search.py`)
+- [x] Add search command to CLI (`biotope/cli.py`)
+- [x] Create comprehensive tests (`tests/commands/test_search.py`)
 
 ### Task 3: Configuration Integration
-- [ ] Update project configuration to include registry settings
-- [ ] Add registry configuration to init command
+- [x] Update project configuration to include registry settings
+- [x] Add registry configuration to init command
 
 ### Task 4: Documentation & Polish
-- [ ] Write API documentation (`docs/api-docs/search.md`)
-- [ ] Update user guides and examples
-- [ ] Integration testing and error handling improvements
+- [x] Write API documentation (`docs/api-docs/search.md`)
+- [x] Update user guides and examples
+- [x] Integration testing and error handling improvements
 
 ## Success Criteria
 

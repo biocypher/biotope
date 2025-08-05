@@ -20,6 +20,7 @@ are prototypes for new features. See more information in the API documentation.
 - `biotope init`: Initialize a new project
 - `biotope status/add/commit/log/push/pull`: Manage metadata in a git-like fashion
 - `biotope get`: Download files from a URL and stage them for annotation and version control
+- `biotope search`: Search for MCP servers and other resources across registries
 - `biotope annotate`: Annotate your data with consistent metadata in Croissant ML
 - `biotope check-data`: Perform consistency checks for file integrity
 - `biotope mv`: Move tracked files and update metadata automatically
@@ -82,6 +83,25 @@ biotope log --oneline
 ```
 
 **Note**: Data files are automatically excluded from Git tracking via `.gitignore`. Only metadata is version controlled, keeping repositories small and focused.
+
+### Registry Integration
+
+Biotope supports searching and integrating external resources through registry systems:
+
+- **MCP Servers**: Search and add Model Context Protocol servers from the BioContext registry
+- **Knowledge Graph Components**: Future support for BioCypher ecosystem components
+- **Caching**: Efficient caching of registry data with configurable duration
+- **Configuration**: Registry settings managed through project configuration
+
+#### Basic Registry Workflow
+
+```bash
+# Search for MCP servers
+biotope search PubMed
+
+# Add a specific server to your project
+biotope add genomoncology/biomcp
+```
 
 ### Project-Level Metadata
 

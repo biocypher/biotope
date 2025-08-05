@@ -340,6 +340,13 @@ def create_project_structure(
             "builds": metadata.get("builds", []),
             "knowledge_sources": metadata.get("knowledge_sources", []),
         },
+        # Registry configuration for external resources
+        "registries": {
+            "mcp": {
+                "url": "https://biocontext.ai/registry.json",
+                "cache_duration": 3600
+            }
+        },
     }
 
     # Add project metadata if provided
