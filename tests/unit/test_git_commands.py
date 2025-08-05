@@ -214,17 +214,19 @@ class TestGitIntegration:
         from biotope.commands.commit import find_biotope_root
         import os
         
-        # Should not find biotope root in empty directory
-        assert find_biotope_root() is None
-        
-        # Create .biotope directory
-        biotope_dir = tmp_path / ".biotope"
-        biotope_dir.mkdir()
-        
-        # Change to tmp_path and find root
+        # Change to tmp_path first to test from empty directory
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
+            
+            # Should not find biotope root in empty directory
+            assert find_biotope_root() is None
+            
+            # Create .biotope directory
+            biotope_dir = tmp_path / ".biotope"
+            biotope_dir.mkdir()
+            
+            # Should now find biotope root
             assert find_biotope_root() == tmp_path
         finally:
             os.chdir(original_cwd)

@@ -394,10 +394,16 @@ def test_add_command_no_biotope_project(mock_find_root, runner, tmp_path):
     test_file = tmp_path / "test.txt"
     test_file.write_text("test content")
     
-    result = runner.invoke(add, [str(test_file)])
-    
-    assert result.exit_code != 0
-    assert "Not in a biotope project" in result.output
+    # Run in isolated filesystem to avoid path issues
+    with runner.isolated_filesystem():
+        # Copy the test file to the isolated filesystem
+        isolated_test_file = Path("test.txt")
+        isolated_test_file.write_text("test content")
+        
+        result = runner.invoke(add, [str(isolated_test_file)])
+        
+        assert result.exit_code != 0
+        assert "Not in a biotope project" in result.output
 
 
 @mock.patch("biotope.utils.find_biotope_root")
