@@ -22,13 +22,10 @@ from biotope.registry.biotools import BioToolsRegistry
 def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> None:
     """
     Search for resources across configured registries.
-    
-    Currently supports searching:
-    - BioContext registry for MCP servers
-    - bio.tools registry for bioinformatics tools
     """
     if not query:
-        click.echo("❌ No search query provided. Use 'biotope search <query>'")
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
         raise click.Abort
     
     # Find biotope project root
