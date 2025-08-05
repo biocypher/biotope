@@ -345,6 +345,10 @@ def create_project_structure(
             "mcp": {
                 "url": "https://biocontext.ai/registry.json",
                 "cache_duration": 3600
+            },
+            "biotools": {
+                "url": "https://bio.tools/api",
+                "cache_duration": 3600
             }
         },
     }

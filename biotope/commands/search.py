@@ -11,18 +11,21 @@ from biotope.utils import find_biotope_root
 from biotope.validation import load_biotope_config
 from biotope.registry.manager import RegistryManager
 from biotope.registry.biocontext import BioContextRegistry
+from biotope.registry.biotools import BioToolsRegistry
 
 
 @click.command()
 @click.argument("query", required=False)
 @click.option("--limit", "-n", default=10, help="Number of results to show")
-@click.option("--type", "-t", help="Resource type to search (currently only 'mcp')")
+@click.option("--type", "-t", help="Resource type to search (mcp, biotools)")
 @click.option("--sort", "-s", type=click.Choice(["relevance", "stars", "name"]), default="relevance", help="Sort results by relevance, stars, or name")
 def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> None:
     """
     Search for resources across configured registries.
     
-    Currently supports searching the BioContext registry for MCP servers.
+    Currently supports searching:
+    - BioContext registry for MCP servers
+    - bio.tools registry for bioinformatics tools
     """
     if not query:
         click.echo("❌ No search query provided. Use 'biotope search <query>'")
@@ -43,40 +46,123 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
     
     # Get registry configuration
     registries = config.get("registries", {})
-    mcp_registry = registries.get("mcp", {})
     
-    if not mcp_registry:
-        click.echo("❌ No MCP registry configured. Please run 'biotope init' to set up registry configuration.")
-        raise click.Abort
+    # Determine which registries to search
+    search_type = type  # None means search all registries
     
-    # Initialize registry manager
-    registry_manager = RegistryManager(biotope_root)
+    if search_type == "mcp":
+        # Search only MCP registry
+        mcp_registry = registries.get("mcp", {})
+        if not mcp_registry:
+            click.echo("❌ No MCP registry configured. Please run 'biotope init' to set up registry configuration.")
+            raise click.Abort
+        
+        # Initialize registry manager
+        registry_manager = RegistryManager(biotope_root)
+        
+        # Search BioContext registry
+        try:
+            registry_url = mcp_registry.get("url", "https://biocontext.ai/registry.json")
+            biocontext = BioContextRegistry(registry_manager, registry_url)
+            results = biocontext.search(query, limit, sort)
+            registry_name = "MCP Servers"
+        except ValueError as e:
+            click.echo(f"❌ Registry error: {e}")
+            raise click.Abort
+        except Exception as e:
+            click.echo(f"❌ Unexpected error: {e}")
+            raise click.Abort
     
-    # Search BioContext registry
-    try:
-        registry_url = mcp_registry.get("url", "https://biocontext.ai/registry.json")
-        biocontext = BioContextRegistry(registry_manager, registry_url)
-        results = biocontext.search(query, limit, sort)
-    except ValueError as e:
-        click.echo(f"❌ Registry error: {e}")
-        raise click.Abort
-    except Exception as e:
-        click.echo(f"❌ Unexpected error: {e}")
+    elif search_type == "biotools":
+        # Search only bio.tools registry
+        # Initialize registry manager
+        registry_manager = RegistryManager(biotope_root)
+        
+        # Search bio.tools registry
+        try:
+            biotools = BioToolsRegistry(registry_manager)
+            raw_results = biotools.search(query, limit, sort)
+            
+            # Format results for display
+            results = []
+            for tool in raw_results:
+                formatted_tool = biotools._format_tool_for_display(tool)
+                results.append(formatted_tool)
+            
+            registry_name = "Bioinformatics Tools"
+        except Exception as e:
+            click.echo(f"❌ bio.tools API error: {e}")
+            raise click.Abort
+    
+    elif search_type is None:
+        # Search all available registries
+        all_results = []
+        registry_manager = RegistryManager(biotope_root)
+        
+        # Search MCP registry if configured
+        mcp_registry = registries.get("mcp", {})
+        if mcp_registry:
+            try:
+                registry_url = mcp_registry.get("url", "https://biocontext.ai/registry.json")
+                biocontext = BioContextRegistry(registry_manager, registry_url)
+                mcp_results = biocontext.search(query, limit, sort)
+                
+                # Add registry type to results for identification
+                for result in mcp_results:
+                    result["_registry_type"] = "mcp"
+                    result["_registry_name"] = "MCP Server"
+                
+                all_results.extend(mcp_results)
+            except Exception as e:
+                click.echo(f"⚠️  MCP registry error: {e}")
+        
+        # Search bio.tools registry
+        try:
+            biotools = BioToolsRegistry(registry_manager)
+            raw_biotools_results = biotools.search(query, limit, sort)
+            
+            # Format and add bio.tools results
+            for tool in raw_biotools_results:
+                formatted_tool = biotools._format_tool_for_display(tool)
+                formatted_tool["_registry_type"] = "biotools"
+                formatted_tool["_registry_name"] = "Bioinformatics Tool"
+                all_results.append(formatted_tool)
+        except Exception as e:
+            click.echo(f"⚠️  bio.tools API error: {e}")
+        
+        # Sort combined results by relevance score if available
+        if sort == "relevance":
+            all_results.sort(key=lambda x: (
+                -x.get("_relevance_score", 0),
+                x.get("name", "").lower()
+            ))
+        elif sort == "name":
+            all_results.sort(key=lambda x: x.get("name", "").lower())
+        
+        results = all_results[:limit]
+        registry_name = "All Resources"
+    
+    else:
+        click.echo(f"❌ Unknown registry type: {search_type}. Supported types: mcp, biotools")
         raise click.Abort
     
     if not results:
-        click.echo(f"🔍 No MCP servers found matching '{query}'")
+        click.echo(f"🔍 No {registry_name.lower()} found matching '{query}'")
         return
     
     # Display results
     console = Console()
-    table = Table(title=f"MCP Servers matching '{query}'")
+    table = Table(title=f"{registry_name} matching '{query}'")
     
     table.add_column("Name", style="cyan")
     table.add_column("Identifier", style="green")
     table.add_column("Description", style="white")
     table.add_column("Keywords", style="yellow")
     table.add_column("Stars", style="magenta")
+    
+    # Add registry type column for combined searches
+    if search_type is None:
+        table.add_column("Type", style="blue")
     
     for server in results:
         name = server.get("name", "Unknown")
@@ -89,7 +175,23 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
         if len(description) > 100:
             description = description[:97] + "..."
         
-        table.add_row(name, identifier, description, keywords, str(stars))
+        if search_type is None:
+            # Show registry type for combined searches
+            registry_type = server.get("_registry_name", "Unknown")
+            table.add_row(name, identifier, description, keywords, str(stars), registry_type)
+        else:
+            table.add_row(name, identifier, description, keywords, str(stars))
     
     console.print(table)
-    click.echo(f"\n💡 Found {len(results)} MCP server(s). Use 'biotope add <identifier>' to add one.") 
+    
+    if search_type == "mcp":
+        click.echo(f"\n💡 Found {len(results)} MCP server(s). Use 'biotope add <identifier>' to add one.")
+    elif search_type == "biotools":
+        click.echo(f"\n💡 Found {len(results)} bioinformatics tool(s). Visit bio.tools for more details.")
+    elif search_type is None:
+        # Count results by type
+        mcp_count = sum(1 for r in results if r.get("_registry_type") == "mcp")
+        biotools_count = sum(1 for r in results if r.get("_registry_type") == "biotools")
+        
+        click.echo(f"\n💡 Found {len(results)} resource(s): {mcp_count} MCP server(s), {biotools_count} bioinformatics tool(s)")
+        click.echo("   Use 'biotope add <identifier>' for MCP servers, or visit bio.tools for tool details.") 

@@ -141,7 +141,7 @@ def test_search_command_no_results(biotope_project):
             result = runner.invoke(search, ["nonexistent"])
             
             assert result.exit_code == 0
-            assert "No MCP servers found" in result.output
+            assert "No mcp servers found" in result.output
         finally:
             os.chdir(original_cwd)
 

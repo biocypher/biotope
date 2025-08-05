@@ -9,7 +9,10 @@ Search for resources across configured registries.
 
 ## Overview
 
-The `biotope search` command allows you to search for MCP servers and other resources across configured registries. Currently, it supports searching the BioContext registry for MCP servers.
+The `biotope search` command allows you to search for resources across configured registries. Currently, it supports:
+
+- **MCP Servers**: Search the BioContext registry for Model Context Protocol servers
+- **Bioinformatics Tools**: Search the bio.tools registry for bioinformatics software and tools
 
 ## Usage
 
@@ -24,22 +27,24 @@ biotope search <query> [OPTIONS]
 ## Options
 
 - `--limit, -n`: Number of results to show (default: 10)
-- `--type, -t`: Resource type to search (currently only 'mcp')
+- `--type, -t`: Resource type to search (mcp, biotools). If not specified, searches all registries
 - `--sort, -s`: Sort results by relevance, stars, or name (default: relevance)
 
 ## Examples
 
-### Basic Search
+### Basic Search (All Registries)
 
-Search for MCP servers containing "PubMed":
+Search across all registries for "PubMed":
 
 ```bash
 biotope search PubMed
 ```
 
+This will return both MCP servers and bioinformatics tools, sorted by relevance.
+
 ### Search with Limit
 
-Limit results to 5 servers:
+Limit results to 5 resources:
 
 ```bash
 biotope search python --limit 5
@@ -47,10 +52,16 @@ biotope search python --limit 5
 
 ### Search by Type
 
-Explicitly search for MCP servers:
+Search for MCP servers only:
 
 ```bash
 biotope search "clinical trials" --type mcp
+```
+
+Search for bioinformatics tools only:
+
+```bash
+biotope search "sequence alignment" --type biotools
 ```
 
 ### Sort by Popularity
@@ -73,11 +84,12 @@ biotope search python --sort name
 
 The command displays results in a formatted table with the following columns:
 
-- **Name**: Server name
-- **Identifier**: Unique identifier (usually GitHub repository)
-- **Description**: Server description (truncated if > 100 characters)
+- **Name**: Resource name
+- **Identifier**: Unique identifier (GitHub repository for MCP servers, biotoolsID for tools)
+- **Description**: Resource description (truncated if > 100 characters)
 - **Keywords**: Associated keywords/tags
-- **Stars**: GitHub star count (if available)
+- **Stars**: GitHub star count (for MCP servers) or "—" (for bioinformatics tools)
+- **Type**: Resource type (shown only when searching all registries)
 
 ## Configuration
 
@@ -92,6 +104,9 @@ registries:
   mcp:
     url: "https://biocontext.ai/registry.json"
     cache_duration: 3600
+  biotools:
+    url: "https://bio.tools/api"
+    cache_duration: 3600
 ```
 
 ## Error Handling
@@ -102,7 +117,8 @@ The command handles various error conditions:
 - **Not in biotope project**: Prompts to run `biotope init`
 - **No registry configured**: Prompts to run `biotope init`
 - **Network errors**: Displays registry error message
-- **No results**: Shows "No MCP servers found" message
+- **No results**: Shows "No resources found" message
+- **Registry-specific errors**: Graceful handling of individual registry failures
 
 ## Next Steps
 
@@ -120,13 +136,22 @@ biotope add genomoncology/biomcp
 
 ## Implementation Details
 
+### MCP Registry (BioContext)
 - Uses BioContext registry (https://biocontext.ai/registry.json)
+- Fetches GitHub star counts for popularity ranking
 - Implements caching with configurable duration (1 hour default)
+
+### Bioinformatics Tools Registry (bio.tools)
+- Uses bio.tools REST API (https://bio.tools/api)
+- Searches across tool names, descriptions, topics, and functions
+- No star counts (bio.tools doesn't provide popularity metrics)
+
+### Common Features
 - Case-insensitive search across name, description, and keywords
 - Rich table formatting for clear output
 - Graceful error handling for network issues
-- Fetches GitHub star counts for popularity ranking
 - Supports sorting by relevance, stars, or name
+- Implements caching with configurable duration (1 hour default)
 
 ### Relevance Scoring Algorithm
 
