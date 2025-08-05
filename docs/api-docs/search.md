@@ -25,6 +25,7 @@ biotope search <query> [OPTIONS]
 
 - `--limit, -n`: Number of results to show (default: 10)
 - `--type, -t`: Resource type to search (currently only 'mcp')
+- `--sort, -s`: Sort results by relevance, stars, or name (default: relevance)
 
 ## Examples
 
@@ -52,6 +53,22 @@ Explicitly search for MCP servers:
 biotope search "clinical trials" --type mcp
 ```
 
+### Sort by Popularity
+
+Sort results by GitHub star count (most popular first):
+
+```bash
+biotope search PubMed --sort stars
+```
+
+### Sort by Name
+
+Sort results alphabetically by name:
+
+```bash
+biotope search python --sort name
+```
+
 ## Output
 
 The command displays results in a formatted table with the following columns:
@@ -60,6 +77,7 @@ The command displays results in a formatted table with the following columns:
 - **Identifier**: Unique identifier (usually GitHub repository)
 - **Description**: Server description (truncated if > 100 characters)
 - **Keywords**: Associated keywords/tags
+- **Stars**: GitHub star count (if available)
 
 ## Configuration
 
@@ -106,4 +124,6 @@ biotope add genomoncology/biomcp
 - Implements caching with configurable duration (1 hour default)
 - Case-insensitive search across name, description, and keywords
 - Rich table formatting for clear output
-- Graceful error handling for network issues 
+- Graceful error handling for network issues
+- Fetches GitHub star counts for popularity ranking
+- Supports sorting by relevance, stars, or name 

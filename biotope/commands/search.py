@@ -17,7 +17,8 @@ from biotope.registry.biocontext import BioContextRegistry
 @click.argument("query", required=False)
 @click.option("--limit", "-n", default=10, help="Number of results to show")
 @click.option("--type", "-t", help="Resource type to search (currently only 'mcp')")
-def search(query: Optional[str], limit: int, type: Optional[str]) -> None:
+@click.option("--sort", "-s", type=click.Choice(["relevance", "stars", "name"]), default="relevance", help="Sort results by relevance, stars, or name")
+def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> None:
     """
     Search for resources across configured registries.
     
@@ -55,7 +56,7 @@ def search(query: Optional[str], limit: int, type: Optional[str]) -> None:
     try:
         registry_url = mcp_registry.get("url", "https://biocontext.ai/registry.json")
         biocontext = BioContextRegistry(registry_manager, registry_url)
-        results = biocontext.search(query, limit)
+        results = biocontext.search(query, limit, sort)
     except ValueError as e:
         click.echo(f"❌ Registry error: {e}")
         raise click.Abort
@@ -75,18 +76,20 @@ def search(query: Optional[str], limit: int, type: Optional[str]) -> None:
     table.add_column("Identifier", style="green")
     table.add_column("Description", style="white")
     table.add_column("Keywords", style="yellow")
+    table.add_column("Stars", style="magenta")
     
     for server in results:
         name = server.get("name", "Unknown")
         identifier = server.get("identifier", "Unknown")
         description = server.get("description", "No description")
         keywords = ", ".join(server.get("keywords", []))
+        stars = server.get("stars", "—")
         
         # Truncate long descriptions
         if len(description) > 100:
             description = description[:97] + "..."
         
-        table.add_row(name, identifier, description, keywords)
+        table.add_row(name, identifier, description, keywords, str(stars))
     
     console.print(table)
     click.echo(f"\n💡 Found {len(results)} MCP server(s). Use 'biotope add <identifier>' to add one.") 

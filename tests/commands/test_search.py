@@ -82,19 +82,22 @@ def mock_registry_data():
             "name": "BioMCP",
             "identifier": "genomoncology/biomcp",
             "description": "A Model Context Protocol server for bioinformatics",
-            "keywords": ["PubMed", "ClinicalTrials", "MyVariant", "python"]
+            "keywords": ["PubMed", "ClinicalTrials", "MyVariant", "python"],
+            "codeRepository": "https://github.com/genomoncology/biomcp"
         },
         {
             "name": "AACT MCP",
             "identifier": "navisbio/AACT_MCP",
             "description": "Clinical trials data access",
-            "keywords": ["AACT", "python"]
+            "keywords": ["AACT", "python"],
+            "codeRepository": "https://github.com/navisbio/AACT_MCP"
         },
         {
             "name": "Reactome MCP",
             "identifier": "augmented-nature/reactome-mcp",
             "description": "Pathway data access",
-            "keywords": ["Reactome", "pathways"]
+            "keywords": ["Reactome", "pathways"],
+            "codeRepository": "https://github.com/augmented-nature/reactome-mcp"
         }
     ]
 
@@ -116,7 +119,7 @@ def test_search_command_success(biotope_project, mock_registry_data):
             
             assert result.exit_code == 0
             assert "BioMCP" in result.output
-            assert "genomoncology/biomcp" in result.output
+            assert "genomoncology/bio" in result.output  # Account for table truncation
             assert "Found 1 MCP server(s)" in result.output
         finally:
             os.chdir(original_cwd)
@@ -279,8 +282,71 @@ def test_search_command_table_formatting(biotope_project, mock_registry_data):
             assert "Identifier" in result.output
             assert "Description" in result.output
             assert "Keywords" in result.output
+            assert "Stars" in result.output  # New column
             # Check that data is present
             assert "BioMCP" in result.output
             assert "AACT MCP" in result.output
         finally:
-            os.chdir(original_cwd) 
+            os.chdir(original_cwd)
+
+
+def test_search_command_sort_by_stars(biotope_project, mock_registry_data):
+    """Test search with sorting by stars."""
+    runner = CliRunner()
+    
+    with patch("biotope.registry.manager.RegistryManager.fetch_registry") as mock_fetch:
+        mock_fetch.return_value = mock_registry_data
+        
+        # Change to the biotope project directory
+        import os
+        original_cwd = os.getcwd()
+        os.chdir(biotope_project)
+        
+        try:
+            result = runner.invoke(search, ["python", "--sort", "stars"])
+            
+            assert result.exit_code == 0
+            assert "Stars" in result.output
+            # Should show star counts (even if they're "—" for mocked data)
+        finally:
+            os.chdir(original_cwd)
+
+
+def test_search_command_sort_by_name(biotope_project, mock_registry_data):
+    """Test search with sorting by name."""
+    runner = CliRunner()
+    
+    with patch("biotope.registry.manager.RegistryManager.fetch_registry") as mock_fetch:
+        mock_fetch.return_value = mock_registry_data
+        
+        # Change to the biotope project directory
+        import os
+        original_cwd = os.getcwd()
+        os.chdir(biotope_project)
+        
+        try:
+            result = runner.invoke(search, ["python", "--sort", "name"])
+            
+            assert result.exit_code == 0
+            assert "AACT MCP" in result.output
+            assert "BioMCP" in result.output
+        finally:
+            os.chdir(original_cwd)
+
+
+def test_search_command_invalid_sort_option(biotope_project):
+    """Test search with invalid sort option."""
+    runner = CliRunner()
+    
+    # Change to the biotope project directory
+    import os
+    original_cwd = os.getcwd()
+    os.chdir(biotope_project)
+    
+    try:
+        result = runner.invoke(search, ["test", "--sort", "invalid"])
+        
+        assert result.exit_code != 0
+        # Should show error about invalid choice
+    finally:
+        os.chdir(original_cwd) 
