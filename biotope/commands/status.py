@@ -13,6 +13,7 @@ from biotope.validation import (
     get_annotation_status_for_files,
     get_all_tracked_files,
     get_staged_metadata_files,
+    load_biotope_config,
 )
 from biotope.utils import find_biotope_root, is_git_repo
 
@@ -156,6 +157,28 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
         elif has_incomplete_tracked:
             console.print(f"\n💡 Run 'biotope status --detailed' to see validation issues.")
 
+    # Get MCP status
+    mcp_status = _get_mcp_status(biotope_root)
+    
+    # Show MCP status if configured
+    if mcp_status["configured"]:
+        console.print(f"\n[bold blue]MCP Registry:[/]")
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Registry", style="cyan")
+        table.add_column("Status", style="yellow")
+        table.add_column("URL", style="green")
+        
+        for registry_name, registry_info in mcp_status["registries"].items():
+            status_icon = "✅" if registry_info["accessible"] else "❌"
+            status_text = "Accessible" if registry_info["accessible"] else "Unreachable"
+            table.add_row(registry_name, f"{status_icon} {status_text}", registry_info["url"])
+        console.print(table)
+        
+        if mcp_status["suggestions"]:
+            console.print(f"\n💡 MCP Suggestions:")
+            for suggestion in mcp_status["suggestions"]:
+                console.print(f"  • {suggestion}")
+    
     # Summary
     total_staged = len(git_status["staged"])
     total_modified = len(git_status["modified"])
@@ -261,4 +284,56 @@ def _get_git_status(biotope_root: Path, biotope_only: bool) -> Dict[str, List]:
         return {"staged": [], "modified": [], "untracked": []}
 
 
- 
+def _get_mcp_status(biotope_root: Path) -> Dict:
+    """Get MCP registry status and configuration."""
+    try:
+        config = load_biotope_config(biotope_root)
+        registries = config.get("registries", {})
+        
+        if not registries:
+            return {
+                "configured": False,
+                "registries": {},
+                "suggestions": []
+            }
+        
+        mcp_status = {
+            "configured": True,
+            "registries": {},
+            "suggestions": []
+        }
+        
+        # Check each configured registry
+        for registry_name, registry_config in registries.items():
+            url = registry_config.get("url", "")
+            accessible = False
+            
+            # Test registry accessibility (with timeout to avoid hanging)
+            try:
+                import requests
+                response = requests.get(url, timeout=5)
+                accessible = response.status_code == 200
+            except Exception:
+                accessible = False
+            
+            mcp_status["registries"][registry_name] = {
+                "url": url,
+                "accessible": accessible
+            }
+        
+        # Add suggestions based on status
+        if mcp_status["registries"]:
+            accessible_registries = [name for name, info in mcp_status["registries"].items() if info["accessible"]]
+            if accessible_registries:
+                mcp_status["suggestions"].append("Run 'biotope search <query>' to find MCP servers")
+            else:
+                mcp_status["suggestions"].append("Registry is unreachable - check network connection")
+        
+        return mcp_status
+        
+    except Exception:
+        return {
+            "configured": False,
+            "registries": {},
+            "suggestions": []
+        }
