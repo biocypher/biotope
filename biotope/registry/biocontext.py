@@ -13,12 +13,13 @@ class BioContextRegistry:
         self.url = url
     
     def search(self, query: str, limit: int = 10, sort: str = "relevance") -> List[Dict]:
-        """Search BioContext registry for MCP servers."""
+        """Search BioContext registry for MCP servers using rank-based aggregation."""
         registry_data = self.registry_manager.fetch_registry(self.url)
         
         results = []
         query_lower = query.lower()
         
+        # Compute raw scores for all aspects
         for server in registry_data:
             # Search in name, description, and keywords
             if (query_lower in server.get("name", "").lower() or
@@ -36,30 +37,56 @@ class BioContextRegistry:
                 else:
                     server_with_stars["stars"] = "—"
                 
-                # Calculate relevance score
-                if sort == "relevance":
-                    server_with_stars["_relevance_score"] = self._calculate_relevance_score(
-                        server_with_stars, query_lower
-                    )
+                # Ensure identifier is present for ranking
+                server_with_stars["identifier"] = server_with_stars.get("identifier", server_with_stars.get("name", "unknown"))
+                
+                # Calculate raw scores
+                server_with_stars["_relevance_score"] = self._calculate_relevance_score(server_with_stars, query_lower)
+                server_with_stars["_impact_score"] = server_with_stars.get("stars", 0) if isinstance(server_with_stars.get("stars"), int) else 0
+                server_with_stars["_quality_score"] = self._calculate_quality_score(server_with_stars)
                 
                 results.append(server_with_stars)
         
-        # Sort results based on sort parameter
+        # Assign ranks for each aspect (1 = best)
+        def rank_servers(servers, key, reverse=True):
+            # reverse=True: higher score = better rank
+            sorted_servers = sorted(servers, key=lambda s: s[key], reverse=reverse)
+            ranks = {}
+            last_score = None
+            last_rank = 0
+            for idx, server in enumerate(sorted_servers):
+                score = server[key]
+                if score != last_score:
+                    last_rank = idx + 1
+                    last_score = score
+                ranks[server["identifier"]] = last_rank
+            return ranks
+        
+        relevance_ranks = rank_servers(results, "_relevance_score", reverse=True)
+        impact_ranks = rank_servers(results, "_impact_score", reverse=True)
+        quality_ranks = rank_servers(results, "_quality_score", reverse=True)
+        
+        # Average the ranks (equal weights)
+        for server in results:
+            server["_avg_rank"] = (
+                relevance_ranks[server["identifier"]] +
+                impact_ranks[server["identifier"]] +
+                quality_ranks[server["identifier"]]
+            ) / 3.0
+        
+        # Sort by average rank (ascending)
+        results.sort(key=lambda x: (x["_avg_rank"], x.get("name", "").lower()))
+        
+        # If sort == "impact", sort by impact only
         if sort == "impact":
-            # Sort by stars (descending), then by name
             results.sort(key=lambda x: (
                 -int(x.get("stars", 0)) if isinstance(x.get("stars"), int) else 0,
                 x.get("name", "").lower()
             ))
+        # If sort == "name", sort by name only
         elif sort == "name":
-            # Sort by name
             results.sort(key=lambda x: x.get("name", "").lower())
-        elif sort == "relevance":
-            # Sort by relevance score (descending), then by name
-            results.sort(key=lambda x: (
-                -x.get("_relevance_score", 0),
-                x.get("name", "").lower()
-            ))
+        # If sort == "relevance", use the rank-based order (already sorted)
         
         return results[:limit]
     
@@ -67,21 +94,21 @@ class BioContextRegistry:
         """Calculate relevance score for a server based on query."""
         score = 0.0
         
-        # Exact name match (highest weight)
+        # Exact name match (reduced weight)
         if query in server.get("name", "").lower():
-            score += 10.0
+            score += 5.0
         
         # Partial name match
         elif any(word in server.get("name", "").lower() for word in query.split()):
-            score += 8.0
+            score += 4.0
         
         # Exact description match
         if query in server.get("description", "").lower():
-            score += 5.0
+            score += 2.5
         
         # Partial description match
         elif any(word in server.get("description", "").lower() for word in query.split()):
-            score += 3.0
+            score += 1.5
         
         # Keyword matches
         keywords = server.get("keywords", [])
@@ -89,15 +116,25 @@ class BioContextRegistry:
         partial_keyword_matches = sum(1 for keyword in keywords 
                                     if any(word in keyword.lower() for word in query.split()))
         
-        score += exact_keyword_matches * 4.0
-        score += partial_keyword_matches * 2.0
+        score += exact_keyword_matches * 2.0
+        score += partial_keyword_matches * 1.0
         
-        # Star count bonus (small boost for popular servers)
+        return score
+    
+    def _calculate_quality_score(self, server: Dict) -> float:
+        """Calculate quality score for an MCP server."""
+        score = 0.0
+        
+        # Quality indicators for MCP servers
+        if server.get("description") and len(server.get("description", "")) > 50:
+            score += 0.3  # Good description
+        if server.get("keywords") and len(server.get("keywords", [])) > 2:
+            score += 0.2  # Good keyword coverage
+        if server.get("codeRepository"):
+            score += 0.3  # Has code repository
         stars = server.get("stars", 0)
-        if isinstance(stars, int) and stars > 0:
-            # More generous scaling for biomedical repos (typically 10-500 stars)
-            # 100 stars = 1.0 bonus, 500 stars = 2.0 bonus
-            score += min(stars / 100.0, 3.0)  # Cap at 3.0 bonus
+        if isinstance(stars, int) and stars > 10:
+            score += 0.2  # Popular server
         
         return score
     

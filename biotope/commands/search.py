@@ -129,10 +129,9 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
         
         # Sort combined results
         if sort == "relevance":
-            all_results.sort(key=lambda x: (
-                -x.get("_relevance_score", 0),
-                x.get("name", "").lower()
-            ))
+            # Preserve the registry's ranking order (which already considers impact and relevance)
+            # The results are already in the correct order from the registry
+            pass
         elif sort == "impact":
             # Sort by impact (stars for MCP, citations for bio.tools)
             def get_impact_value(result):
