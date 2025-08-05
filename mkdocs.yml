@@ -45,11 +45,12 @@ nav:
   - Git Integration for Developers: git-integration-dev.md
   - Cluster Compliance: cluster-compliance.md
   - API Docs:
+      - Init: api-docs/init.md
+      - Search: api-docs/search.md
       - Add: api-docs/add.md
       - Annotate: api-docs/annotate.md
       - Build: api-docs/build.md
       - Chat: api-docs/chat.md
-      - Init: api-docs/init.md
       - Read: api-docs/read.md
       - View: api-docs/view.md
   - Learn:
