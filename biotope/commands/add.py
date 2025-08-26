@@ -1,6 +1,7 @@
 """Add command implementation for tracking data files and metadata."""
 
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -99,15 +100,6 @@ def add(paths: tuple[Path, ...], recursive: bool, force: bool) -> None:
         for file_path in skipped_files:
             click.echo(f"  - {file_path}")
 
-    if added_files:
-        click.echo(f"\n💡 Next steps:")
-        click.echo(f"  1. Run 'biotope status' to see staged files")
-        click.echo(
-            f"  2. Run 'biotope annotate interactive --staged' to create metadata"
-        )
-        click.echo(f"  3. Run 'biotope commit -m \"message\"' to save changes")
-
-
 def _add_file(
     file_path: Path, biotope_root: Path, datasets_dir: Path, force: bool
 ) -> bool:
@@ -122,7 +114,7 @@ def _add_file(
 
     # Check if already tracked
     if not force and is_file_tracked(file_path, biotope_root):
-        click.echo(f"⚠️  File '{file_path}' already tracked (use --force to override)")
+        click.echo(f"⚠️  File {file_path.relative_to(biotope_root)} already tracked (use --force to override)")
         return False
 
     # Create basic metadata entry
@@ -144,6 +136,22 @@ def _add_file(
         ],
     }
 
+    metadata["dateCreated"] = datetime.now(timezone.utc).isoformat()
+
+    # Top-level creator (from git, if available)
+    git_name, git_email = _git_user_identity(biotope_root)
+    if git_name:
+        creator_obj = {"@type": "Person", "name": git_name}
+        if git_email:
+            creator_obj["email"] = git_email
+        metadata["creator"] = creator_obj
+    else:
+        click.echo(
+            "ℹ️  No Git identity found. Set it once to prefill 'creator' automatically:\n"
+            "    git config --global user.name  \"Your Name\"\n"
+            "    git config --global user.email \"you@example.com\""
+        )
+
     # Save metadata to datasets directory with directory structure mirroring
     relative_path = file_path.relative_to(biotope_root)
     metadata_file = datasets_dir / relative_path.with_suffix(".jsonld")
@@ -151,5 +159,21 @@ def _add_file(
     with open(metadata_file, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    click.echo(f"📁 Added {file_path} (SHA256: {sha256_hash[:8]}...)")
     return True
+
+def _git_user_identity(cwd: Path) -> tuple[str | None, str | None]:
+    """Return (name, email) from `git config`, preferring repo-local config."""
+    try:
+        name = subprocess.run(
+            ["git", "config", "--get", "user.name"],
+            cwd=cwd,
+            capture_output=True, text=True, check=False
+        ).stdout.strip() or None
+        email = subprocess.run(
+            ["git", "config", "--get", "user.email"],
+            cwd=cwd,
+            capture_output=True, text=True, check=False
+        ).stdout.strip() or None
+        return name, email
+    except FileNotFoundError:
+        return None, None
