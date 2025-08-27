@@ -3,6 +3,7 @@
 import datetime
 import getpass
 import json
+import csv
 import os
 import subprocess
 from pathlib import Path
@@ -42,7 +43,7 @@ def sample_metadata_file(tmp_path):
             "@type": "Person",
             "name": "researcher@university.edu",
         },
-        "dateCreated": "2023-01-15",
+        "dateCreated": "2025-08-27T13:37:12.651208+00:00",
         "cr:accessRestrictions": "Restricted to research use only",
         "encodingFormat": "CSV",
         "cr:legalObligations": "Data usage agreement required",
@@ -167,7 +168,7 @@ def test_create_command_with_required_fields(runner, tmp_path):
 def test_create_command_with_defaults(runner, tmp_path):
     """Test creating a new metadata file with default values for some fields."""
     output_path = tmp_path / "output.json"
-    today = datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
+    today_date = datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
     username = getpass.getuser()
 
     # Run the create command with minimal required fields
@@ -197,7 +198,12 @@ def test_create_command_with_defaults(runner, tmp_path):
     assert metadata["description"] == ""  # Default empty string
     assert metadata["url"] == "https://example.org/proteomics"  # Changed from dataSource
     assert metadata["creator"]["name"] == username  # Changed from contactPerson
-    assert metadata["dateCreated"] == today  # Changed from creationDate
+    # Expect an ISO 8601 datetime with timezone; date portion should be today
+    date_created_str = metadata["dateCreated"]
+    assert "T" in date_created_str  # ensure datetime-like format
+    dt = datetime.datetime.fromisoformat(date_created_str.replace("Z", "+00:00"))
+    assert dt.tzinfo is not None and dt.utcoffset() == datetime.timedelta(0)
+    assert dt.date().isoformat() == today_date
     assert metadata["cr:accessRestrictions"] == "Public"  # Added cr: prefix
 
     # Optional fields should not be present
@@ -670,6 +676,93 @@ def test_real_validation_with_mlcroissant_cli(runner, tmp_path):
         f"Validation failed with error: {validation_error if 'validation_error' in locals() else 'unknown error'}"
     )
 
+
+def _write_simple_project_with_metadata(project_root: Path) -> Path:
+    """Helper: create a minimal biotope project with one metadata file."""
+    os.makedirs(project_root / ".git", exist_ok=True)
+    datasets_dir = project_root / ".biotope" / "datasets" / "data"
+    os.makedirs(datasets_dir, exist_ok=True)
+
+    metadata_path = datasets_dir / "file1.jsonld"
+    metadata = {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "Dataset",
+        "name": "data/file1.csv",
+        "description": "Dataset for file1.csv",
+        "license": "https://creativecommons.org/licenses/by/4.0/",
+        "citation": "Please cite this dataset as: Example (2025)",
+        "cr:projectName": "example-project",
+        "distribution": [
+            {
+                "@type": "sc:FileObject",
+                "@id": "file_abc12345",
+                "name": "file1.csv",
+                "contentUrl": "data/file1.csv",
+            }
+        ],
+    }
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    return metadata_path
+
+
+def test_batch_to_csv_generates_project_csv(runner, tmp_path):
+    """batch --to-csv creates .biotope.csv with rows from existing metadata."""
+    project_root = tmp_path
+    prev_cwd = os.getcwd()
+    try:
+        os.chdir(project_root)
+        _write_simple_project_with_metadata(project_root)
+
+        result = runner.invoke(annotate, ["batch", "--to-csv"])
+        assert result.exit_code == 0
+
+        csv_path = project_root / ".biotope.csv"
+        assert csv_path.exists()
+
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) == 1
+        row = rows[0]
+        # Required columns present and populated
+        assert row["filepath"] == "data/file1.csv"
+        assert row["description"] == "Dataset for file1.csv"
+        # Optional columns exist in header
+        assert "name" in row and "data_url" in row
+    finally:
+        os.chdir(prev_cwd)
+
+
+def test_batch_from_csv_noop_when_unedited(runner, tmp_path):
+    """batch --from-csv should not modify metadata when CSV is unedited."""
+    project_root = tmp_path
+    prev_cwd = os.getcwd()
+    try:
+        os.chdir(project_root)
+        metadata_path = _write_simple_project_with_metadata(project_root)
+        before = metadata_path.read_text(encoding="utf-8")
+
+        # Generate CSV
+        to_csv_result = runner.invoke(annotate, ["batch", "--to-csv"])
+        assert to_csv_result.exit_code == 0
+        csv_path = project_root / ".biotope.csv"
+        assert csv_path.exists()
+
+        # Import from CSV without changes
+        from_csv_result = runner.invoke(annotate, ["batch", "--from-csv"])
+        assert from_csv_result.exit_code == 0
+        # The command cleans up the CSV file after applying
+        assert not csv_path.exists()
+
+        after = metadata_path.read_text(encoding="utf-8")
+        assert before == after  # No change expected
+        # Summary should report unchanged = 1
+        assert "Unchanged: 1" in from_csv_result.output
+    finally:
+        os.chdir(prev_cwd)
 
 @pytest.mark.integration
 def test_real_validation_complex_metadata_cli(runner, tmp_path):
