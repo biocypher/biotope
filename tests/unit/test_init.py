@@ -357,3 +357,29 @@ def test_init_metadata():
             assert "last_modified" in project_info
             assert isinstance(project_info["builds"], list)
             assert isinstance(project_info["knowledge_sources"], list)
+
+
+def test_init_non_interactive():
+    """Test initialization with --non-interactive flag uses git user.name and skips prompts."""
+    import subprocess
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        # Initialize a git repo and set a user.name so non-interactive can derive project name
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "ci-user"], check=True, capture_output=True)
+
+        result = runner.invoke(
+            init,
+            ["--non-interactive"],
+            obj={"version": "0.1.0"},
+        )
+
+        assert result.exit_code == 0
+        # Should announce automatic initialization with derived project name
+        assert "Initializing biotope automatically with project name" in result.output
+
+        # Check that config was created with the derived project name
+        with open("config/biotope.yaml") as f:
+            config = yaml.safe_load(f)
+            assert config["project"]["name"] == "ci-user_project"

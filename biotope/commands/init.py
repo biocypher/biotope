@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 import yaml
 from rich.console import Console
+import subprocess
 
 from biotope.utils import is_git_repo
 
@@ -18,7 +19,15 @@ from biotope.utils import is_git_repo
     default=".",
     help="Directory to initialize biotope project in",
 )
-def init(dir: Path) -> None:  # noqa: A002
+@click.option(
+    "--non-interactive",
+    "-n",
+    is_flag=True,
+    default=False,
+    help="Run initialization without interactive prompts (fail if required inputs missing).",
+)
+
+def init(dir: Path, non_interactive: bool) -> None:  # noqa: A002
     """
     Initialize a new biotope with interactive configuration in the specified directory.
     """
@@ -66,17 +75,38 @@ def init(dir: Path) -> None:  # noqa: A002
     click.echo("Establishing biotope! Let's set up your project.\n")
 
     # Project name
-    project_name = click.prompt(
-        "What's your project name?",
-        type=str,
-        default=dir.absolute().name,
-    )
+    if non_interactive:
+        # derive username from git if available, otherwise fallback to system user
+        try:
+            git_name = (
+                subprocess.run(
+                    ["git", "config", "user.name"], stdout=subprocess.PIPE, check=True
+                )
+                .stdout.decode()
+                .strip()
+            )
+        except Exception:
+            import getpass
+
+            git_name = getpass.getuser()
+
+        project_name = f"{git_name}_project"
+        click.echo(f"Initializing biotope automatically with project name: {project_name}")
+    else:
+        project_name = click.prompt(
+            "What's your project name?",
+            type=str,
+            default=dir.absolute().name,
+        )
 
     # Knowledge sources
     knowledge_sources = []
-    use_knowledge_graph = click.confirm(
-        "Would you like to install a knowledge graph now?", default=False
-    )
+    if non_interactive:
+        use_knowledge_graph = False
+    else:
+        use_knowledge_graph = click.confirm(
+            "Would you like to install a knowledge graph now?", default=False
+        )
     if use_knowledge_graph:
         while True:
             source = click.prompt(
@@ -104,9 +134,12 @@ def init(dir: Path) -> None:  # noqa: A002
         )
 
     # LLM integration
-    use_llm = click.confirm(
-        "\nWould you like to set up LLM integration?", default=False
-    )
+    if non_interactive:
+        use_llm = False
+    else:
+        use_llm = click.confirm(
+            "\nWould you like to set up LLM integration?", default=False
+        )
     if use_llm:
         llm_provider = click.prompt(
             "Which LLM provider would you like to use?",
@@ -123,18 +156,22 @@ def init(dir: Path) -> None:  # noqa: A002
                 hide_input=True,
             )
 
-    # Project-level metadata collection for pre-filling annotations
     console = Console()
-    console.print("\n[bold blue]Project Metadata Setup[/]")
-    console.print(
-        "The following information will be used to pre-fill metadata forms when creating dataset annotations."
-    )
-    console.print("You can skip any fields and provide them later during annotation.")
+    if not non_interactive:
+    # Project-level metadata collection for pre-filling annotations
+        console.print("\n[bold blue]Project Metadata Setup[/]")
+        console.print(
+            "The following information will be used to pre-fill metadata forms when creating dataset annotations."
+        )
+        console.print("You can skip any fields and provide them later during annotation.")
 
-    collect_project_metadata = click.confirm(
-        "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
-        default=True,
-    )
+    if non_interactive:
+        collect_project_metadata = False
+    else:
+        collect_project_metadata = click.confirm(
+            "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
+            default=True,
+        )
 
     project_metadata = {}
     if collect_project_metadata:
