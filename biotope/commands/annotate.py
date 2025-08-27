@@ -1691,6 +1691,19 @@ def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root
                     metadata["creator"][field_parts[1]] = value
             else:
                 metadata[metadata_field] = value
+
+    # Ensure creator name is captured even if mapping was altered or missing
+    try:
+        creator_val = row.get("creator", "").strip()
+        if creator_val:
+            if "creator" not in metadata or not isinstance(metadata.get("creator"), dict):
+                metadata["creator"] = {"@type": "Person", "name": creator_val}
+            else:
+                metadata["creator"]["name"] = creator_val
+                if "@type" not in metadata["creator"]:
+                    metadata["creator"]["@type"] = "Person"
+    except Exception:
+        pass
     
     # Use default name if name not provided
     if "name" not in metadata or not metadata["name"]:
@@ -1727,11 +1740,26 @@ def _create_annotation_from_metadata(
     
     # Update fields from CSV metadata, but preserve existing distribution
     for key, value in metadata.items():
-        if key == "creator" and isinstance(value, dict):
-            # Handle creator object specially
-            if "creator" not in updated_metadata:
-                updated_metadata["creator"] = {"@type": "Person"}
-            updated_metadata["creator"].update(value)
+        if key == "creator":
+            # Build a fresh creator object to avoid in-place mutation of nested dicts
+            if isinstance(value, dict):
+                existing_creator = (
+                    updated_metadata.get("creator")
+                    if isinstance(updated_metadata.get("creator"), dict)
+                    else {}
+                )
+                merged_creator = {"@type": "Person"}
+                # Preserve existing email if new one not provided
+                if isinstance(existing_creator, dict) and existing_creator.get("email"):
+                    merged_creator["email"] = existing_creator.get("email")
+                # Overlay incoming fields (name/email, etc.)
+                for k, v in value.items():
+                    merged_creator[k] = v
+                if "@type" not in merged_creator:
+                    merged_creator["@type"] = "Person"
+                updated_metadata["creator"] = merged_creator
+            elif isinstance(value, str) and value.strip():
+                updated_metadata["creator"] = {"@type": "Person", "name": value.strip()}
         elif key != "distribution":  # Don't overwrite distribution from existing file
             updated_metadata[key] = value
     

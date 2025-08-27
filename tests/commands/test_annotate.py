@@ -764,6 +764,100 @@ def test_batch_from_csv_noop_when_unedited(runner, tmp_path):
     finally:
         os.chdir(prev_cwd)
 
+
+def test_batch_from_csv_updates_when_edited(runner, tmp_path):
+    """batch --from-csv should update metadata when CSV values change."""
+    project_root = tmp_path
+    prev_cwd = os.getcwd()
+    try:
+        os.chdir(project_root)
+        metadata_path = _write_simple_project_with_metadata(project_root)
+
+        # Generate CSV
+        to_csv_result = runner.invoke(annotate, ["batch", "--to-csv"])
+        assert to_csv_result.exit_code == 0
+        csv_path = project_root / ".biotope.csv"
+        assert csv_path.exists()
+
+        # Edit CSV: change description and add encoding_format
+        rows = []
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+        assert rows
+        rows[0]["description"] = "Updated description from CSV"
+        rows[0]["encoding_format"] = "text/csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        # Apply from CSV
+        from_csv_result = runner.invoke(annotate, ["batch", "--from-csv"])
+        assert from_csv_result.exit_code == 0
+        assert "Updated: 1" in from_csv_result.output
+
+        # Verify metadata actually changed and distribution encodingFormat updated
+        with open(metadata_path, encoding="utf-8") as f:
+            updated = json.load(f)
+        assert updated["description"] == "Updated description from CSV"
+        # encodingFormat should be applied at top-level or on file objects per logic
+        if "encodingFormat" in updated:
+            assert updated["encodingFormat"] == "text/csv"
+        if "distribution" in updated:
+            for d in updated["distribution"]:
+                if d.get("@type") == "sc:FileObject":
+                    assert d.get("encodingFormat") == "text/csv"
+    finally:
+        os.chdir(prev_cwd)
+
+
+def test_batch_from_csv_updates_creator_name(runner, tmp_path):
+    """Changing the creator column in CSV should update creator.name in JSON-LD."""
+    project_root = tmp_path
+    prev_cwd = os.getcwd()
+    try:
+        os.chdir(project_root)
+        metadata_path = _write_simple_project_with_metadata(project_root)
+        with open(metadata_path, encoding="utf-8") as f:
+            original = json.load(f)
+        # Ensure creator exists initially (or add minimal one)
+        if "creator" not in original:
+            original["creator"] = {"@type": "Person", "name": "Old Name"}
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(original, f, indent=2)
+
+        # Generate CSV
+        to_csv_result = runner.invoke(annotate, ["batch", "--to-csv"])
+        assert to_csv_result.exit_code == 0
+        csv_path = project_root / ".biotope.csv"
+        assert csv_path.exists()
+
+        # Edit CSV: change creator
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+        assert rows
+        rows[0]["creator"] = "New Creator Name"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        # Apply from CSV
+        from_csv_result = runner.invoke(annotate, ["batch", "--from-csv"])
+        assert from_csv_result.exit_code == 0
+        assert "Updated:" in from_csv_result.output
+
+        # Verify creator updated
+        with open(metadata_path, encoding="utf-8") as f:
+            updated = json.load(f)
+        assert updated.get("creator", {}).get("name") == "New Creator Name"
+    finally:
+        os.chdir(prev_cwd)
+
 @pytest.mark.integration
 def test_real_validation_complex_metadata_cli(runner, tmp_path):
     """Test that complex metadata is actually valid using the real mlcroissant CLI."""
