@@ -1,4 +1,6 @@
 .vscode
+*.json
+.biotope/
 
 ### Linux template
 *~
