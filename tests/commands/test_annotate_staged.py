@@ -24,6 +24,9 @@ def biotope_project(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
     
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir()
