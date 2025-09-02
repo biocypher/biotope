@@ -42,6 +42,9 @@ def biotope_project(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
     
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir()
@@ -56,6 +59,9 @@ def biotope_project_with_file(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir(parents=True)
+    
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
     
     # Create test data file
     data_dir = tmp_path / "data" / "raw"
@@ -987,6 +993,9 @@ def biotope_project_with_directory(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir(parents=True)
+    
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
     
     # Create test data directory with multiple files
     data_dir = tmp_path / "experiment_data"

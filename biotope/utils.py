@@ -14,7 +14,8 @@ def find_biotope_root() -> Optional[Path]:
     Find the biotope project root directory.
 
     Searches upward from the current working directory to find a directory
-    containing a .biotope/ subdirectory.
+    containing a .biotope/ subdirectory. Enforces that .git and .biotope 
+    must be in the same directory.
 
     Returns:
         Path to the biotope project root, or None if not found
@@ -22,6 +23,8 @@ def find_biotope_root() -> Optional[Path]:
     current = Path.cwd()
     while current != current.parent:
         if (current / ".biotope").exists():
+            if not (current / ".git").exists():
+                return None
             return current
         current = current.parent
     return None
