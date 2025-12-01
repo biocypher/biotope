@@ -35,7 +35,11 @@ from biotope.utils import find_biotope_root, is_git_repo
     help="Show detailed validation errors for tracked datasets.",
 )
 def status(porcelain: bool, biotope_only: bool, detailed: bool) -> None:
-    """Show the current status of the biotope project using Git."""
+    """Show the current status of the biotope project using Git.
+    
+    Displays Git status for .biotope/ directory changes.
+    Similar to git status but focused on metadata.
+    """
     console = Console()
     
     # Find biotope project root
@@ -253,13 +257,13 @@ def _get_git_status(biotope_root: Path, biotope_only: bool) -> Dict[str, List]:
                 continue
             
             # Parse Git status line (e.g., "M  .biotope/datasets/file.jsonld")
-            status = line[:2].strip()
+            status = line[:2]
             file_path = line[3:]
             
             if status == "??":
                 untracked.append(file_path)
-            elif status in ["A", "M", "D", "R"]:
-                staged.append((status, file_path))
+            elif status in ["A ", "M ", "D ", "R "]:
+                staged.append((status.strip(), file_path))
             elif status in [" M", " D", " R"]:
                 modified.append((status.strip(), file_path))
         

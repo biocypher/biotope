@@ -38,6 +38,9 @@ def biotope_project(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
     
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir()
@@ -208,7 +211,7 @@ def test_add_file_absolute_path(git_repo, sample_file):
     with open(metadata_file) as f:
         metadata = json.load(f)
     
-    assert metadata["name"] == target_file.stem
+    assert metadata["name"] == str(target_file.relative_to(git_repo))
     assert metadata["distribution"][0]["name"] == target_file.name
     assert metadata["distribution"][0]["contentUrl"] == str(target_file.relative_to(git_repo))
     assert "sha256" in metadata["distribution"][0]
@@ -248,7 +251,7 @@ def test_add_file_relative_path(git_repo):
         with open(metadata_file) as f:
             metadata = json.load(f)
         
-        assert metadata["name"] == relative_path.stem
+        assert metadata["name"] == str(target_file.relative_to(git_repo))
         assert metadata["distribution"][0]["name"] == relative_path.name
         assert metadata["distribution"][0]["contentUrl"] == str(relative_path)
         assert "sha256" in metadata["distribution"][0]
@@ -385,7 +388,7 @@ def test_add_command_relative_path(
         os.chdir(original_cwd)
 
 
-@mock.patch("biotope.utils.find_biotope_root")
+@mock.patch("biotope.commands.add.find_biotope_root")
 def test_add_command_no_biotope_project(mock_find_root, runner, tmp_path):
     """Test add command when not in a biotope project."""
     mock_find_root.return_value = None

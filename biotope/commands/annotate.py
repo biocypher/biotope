@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import csv
-import datetime
 import getpass
 import hashlib
 import json
 import subprocess
 from pathlib import Path
-from typing import Optional
+from datetime import datetime, timezone
 
 import click
 from rich.console import Console
@@ -77,9 +76,77 @@ def merge_metadata(dynamic_metadata: dict) -> dict:
     return metadata
 
 
-@click.group()
-def annotate() -> None:
-    """Create dataset metadata definitions in Croissant format."""
+@click.group(invoke_without_command=True)
+@click.option(
+    "-r",
+    "--recursive",
+    is_flag=True,
+    help="Shorthand for 'annotate batch' when used with --to-csv/--from-csv.",
+)
+@click.option(
+    "--to-csv",
+    is_flag=True,
+    hidden=True,
+    help="Generate a project .biotope.csv (use with -r).",
+)
+@click.option(
+    "--from-csv",
+    is_flag=True,
+    hidden=True,
+    help="Apply updates from project .biotope.csv (use with -r).",
+)
+@click.pass_context
+def annotate(
+    ctx: click.Context,
+    recursive: bool = False,
+    to_csv: bool = False,
+    from_csv: bool = False,
+) -> None:
+    """Create dataset metadata in Croissant format.
+
+    Tip: use 'biotope annotate batch --to-csv' to export or '--from-csv' to import.
+    The '-r' flag is a shorthand for these batch CSV operations.
+    """
+    # Handle short-hand alias only when no subcommand is provided
+    if ctx.invoked_subcommand is None:
+        # If user passed legacy flags without -r, guide them to new usage
+        if (to_csv or from_csv) and not recursive:
+            click.echo("❌ Direct --to-csv/--from-csv are deprecated. Use 'biotope annotate batch --to-csv' or 'biotope annotate batch --from-csv' (or prefix with -r).")
+            raise click.Abort
+
+        if recursive and (to_csv or from_csv):
+            biotope_root = find_biotope_root()
+            if not biotope_root:
+                click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
+                raise click.Abort
+
+            if to_csv and from_csv:
+                click.echo("❌ Please specify only one of --to-csv or --from-csv")
+                raise click.Abort
+
+            if to_csv:
+                _generate_project_biotope_csv(biotope_root)
+                ctx.exit(0)
+
+            if from_csv:
+                console = Console()
+                csv_path = biotope_root / ".biotope.csv"
+                if not csv_path.exists():
+                    click.echo("❌ No .biotope.csv found at project root. Run 'biotope annotate batch --to-csv' first.")
+                    raise click.Abort
+                _process_csv_annotation(console, str(csv_path), None, biotope_root)
+                try:
+                    csv_path.unlink()
+                    click.echo("🗑️  Removed .biotope.csv after applying updates")
+                except Exception:
+                    click.echo("⚠️  Warning: Could not delete .biotope.csv; please remove it manually if desired")
+                ctx.exit(0)
+
+        # No subcommand and no alias flags → show help and signal usage error (exit code 2)
+        # Mimic Click's default behavior when a subcommand is required
+        click.echo(ctx.get_help())
+        # Use Click's fail to set exit code 2
+        ctx.fail("Missing command.")
 
 
 @annotate.command()
@@ -116,7 +183,7 @@ def annotate() -> None:
 )
 @click.option(
     "--date",
-    default=datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat(),
+    default=datetime.now(tz=timezone.utc).isoformat(),
     help="Date of creation (ISO format: YYYY-MM-DD).",
 )
 @click.option(
@@ -300,6 +367,72 @@ def load(jsonld, record_set, num_records):
     except Exception as e:
         click.echo(f"Error running load command: {e!s}", err=True)
         exit(1)
+
+
+@annotate.command(help="Batch operations for CSV-based annotations. Export with --to-csv or import with --from-csv.")
+@click.option(
+    "--to-csv",
+    is_flag=True,
+    help="Export: write .biotope.csv at project root",
+)
+@click.option(
+    "--from-csv",
+    "apply_from_csv",
+    is_flag=True,
+    help="Apply updates from a CSV (defaults to project .biotope.csv)",
+)
+@click.option(
+    "--column-mapping",
+    "-m",
+    type=str,
+    help="JSON mapping CSV column names to expected fields (e.g., '{\"data_file\": \"filepath\"}')",
+)
+def batch(
+    to_csv: bool = False,
+    apply_from_csv: bool = False,
+    column_mapping: str | None = None,
+) -> None:
+    """Export or import annotations via CSV.
+
+    Examples:
+      biotope annotate batch --to-csv
+      biotope annotate batch --from-csv
+    """
+    console = Console()
+
+    biotope_root = find_biotope_root()
+    if not biotope_root:
+        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
+        raise click.Abort
+
+    if to_csv and apply_from_csv:
+        console.print("❌ Please specify only one of --to-csv or --from-csv")
+        raise click.Abort
+
+    if not to_csv and not apply_from_csv:
+        console.print("❌ Specify one mode: --to-csv or --from-csv")
+        raise click.Abort
+
+    if to_csv:
+        _generate_project_biotope_csv(biotope_root)
+        return
+
+    resolved_csv_path: Path
+    resolved_csv_path = biotope_root / ".biotope.csv"
+
+    if not resolved_csv_path.exists():
+        console.print(f"❌ CSV file not found: {resolved_csv_path}")
+        raise click.Abort
+
+    _process_csv_annotation(console, str(resolved_csv_path), column_mapping, biotope_root)
+
+    # Delete project CSV only if we used the default location (mirrors -r behavior)
+    if resolved_csv_path.name == ".biotope.csv":
+        try:
+            resolved_csv_path.unlink()
+            click.echo("🗑️  Removed .biotope.csv after applying updates")
+        except Exception:
+            click.echo("⚠️  Warning: Could not delete .biotope.csv; please remove it manually if desired")
 
 
 @annotate.command()
@@ -629,7 +762,7 @@ def interactive(
 
     date = click.prompt(
         "Creation date (YYYY-MM-DD)",
-        default=metadata.get("dateCreated", datetime.date.today().isoformat()),
+        default=metadata.get("dateCreated", datetime.now(tz=timezone.utc).isoformat()),
     )
 
     # Section: Access Information
@@ -1093,7 +1226,7 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     
     date = click.prompt(
         "Creation date (YYYY-MM-DD)",
-        default=metadata.get("dateCreated", datetime.date.today().isoformat()),
+        default=metadata.get("dateCreated", datetime.now(tz=timezone.utc).isoformat()),
     )
     
     # Section: Access Information
@@ -1280,6 +1413,7 @@ def _process_csv_annotation(
     # Define expected columns and their mappings
     expected_columns = {
         "filepath": "filepath",
+        "name": "name",
         "description": "description",
         "data_url": "url",
         "creator": "creator.name",
@@ -1292,6 +1426,7 @@ def _process_csv_annotation(
         "publication_date": "datePublished",
         "version": "version",
         "license": "license",
+        "license_url": "license",
         "citation": "citation"
     }
     
@@ -1311,11 +1446,14 @@ def _process_csv_annotation(
             raise click.Abort
             
         with open(csv_path, 'r', newline='', encoding='utf-8') as f:
-            # Try to detect the CSV dialect
+            # Try to detect the CSV dialect; fall back to standard comma CSV if detection fails
             sample = f.read(1024)
             f.seek(0)
             sniffer = csv.Sniffer()
-            dialect = sniffer.sniff(sample)
+            try:
+                dialect = sniffer.sniff(sample)
+            except Exception:
+                dialect = csv.excel  # default to comma-delimited
             
             reader = csv.DictReader(f, dialect=dialect)
             rows = list(reader)
@@ -1395,6 +1533,8 @@ def _process_csv_annotation(
         
         # Process each validated file
         successful_annotations = 0
+        updated_count = 0
+        unchanged_count = 0
         for i, (filepath, row) in enumerate(csv_files_to_process, 1):
             console.print(f"\n[bold green]Processing entry {i}/{len(csv_files_to_process)}[/]")
             
@@ -1405,7 +1545,11 @@ def _process_csv_annotation(
                 metadata = _build_metadata_from_csv_row(row, expected_columns, biotope_root, filepath)
                 
                 # Update existing annotation
-                _create_annotation_from_metadata(console, filepath, metadata, biotope_root, csv_file)
+                result = _create_annotation_from_metadata(console, filepath, metadata, biotope_root, csv_file)
+                if result is True:
+                    updated_count += 1
+                elif result is False:
+                    unchanged_count += 1
                 successful_annotations += 1
                 
             except Exception as e:
@@ -1413,6 +1557,8 @@ def _process_csv_annotation(
                 continue
         
         console.print(f"\n✅ Successfully processed {successful_annotations}/{len(csv_files_to_process)} annotations")
+        console.print(f"✅ Updated: {updated_count}")
+        console.print(f"ℹ️  Unchanged: {unchanged_count}")
         
         if successful_annotations > 0:
             # Stage the changes in Git
@@ -1423,7 +1569,7 @@ def _process_csv_annotation(
                     cwd=biotope_root,
                     check=True
                 )
-                console.print("✅ Staged all changes in Git")
+                console.print("\n✅ Staged all changes in Git")
             except subprocess.CalledProcessError as e:
                 console.print(f"⚠️  Warning: Could not stage changes in Git: {e}")
         
@@ -1433,6 +1579,103 @@ def _process_csv_annotation(
     except Exception as e:
         console.print(f"❌ Error processing CSV file: {e}")
         raise click.Abort
+
+
+def _generate_project_biotope_csv(biotope_root: Path) -> None:
+    datasets_dir = biotope_root / ".biotope" / "datasets"
+    csv_path = biotope_root / ".biotope.csv"
+
+    if not datasets_dir.exists():
+        click.echo("❌ No datasets found (.biotope/datasets missing). Add files first with 'biotope add'.")
+        raise click.Abort
+
+    # Column order
+    csv_columns = [
+        "filepath",
+        "name",
+        "description",
+        "data_url",
+        "creator",
+        "creator_email",
+        "project_name",
+        "date_created",
+        "access_restrictions",
+        "encoding_format",
+        "legal_obligations",
+        "collaboration_partner",
+        "publication_date",
+        "version",
+        "license",
+        "citation",
+    ]
+
+    # Simple 1:1 mapping for top-level keys
+    CSV_MAP = {
+        "data_url": "url",
+        "project_name": "cr:projectName",
+        "date_created": "dateCreated",
+        "access_restrictions": "cr:accessRestrictions",
+        "encoding_format": "encodingFormat",
+        "legal_obligations": "cr:legalObligations",
+        "collaboration_partner": "cr:collaborationPartner",
+        "publication_date": "datePublished",
+        "version": "version",
+    }
+
+    rows = []
+
+    for metadata_file in datasets_dir.rglob("*.jsonld"):
+        try:
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        # filepath: prefer distribution[0].contentUrl, else derive from path
+        data_rel_path = ""
+        dist = metadata.get("distribution") or []
+        if isinstance(dist, list) and dist and isinstance(dist[0], dict):
+            data_rel_path = str(dist[0].get("contentUrl") or "")
+        if not data_rel_path:
+            try:
+                data_rel_path = str(metadata_file.relative_to(datasets_dir).with_suffix(""))
+            except Exception:
+                continue
+
+        row = {c: "" for c in csv_columns}
+        row["filepath"] = data_rel_path
+
+        # name/description with simple fallbacks
+        row["name"] = metadata.get("name", Path(data_rel_path).stem)
+        row["description"] = metadata.get("description", f"Dataset for {Path(data_rel_path).name}")
+
+        # creator object (if present)
+        creator = metadata.get("creator") or {}
+        if isinstance(creator, dict):
+            row["creator"] = str(creator.get("name", ""))
+            row["creator_email"] = str(creator.get("email", ""))
+
+        # license with alias fallback
+        row["license"] = str(metadata.get("license") or metadata.get("license_url") or "")
+
+        # fill the rest from the flat map
+        for col, key in CSV_MAP.items():
+            row[col] = row[col] or str(metadata.get(key, "") or "")
+
+        rows.append(row)
+
+    if not rows:
+        click.echo("ℹ️  No metadata files found to export.")
+        return
+
+    try:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_columns)
+            writer.writeheader()
+            writer.writerows(rows)
+        click.echo(f"📝 Generated annotation CSV: {csv_path}")
+        click.echo("💡 Edit this file, then run 'biotope annotate batch --from-csv' to apply updates")
+    except Exception as e:
+        click.echo(f"⚠️  Warning: Could not generate .biotope.csv: {e}")
 
 
 def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root: Path, filepath: str) -> dict:
@@ -1446,7 +1689,7 @@ def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root
     try:
         from biotope.utils import load_project_metadata
         project_metadata = load_project_metadata(biotope_root)
-    except:
+    except Exception:
         project_metadata = {}
     
     # Map CSV columns to metadata fields
@@ -1467,6 +1710,19 @@ def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root
                     metadata["creator"][field_parts[1]] = value
             else:
                 metadata[metadata_field] = value
+
+    # Ensure creator name is captured even if mapping was altered or missing
+    try:
+        creator_val = row.get("creator", "").strip()
+        if creator_val:
+            if "creator" not in metadata or not isinstance(metadata.get("creator"), dict):
+                metadata["creator"] = {"@type": "Person", "name": creator_val}
+            else:
+                metadata["creator"]["name"] = creator_val
+                if "@type" not in metadata["creator"]:
+                    metadata["creator"]["@type"] = "Person"
+    except Exception:
+        pass
     
     # Use default name if name not provided
     if "name" not in metadata or not metadata["name"]:
@@ -1479,25 +1735,32 @@ def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root
     
     # Set required defaults if still missing
     if "dateCreated" not in metadata:
-        metadata["dateCreated"] = datetime.date.today().isoformat()
+        from datetime import date
+        metadata["dateCreated"] = date.today().isoformat()
     
     if "creator" not in metadata:
         metadata["creator"] = {
             "@type": "Person",
             "name": getpass.getuser()
         }
-    
+
     return metadata
 
 
-def _create_annotation_from_metadata(console: Console, filepath: str, metadata: dict, biotope_root: Path, csv_file_path: str | None = None) -> None:
+def _create_annotation_from_metadata(
+    console: Console,
+    filepath: str,
+    metadata: dict,
+    biotope_root: Path,
+    csv_file_path: str | None = None
+) -> bool | None:
     """Update existing metadata file for a staged file."""
     # Find the existing metadata file for this staged file
     existing_metadata_file = _find_existing_metadata_file(filepath, biotope_root, csv_file_path)
     
     if not existing_metadata_file:
         console.print(f"❌ No existing metadata file found for '{filepath}'. File must be staged first with 'biotope add'.")
-        return
+        return None
     
     # Load existing metadata
     try:
@@ -1505,18 +1768,33 @@ def _create_annotation_from_metadata(console: Console, filepath: str, metadata: 
             existing_metadata = json.load(f)
     except (json.JSONDecodeError, IOError) as e:
         console.print(f"❌ Error reading existing metadata file {existing_metadata_file}: {e}")
-        return
+        return None
     
     # Update existing metadata with new values from CSV, preserving distribution and other existing data
     updated_metadata = existing_metadata.copy()
     
     # Update fields from CSV metadata, but preserve existing distribution
     for key, value in metadata.items():
-        if key == "creator" and isinstance(value, dict):
-            # Handle creator object specially
-            if "creator" not in updated_metadata:
-                updated_metadata["creator"] = {"@type": "Person"}
-            updated_metadata["creator"].update(value)
+        if key == "creator":
+            # Build a fresh creator object to avoid in-place mutation of nested dicts
+            if isinstance(value, dict):
+                existing_creator = (
+                    updated_metadata.get("creator")
+                    if isinstance(updated_metadata.get("creator"), dict)
+                    else {}
+                )
+                merged_creator = {"@type": "Person"}
+                # Preserve existing email if new one not provided
+                if isinstance(existing_creator, dict) and existing_creator.get("email"):
+                    merged_creator["email"] = existing_creator.get("email")
+                # Overlay incoming fields (name/email, etc.)
+                for k, v in value.items():
+                    merged_creator[k] = v
+                if "@type" not in merged_creator:
+                    merged_creator["@type"] = "Person"
+                updated_metadata["creator"] = merged_creator
+            elif isinstance(value, str) and value.strip():
+                updated_metadata["creator"] = {"@type": "Person", "name": value.strip()}
         elif key != "distribution":  # Don't overwrite distribution from existing file
             updated_metadata[key] = value
     
@@ -1526,11 +1804,17 @@ def _create_annotation_from_metadata(console: Console, filepath: str, metadata: 
             if distribution.get("@type") == "sc:FileObject":
                 distribution["encodingFormat"] = metadata["encodingFormat"]
     
+    # If nothing changed, skip writing
+    if updated_metadata == existing_metadata:
+        console.print(f"ℹ️ Metadata unchanged")
+        return False
+    
     # Write updated metadata back to the same file
     with open(existing_metadata_file, "w") as f:
         json.dump(updated_metadata, f, indent=2)
     
-    console.print(f"✅ Updated: {existing_metadata_file.relative_to(biotope_root)}")
+    console.print(f"✅ Metadata updated")
+    return True
 
 
 def _find_existing_metadata_file(filepath: str, biotope_root: Path, csv_file_path: str | None = None) -> Path | None:
@@ -1621,6 +1905,3 @@ def get_staged_files(biotope_root: Path) -> list:
         pass
     
     return staged_files
-
-
-

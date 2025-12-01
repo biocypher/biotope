@@ -1,10 +1,7 @@
 """Unit tests for biotope utilities."""
 
 import yaml
-from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from biotope.utils import find_biotope_root, is_git_repo, load_project_metadata
 
@@ -15,9 +12,10 @@ def test_find_biotope_root(tmp_path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     
-    # Create .biotope directory
     biotope_dir = project_dir / ".biotope"
     biotope_dir.mkdir()
+    git_dir = project_dir / ".git"
+    git_dir.mkdir()
     
     # Test from project root
     with patch("biotope.utils.Path.cwd", return_value=project_dir):
@@ -37,6 +35,16 @@ def test_find_biotope_root(tmp_path):
     outside_dir.mkdir()
     
     with patch("biotope.utils.Path.cwd", return_value=outside_dir):
+        result = find_biotope_root()
+        assert result is None
+    
+    # Test .biotope without .git (should fail)
+    invalid_project_dir = tmp_path / "invalid_project"
+    invalid_project_dir.mkdir()
+    invalid_biotope_dir = invalid_project_dir / ".biotope"
+    invalid_biotope_dir.mkdir()
+    
+    with patch("biotope.utils.Path.cwd", return_value=invalid_project_dir):
         result = find_biotope_root()
         assert result is None
 

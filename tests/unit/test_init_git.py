@@ -77,6 +77,9 @@ class TestInitWithGit:
 
     def test_init_existing_git_repo(self, runner, tmp_path):
         """Test init in existing Git repository (env-independent)."""
+        
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
 
         def mock_subprocess_run(args, **kwargs):
             from subprocess import CalledProcessError

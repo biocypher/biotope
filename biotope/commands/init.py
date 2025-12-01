@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 import yaml
 from rich.console import Console
+import subprocess
 
 from biotope.utils import is_git_repo
 
@@ -18,7 +19,15 @@ from biotope.utils import is_git_repo
     default=".",
     help="Directory to initialize biotope project in",
 )
-def init(dir: Path) -> None:  # noqa: A002
+@click.option(
+    "--non-interactive",
+    "-n",
+    is_flag=True,
+    default=False,
+    help="Run initialization without interactive prompts (fail if required inputs missing).",
+)
+
+def init(dir: Path, non_interactive: bool) -> None:  # noqa: A002
     """
     Initialize a new biotope with interactive configuration in the specified directory.
     """
@@ -28,21 +37,76 @@ def init(dir: Path) -> None:  # noqa: A002
         click.echo("❌ A biotope project already exists in this directory.")
         click.echo("To start fresh, remove the .biotope directory first.")
         raise click.Abort
+    
+    current_dir = dir.resolve()
+    
+    # Check if .git and .biotope are in the same directory
+    if not (current_dir / ".git").exists():
+        parent_dir = current_dir.parent
+        parent_git_found = False
+        while parent_dir != parent_dir.parent:
+            if (parent_dir / ".git").exists():
+                parent_git_found = True
+                break
+            parent_dir = parent_dir.parent
+        
+        if parent_git_found:
+            click.echo("❌ Found a Git repository in a parent directory.")
+            click.echo("Biotope requires .git and .biotope to be in the same directory.")
+            click.echo(f"Please initialize biotope in the Git repository root ({parent_dir}) instead.")
+            click.echo("Or initialize a Git repository in the current directory to create a Git submodule.")
+            
+            if click.confirm(
+                "\nWould you like to initialize a Git repository in the current directory to create a Git submodule?",
+                default=False,
+            ):
+                try:
+                    _init_git_repo(current_dir)
+                    click.echo("✅ Git repository initialized in current directory")
+                    click.echo("You can now proceed with biotope initialization.\n")
+                except Exception as e:
+                    click.echo(f"❌ Failed to initialize Git repository: {e}")
+                    click.echo("Please initialize Git manually and try again.")
+                    raise click.Abort
+            else:
+                click.echo("Please initialize biotope in the Git repository root or create a Git repository here first.")
+                raise click.Abort
 
     click.echo("Establishing biotope! Let's set up your project.\n")
 
     # Project name
-    project_name = click.prompt(
-        "What's your project name?",
-        type=str,
-        default=dir.absolute().name,
-    )
+    if non_interactive:
+        # derive username from git if available, otherwise fallback to system user
+        try:
+            git_name = (
+                subprocess.run(
+                    ["git", "config", "user.name"], stdout=subprocess.PIPE, check=True
+                )
+                .stdout.decode()
+                .strip()
+            )
+        except Exception:
+            import getpass
+
+            git_name = getpass.getuser()
+
+        project_name = f"{git_name}_project"
+        click.echo(f"Initializing biotope automatically with project name: {project_name}")
+    else:
+        project_name = click.prompt(
+            "What's your project name?",
+            type=str,
+            default=dir.absolute().name,
+        )
 
     # Knowledge sources
     knowledge_sources = []
-    use_knowledge_graph = click.confirm(
-        "Would you like to install a knowledge graph now?", default=False
-    )
+    if non_interactive:
+        use_knowledge_graph = False
+    else:
+        use_knowledge_graph = click.confirm(
+            "Would you like to install a knowledge graph now?", default=False
+        )
     if use_knowledge_graph:
         while True:
             source = click.prompt(
@@ -70,9 +134,12 @@ def init(dir: Path) -> None:  # noqa: A002
         )
 
     # LLM integration
-    use_llm = click.confirm(
-        "\nWould you like to set up LLM integration?", default=False
-    )
+    if non_interactive:
+        use_llm = False
+    else:
+        use_llm = click.confirm(
+            "\nWould you like to set up LLM integration?", default=False
+        )
     if use_llm:
         llm_provider = click.prompt(
             "Which LLM provider would you like to use?",
@@ -89,18 +156,22 @@ def init(dir: Path) -> None:  # noqa: A002
                 hide_input=True,
             )
 
-    # Project-level metadata collection for pre-filling annotations
     console = Console()
-    console.print("\n[bold blue]Project Metadata Setup[/]")
-    console.print(
-        "The following information will be used to pre-fill metadata forms when creating dataset annotations."
-    )
-    console.print("You can skip any fields and provide them later during annotation.")
+    if not non_interactive:
+    # Project-level metadata collection for pre-filling annotations
+        console.print("\n[bold blue]Project Metadata Setup[/]")
+        console.print(
+            "The following information will be used to pre-fill metadata forms when creating dataset annotations."
+        )
+        console.print("You can skip any fields and provide them later during annotation.")
 
-    collect_project_metadata = click.confirm(
-        "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
-        default=True,
-    )
+    if non_interactive:
+        collect_project_metadata = False
+    else:
+        collect_project_metadata = click.confirm(
+            "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
+            default=True,
+        )
 
     project_metadata = {}
     if collect_project_metadata:
@@ -237,6 +308,13 @@ def init(dir: Path) -> None:  # noqa: A002
             else:
                 click.echo("❌ Git is necessary to use biotope")
                 raise click.Abort
+        
+        # Verify that .git exists in the target directory (if git wasn't just initialized)
+        # Note: .biotope will be created later, so we just check for .git presence
+        if not git_was_initialized and not (dir / ".git").exists():
+            # This shouldn't happen if our earlier checks worked correctly
+            click.echo("❌ Git repository not found in target directory")
+            raise click.Abort
 
         dir.mkdir(parents=True, exist_ok=True)
         create_project_structure(dir, user_config, metadata, project_metadata)

@@ -211,7 +211,7 @@ class TestGitIntegration:
 
     def test_find_biotope_root(self, tmp_path):
         """Test finding biotope root."""
-        from biotope.commands.commit import find_biotope_root
+        from biotope.utils import find_biotope_root
         import os
         
         # Change to tmp_path first to test from empty directory

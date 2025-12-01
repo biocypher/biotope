@@ -24,6 +24,9 @@ def biotope_project(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
     
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    
     # Create config directory
     config_dir = biotope_dir / "config"
     config_dir.mkdir()
