@@ -18,7 +18,7 @@ from biotope.registry.biotools import BioToolsRegistry
 @click.argument("query", required=False)
 @click.option("--limit", "-n", default=10, help="Number of results to show")
 @click.option("--type", "-t", help="Resource type to search (mcp, biotools)")
-@click.option("--sort", "-s", type=click.Choice(["relevance", "impact", "name"]), default="relevance", help="Sort results by relevance, impact, or name")
+@click.option("--sort", "-s", type=click.Choice(["relevance", "impact", "name", "composite"]), default="relevance", help="Sort results by relevance, impact, name, or composite score")
 def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> None:
     """
     Search for resources across configured registries.
@@ -131,6 +131,10 @@ def search(query: Optional[str], limit: int, type: Optional[str], sort: str) -> 
         if sort == "relevance":
             # Preserve the registry's ranking order (which already considers impact and relevance)
             # The results are already in the correct order from the registry
+            pass
+        elif sort == "composite":
+            # Preserve the registry's composite score ordering (25% relevance, 45% impact, 30% quality)
+            # The results are already in the correct order from the registry when sort="composite"
             pass
         elif sort == "impact":
             # Sort by impact (stars for MCP, citations for bio.tools)

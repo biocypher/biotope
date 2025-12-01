@@ -26,6 +26,7 @@ class BioToolsRegistry:
             # Ensure identifier is present for ranking
             tool["identifier"] = tool.get("biotoolsID", tool.get("name", "unknown"))
             tool["_relevance_score"] = self._calculate_relevance_score(tool, query_lower)
+            tool["_composite_method_score"] = self._calculate_composite_score(tool, query_lower, tools_data)
             metrics = self._get_tool_metrics(tool)
             tool["_impact_score"] = metrics["citations"]
             tool["_quality_score"] = (
@@ -63,6 +64,9 @@ class BioToolsRegistry:
         # If sort == "name", sort by name only
         elif sort == "name":
             results.sort(key=lambda x: x.get("name", "").lower())
+        # If sort == "composite", use _calculate_composite_score method (25% relevance, 45% impact, 30% quality)
+        elif sort == "composite":
+            results.sort(key=lambda x: (-x["_composite_method_score"], x.get("name", "").lower()))
         # If sort == "relevance", use the composite score order (already sorted above)
         
         return results[:limit]
