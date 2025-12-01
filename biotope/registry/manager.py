@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import requests
 from datetime import datetime
+import hashlib
 
 
 class RegistryManager:
@@ -16,7 +17,8 @@ class RegistryManager:
     
     def fetch_registry(self, url: str, cache_duration: int = 3600) -> list[dict]:
         """Fetch registry data with caching."""
-        cache_file = self.cache_dir / f"registry_{hash(url)}.json"
+        cache_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
+        cache_file = self.cache_dir / f"registry_{cache_key}.json"
         
         # Check cache first
         if cache_file.exists():
