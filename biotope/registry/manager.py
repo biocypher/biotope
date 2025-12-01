@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import logging
 import requests
 from datetime import datetime
 import hashlib
@@ -27,8 +28,8 @@ class RegistryManager:
                 try:
                     with open(cache_file) as f:
                         return json.load(f)
-                except (json.JSONDecodeError, IOError):
-                    pass
+                except (json.JSONDecodeError, IOError) as exc:
+                    logging.warning("Corrupted registry cache at %s: %s", cache_file, exc)
         
         # Fetch from remote
         try:
