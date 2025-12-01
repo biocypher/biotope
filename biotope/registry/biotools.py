@@ -37,12 +37,12 @@ class BioToolsRegistry:
             results.append(tool)
         
         # Direct weighted scoring instead of rank-based aggregation
+        max_relevance = max([t["_relevance_score"] for t in results]) if results else 1
+        max_impact = max([t["_impact_score"] for t in results]) if results else 1
+        max_quality = max([t["_quality_score"] for t in results]) if results else 1
+        
         for tool in results:
             # Normalize scores to 0-1 range
-            max_relevance = max([t["_relevance_score"] for t in results]) if results else 1
-            max_impact = max([t["_impact_score"] for t in results]) if results else 1
-            max_quality = max([t["_quality_score"] for t in results]) if results else 1
-            
             normalized_relevance = tool["_relevance_score"] / max_relevance if max_relevance > 0 else 0
             normalized_impact = tool["_impact_score"] / max_impact if max_impact > 0 else 0
             normalized_quality = tool["_quality_score"] / max_quality if max_quality > 0 else 0
