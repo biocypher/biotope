@@ -12,6 +12,10 @@ from biotope.commands.search import search
 @pytest.fixture
 def biotope_project(tmp_path):
     """Create a mock biotope project structure."""
+    # Create .git directory (required for find_biotope_root)
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    
     # Create .biotope directory
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()

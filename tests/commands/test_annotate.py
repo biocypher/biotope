@@ -865,13 +865,10 @@ def test_real_validation_complex_metadata_cli(runner, tmp_path):
     metadata_path = tmp_path / "real_complex_metadata.json"
 
     # Create a more complex metadata structure with file objects and record sets
+    # Use the standard Croissant context to ensure compatibility with mlcroissant validator
+    from biotope.commands.annotate import get_standard_context
     metadata = {
-        "@context": {
-            "@vocab": "https://schema.org/",
-            "cr": "https://mlcommons.org/croissant/",
-            "ml": "http://ml-schema.org/",
-            "sc": "https://schema.org/",
-        },
+        "@context": get_standard_context(),
         "@type": "Dataset",
         "name": "RealComplexTestDataset",  # Removed spaces
         "description": "A dataset with multiple file objects and record sets for real validation",

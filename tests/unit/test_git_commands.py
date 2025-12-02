@@ -226,6 +226,13 @@ class TestGitIntegration:
             biotope_dir = tmp_path / ".biotope"
             biotope_dir.mkdir()
             
+            # Should still not find root without .git
+            assert find_biotope_root() is None
+            
+            # Create .git directory (required alongside .biotope)
+            git_dir = tmp_path / ".git"
+            git_dir.mkdir()
+            
             # Should now find biotope root
             assert find_biotope_root() == tmp_path
         finally:

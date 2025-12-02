@@ -96,10 +96,13 @@ def test_registry_manager_fetch_registry_error(mock_get, tmp_path):
 
 def test_registry_manager_caching(tmp_path, mock_registry_data):
     """Test RegistryManager caching functionality."""
+    import hashlib
     registry_manager = RegistryManager(tmp_path)
     
-    # Create a cached file
-    cache_file = registry_manager.cache_dir / f"registry_{hash('https://biocontext.ai/registry.json')}.json"
+    # Create a cached file using the same hash algorithm as the manager
+    url = "https://biocontext.ai/registry.json"
+    cache_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    cache_file = registry_manager.cache_dir / f"registry_{cache_key}.json"
     with open(cache_file, 'w') as f:
         json.dump(mock_registry_data, f)
     
