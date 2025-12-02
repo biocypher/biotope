@@ -67,6 +67,9 @@ def add(paths: tuple[Path, ...], recursive: bool, force: bool) -> None:
         elif path.is_dir() and recursive:
             for file_path in path.rglob("*"):
                 if file_path.is_file():
+                    # Skip .biotope.csv files - these are biotope's own annotation files
+                    if file_path.name == ".biotope.csv":
+                        continue
                     result = _add_file(file_path, biotope_root, datasets_dir, force)
                     if result:
                         added_files.append(file_path)

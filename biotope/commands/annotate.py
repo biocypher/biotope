@@ -437,51 +437,6 @@ def batch(
 
 @annotate.command()
 @click.option(
-    "--from-csv",
-    type=click.Path(exists=True),
-    help="Path to CSV file containing batch annotation data",
-)
-@click.option(
-    "--column-mapping",
-    "-m",
-    type=str,
-    help="JSON string mapping CSV column names to expected fields (e.g., '{\"data_file\": \"filepath\"}')",
-)
-def batch(
-    from_csv: str | None = None,
-    column_mapping: str | None = None
-) -> None:
-    """Batch annotate multiple files from a CSV file.
-    
-    This command updates the metadata for files that have already been added to the biotope project.
-    All files specified in the CSV must be already added/staged in the biotope project using 'biotope add'.
-    
-    The CSV should have columns for filepath, description, and other optional metadata.
-    The dataset name is automatically derived from the filepath.
-    Use --column-mapping to map your CSV columns to the expected metadata fields.
-    
-    Process:
-    1. Validates that all files in CSV are already staged in biotope
-    2. Finds the existing metadata files for those staged files
-    3. Updates the existing metadata with information from the CSV
-    
-    Examples:
-        biotope annotate batch --from-csv batch_data.csv
-        biotope annotate batch --from-csv my_data.csv --column-mapping '{"data_file": "filepath"}'
-    """
-    console = Console()
-
-    # Require CSV file
-    if not from_csv:
-        console.print("❌ CSV file is required. Use --from-csv option for help.")
-        raise click.Abort
-
-    # Handle CSV file processing
-    _process_csv_annotation(console, from_csv, column_mapping)
-
-
-@annotate.command()
-@click.option(
     "--file-path",
     "-f",
     type=click.Path(exists=True),
@@ -1625,6 +1580,10 @@ def _generate_project_biotope_csv(biotope_root: Path) -> None:
     rows = []
 
     for metadata_file in datasets_dir.rglob("*.jsonld"):
+        # Skip .biotope.jsonld files - these are metadata for biotope's own annotation files
+        if metadata_file.name == ".biotope.jsonld":
+            continue
+            
         try:
             metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
         except Exception:
@@ -1640,6 +1599,10 @@ def _generate_project_biotope_csv(biotope_root: Path) -> None:
                 data_rel_path = str(metadata_file.relative_to(datasets_dir).with_suffix(""))
             except Exception:
                 continue
+        
+        # Skip .biotope.csv files - these are biotope's own annotation files
+        if Path(data_rel_path).name == ".biotope.csv":
+            continue
 
         row = {c: "" for c in csv_columns}
         row["filepath"] = data_rel_path
@@ -1728,21 +1691,10 @@ def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root
     if "name" not in metadata or not metadata["name"]:
         metadata["name"] = default_name
     
-    # Apply defaults from project metadata for missing fields
-    for key, value in project_metadata.items():
-        if key not in metadata:
-            metadata[key] = value
-    
-    # Set required defaults if still missing
-    if "dateCreated" not in metadata:
-        from datetime import date
-        metadata["dateCreated"] = date.today().isoformat()
-    
-    if "creator" not in metadata:
-        metadata["creator"] = {
-            "@type": "Person",
-            "name": getpass.getuser()
-        }
+    # Note: For CSV updates, we only include fields explicitly provided in the CSV.
+    # Default values (dateCreated, creator) are NOT added here since this would
+    # modify existing metadata that didn't have these fields. Defaults should
+    # only be applied during initial file annotation, not CSV-based updates.
 
     return metadata
 
