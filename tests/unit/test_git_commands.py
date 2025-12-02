@@ -213,22 +213,27 @@ class TestGitIntegration:
         """Test finding biotope root."""
         from biotope.utils import find_biotope_root
         import os
-        from unittest.mock import patch
         
-        # Should not find biotope root in empty directory
-        with patch("biotope.utils.Path.cwd", return_value=tmp_path):
-            assert find_biotope_root() is None
-        
-        # Create .biotope and .git directories (both required)
-        biotope_dir = tmp_path / ".biotope"
-        biotope_dir.mkdir()
-        git_dir = tmp_path / ".git"
-        git_dir.mkdir()
-        
-        # Change to tmp_path and find root
+        # Change to tmp_path first to test from empty directory
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
+            
+            # Should not find biotope root in empty directory
+            assert find_biotope_root() is None
+            
+            # Create .biotope directory
+            biotope_dir = tmp_path / ".biotope"
+            biotope_dir.mkdir()
+            
+            # Should still not find root without .git
+            assert find_biotope_root() is None
+            
+            # Create .git directory (required alongside .biotope)
+            git_dir = tmp_path / ".git"
+            git_dir.mkdir()
+            
+            # Should now find biotope root
             assert find_biotope_root() == tmp_path
         finally:
             os.chdir(original_cwd)

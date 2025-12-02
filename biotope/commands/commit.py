@@ -35,18 +35,7 @@ from biotope.utils import find_biotope_root, is_git_repo
     help="Amend the previous commit",
 )
 def commit(message: str, author: Optional[str], no_verify: bool, amend: bool) -> None:
-    """
-    Commit staged files and metadata changes using Git.
-    
-    Creates a Git commit for the .biotope/ directory changes.
-    Similar to git commit but focused on metadata.
-    
-    Args:
-        message: Commit message describing the changes
-        author: Author of the commit
-        no_verify: Skip validation of metadata files
-        amend: Amend the previous commit
-    """
+    """Commit staged files and metadata changes using Git."""
     # Find biotope project root
     biotope_root = find_biotope_root()
     if not biotope_root:

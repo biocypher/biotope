@@ -34,20 +34,10 @@ from biotope.utils import (
     help="Force add even if file already tracked",
 )
 def add(paths: tuple[Path, ...], recursive: bool, force: bool) -> None:
-    """
-    Add data files to biotope project and stage for metadata creation.
-
-    This command calculates checksums for data files and prepares them for metadata
-    annotation. Files are tracked in the .biotope/datasets/ directory with their
-    checksums embedded in Croissant ML metadata.
-
-    Args:
-        paths: Files or directories to add
-        recursive: Add directories recursively
-        force: Force add even if already tracked
-    """
+    """Add data files to biotope project and stage for metadata creation."""
     if not paths:
-        click.echo("❌ No paths specified. Use 'biotope add <file_or_directory>'")
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
         raise click.Abort
 
     # Find biotope project root
@@ -77,6 +67,9 @@ def add(paths: tuple[Path, ...], recursive: bool, force: bool) -> None:
         elif path.is_dir() and recursive:
             for file_path in path.rglob("*"):
                 if file_path.is_file():
+                    # Skip .biotope.csv files - these are biotope's own annotation files
+                    if file_path.name == ".biotope.csv":
+                        continue
                     result = _add_file(file_path, biotope_root, datasets_dir, force)
                     if result:
                         added_files.append(file_path)

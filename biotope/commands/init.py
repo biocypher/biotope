@@ -418,6 +418,17 @@ def create_project_structure(
             "builds": metadata.get("builds", []),
             "knowledge_sources": metadata.get("knowledge_sources", []),
         },
+        # Registry configuration for external resources
+        "registries": {
+            "mcp": {
+                "url": "https://biocontext.ai/registry.json",
+                "cache_duration": 3600
+            },
+            "biotools": {
+                "url": "https://bio.tools/api",
+                "cache_duration": 3600
+            }
+        },
     }
 
     # Add project metadata if provided
@@ -434,6 +445,10 @@ def create_project_structure(
 /data/
 /downloads/
 /tmp/
+
+# Biotope cache files (not tracked in Git)
+# Cache contains temporary registry data and other cached content
+.biotope/cache/
 
 # Python
 __pycache__/

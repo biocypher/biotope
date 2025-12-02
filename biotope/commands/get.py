@@ -96,15 +96,7 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
     help="Download file without adding to biotope project",
 )
 def get(url: str, output_dir: str, no_add: bool) -> None:
-    """
-    Download a file and integrate with biotope workflow.
-
-    Downloads a file from the given URL and automatically adds it to the biotope project
-    for staging and annotation. The file will be visible in 'biotope status' and can be
-    annotated using 'biotope annotate --staged'.
-
-    URL can be any valid HTTP/HTTPS URL pointing to a file.
-    """
+    """Download a file and integrate with biotope workflow."""
     # Find biotope project root
     biotope_root = find_biotope_root()
     if not biotope_root:

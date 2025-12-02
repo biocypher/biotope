@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import getpass
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -221,42 +222,7 @@ def create(
     """Create a new Croissant metadata file with required scientific metadata fields."""
     # Create a basic metadata structure with proper Croissant context
     metadata = {
-        "@context": {
-            "@vocab": "https://schema.org/",
-            "cr": "https://mlcommons.org/croissant/",
-            "ml": "http://ml-schema.org/",
-            "sc": "https://schema.org/",
-            "dct": "http://purl.org/dc/terms/",
-            "data": "https://mlcommons.org/croissant/data/",
-            "rai": "https://mlcommons.org/croissant/rai/",
-            "format": "https://mlcommons.org/croissant/format/",
-            "citeAs": "https://mlcommons.org/croissant/citeAs/",
-            "conformsTo": "https://mlcommons.org/croissant/conformsTo/",
-            "@language": "en",
-            "repeated": "https://mlcommons.org/croissant/repeated/",
-            "field": "https://mlcommons.org/croissant/field/",
-            "examples": "https://mlcommons.org/croissant/examples/",
-            "recordSet": "https://mlcommons.org/croissant/recordSet/",
-            "fileObject": "https://mlcommons.org/croissant/fileObject/",
-            "fileSet": "https://mlcommons.org/croissant/fileSet/",
-            "source": "https://mlcommons.org/croissant/source/",
-            "references": "https://mlcommons.org/croissant/references/",
-            "key": "https://mlcommons.org/croissant/key/",
-            "parentField": "https://mlcommons.org/croissant/parentField/",
-            "isLiveDataset": "https://mlcommons.org/croissant/isLiveDataset/",
-            "separator": "https://mlcommons.org/croissant/separator/",
-            "extract": "https://mlcommons.org/croissant/extract/",
-            "subField": "https://mlcommons.org/croissant/subField/",
-            "regex": "https://mlcommons.org/croissant/regex/",
-            "column": "https://mlcommons.org/croissant/column/",
-            "path": "https://mlcommons.org/croissant/path/",
-            "fileProperty": "https://mlcommons.org/croissant/fileProperty/",
-            "md5": "https://mlcommons.org/croissant/md5/",
-            "jsonPath": "https://mlcommons.org/croissant/jsonPath/",
-            "transform": "https://mlcommons.org/croissant/transform/",
-            "replace": "https://mlcommons.org/croissant/replace/",
-            "dataType": "https://mlcommons.org/croissant/dataType/",
-        },
+        "@context": get_standard_context(),
         "@type": "Dataset",
         "name": name,
         "description": description,
@@ -1614,6 +1580,10 @@ def _generate_project_biotope_csv(biotope_root: Path) -> None:
     rows = []
 
     for metadata_file in datasets_dir.rglob("*.jsonld"):
+        # Skip .biotope.jsonld files - these are metadata for biotope's own annotation files
+        if metadata_file.name == ".biotope.jsonld":
+            continue
+            
         try:
             metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
         except Exception:
@@ -1629,6 +1599,10 @@ def _generate_project_biotope_csv(biotope_root: Path) -> None:
                 data_rel_path = str(metadata_file.relative_to(datasets_dir).with_suffix(""))
             except Exception:
                 continue
+        
+        # Skip .biotope.csv files - these are biotope's own annotation files
+        if Path(data_rel_path).name == ".biotope.csv":
+            continue
 
         row = {c: "" for c in csv_columns}
         row["filepath"] = data_rel_path
@@ -1666,12 +1640,20 @@ def _generate_project_biotope_csv(biotope_root: Path) -> None:
     except Exception as e:
         click.echo(f"⚠️  Warning: Could not generate .biotope.csv: {e}")
 
+
 def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root: Path, filepath: str) -> dict:
     """Build metadata dictionary from CSV row."""
     metadata = {}
     
     # Generate default name from filepath if name is not provided
     default_name = Path(filepath).stem
+    
+    # Load project metadata for defaults
+    try:
+        from biotope.utils import load_project_metadata
+        project_metadata = load_project_metadata(biotope_root)
+    except Exception:
+        project_metadata = {}
     
     # Map CSV columns to metadata fields
     for csv_col, metadata_field in expected_columns.items():
@@ -1708,6 +1690,11 @@ def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root
     # Use default name if name not provided
     if "name" not in metadata or not metadata["name"]:
         metadata["name"] = default_name
+    
+    # Note: For CSV updates, we only include fields explicitly provided in the CSV.
+    # Default values (dateCreated, creator) are NOT added here since this would
+    # modify existing metadata that didn't have these fields. Defaults should
+    # only be applied during initial file annotation, not CSV-based updates.
 
     return metadata
 
@@ -1813,6 +1800,19 @@ def get_staged_files(biotope_root: Path) -> list:
     staged_files = []
     
     try:
+        # Get the git root directory to understand relative paths
+        git_root_result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=biotope_root,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        git_root = Path(git_root_result.stdout.strip())
+        
+        # Calculate the relative path from git root to biotope root
+        biotope_relative_to_git = biotope_root.relative_to(git_root)
+        
         # Get staged files from Git
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
@@ -1823,8 +1823,23 @@ def get_staged_files(biotope_root: Path) -> list:
         )
         
         for file_path in result.stdout.splitlines():
-            if file_path.startswith(".biotope/datasets/") and file_path.endswith(".jsonld"):
-                metadata_file = biotope_root / file_path
+            # Handle both cases: biotope project at git root and in subdirectory
+            if biotope_relative_to_git == Path("."):
+                # Biotope project is at git root
+                expected_prefix = ".biotope/datasets/"
+                metadata_file_path = file_path
+            else:
+                # Biotope project is in a subdirectory
+                expected_prefix = f"{biotope_relative_to_git}/.biotope/datasets/"
+                if file_path.startswith(str(biotope_relative_to_git) + "/"):
+                    # Strip the biotope relative path to get the path relative to biotope root
+                    metadata_file_path = file_path[len(str(biotope_relative_to_git)) + 1:]
+                else:
+                    continue
+            
+            if file_path.startswith(expected_prefix) and file_path.endswith(".jsonld"):
+                # Read the metadata file to get file information
+                metadata_file = biotope_root / metadata_file_path
                 try:
                     with open(metadata_file) as f:
                         metadata = json.load(f)

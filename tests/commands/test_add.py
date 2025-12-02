@@ -397,10 +397,16 @@ def test_add_command_no_biotope_project(mock_find_root, runner, tmp_path):
     test_file = tmp_path / "test.txt"
     test_file.write_text("test content")
     
-    result = runner.invoke(add, [str(test_file)])
-    
-    assert result.exit_code != 0
-    assert "Not in a biotope project" in result.output
+    # Run in isolated filesystem to avoid path issues
+    with runner.isolated_filesystem():
+        # Copy the test file to the isolated filesystem
+        isolated_test_file = Path("test.txt")
+        isolated_test_file.write_text("test content")
+        
+        result = runner.invoke(add, [str(isolated_test_file)])
+        
+        assert result.exit_code != 0
+        assert "Not in a biotope project" in result.output
 
 
 @mock.patch("biotope.utils.find_biotope_root")
@@ -428,9 +434,9 @@ def test_add_command_no_git_repo(mock_is_git, mock_find_root, runner, biotope_pr
 def test_add_command_no_paths(runner):
     """Test add command with no paths specified."""
     result = runner.invoke(add, [])
-    
+
     assert result.exit_code != 0
-    assert "No paths specified" in result.output
+    assert "Usage: add [OPTIONS] [PATHS]..." in result.output
 
 
 @mock.patch("biotope.utils.find_biotope_root")

@@ -15,6 +15,7 @@ from biotope.commands.mv import mv as mv_cmd
 from biotope.commands.pull import pull as pull_cmd
 from biotope.commands.push import push as push_cmd
 from biotope.commands.read import read as read_cmd
+from biotope.commands.search import search as search_cmd
 from biotope.commands.status import status as status_cmd
 
 
@@ -37,6 +38,7 @@ def build() -> None:
 
 
 cli.add_command(read_cmd, "read")
+cli.add_command(search_cmd, "search")
 
 
 cli.add_command(chat_cmd, "chat")
