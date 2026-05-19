@@ -37,10 +37,10 @@ Biotope enables compliance through:
      }
      ```
 2. **Set Up Remote Validation**
-   - Deploy a remote validation server (see [examples/remote-validation-server.py](../examples/remote-validation-server.py)).
+   - Deploy a remote validation server (see [examples/remote-validation-server.py](examples/remote-validation-server.py)).
    - Provide users with the remote validation URL.
 3. **Automate Compliance Checking**
-   - Use the [cluster compliance checker](../examples/cluster-compliance-checker.py) to scan all projects:
+   - Use the [cluster compliance checker](examples/cluster-compliance-checker.py) to scan all projects:
      ```bash
      python cluster-compliance-checker.py --scan-dir /cluster/projects --requirements /etc/biotope/cluster-requirements.json --report /var/log/biotope/compliance-$(date +%Y%m%d).txt
      ```
@@ -150,8 +150,8 @@ RECOMMENDATIONS:
 
 ## References and Further Reading
 
-- [Remote Validation Server Example](../examples/remote-validation-server.py)
-- [Cluster Compliance Checker Script](../examples/cluster-compliance-checker.py)
+- [Remote Validation Server Example](examples/remote-validation-server.py)
+- [Cluster Compliance Checker Script](examples/cluster-compliance-checker.py)
 - [Validation Patterns and Examples](https://github.com/biocypher/biotope/tree/main/docs/examples)
 - [Git Integration for Users](git-integration.md)
 - [Developer & Admin Guide: Annotation Validation](git-integration-dev.md) 

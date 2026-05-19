@@ -367,7 +367,7 @@ biotope add data/raw/experiment.csv --force
 
 - **[Downloading Files](get-files.md)**: Learn how to download and stage files from URLs
 - **[Annotating Data](annotate-omics.md)**: Learn how to create detailed metadata for your data
-- **[Project Status](git-integration.md)**: Learn how to check your project status and manage metadata
+- **[Project Status](../../git-integration.md)**: Learn how to check your project status and manage metadata
 
 ## Getting Help
 

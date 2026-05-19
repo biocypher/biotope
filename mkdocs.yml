@@ -45,6 +45,9 @@ nav:
   - Git Integration: git-integration.md
   - Git Integration for Developers: git-integration-dev.md
   - Cluster Compliance: cluster-compliance.md
+  - Examples: examples/README.md
+  - Implementation Plans:
+      - Registry Integration: implementation-plans/registry-integration.md
   - API Docs:
       - Init: api-docs/init.md
       - Describe: api-docs/describe.md
