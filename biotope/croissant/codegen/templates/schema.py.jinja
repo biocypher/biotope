@@ -1,0 +1,31 @@
+{% extends "base.jinja" %}
+{% block content %}
+# ruff: noqa: D101
+# type: ignore[generalTypeIssues]
+
+from collections.abc import Sequence
+from typing import Final
+
+from biotope.croissant.spec import FieldKind
+from biotope.croissant.codegen.schema_base import Dataset, Field, ScalarField, SequenceField, StructField
+
+{% for class_info in class_infos %}
+class {{ class_info.name }}({{ class_info.inherit_from }}):
+{% if class_info.docstring_lines %}
+    """{{ class_info.docstring_lines | join('\n    ') }}
+    """
+{% endif %}
+{% for attr in class_info.late_attributes %}
+    {{ attr.name }}: {{ attr.type }}
+{% endfor %}
+
+
+{% endfor %}
+{% for class_info in class_infos %}
+{% for attr in class_info.late_attributes %}
+{{ class_info.name }}.{{ attr.name }} = {{ attr.value }}
+{% endfor %}
+
+
+{% endfor %}
+{% endblock %}

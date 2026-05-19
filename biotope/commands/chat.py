@@ -1,4 +1,10 @@
-"""Chat command implementation using biochatter."""
+"""``biotope chat`` — conversational interaction with the project.
+
+v1 promise: a provider-agnostic conversational interface to the project's
+KG and metadata. v1 ships the biochatter backend; the ``--backend`` slot
+exists so more backends (Claude Code session, local Ollama, etc.) can land
+without reshaping the command.
+"""
 
 import os
 from importlib.util import find_spec
@@ -44,6 +50,12 @@ if HAS_BIOCHATTER:
     default=None,
     help="API key for the LLM",
 )
+@click.option(
+    "--backend",
+    type=click.Choice(["biochatter"]),
+    default="biochatter",
+    help="Conversational backend. More backends planned; biochatter is v1.",
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
@@ -52,6 +64,7 @@ def chat(
     interactive: bool,
     correct: bool,
     api_key: str | None,
+    backend: str,
 ) -> None:
     """
     Start a chat session with biochatter.

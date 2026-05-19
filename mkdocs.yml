@@ -40,19 +40,26 @@ theme:
 
 nav:
   - Home: index.md
+  - Architecture: architecture.md
   - Project Context: project-context.md
   - Git Integration: git-integration.md
   - Git Integration for Developers: git-integration-dev.md
   - Cluster Compliance: cluster-compliance.md
   - API Docs:
       - Init: api-docs/init.md
-      - Search: api-docs/search.md
+      - Describe: api-docs/describe.md
       - Add: api-docs/add.md
       - Annotate: api-docs/annotate.md
+      - Search: api-docs/search.md
+      - Discover: api-docs/discover.md
+      - Propose Mapping: api-docs/propose-mapping.md
+      - Propose Alignment: api-docs/propose-alignment.md
       - Build: api-docs/build.md
-      - Chat: api-docs/chat.md
-      - Read: api-docs/read.md
       - View: api-docs/view.md
+      - Benchmark: api-docs/benchmark.md
+      - Read: api-docs/read.md
+      - Chat: api-docs/chat.md
+      - Config: api-docs/config.md
   - Learn:
       - Tutorials: learn/tutorials/index.md
       - Add Files: learn/tutorials/add-files.md

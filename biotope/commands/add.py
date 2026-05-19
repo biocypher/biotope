@@ -156,6 +156,9 @@ def _add_file(
 
     metadata["dateCreated"] = datetime.now(tz=timezone.utc).isoformat()
 
+    # Enrich with structural metadata from croissant-baker, if it can handle the file.
+    _enrich_with_baker(metadata, file_path)
+
     # Top-level creator (from git, if available)
     git_name, git_email = _git_user_identity(biotope_root)
     if git_name:
@@ -189,6 +192,51 @@ def _add_file(
         json.dump(metadata, f, indent=2)
 
     return True
+
+def _enrich_with_baker(metadata: dict, file_path: Path) -> None:
+    """Attach baker-derived structural metadata under ``cr:recordSet`` if available.
+
+    The shallow stub holds file-level info only. croissant-baker can extract
+    column names, types, and row counts for handled formats (CSV, Parquet,
+    JSON, FHIR, …). When a handler matches, store the extraction under
+    ``cr:recordSet`` so downstream commands (``propose-mapping``, ``build``)
+    can use it without rerunning baker.
+    """
+    try:
+        from croissant_baker.metadata_generator import find_handler, register_all_handlers
+    except ImportError:
+        return
+
+    register_all_handlers()
+    handler = find_handler(file_path)
+    if handler is None:
+        return
+    try:
+        extracted = handler.extract_metadata(file_path)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"⚠️  baker could not extract from {file_path.name}: {exc}")
+        return
+
+    record_set: dict = {
+        "@type": "cr:RecordSet",
+        "name": file_path.stem,
+        "field": [],
+    }
+    column_types = extracted.get("column_types") or {}
+    for col, ctype in column_types.items():
+        record_set["field"].append(
+            {
+                "@type": "cr:Field",
+                "name": col,
+                "dataType": str(ctype),
+            },
+        )
+    for stat_key in ("num_rows", "num_columns", "encoding_format"):
+        if stat_key in extracted:
+            record_set[f"cr:{stat_key}"] = extracted[stat_key]
+
+    metadata.setdefault("recordSet", []).append(record_set)
+
 
 def _git_user_identity(cwd: Path) -> tuple[str | None, str | None]:
     """Return (name, email) from `git config`, preferring repo-local config."""

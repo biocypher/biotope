@@ -1,594 +1,138 @@
-"""Initialize command implementation."""
+"""``biotope init`` — scaffold a new biotope project.
 
-from datetime import datetime, timezone
+Default behavior is **pure scaffold**: create the directory layout, drop an
+``AGENTS.md`` for the agent surface, write an empty ``project.yaml``, run
+``git init``. No content questions. The agent (or the user via
+``biotope describe``) fills in the competence questions afterwards.
+
+Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
+``project.yaml`` so the user can fill ``purpose:`` before exiting init.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import click
 import yaml
 from rich.console import Console
-import subprocess
 
-from biotope.utils import is_git_repo
+from biotope.project_model import Project, resolve_project_path
+
+console = Console()
+
+TEMPLATES = Path(__file__).parent.parent / "templates"
+
+DEFAULT_BIOTOPE_CONFIG: dict = {
+    "version": "0.1",
+    "croissant_schema_version": "1.1",
+    "data_storage": ".biotope/datasets",
+    "validation": {
+        "enabled": True,
+        "required_fields": ["@type", "name", "description"],
+    },
+}
 
 
 @click.command()
+@click.argument("name", required=False)
 @click.option(
     "--dir",
     "-d",
     type=click.Path(file_okay=False, path_type=Path),
     default=".",
-    help="Directory to initialize biotope project in",
+    help="Parent directory to initialise the project in. The project goes in NAME/ within this dir.",
 )
 @click.option(
-    "--non-interactive",
-    "-n",
+    "--purpose",
+    "-p",
+    type=str,
+    default="",
+    help="Seed the project's purpose (competence question) directly. Skips the editor.",
+)
+@click.option(
+    "--no-git",
     is_flag=True,
     default=False,
-    help="Run initialization without interactive prompts (fail if required inputs missing).",
+    help="Skip running `git init`. The .biotope/ directory is still created.",
 )
-
-def init(dir: Path, non_interactive: bool) -> None:  # noqa: A002
-    """
-    Initialize a new biotope with interactive configuration in the specified directory.
-    """
-    # Check if .biotope directory already exists
-    biotope_dir = dir / ".biotope"
-    if biotope_dir.exists():
-        click.echo("❌ A biotope project already exists in this directory.")
-        click.echo("To start fresh, remove the .biotope directory first.")
-        raise click.Abort
-    
-    current_dir = dir.resolve()
-    
-    # Check if .git and .biotope are in the same directory
-    if not (current_dir / ".git").exists():
-        parent_dir = current_dir.parent
-        parent_git_found = False
-        while parent_dir != parent_dir.parent:
-            if (parent_dir / ".git").exists():
-                parent_git_found = True
-                break
-            parent_dir = parent_dir.parent
-        
-        if parent_git_found:
-            click.echo("❌ Found a Git repository in a parent directory.")
-            click.echo("Biotope requires .git and .biotope to be in the same directory.")
-            click.echo(f"Please initialize biotope in the Git repository root ({parent_dir}) instead.")
-            click.echo("Or initialize a Git repository in the current directory to create a Git submodule.")
-            
-            if click.confirm(
-                "\nWould you like to initialize a Git repository in the current directory to create a Git submodule?",
-                default=False,
-            ):
-                try:
-                    _init_git_repo(current_dir)
-                    click.echo("✅ Git repository initialized in current directory")
-                    click.echo("You can now proceed with biotope initialization.\n")
-                except Exception as e:
-                    click.echo(f"❌ Failed to initialize Git repository: {e}")
-                    click.echo("Please initialize Git manually and try again.")
-                    raise click.Abort
-            else:
-                click.echo("Please initialize biotope in the Git repository root or create a Git repository here first.")
-                raise click.Abort
-
-    click.echo("Establishing biotope! Let's set up your project.\n")
-
-    # Project name
-    if non_interactive:
-        # derive username from git if available, otherwise fallback to system user
-        try:
-            git_name = (
-                subprocess.run(
-                    ["git", "config", "user.name"], stdout=subprocess.PIPE, check=True
-                )
-                .stdout.decode()
-                .strip()
-            )
-        except Exception:
-            import getpass
-
-            git_name = getpass.getuser()
-
-        project_name = f"{git_name}_project"
-        click.echo(f"Initializing biotope automatically with project name: {project_name}")
-    else:
-        project_name = click.prompt(
-            "What's your project name?",
-            type=str,
-            default=dir.absolute().name,
-        )
-
-    # Knowledge sources
-    knowledge_sources = []
-    if non_interactive:
-        use_knowledge_graph = False
-    else:
-        use_knowledge_graph = click.confirm(
-            "Would you like to install a knowledge graph now?", default=False
-        )
-    if use_knowledge_graph:
-        while True:
-            source = click.prompt(
-                "\nEnter knowledge source or press enter to finish.",
-                type=str,
-                default="",
-                show_default=False,
-            )
-            if not source:
-                break
-            source_type = click.prompt(
-                "What type of source is this?",
-                type=click.Choice(["database", "file", "api"], case_sensitive=False),
-                default="database",
-            )
-            knowledge_sources.append({"name": source, "type": source_type})
-
-    # Output preferences - only ask if knowledge graph is being used
-    output_format = "neo4j"  # Default
-    if use_knowledge_graph:
-        output_format = click.prompt(
-            "\nPreferred output format",
-            type=click.Choice(["neo4j", "csv", "json"], case_sensitive=False),
-            default="neo4j",
-        )
-
-    # LLM integration
-    if non_interactive:
-        use_llm = False
-    else:
-        use_llm = click.confirm(
-            "\nWould you like to set up LLM integration?", default=False
-        )
-    if use_llm:
-        llm_provider = click.prompt(
-            "Which LLM provider would you like to use?",
-            type=click.Choice(
-                ["google", "openai", "anthropic", "local"], case_sensitive=False
-            ),
-            default="openai",
-        )
-
-        if llm_provider in ["google", "openai", "anthropic"]:
-            api_key = click.prompt(
-                f"Please enter your {llm_provider} API key",
-                type=str,
-                hide_input=True,
-            )
-
-    console = Console()
-    if not non_interactive:
-    # Project-level metadata collection for pre-filling annotations
-        console.print("\n[bold blue]Project Metadata Setup[/]")
-        console.print(
-            "The following information will be used to pre-fill metadata forms when creating dataset annotations."
-        )
-        console.print("You can skip any fields and provide them later during annotation.")
-
-    if non_interactive:
-        collect_project_metadata = False
-    else:
-        collect_project_metadata = click.confirm(
-            "\nWould you like to set up project-level metadata now? This will be used to pre-fill metadata later.",
-            default=True,
-        )
-
-    project_metadata = {}
-    if collect_project_metadata:
-        console.print("\n[bold green]Project Information[/]")
-        console.print("─" * 50)
-
-        # Project description
-        project_description = click.prompt(
-            "Project description (what is this project about?)",
-            default="",
-            show_default=False,
-        )
-        if project_description:
-            project_metadata["description"] = project_description
-
-        # Project URL
-        project_url = click.prompt(
-            "Project URL (if available)",
-            default="",
-            show_default=False,
-        )
-        if project_url:
-            project_metadata["url"] = project_url
-
-        # Creator/Contact
-        creator = click.prompt(
-            "Primary contact person (email preferred)",
-            default="",
-            show_default=False,
-        )
-        if creator:
-            project_metadata["creator"] = creator
-
-        # License
-        license_url = click.prompt(
-            "Default license URL",
-            default="https://creativecommons.org/licenses/by/4.0/",
-            show_default=True,
-        )
-        if license_url:
-            project_metadata["license"] = license_url
-
-        # Citation template
-        citation_template = click.prompt(
-            "Citation template (use {name} and {year} as placeholders)",
-            default="Please cite this dataset as: {name} ({year})",
-            show_default=True,
-        )
-        if citation_template:
-            project_metadata["citation"] = citation_template
-
-        # Access restrictions
-        has_access_restrictions = click.confirm(
-            "Does this project have default access restrictions?",
-            default=False,
-        )
-        if has_access_restrictions:
-            access_restrictions = click.prompt(
-                "Default access restrictions description",
-                default="",
-                show_default=False,
-            )
-            if access_restrictions:
-                project_metadata["access_restrictions"] = access_restrictions
-
-        # Legal obligations
-        has_legal_obligations = click.confirm(
-            "Does this project have default legal obligations?",
-            default=False,
-        )
-        if has_legal_obligations:
-            legal_obligations = click.prompt(
-                "Default legal obligations description",
-                default="",
-                show_default=False,
-            )
-            if legal_obligations:
-                project_metadata["legal_obligations"] = legal_obligations
-
-        # Collaboration partner
-        has_collaboration_partner = click.confirm(
-            "Does this project have a collaboration partner?",
-            default=False,
-        )
-        if has_collaboration_partner:
-            collaboration_partner = click.prompt(
-                "Collaboration partner and institute",
-                default="",
-                show_default=False,
-            )
-            if collaboration_partner:
-                project_metadata["collaboration_partner"] = collaboration_partner
-
-        # Store project name for consistency
-        project_metadata["project_name"] = project_name
-
-    # Create user configuration
-    user_config = {
-        "project": {
-            "name": project_name,
-            "output_format": output_format,
-        },
-        "knowledge_sources": knowledge_sources,
-    }
-
-    if use_llm:
-        user_config["llm"] = {
-            "provider": llm_provider,
-            "api_key": api_key if llm_provider in ["openai", "anthropic"] else None,
-        }
-
-    # Create internal metadata
-    metadata = {
-        "project_name": project_name,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "biotope_version": click.get_current_context().obj.get("version", "unknown"),
-        "last_modified": datetime.now(timezone.utc).isoformat(),
-        "builds": [],
-        "knowledge_sources": knowledge_sources,
-    }
-
-    # Create project structure
-    try:
-        # Initialize Git if not already initialized
-        git_was_initialized = False
-        if not is_git_repo(dir):
-            if click.confirm(
-                "\nDo you confirm to initialize Git for version control? (It is necessary to use biotope.)",
-                default=True,
-            ):
-                _init_git_repo(dir)
-                git_was_initialized = True
-                click.echo("✅ Git repository initialized")
-            else:
-                click.echo("❌ Git is necessary to use biotope")
-                raise click.Abort
-        
-        # Verify that .git exists in the target directory (if git wasn't just initialized)
-        # Note: .biotope will be created later, so we just check for .git presence
-        if not git_was_initialized and not (dir / ".git").exists():
-            # This shouldn't happen if our earlier checks worked correctly
-            click.echo("❌ Git repository not found in target directory")
-            raise click.Abort
-
-        dir.mkdir(parents=True, exist_ok=True)
-        create_project_structure(dir, user_config, metadata, project_metadata)
-        
-        # Create initial commit with project files if Git was just initialized
-        if git_was_initialized:
-            _create_initial_commit(dir)
-
-        click.echo("\n✨ Biotope established successfully! ✨")
-        click.echo(
-            f"\nYour biotope '{project_name}' has been established. Make sure to water regularly.",
-        )
-        click.echo("\nNext steps:")
-        click.echo("1. Review the configuration in config/biotope.yaml")
-        if use_knowledge_graph:
-            click.echo("2. Add your knowledge sources")
-        click.echo("3. Run 'biotope add <file>' to stage data files")
-        click.echo("4. Run 'biotope annotate interactive --staged' to create metadata")
-        click.echo("5. Run 'biotope commit -m \"message\"' to save changes")
-
-        if collect_project_metadata and project_metadata:
-            click.echo(
-                "\n💡 Project metadata has been saved and will be used to pre-fill annotation forms."
-            )
-            click.echo(
-                "   You can update it later with 'biotope config set-project-metadata'"
-            )
-    except (OSError, yaml.YAMLError) as e:
-        click.echo(f"\n❌ Error initializing project: {e!s}", err=True)
-        raise click.Abort from e
-
-
-def create_project_structure(
-    directory: Path, config: dict, metadata: dict, project_metadata: dict = None
+@click.option(
+    "--visible",
+    is_flag=True,
+    default=False,
+    help="Write project.yaml at the project root instead of inside .biotope/.",
+)
+@click.option(
+    "--interactive",
+    is_flag=True,
+    default=False,
+    help="Open $EDITOR on project.yaml so you can fill in purpose before exiting init.",
+)
+def init(
+    name: str | None,
+    dir: Path,  # noqa: A002
+    purpose: str,
+    no_git: bool,
+    visible: bool,
+    interactive: bool,
 ) -> None:
+    """Scaffold a new biotope project.
+
+    Default invocation: ``biotope init my-project``. Creates ``my-project/`` with
+    ``.biotope/``, ``data/``, ``mappings/``, an ``AGENTS.md`` for agents to read,
+    and an empty ``project.yaml``. Runs ``git init`` unless ``--no-git`` is set.
     """
-    Create the project directory structure and configuration files.
+    if name is None:
+        name = click.prompt("Project name", type=str)
 
-    Args:
-        directory: Project directory path
-        config: User-facing configuration dictionary
-        metadata: Internal metadata dictionary (now consolidated into biotope config)
-        project_metadata: Project-level metadata for pre-filling annotations
+    project_dir = (dir / name).resolve() if name != "." else dir.resolve()
+    if name == ".":
+        name = project_dir.name
 
-    """
-    # Create directory structure - git-on-top layout
-    dirs = [
-        ".biotope",
-        ".biotope/config",  # Configuration for biotope project
-        ".biotope/datasets",  # Stores Croissant ML JSON-LD files
-        ".biotope/workflows",  # Bioinformatics workflow definitions
-        ".biotope/logs",  # Command execution logs
-        "config",
-        "data",
-        "data/raw",
-        "data/processed",
-        "schemas",
-        "outputs",
-    ]
+    if (project_dir / ".biotope").exists():
+        click.echo(f"❌ {project_dir} already contains a .biotope/ directory.")
+        raise click.Abort
 
-    for d in dirs:
-        (directory / d).mkdir(parents=True, exist_ok=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / ".biotope" / "datasets").mkdir(parents=True, exist_ok=True)
+    (project_dir / ".biotope" / "workflows").mkdir(parents=True, exist_ok=True)
+    (project_dir / "data" / "raw").mkdir(parents=True, exist_ok=True)
+    (project_dir / "data" / "processed").mkdir(parents=True, exist_ok=True)
+    (project_dir / "mappings").mkdir(exist_ok=True)
 
-    # Create user-facing config file
-    (directory / "config" / "biotope.yaml").write_text(
-        yaml.dump(config, default_flow_style=False),
-    )
+    config_path = project_dir / ".biotope" / "config.yaml"
+    config_path.write_text(yaml.safe_dump(DEFAULT_BIOTOPE_CONFIG, sort_keys=False))
 
-    # Create consolidated biotope config (Git-like approach)
-    biotope_config = {
-        "version": "1.0",
-        "croissant_schema_version": "1.0",
-        "default_metadata_template": "scientific",
-        "data_storage": {"type": "local", "path": "data"},
-        "checksum_algorithm": "sha256",
-        "auto_stage": True,
-        "commit_message_template": "Update metadata: {description}",
-        "annotation_validation": {
-            "enabled": True,
-            "minimum_required_fields": [
-                "name",
-                "description",
-                "creator",
-                "dateCreated",
-                "distribution",
-            ],
-            "field_validation": {
-                "name": {"type": "string", "min_length": 1},
-                "description": {"type": "string", "min_length": 10},
-                "creator": {"type": "object", "required_keys": ["name"]},
-                "dateCreated": {"type": "string", "format": "date"},
-                "distribution": {"type": "array", "min_length": 1},
-            },
-        },
-        # Consolidate internal metadata into config (Git-like approach)
-        "project_info": {
-            "name": metadata.get("project_name"),
-            "created_at": metadata.get("created_at"),
-            "biotope_version": metadata.get("biotope_version"),
-            "last_modified": metadata.get("last_modified"),
-            "builds": metadata.get("builds", []),
-            "knowledge_sources": metadata.get("knowledge_sources", []),
-        },
-        # Registry configuration for external resources
-        "registries": {
-            "mcp": {
-                "url": "https://biocontext.ai/registry.json",
-                "cache_duration": 3600
-            },
-            "biotools": {
-                "url": "https://bio.tools/api",
-                "cache_duration": 3600
-            }
-        },
-    }
+    project = Project(name=name, purpose=purpose)
+    project_yaml_path = resolve_project_path(project_dir, visible=visible)
+    project_yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    project.dump(project_yaml_path)
 
-    # Add project metadata if provided
-    if project_metadata:
-        biotope_config["project_metadata"] = project_metadata
+    agents_md_dest = project_dir / "AGENTS.md"
+    agents_md_src = TEMPLATES / "AGENTS.md"
+    shutil.copy(agents_md_src, agents_md_dest)
 
-    (directory / ".biotope" / "config" / "biotope.yaml").write_text(
-        yaml.dump(biotope_config, default_flow_style=False),
-    )
+    gitignore = project_dir / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text("data/raw/\ndata/processed/\n__pycache__/\n*.pyc\n.venv/\n")
 
-    # Create .gitignore file to exclude data files and other common files
-    gitignore_content = """# Biotope data files (not tracked in Git)
-# Data files are tracked through metadata in .biotope/datasets/
-/data/
-/downloads/
-/tmp/
+    if not no_git:
+        try:
+            subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            click.echo(f"⚠️  git init failed: {exc}")
 
-# Biotope cache files (not tracked in Git)
-# Cache contains temporary registry data and other cached content
-.biotope/cache/
+    if interactive:
+        editor = os.environ.get("EDITOR", "vi")
+        try:
+            subprocess.run([editor, str(project_yaml_path)], check=True)
+            Project.load(project_yaml_path)  # validate after edit
+        except subprocess.CalledProcessError:
+            click.echo(f"⚠️  Editor exited non-zero; {project_yaml_path} may be empty.")
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Jupyter
-.ipynb_checkpoints
-*/.ipynb_checkpoints/*
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-*.tmp
-*.temp
-"""
-    (directory / ".gitignore").write_text(gitignore_content)
-
-    # Note: No custom refs needed - Git handles all version control
-
-    # Create README
-    readme_content = f"""# {config["project"]["name"]}
-
-A BioCypher knowledge graph project managed with biotope.
-
-## Project Structure
-
-- `config/`: User configuration files
-- `data/`: Data files (not tracked in Git)
-  - `raw/`: Raw input data
-  - `processed/`: Processed data
-- `schemas/`: Knowledge schema definitions
-- `outputs/`: Generated knowledge graphs
-- `.biotope/`: Biotope project management (Git-tracked)
-  - `datasets/`: Croissant ML metadata files
-  - `workflows/`: Bioinformatics workflow definitions
-  - `config/`: Biotope configuration (Git-like approach)
-  - `logs/`: Command execution history
-
-## Git Integration
-
-This project uses Git for metadata version control. The `.biotope/` directory is tracked by Git, allowing you to:
-- Version control your metadata changes
-- Collaborate with others on metadata
-- Use standard Git tools and workflows
-
-**Note**: Data files in the `data/` directory are intentionally excluded from Git tracking via `.gitignore`. This is because:
-- Data files are often large and would bloat the repository
-- Data files are tracked through metadata in `.biotope/datasets/`
-- Checksums ensure data integrity without storing the actual files
-
-## Getting Started
-
-1. Add data files: `biotope add <data_file>`
-2. Create metadata: `biotope annotate interactive --staged`
-3. Check status: `biotope status`
-4. Commit changes: `biotope commit -m "Add new dataset"`
-5. View history: `biotope log`
-6. Push/pull: `biotope push` / `biotope pull`
-
-## Standard Git Commands
-
-You can also use standard Git commands:
-- `git status` - See all project changes
-- `git log -- .biotope/` - View metadata history
-- `git diff .biotope/` - See metadata changes
-"""
-    (directory / "README.md").write_text(readme_content)
-
-
-def _init_git_repo(directory: Path) -> None:
-    """Initialize a Git repository in the directory."""
-    try:
-        import subprocess
-
-        subprocess.run(["git", "init"], cwd=directory, check=True)
-
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        click.echo(f"⚠️  Warning: Could not initialize Git: {e}")
-
-
-def _create_initial_commit(directory: Path) -> None:
-    """Create initial commit with project files."""
-    try:
-        import subprocess
-
-        # Add all files and create initial commit
-        subprocess.run(["git", "add", "."], cwd=directory, check=True)
-
-        subprocess.run(
-            ["git", "commit", "-m", "Initial biotope project setup"],
-            cwd=directory,
-            check=True,
-        )
-
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        click.echo(f"⚠️  Warning: Could not create initial commit: {e}")
+    console.print(f"✅ Initialised biotope project at [cyan]{project_dir}[/cyan]")
+    console.print(f"   project.yaml: [dim]{project_yaml_path.relative_to(project_dir)}[/dim]")
+    console.print("   Next: edit AGENTS.md or run [bold]biotope describe[/bold] to set purpose.")

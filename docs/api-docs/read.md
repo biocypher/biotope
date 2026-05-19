@@ -1,8 +1,5 @@
-# Biotope Read
+# `biotope read`
 
-!!! warning "Draft stage"
-
-    Biotope is in draft stage. Functionality may be missing or incomplete.
-    The API is subject to change.
+Promised as the NLP ingestion + health-check entry point — the canonical way to push unstructured text into a project's KG and the spot to run sanity checks before/after a build. v1 is a passthrough; integration with `epistemic-agent`'s synthesis loop is planned.
 
 ::: biotope.commands.read

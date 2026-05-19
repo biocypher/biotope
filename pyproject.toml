@@ -3,20 +3,24 @@
 ################################################################################
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 ################################################################################
-# Project Configuration
+# Project Configuration (PEP 621)
 ################################################################################
 
-[tool.poetry]
+[project]
 name = "biotope"
 version = "0.5.0"
 description = "CLI integration for BioCypher ecosystem packages"
-authors = ["Sebastian Lobentanzer <sebastian.lobentanzer@gmail.com>"]
-license = "MIT"
 readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [
+    { name = "Sebastian Lobentanzer", email = "sebastian.lobentanzer@gmail.com" },
+]
+keywords = []
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
@@ -24,39 +28,43 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
 ]
-keywords = []
+dependencies = [
+    "click>=8.1.8,<9",
+    "rich>=13.9.4,<16.0.0",
+    "PyYAML>=6.0,<7",
+    "mlcroissant>=1.0.13,<2",
+    "requests>=2.31.0,<3",
+    "pydantic>=2.6,<3",
+    "jinja2>=3.1,<4",
+    "duckdb>=1.0,<2",
+    "croissant-baker>=0.3,<1",
+]
 
-[tool.poetry.urls]
-Homepage = "https://github.com/biocypher/cli"
-"Source Code" = "https://github.com/biocypher/cli"
-"Bug Tracker" = "https://github.com/biocypher/cli/issues"
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.1.0",
+    "pytest>=8.3.4",
+    "bump2version>=1.0.1",
+    "mkdocs-material>=9.6.13",
+    "mike>=2.1.3",
+    "mkdocstrings-python>=1.16.10",
+]
+# biochatter (used by `biotope chat`) is intentionally not declared here:
+# it pins pillow<11 and conflicts with croissant-baker's pillow>=12.2.
+# Install it explicitly when needed: `uv pip install biochatter`.
+
+[project.urls]
+Homepage = "https://github.com/biocypher/biotope"
+"Source Code" = "https://github.com/biocypher/biotope"
+"Bug Tracker" = "https://github.com/biocypher/biotope/issues"
 Documentation = "https://biocypher.org"
 Download = "https://pypi.org/project/biotope/#files"
 
-[tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-click = "^8.1.8"
-rich = "^13.9.4"
-PyYAML = "^6.0"
-mlcroissant = "^1.0.13"
-requests = "^2.31.0"
-
-[tool.poetry.group.dev.dependencies]
-pre-commit = "^4.1.0"
-pytest = "^8.3.4"
-bump2version = "^1.0.1"
-mkdocs-material = "^9.6.13"
-mike = "^2.1.3"
-mkdocstrings-python = "^1.16.10"
-
-[tool.poetry.group.chat]
-optional = true
-
-[tool.poetry.group.chat.dependencies]
-biochatter = ">=0.7.0"
-
-[tool.poetry.scripts]
+[project.scripts]
 biotope = "biotope.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["biotope"]
 
 ################################################################################
 # Tool Configuration

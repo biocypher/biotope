@@ -1,4 +1,10 @@
-"""Read command implementation."""
+"""``biotope read`` — NLP ingestion and health-check entry point.
+
+v1 promise: the canonical way to ingest unstructured text into the project's
+graph and the entry point for sanity checks before/after a build. Currently a
+passthrough that echoes the input; future scope is wiring into
+``epistemic-agent``'s synthesis loop.
+"""
 
 from __future__ import annotations
 
