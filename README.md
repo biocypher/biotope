@@ -3,7 +3,7 @@
 |         |                                                                                                                                                              |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Package | [![Latest PyPI Version](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/) [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/) [![Docs](https://readthedocs.org/projects/biotope/badge/?version=latest)](https://biotope.readthedocs.io/) |
-| Meta    | [![MIT](https://img.shields.io/pypi/l/biotope.svg)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
+| Meta    | [![Apache 2.0](https://img.shields.io/pypi/l/biotope.svg)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
 
 CLI for the BioCypher ecosystem: Croissant-described data → BioCypher knowledge graph, with git-like metadata version control.
 
@@ -73,4 +73,4 @@ Build backend is hatchling; lockfile is `uv.lock`. CI runs `uv sync` + `uv run p
 
 ## Copyright
 
-Copyright © 2025–2026 BioCypher Team. [MIT License](./LICENSE).
+Copyright © 2025–2026 BioCypher Team. [Apache 2.0](./LICENSE).

@@ -16,7 +16,7 @@ version = "0.5.0"
 description = "CLI integration for BioCypher ecosystem packages"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [
     { name = "Sebastian Lobentanzer", email = "sebastian.lobentanzer@gmail.com" },
 ]
@@ -24,7 +24,7 @@ keywords = []
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
 ]
