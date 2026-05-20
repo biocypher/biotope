@@ -67,6 +67,34 @@ def test_describe_show(tmp_path: Path, monkeypatch) -> None:
     assert "hello" in result.output
 
 
+def test_describe_no_args_prints_state_and_hints(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+    project_dir = _init(runner, tmp_path, name="status-check")
+    monkeypatch.chdir(project_dir)
+    runner.invoke(describe, ["--purpose", "Map drug-target links"])
+
+    result = runner.invoke(describe, [])
+    assert result.exit_code == 0, result.output
+    assert "Map drug-target links" in result.output
+    assert "--purpose" in result.output
+    assert "--relation" in result.output
+
+
+def test_describe_accepts_natural_language_relation(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+    project_dir = _init(runner, tmp_path, name="nl")
+    monkeypatch.chdir(project_dir)
+
+    result = runner.invoke(
+        describe,
+        ["--relation", "which drugs target which proteins"],
+    )
+    assert result.exit_code == 0, result.output
+
+    project = Project.load(project_dir / ".biotope" / "project.yaml")
+    assert project.required_relations == ["which drugs target which proteins"]
+
+
 def test_describe_fails_without_project(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     monkeypatch.chdir(tmp_path)

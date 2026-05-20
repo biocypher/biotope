@@ -370,6 +370,11 @@ def load(jsonld, record_set, num_records):
 
 
 @annotate.command(help="Batch operations for CSV-based annotations. Export with --to-csv or import with --from-csv.")
+@click.argument(
+    "csv_path",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option(
     "--to-csv",
     is_flag=True,
@@ -379,7 +384,7 @@ def load(jsonld, record_set, num_records):
     "--from-csv",
     "apply_from_csv",
     is_flag=True,
-    help="Apply updates from a CSV (defaults to project .biotope.csv)",
+    help="Apply updates from a CSV. Defaults to <project>/.biotope.csv; pass a CSV path to override.",
 )
 @click.option(
     "--column-mapping",
@@ -388,6 +393,7 @@ def load(jsonld, record_set, num_records):
     help="JSON mapping CSV column names to expected fields (e.g., '{\"data_file\": \"filepath\"}')",
 )
 def batch(
+    csv_path: Path | None = None,
     to_csv: bool = False,
     apply_from_csv: bool = False,
     column_mapping: str | None = None,
@@ -397,6 +403,7 @@ def batch(
     Examples:
       biotope annotate batch --to-csv
       biotope annotate batch --from-csv
+      biotope annotate batch --from-csv data/raw/<subdir>/.biotope.csv
     """
     console = Console()
 
@@ -414,20 +421,31 @@ def batch(
         raise click.Abort
 
     if to_csv:
+        if csv_path is not None:
+            console.print("❌ --to-csv writes to <project>/.biotope.csv; do not pass a path.")
+            raise click.Abort
         _generate_project_biotope_csv(biotope_root)
         return
 
-    resolved_csv_path: Path
-    resolved_csv_path = biotope_root / ".biotope.csv"
+    resolved_csv_path = csv_path.resolve() if csv_path is not None else (biotope_root / ".biotope.csv")
+    used_default = csv_path is None
 
     if not resolved_csv_path.exists():
-        console.print(f"❌ CSV file not found: {resolved_csv_path}")
+        if used_default:
+            console.print(
+                f"❌ No .biotope.csv at project root ({resolved_csv_path}).\n"
+                "   Run [bold]biotope annotate batch --to-csv[/bold] first, "
+                "or pass an explicit path: "
+                "[bold]biotope annotate batch --from-csv <path>[/bold].",
+            )
+        else:
+            console.print(f"❌ CSV file not found: {resolved_csv_path}")
         raise click.Abort
 
     _process_csv_annotation(console, str(resolved_csv_path), column_mapping, biotope_root)
 
-    # Delete project CSV only if we used the default location (mirrors -r behavior)
-    if resolved_csv_path.name == ".biotope.csv":
+    # Only auto-delete the project-root default; never an explicitly-passed path.
+    if used_default:
         try:
             resolved_csv_path.unlink()
             click.echo("🗑️  Removed .biotope.csv after applying updates")

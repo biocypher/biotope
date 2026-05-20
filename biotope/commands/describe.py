@@ -12,10 +12,40 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.panel import Panel
 
 from biotope.project_model import Project, find_project, resolve_project_path
 
 console = Console()
+
+
+def _render_state_and_hints(project_path: Path, project: Project) -> None:
+    """Show the current project document plus a reminder of mutating flags."""
+    lines = [
+        f"[bold]name:[/bold] {project.name}",
+        f"[bold]purpose:[/bold] {project.purpose or '[dim](not set)[/dim]'}",
+        f"[bold]required entities:[/bold] {', '.join(project.required_entities) or '[dim](none)[/dim]'}",
+        f"[bold]required relations:[/bold] {', '.join(project.required_relations) or '[dim](none)[/dim]'}",
+    ]
+    if project.data_sources:
+        lines.append(f"[bold]data sources:[/bold] {', '.join(project.data_sources)}")
+    if project.notes:
+        lines.append(f"[bold]notes:[/bold] {project.notes}")
+    console.print(
+        Panel("\n".join(lines), title=str(project_path), border_style="cyan", expand=False),
+    )
+    console.print(
+        "\n[bold]Update this document with flags[/bold] "
+        "(repeat list flags as needed; free text accepted):\n"
+        "  --purpose \"…\"               replace the project purpose\n"
+        "  --entity \"…\"                add an entity (e.g. drug, gene, customer)\n"
+        "  --relation \"…\"              add a relation (e.g. \"which drugs target which proteins\")\n"
+        "  --source \"…\"                record a data source (path, URL, or registry id)\n"
+        "  --notes \"…\"                 replace the free-form notes field\n"
+        "  --clear-entities | --clear-relations | --clear-sources   reset the list before adding\n"
+        "  --edit                        open $EDITOR on project.yaml instead\n"
+        "  --show                        same as running `biotope describe` with no flags",
+    )
 
 
 @click.command()
@@ -25,21 +55,29 @@ console = Console()
     "-e",
     "entities",
     multiple=True,
-    help="Add to required_entities. Repeatable. Use --clear-entities to reset first.",
+    help=(
+        "Add to required_entities. Repeatable. Free text — usually a noun "
+        "(e.g. 'drug', 'gene', 'customer', 'invoice line item'). "
+        "Use --clear-entities to reset first."
+    ),
 )
 @click.option(
     "--relation",
     "-r",
     "relations",
     multiple=True,
-    help="Add to required_relations. Repeatable.",
+    help=(
+        "Add to required_relations. Repeatable. Free text — can be a short "
+        "label ('drug_targets_gene') or a natural-language statement "
+        "('which drugs target which proteins')."
+    ),
 )
 @click.option(
     "--source",
     "-s",
     "sources",
     multiple=True,
-    help="Add to data_sources. Repeatable.",
+    help="Add to data_sources. Repeatable. A path, URL, or registry id.",
 )
 @click.option("--notes", type=str, default=None, help="Replace the notes field.")
 @click.option("--clear-entities", is_flag=True, help="Empty required_entities before adding --entity values.")
@@ -75,8 +113,23 @@ def describe(
 
     project = Project.load(project_path)
 
-    if show:
-        click.echo(project.model_dump_json(indent=2))
+    no_mutation_requested = not any(
+        [
+            purpose is not None,
+            notes is not None,
+            entities,
+            relations,
+            sources,
+            clear_entities,
+            clear_relations,
+            clear_sources,
+            edit,
+            show,
+        ],
+    )
+
+    if show or no_mutation_requested:
+        _render_state_and_hints(project_path, project)
         return
 
     if edit:

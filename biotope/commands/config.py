@@ -48,7 +48,7 @@ def set_validation(field: Optional[str], type: Optional[str], min_length: Option
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort
@@ -211,7 +211,7 @@ def set_validation_pattern(pattern: str) -> None:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort
@@ -261,7 +261,7 @@ def remove_validation(field: str) -> None:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort
@@ -314,7 +314,7 @@ def toggle_validation(enabled: bool) -> None:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort
@@ -373,7 +373,7 @@ def set_remote_validation(url: str, cache_duration: int, fallback_to_local: bool
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort
@@ -439,7 +439,7 @@ def remove_remote_validation() -> None:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort
@@ -579,7 +579,7 @@ def set_project_metadata() -> None:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
     
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         click.echo("❌ Biotope configuration not found. Run 'biotope init' first.")
         raise click.Abort

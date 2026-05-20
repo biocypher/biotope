@@ -55,7 +55,7 @@ def is_git_repo(directory: Path) -> bool:
 
 def load_project_metadata(biotope_root: Path) -> dict:
     """Load project-level metadata from biotope configuration for pre-filling annotations."""
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         return {}
 

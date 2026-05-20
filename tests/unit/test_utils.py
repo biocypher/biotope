@@ -74,8 +74,6 @@ def test_load_project_metadata(tmp_path):
     biotope_dir = project_dir / ".biotope"
     biotope_dir.mkdir()
     
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create config with project metadata
     config_data = {
@@ -93,7 +91,7 @@ def test_load_project_metadata(tmp_path):
         }
     }
     
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config_data, f)
     
@@ -131,8 +129,6 @@ def test_load_project_metadata_no_project_metadata(tmp_path):
     biotope_dir = project_dir / ".biotope"
     biotope_dir.mkdir()
     
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create config without project metadata
     config_data = {
@@ -142,7 +138,7 @@ def test_load_project_metadata_no_project_metadata(tmp_path):
         }
     }
     
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config_data, f)
     
@@ -160,8 +156,6 @@ def test_load_project_metadata_partial_data(tmp_path):
     biotope_dir = project_dir / ".biotope"
     biotope_dir.mkdir()
     
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create config with partial project metadata
     config_data = {
@@ -172,7 +166,7 @@ def test_load_project_metadata_partial_data(tmp_path):
         }
     }
     
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config_data, f)
     

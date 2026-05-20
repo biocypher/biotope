@@ -21,8 +21,6 @@ def biotope_project(tmp_path):
     biotope_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
@@ -71,7 +69,7 @@ def biotope_project(tmp_path):
     }
     
     import yaml
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     

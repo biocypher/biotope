@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 def load_biotope_config(biotope_root: Path) -> Dict:
     """Load biotope configuration from .biotope/config/biotope.yaml."""
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         return {}
     

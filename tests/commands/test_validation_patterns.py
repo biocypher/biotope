@@ -26,8 +26,6 @@ def biotope_project(tmp_path):
     biotope_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create initial config
     initial_config = {
@@ -43,7 +41,7 @@ def biotope_project(tmp_path):
         }
     }
     
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(initial_config, f)
     
@@ -62,7 +60,7 @@ def test_set_validation_pattern(mock_find_root, runner, biotope_project):
     assert "Set validation pattern to: cluster-strict" in result.output
     
     # Check that config was updated
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         updated_config = yaml.safe_load(f)
     
@@ -89,7 +87,7 @@ def test_show_validation_pattern_with_remote(mock_find_root, runner, biotope_pro
     mock_find_root.return_value = biotope_project
     
     # Update config to include remote validation
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
     
@@ -121,7 +119,7 @@ def test_get_validation_pattern_default(biotope_project):
 def test_get_validation_pattern_explicit(biotope_project):
     """Test getting validation pattern with explicit configuration."""
     # Update config
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
     
@@ -137,7 +135,7 @@ def test_get_validation_pattern_explicit(biotope_project):
 def test_get_validation_pattern_with_remote_cluster(biotope_project):
     """Test getting validation pattern with cluster remote validation."""
     # Update config with cluster remote validation
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
     
@@ -155,7 +153,7 @@ def test_get_validation_pattern_with_remote_cluster(biotope_project):
 def test_get_validation_pattern_with_remote_storage(biotope_project):
     """Test getting validation pattern with storage remote validation."""
     # Update config with storage remote validation
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
     
@@ -194,7 +192,7 @@ def test_get_validation_info_with_remote(mock_load_remote, biotope_project):
     }
     
     # Update config with remote validation
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
     
@@ -225,7 +223,7 @@ def test_show_validation_includes_pattern(mock_find_root, runner, biotope_projec
     mock_find_root.return_value = biotope_project
     
     # Update config with specific pattern
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
     

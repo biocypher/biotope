@@ -33,7 +33,6 @@ class TestGitCommands:
         
         # Create subdirectories
         (biotope_dir / "datasets").mkdir()
-        (biotope_dir / "config").mkdir()
         (biotope_dir / "logs").mkdir()
         
         # Create sample metadata

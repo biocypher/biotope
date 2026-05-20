@@ -28,8 +28,6 @@ def biotope_project(tmp_path):
     git_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
@@ -70,7 +68,7 @@ def test_status_shows_annotation_status_for_add_metadata(runner, git_repo):
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -138,7 +136,7 @@ def test_status_shows_annotation_status_for_complete_metadata(runner, git_repo):
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -211,7 +209,7 @@ def test_status_suggests_annotate_for_incomplete_staged_metadata(runner, git_rep
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -283,7 +281,7 @@ def test_status_does_not_suggest_annotate_for_complete_staged_metadata(runner, g
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -362,7 +360,7 @@ def test_status_suggests_annotate_for_incomplete_tracked_metadata(runner, git_re
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -435,7 +433,7 @@ def test_status_does_not_suggest_annotate_for_complete_tracked_metadata(runner, 
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -513,7 +511,7 @@ def test_status_shows_suggestions_for_both_staged_and_tracked_incomplete(runner,
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -595,7 +593,7 @@ def test_status_detailed_shows_errors_for_incomplete_metadata(runner, git_repo):
             "minimum_required_fields": ["name", "description", "creator"],
         }
     }
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
 
@@ -626,7 +624,7 @@ def test_status_detailed_shows_no_errors_when_validation_disabled(runner, git_re
             "minimum_required_fields": ["name", "description", "creator"],
         }
     }
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
 
@@ -658,7 +656,7 @@ def test_status_no_detailed_suggests_detailed_for_incomplete_metadata(runner, gi
             "minimum_required_fields": ["name", "description", "creator"],
         }
     }
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
 
@@ -688,7 +686,7 @@ def test_status_detailed_shows_no_errors_for_complete_metadata(runner, git_repo)
             "minimum_required_fields": ["name", "description", "creator"],
         }
     }
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
 

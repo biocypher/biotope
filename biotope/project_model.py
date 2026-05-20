@@ -32,10 +32,20 @@ class Project(BaseModel):
     """Free-text competence question(s). The single most important field."""
 
     required_entities: list[str] = Field(default_factory=list)
-    """Entity types the graph must contain to answer ``purpose``."""
+    """Entity types the graph must contain to answer ``purpose``.
+
+    Free text. Typically nouns (``drug``, ``gene``, ``customer``). No
+    snake_case enforcement; downstream commands treat these as natural-
+    language hints when matching against schemas and registries.
+    """
 
     required_relations: list[str] = Field(default_factory=list)
-    """Relation types between those entities."""
+    """Relations between entities.
+
+    Free text. Either short labels (``drug_targets_gene``) or natural-
+    language statements (``which drugs target which proteins``) are accepted;
+    downstream matching is intentionally fuzzy.
+    """
 
     data_sources: list[str] = Field(default_factory=list)
     """Croissant files, registry IDs, or URLs the user has on hand."""

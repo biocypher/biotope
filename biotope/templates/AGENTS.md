@@ -26,13 +26,20 @@ Populate the project document via flags — never edit YAML by hand:
 ```bash
 biotope describe --purpose "..." \
                  --entity gene --entity disease --entity drug \
-                 --relation gene_associated_with_disease \
-                 --relation drug_targets_gene
+                 --relation "which drugs target which genes" \
+                 --relation "which genes are associated with which diseases"
 ```
 
 `biotope describe` writes to `.biotope/project.yaml` (or `./project.yaml` if
 the project was initialised with `--visible`). It is the agent-side equivalent
 of an editor: the only canonical way to record content-level intent.
+
+`--entity` and `--relation` accept **free text**. Use a short label if the
+schema vocabulary is already settled (`drug_targets_gene`); otherwise capture
+the user's wording verbatim (`which drugs target which proteins`) and let
+downstream commands resolve it heuristically. Running `biotope describe` with
+no flags prints the current state plus a reminder of available flags — useful
+as a status check at any point.
 
 ## Bring data in
 

@@ -16,8 +16,6 @@ def biotope_project_with_mcp(tmp_path):
     biotope_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create config with MCP registry
     config = {
@@ -57,7 +55,7 @@ def biotope_project_with_mcp(tmp_path):
         },
     }
     
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -72,8 +70,6 @@ def biotope_project_without_mcp(tmp_path):
     biotope_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create config without MCP registry
     config = {
@@ -107,7 +103,7 @@ def biotope_project_without_mcp(tmp_path):
         },
     }
     
-    config_file = config_dir / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -158,7 +154,7 @@ def test_get_mcp_status_without_registry(biotope_project_without_mcp):
 def test_get_mcp_status_with_multiple_registries(biotope_project_with_mcp):
     """Test MCP status with multiple registries."""
     # Add another registry to the config
-    config_file = biotope_project_with_mcp / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project_with_mcp / ".biotope" / "config.yaml"
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     
@@ -197,9 +193,9 @@ def test_get_mcp_status_with_timeout():
     # Create a minimal project structure
     tmp_path = Path("/tmp/test_biotope")
     tmp_path.mkdir(exist_ok=True)
-    config_dir = tmp_path / ".biotope" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    
+    biotope_dir = tmp_path / ".biotope"
+    biotope_dir.mkdir(parents=True, exist_ok=True)
+
     config = {
         "registries": {
             "mcp": {
@@ -208,8 +204,8 @@ def test_get_mcp_status_with_timeout():
             }
         }
     }
-    
-    config_file = config_dir / "biotope.yaml"
+
+    config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
     
@@ -238,7 +234,7 @@ def test_get_mcp_status_with_config_error(tmp_path):
 def test_get_mcp_status_with_empty_registries(biotope_project_without_mcp):
     """Test MCP status when registries section is empty."""
     # Add empty registries section
-    config_file = biotope_project_without_mcp / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project_without_mcp / ".biotope" / "config.yaml"
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     
@@ -257,7 +253,7 @@ def test_get_mcp_status_with_empty_registries(biotope_project_without_mcp):
 def test_get_mcp_status_with_malformed_registry_config(biotope_project_with_mcp):
     """Test MCP status with malformed registry configuration."""
     # Modify config to have malformed registry entry
-    config_file = biotope_project_with_mcp / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project_with_mcp / ".biotope" / "config.yaml"
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     

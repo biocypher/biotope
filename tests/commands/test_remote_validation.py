@@ -26,8 +26,6 @@ def biotope_project(tmp_path):
     biotope_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
@@ -68,7 +66,7 @@ def test_set_remote_validation(mock_find_root, runner, biotope_project):
     mock_find_root.return_value = biotope_project
     
     # Create initial config
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     initial_config = {
         "annotation_validation": {
             "enabled": True,
@@ -116,7 +114,7 @@ def test_remove_remote_validation(mock_find_root, runner, biotope_project):
     mock_find_root.return_value = biotope_project
     
     # Create config with remote validation
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     initial_config = {
         "annotation_validation": {
             "enabled": True,
@@ -170,7 +168,7 @@ def test_show_remote_validation(mock_find_root, runner, biotope_project):
     mock_find_root.return_value = biotope_project
     
     # Create config with remote validation
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     initial_config = {
         "annotation_validation": {
             "enabled": True,
@@ -212,7 +210,7 @@ def test_show_remote_validation_no_config(mock_find_root, runner, biotope_projec
     mock_find_root.return_value = biotope_project
     
     # Create empty config
-    config_file = biotope_project / ".biotope" / "config" / "biotope.yaml"
+    config_file = biotope_project / ".biotope" / "config.yaml"
     initial_config = {"annotation_validation": {"enabled": True}}
     with open(config_file, "w") as f:
         yaml.dump(initial_config, f)

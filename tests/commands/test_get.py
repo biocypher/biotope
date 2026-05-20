@@ -49,10 +49,9 @@ def biotope_project(tmp_path):
     biotope_dir = project_dir / ".biotope"
     biotope_dir.mkdir()
     (biotope_dir / "datasets").mkdir()
-    (biotope_dir / "config").mkdir()
 
     # Create basic config
-    config_file = biotope_dir / "config" / "biotope.yaml"
+    config_file = biotope_dir / "config.yaml"
     config_file.write_text("project_name: test_project\n")
 
     # Initialize git repository

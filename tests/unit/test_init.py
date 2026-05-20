@@ -73,4 +73,7 @@ def test_init_creates_default_biotope_config(tmp_path: Path) -> None:
     _invoke(runner, "c", "--dir", str(tmp_path), "--no-git")
     config = yaml.safe_load((tmp_path / "c" / ".biotope" / "config.yaml").read_text())
     assert config["croissant_schema_version"] == "1.1"
-    assert config["validation"]["enabled"] is True
+    assert config["annotation_validation"]["enabled"] is True
+    assert "creator" in config["annotation_validation"]["minimum_required_fields"]
+    assert "distribution" in config["annotation_validation"]["minimum_required_fields"]
+    assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10

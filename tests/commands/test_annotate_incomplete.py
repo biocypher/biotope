@@ -63,8 +63,6 @@ def biotope_project(tmp_path):
     biotope_dir.mkdir()
     
     # Create config directory
-    config_dir = biotope_dir / "config"
-    config_dir.mkdir()
     
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
@@ -111,7 +109,7 @@ def test_interactive_incomplete_finds_incomplete_files(
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
@@ -216,7 +214,7 @@ def test_interactive_incomplete_no_incomplete_files(mock_find_root, runner, git_
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)
@@ -272,7 +270,7 @@ def test_interactive_incomplete_no_tracked_files(mock_find_root, runner, git_rep
         }
     }
     
-    config_file = git_repo / ".biotope" / "config" / "biotope.yaml"
+    config_file = git_repo / ".biotope" / "config.yaml"
     import yaml
     with open(config_file, "w") as f:
         yaml.dump(config, f)

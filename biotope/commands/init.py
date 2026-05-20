@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import click
@@ -21,6 +22,12 @@ import yaml
 from rich.console import Console
 
 from biotope.project_model import Project, resolve_project_path
+
+PURPOSE_PROMPT = (
+    "What is the main purpose or aim of this project?\n"
+    "  (one or two sentences; press Enter to skip and set later via "
+    "`biotope describe --purpose ...`)"
+)
 
 console = Console()
 
@@ -30,9 +37,22 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
     "version": "0.1",
     "croissant_schema_version": "1.1",
     "data_storage": ".biotope/datasets",
-    "validation": {
+    "annotation_validation": {
         "enabled": True,
-        "required_fields": ["@type", "name", "description"],
+        "minimum_required_fields": [
+            "name",
+            "description",
+            "creator",
+            "dateCreated",
+            "distribution",
+        ],
+        "field_validation": {
+            "name": {"type": "string", "min_length": 1},
+            "description": {"type": "string", "min_length": 10},
+            "creator": {"type": "object", "required_keys": ["name"]},
+            "dateCreated": {"type": "string", "format": "date"},
+            "distribution": {"type": "array", "min_length": 1},
+        },
     },
 }
 
@@ -50,8 +70,17 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
     "--purpose",
     "-p",
     type=str,
-    default="",
-    help="Seed the project's purpose (competence question) directly. Skips the editor.",
+    default=None,
+    help=(
+        "Seed the project's purpose directly. "
+        "If omitted and stdin is a TTY, init will prompt; pass --no-prompt to skip."
+    ),
+)
+@click.option(
+    "--no-prompt",
+    is_flag=True,
+    default=False,
+    help="Never prompt interactively. Combined with no --purpose, leaves it empty.",
 )
 @click.option(
     "--no-git",
@@ -74,7 +103,8 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
 def init(
     name: str | None,
     dir: Path,  # noqa: A002
-    purpose: str,
+    purpose: str | None,
+    no_prompt: bool,
     no_git: bool,
     visible: bool,
     interactive: bool,
@@ -87,6 +117,13 @@ def init(
     """
     if name is None:
         name = click.prompt("Project name", type=str)
+
+    if purpose is None:
+        if no_prompt or not sys.stdin.isatty():
+            purpose = ""
+        else:
+            click.echo(PURPOSE_PROMPT)
+            purpose = click.prompt("purpose", default="", show_default=False)
 
     project_dir = (dir / name).resolve() if name != "." else dir.resolve()
     if name == ".":
@@ -135,4 +172,13 @@ def init(
 
     console.print(f"✅ Initialised biotope project at [cyan]{project_dir}[/cyan]")
     console.print(f"   project.yaml: [dim]{project_yaml_path.relative_to(project_dir)}[/dim]")
-    console.print("   Next: edit AGENTS.md or run [bold]biotope describe[/bold] to set purpose.")
+    if purpose:
+        console.print(f"   purpose: [dim]{purpose}[/dim]")
+        console.print(
+            "   Next: add entities and relations with "
+            "[bold]biotope describe --entity ... --relation ...[/bold].",
+        )
+    else:
+        console.print(
+            "   Next: set purpose with [bold]biotope describe --purpose \"...\"[/bold].",
+        )
