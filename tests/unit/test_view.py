@@ -6,7 +6,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from biotope.commands.describe import describe
+from biotope.commands.map import map_group as describe
 from biotope.commands.init import init
 from biotope.commands.view import view
 

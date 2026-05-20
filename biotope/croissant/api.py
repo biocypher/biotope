@@ -1,9 +1,9 @@
 """High-level Croissant→KG operations.
 
-These pure functions are the shared backbone of both the test suite and
-the new biotope CLI verbs (``propose-mapping``, ``propose-alignment``,
-``discover``, ``build``). They return JSON-serialisable dicts so the CLI
-can echo their output verbatim and tests can assert against structure.
+Pure functions shared between the test suite and the biotope CLI verbs
+(``biotope map``, ``propose-alignment``, ``discover``, ``build``). They return
+JSON-serialisable dicts so the CLI can echo their output verbatim and tests
+can assert against structure.
 """
 
 from __future__ import annotations
@@ -20,9 +20,12 @@ from biotope.croissant.alignment.model import (
     JoinKeys,
     Reference,
 )
-from biotope.croissant.mapping.defaults import default_mapping
+from biotope.croissant.mapping.defaults import intent_comment, unresolved_scaffold
 from biotope.croissant.mapping.loader import load_mapping
-from biotope.croissant.mapping.render import render_review_scaffold
+from biotope.croissant.mapping.render import (
+    build_inspector_appendix,
+    render_mapping_with_appendix,
+)
 from biotope.croissant.registry.client import LocalRegistryClient, RegistryClient
 from biotope.croissant.spec import load_from_path, load_from_url
 
@@ -94,38 +97,86 @@ def discover_sources(
     }
 
 
-def propose_mapping(
+def scaffold_mapping(
     croissant_path: str | Path,
     *,
+    required_entities: list[str] | None = None,
+    required_relations: list[str] | None = None,
+    purpose: str | None = None,
     write_to: str | Path | None = None,
     preview_rows: int = 3,
 ) -> dict[str, Any]:
-    """Generate a heuristic ``mapping.yaml`` for a Croissant file."""
+    """Generate an unresolved semantic mapping scaffold for a Croissant file.
+
+    The scaffold is heuristic-free: slot keys are normalised from the supplied
+    ``required_entities`` / ``required_relations`` lists, all selectors and
+    record_set choices are left unresolved, and the inspector output is
+    appended as a YAML comment block.
+    """
     path_str = str(croissant_path)
     dataset = (
         load_from_url(path_str)
         if path_str.startswith(("http://", "https://"))
         else load_from_path(path_str)
     )
-    mapping = default_mapping(dataset, croissant_path=path_str)
-    payload = mapping.model_dump(by_alias=True, exclude_defaults=False)
-    scaffold = render_review_scaffold(
-        mapping,
+    mapping = unresolved_scaffold(
+        path_str,
+        required_entities=required_entities or [],
+        required_relations=required_relations or [],
+    )
+    datasets_location = _infer_datasets_location(croissant_path)
+    appendix = build_inspector_appendix(
         dataset,
-        datasets_location=_infer_datasets_location(croissant_path),
+        datasets_location=datasets_location,
         preview_rows=preview_rows,
+    )
+    comment = intent_comment(
+        required_entities=required_entities or [],
+        required_relations=required_relations or [],
+        purpose=purpose,
+    )
+    scaffold = render_mapping_with_appendix(
+        mapping,
+        appendix=appendix,
+        intent_comment=comment,
     )
     if write_to is not None:
         Path(write_to).write_text(scaffold)
     return {
-        "mapping": payload,
         "yaml": scaffold,
         "wrote": str(write_to) if write_to else None,
+        "unresolved": mapping.unresolved_slots(),
     }
 
 
+# Backwards-compatible alias (the deprecated `propose-mapping` CLI forwards here).
+def propose_mapping(
+    croissant_path: str | Path,
+    *,
+    write_to: str | Path | None = None,
+    preview_rows: int = 3,
+    required_entities: list[str] | None = None,
+    required_relations: list[str] | None = None,
+    purpose: str | None = None,
+) -> dict[str, Any]:
+    """Deprecated: identical to :func:`scaffold_mapping`."""
+    return scaffold_mapping(
+        croissant_path,
+        write_to=write_to,
+        preview_rows=preview_rows,
+        required_entities=required_entities,
+        required_relations=required_relations,
+        purpose=purpose,
+    )
+
+
 def _infer_datasets_location(croissant_path: str | Path) -> Path | None:
-    """Best-effort local data root for preview sampling."""
+    """Best-effort on-disk data root for preview sampling.
+
+    For Croissants under ``.biotope/datasets/<rel>.jsonld`` returns the matching
+    ``<project>/<rel>/`` data directory; ``includes`` paths in baker-generated
+    Croissants are relative to that directory, not to the project root.
+    """
     path_str = str(croissant_path)
     if path_str.startswith(("http://", "https://")):
         return None
@@ -133,11 +184,14 @@ def _infer_datasets_location(croissant_path: str | Path) -> Path | None:
     path = Path(path_str).resolve()
     for parent in path.parents:
         if parent.name == "datasets" and parent.parent.name == ".biotope":
-            rel = path.relative_to(parent).with_suffix("")
             biotope_root = parent.parent.parent
-            candidate = biotope_root / rel
-            if candidate.exists():
-                return candidate if candidate.is_dir() else candidate.parent
+            try:
+                rel = path.relative_to(parent).with_suffix("")
+            except ValueError:
+                return biotope_root
+            data_dir = biotope_root / rel
+            if data_dir.exists():
+                return data_dir if data_dir.is_dir() else data_dir.parent
             return biotope_root
     return path.parent
 
@@ -147,22 +201,26 @@ def propose_alignment(
     *,
     write_to: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Propose an ``alignment.yaml`` by spotting overlap in node-property names."""
+    """Propose an ``alignment.yaml`` by spotting overlap in entity property names.
+
+    Operates over semantic entity keys (the mapping key, which is also the
+    generated ``input_label``).
+    """
     mappings = [(Path(p).stem.replace(".mapping", ""), load_mapping(p)) for p in mapping_paths]
     equivalences: list[Equivalence] = []
 
     for i, (stem_a, mapping_a) in enumerate(mappings):
         for stem_b, mapping_b in mappings[i + 1 :]:
-            for node_a in mapping_a.nodes:
-                for node_b in mapping_b.nodes:
-                    shared = set(node_a.properties).intersection(node_b.properties)
+            for ent_key_a, entity_a in mapping_a.entities.items():
+                for ent_key_b, entity_b in mapping_b.entities.items():
+                    shared = set(entity_a.properties).intersection(entity_b.properties)
                     if not shared:
                         continue
                     join_field = sorted(shared)[0]
                     equivalences.append(
                         Equivalence(
-                            a=Reference(mapping=stem_a, node_type=node_a.type),
-                            b=Reference(mapping=stem_b, node_type=node_b.type),
+                            a=Reference(mapping=stem_a, node_type=ent_key_a),
+                            b=Reference(mapping=stem_b, node_type=ent_key_b),
                             kind=EquivalenceKind.SAME_NODE,
                             join_on=JoinKeys(a=join_field, b=join_field),
                         ),

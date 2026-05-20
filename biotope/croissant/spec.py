@@ -90,6 +90,26 @@ class ConfiguredBaseModel(BaseModel):
     )
 
 
+class CroissantFieldSource(ConfiguredBaseModel):
+    """Field source link, e.g. ``{fileSet: {@id: target-fileset}, extract: ...}``."""
+
+    file_object: dict | None = None
+    file_set: dict | None = None
+    extract: dict | None = None
+
+    @property
+    def file_set_id(self) -> str | None:
+        if isinstance(self.file_set, dict):
+            return self.file_set.get("@id")
+        return None
+
+    @property
+    def file_object_id(self) -> str | None:
+        if isinstance(self.file_object, dict):
+            return self.file_object.get("@id")
+        return None
+
+
 class CroissantFieldModel(ConfiguredBaseModel):
     """A field within a Croissant record set."""
 
@@ -101,6 +121,7 @@ class CroissantFieldModel(ConfiguredBaseModel):
         validation_alias=AliasChoices("repeated", "isArray", "cr:isArray"),
     )
     sub_field: list[CroissantFieldModel] = Field(default_factory=list)
+    source: CroissantFieldSource | None = None
 
     def kind(self) -> FieldKind:
         """Return the normalised :class:`FieldKind` for this field."""

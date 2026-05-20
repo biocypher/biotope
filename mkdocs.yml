@@ -50,13 +50,13 @@ nav:
       - Registry Integration: implementation-plans/registry-integration.md
   - API Docs:
       - Init: api-docs/init.md
-      - Describe: api-docs/describe.md
+      - Map: api-docs/map.md
       - Add: api-docs/add.md
       - Annotate: api-docs/annotate.md
       - Search: api-docs/search.md
       - Discover: api-docs/discover.md
-      - Propose Mapping: api-docs/propose-mapping.md
       - Propose Alignment: api-docs/propose-alignment.md
+      - Propose Mapping (deprecated): api-docs/propose-mapping.md
       - Build: api-docs/build.md
       - View: api-docs/view.md
       - Benchmark: api-docs/benchmark.md

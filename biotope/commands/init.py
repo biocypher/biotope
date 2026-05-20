@@ -3,7 +3,7 @@
 Default behavior is **pure scaffold**: create the directory layout, drop an
 ``AGENTS.md`` for the agent surface, write an empty ``project.yaml``, run
 ``git init``. No content questions. The agent (or the user via
-``biotope describe``) fills in the competence questions afterwards.
+``biotope map``) fills in the competence questions afterwards.
 
 Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
 ``project.yaml`` so the user can fill ``purpose:`` before exiting init.
@@ -26,7 +26,7 @@ from biotope.project_model import Project, resolve_project_path
 PURPOSE_PROMPT = (
     "What is the main purpose or aim of this project?\n"
     "  (one or two sentences; press Enter to skip and set later via "
-    "`biotope describe --purpose ...`)"
+    "`biotope map --purpose ...`)"
 )
 
 console = Console()
@@ -184,9 +184,9 @@ def init(
         console.print(f"   purpose: [dim]{purpose}[/dim]")
         console.print(
             "   Next: add entities and relations with "
-            "[bold]biotope describe --entity ... --relation ...[/bold].",
+            "[bold]biotope map --entity ... --relation ...[/bold].",
         )
     else:
         console.print(
-            "   Next: set purpose with [bold]biotope describe --purpose \"...\"[/bold].",
+            "   Next: set purpose with [bold]biotope map --purpose \"...\"[/bold].",
         )

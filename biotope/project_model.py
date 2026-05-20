@@ -2,8 +2,8 @@
 
 This document captures what the user wants the knowledge graph to answer,
 *not* technical configuration. It is the canonical agent surface: an agent
-populates it via ``biotope describe`` flags, and downstream commands
-(``propose-mapping``, ``discover``, ``build``) consult it.
+populates it via ``biotope map`` intent flags, and downstream commands
+(``biotope map``, ``discover``, ``build``) consult it.
 
 Hierarchical config precedence (lower wins, higher overrides):
 

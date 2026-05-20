@@ -130,23 +130,50 @@ class AcquisitionContext:
     def _resolve_path(self, rs: CroissantRecordSetModel) -> Path:
         """Resolve a record set to a filesystem glob path.
 
-        Strategy:
+        Strategy, in order:
 
-        1. If a FileSet distribution shares the record set's name or id, use
-           ``datasets_location / fileset.includes``.
-        2. Else if a FileObject's id matches the record set name, use its
-           ``contentUrl`` resolved relative to ``datasets_location``.
-        3. Else default to ``datasets_location / record_set.name`` and let
-           DuckDB glob with a recursive ``**/*`` pattern.
+        1. Follow ``rs.field[*].source.fileSet`` / ``fileObject`` to the
+           referenced distribution entry (canonical Croissant link).
+        2. Match a FileSet/FileObject by ``dist.id == rs.name`` or
+           ``dist.id == f"{rs.name}-fileset"`` (baker convention).
+        3. Default to ``datasets_location / record_set.name`` and let DuckDB
+           glob with a recursive ``**/*`` pattern.
         """
-        for dist in self.dataset.distribution:
-            if isinstance(dist, CroissantFileSetModel) and dist.id == rs.name:
+        dist_by_id: dict[str, CroissantFileSetModel | CroissantFileObjectModel] = {
+            d.id: d for d in self.dataset.distribution if d.id
+        }
+
+        # 1. Field source links (canonical).
+        for field in rs.field:
+            if field.source is None:
+                continue
+            fs_id = field.source.file_set_id
+            if fs_id and fs_id in dist_by_id:
+                dist = dist_by_id[fs_id]
+                if isinstance(dist, CroissantFileSetModel):
+                    return self.datasets_location / dist.includes
+                if isinstance(dist, CroissantFileObjectModel) and dist.content_url:
+                    return self.datasets_location / dist.content_url
+            fo_id = field.source.file_object_id
+            if fo_id and fo_id in dist_by_id:
+                dist = dist_by_id[fo_id]
+                if isinstance(dist, CroissantFileObjectModel) and dist.content_url:
+                    return self.datasets_location / dist.content_url
+                if isinstance(dist, CroissantFileSetModel):
+                    return self.datasets_location / dist.includes
+
+        # 2. Heuristic id matching.
+        for candidate_id in (rs.name, f"{rs.name}-fileset"):
+            dist = dist_by_id.get(candidate_id)
+            if isinstance(dist, CroissantFileSetModel):
                 return self.datasets_location / dist.includes
-            if isinstance(dist, CroissantFileObjectModel) and dist.id == rs.name:
+            if isinstance(dist, CroissantFileObjectModel):
                 if dist.content_url is None:
                     msg = f"FileObject {dist.id!r} has no contentUrl"
                     raise ValueError(msg)
                 return self.datasets_location / dist.content_url
+
+        # 3. Fallback.
         return self.datasets_location / rs.name
 
     def _read(self, path: Path) -> duckdb.DuckDBPyRelation:

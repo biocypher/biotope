@@ -1,12 +1,13 @@
 """Combine multiple compiled adapters via an :class:`Alignment`.
 
 For v1 only :class:`EquivalenceKind.SAME_NODE` is implemented. The merge is
-deliberately simple: we rewrite the IDs emitted by adapter B's matching node
+deliberately simple: we rewrite the IDs emitted by adapter B's matching entity
 type so they collide with adapter A's IDs on the same join key. BioCypher
 then naturally deduplicates the resulting node tuples.
 
-A richer ER backend can plug into this same surface by inserting a
-``rewrite_id`` step at the SAME_NODE branch.
+After the IR shift to semantic entities/relations, ``Reference.node_type`` is
+matched against entity *keys* (= generated input labels) rather than legacy
+``node.type`` strings.
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ class MergedAdapter:
     alignment: Alignment
 
     def get_nodes(self) -> Iterator[NodeTuple]:
-        """Yield deduplicated nodes from every adapter under the alignment."""
         rewrites = self._build_node_id_rewrites()
         for stem, adapter in self.adapters_by_stem.items():
             for node_id, label, props in adapter.get_nodes():
@@ -39,21 +39,13 @@ class MergedAdapter:
                 yield (node_id, label, props)
 
     def get_edges(self) -> Iterator[EdgeTuple]:
-        """Yield edges from every adapter.
-
-        v1 caveat: endpoint rewriting only applies through node-side ID
-        collapse. Edges whose source/target are already CURIE-shaped will
-        collide naturally with the rewritten nodes. Edges with synthetic
-        endpoint IDs require an extension here.
-        """
         for adapter in self.adapters_by_stem.values():
             yield from adapter.get_edges()
 
     def _build_node_id_rewrites(self) -> dict[tuple[str, str], tuple[str, str]]:
-        """Build a ``{(mapping_stem, node_type): (join_field, prefix)}`` table.
+        """Build ``{(mapping_stem, entity_key): (join_field, prefix)}``.
 
-        For each ``same_node`` equivalence, side B's node IDs are rewritten to
-        use side A's CURIE prefix on the join value. Side A is left as-is.
+        ``Reference.node_type`` now identifies an entity by its mapping key.
         """
         result: dict[tuple[str, str], tuple[str, str]] = {}
         for eq in self.alignment.equivalences:
@@ -67,13 +59,23 @@ class MergedAdapter:
         return result
 
     @staticmethod
-    def _infer_curie_prefix(adapter: CompiledAdapter, node_type: str) -> str | None:
-        """Best-effort: read the ``prefix`` from the matching node's id transform."""
-        for node in adapter.mapping.nodes:
-            if node.type == node_type and node.id.transform == "as_curie":
-                prefix = node.id.args.get("prefix")
+    def _infer_curie_prefix(adapter: CompiledAdapter, entity_key: str) -> str | None:
+        """Best-effort: read ``args.prefix`` from the matching entity's id selector."""
+        entity = adapter.mapping.entities.get(entity_key)
+        if entity is None or entity.id is None:
+            return None
+        selector = entity.id
+        ids = adapter.mapping.ids
+        while selector is not None:
+            if selector.transform == "as_curie":
+                prefix = selector.args.get("prefix")
                 if isinstance(prefix, str):
                     return prefix
+                return None
+            if selector.use is not None and selector.use in ids:
+                selector = ids[selector.use]
+                continue
+            return None
         return None
 
 

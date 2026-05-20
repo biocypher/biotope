@@ -37,8 +37,8 @@ notes: ""
 Populated by:
 
 - `biotope init --purpose "..."` (one-shot)
-- `biotope describe --entity ... --relation ... --purpose "..."` (incremental)
-- The agent reading `AGENTS.md` (which in turn calls `biotope describe`)
+- `biotope map --entity ... --relation ... --purpose "..."` (incremental, non-interactive)
+- The agent reading `AGENTS.md` (which in turn calls `biotope map` with intent flags)
 
 Read by:
 
@@ -57,13 +57,14 @@ CLI flag                              ← highest
 ~/.config/biotope/config.yaml         ← lowest
 ```
 
-CLI flags always win. Inspect resolved values with `biotope describe --show`.
+CLI flags always win. Inspect resolved values with `biotope map --show`.
 
 ## `.biotope/datasets/<name>.jsonld`
 
 One Croissant 1.1 JSON-LD file per tracked data file. `biotope add` writes the file-level stub; if `croissant-baker` has a handler for the file's extension, structural metadata (column types, row counts) is appended automatically. Fields baker cannot infer (license, creator, access restrictions) come from CLI flags on `biotope add`.
 
-These files are the input to `biotope propose-mapping`.
+These files are the input to `biotope map scaffold` (which produces an
+unresolved semantic mapping) and to `biotope build` (which compiles it).
 
 ## Why this shape
 

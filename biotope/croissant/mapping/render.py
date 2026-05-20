@@ -1,4 +1,10 @@
-"""Render human-reviewable ``mapping.yaml`` scaffolds."""
+"""Render semantic ``mapping.yaml`` documents with optional inspector appendix.
+
+The renderer never autoselects record sets or fields. It writes the mapping
+literally and (optionally) appends a comment block summarising the referenced
+Croissant dataset so an editor — human or copilot — can resolve slots without
+re-running inspection.
+"""
 
 from __future__ import annotations
 
@@ -7,254 +13,150 @@ from typing import Any
 
 import yaml
 
-from biotope.croissant.acquisition import AcquisitionContext
-from biotope.croissant.mapping.model import EdgeMapping, Mapping, NodeMapping
-from biotope.croissant.spec import CroissantDatasetModel, CroissantFieldModel, CroissantRecordSetModel, FieldKind
+from biotope.croissant.mapping.model import (
+    EntityMapping,
+    ExplodeScan,
+    Mapping,
+    RelationMapping,
+    RowScan,
+    Scan,
+    Selector,
+)
+from biotope.croissant.spec import CroissantDatasetModel
 
 
 def render_mapping_yaml(mapping: Mapping) -> str:
-    """Serialise a :class:`Mapping` as plain YAML."""
-    return yaml.safe_dump(
-        mapping.model_dump(by_alias=True, exclude_defaults=False),
-        sort_keys=False,
+    """Serialise a :class:`Mapping` as plain YAML, omitting noise defaults."""
+    payload = _mapping_payload(mapping)
+    return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+
+
+def render_mapping_with_appendix(
+    mapping: Mapping,
+    *,
+    appendix: str | None = None,
+    intent_comment: str | None = None,
+) -> str:
+    """Render ``mapping`` YAML, optionally followed by an inspector comment appendix.
+
+    ``intent_comment`` is rendered as a top-of-file comment block (typically the
+    original human phrasing of declared entities/relations from ``project.yaml``).
+    ``appendix`` is appended verbatim as a YAML comment block at the end of the
+    document.
+    """
+    sections: list[str] = []
+    if intent_comment:
+        sections.append(_as_comment_block(intent_comment))
+    sections.append(render_mapping_yaml(mapping))
+    if appendix:
+        sections.append(_as_comment_block(appendix))
+    return "\n".join(s.rstrip() for s in sections) + "\n"
+
+
+def _mapping_payload(mapping: Mapping) -> dict[str, Any]:
+    out: dict[str, Any] = {"croissant": mapping.croissant}
+    if mapping.ids:
+        out["ids"] = {name: _selector_payload(sel) for name, sel in mapping.ids.items()}
+    if mapping.entities:
+        out["entities"] = {name: _entity_payload(entity) for name, entity in mapping.entities.items()}
+    if mapping.relations:
+        out["relations"] = {name: _relation_payload(rel) for name, rel in mapping.relations.items()}
+    return out
+
+
+def _entity_payload(entity: EntityMapping) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if entity.record_set is not None:
+        out["record_set"] = entity.record_set
+    out["scan"] = _scan_payload(entity.scan)
+    if entity.schema_term is not None:
+        out["schema_term"] = entity.schema_term
+    if entity.namespace is not None:
+        out["namespace"] = entity.namespace
+    if entity.id is not None:
+        out["id"] = _selector_payload(entity.id)
+    if entity.properties:
+        out["properties"] = {k: _selector_payload(v) for k, v in entity.properties.items()}
+    if entity.where is not None:
+        out["where"] = entity.where
+    return out
+
+
+def _relation_payload(relation: RelationMapping) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if relation.record_set is not None:
+        out["record_set"] = relation.record_set
+    out["scan"] = _scan_payload(relation.scan)
+    if relation.schema_term is not None:
+        out["schema_term"] = relation.schema_term
+    if relation.source is not None:
+        out["source"] = _endpoint_payload(relation.source)
+    if relation.target is not None:
+        out["target"] = _endpoint_payload(relation.target)
+    if relation.properties:
+        out["properties"] = {k: _selector_payload(v) for k, v in relation.properties.items()}
+    if relation.where is not None:
+        out["where"] = relation.where
+    return out
+
+
+def _selector_payload(sel: Selector) -> Any:
+    if sel.transform == "passthrough" and not sel.args and sel.use is None and sel.field is not None:
+        return sel.field
+    return _strip_defaults(
+        {
+            "field": sel.field,
+            "use": sel.use,
+            "transform": sel.transform if sel.transform != "passthrough" else None,
+            "args": sel.args or None,
+        }
     )
 
 
-def render_review_scaffold(
-    mapping: Mapping,
+def _endpoint_payload(endpoint: Any) -> Any:
+    return _strip_defaults(
+        {
+            "entity": endpoint.entity,
+            "field": endpoint.field,
+            "use": endpoint.use,
+            "transform": endpoint.transform if endpoint.transform != "passthrough" else None,
+            "args": endpoint.args or None,
+        }
+    )
+
+
+def _scan_payload(scan: Scan) -> Any:
+    if isinstance(scan, RowScan):
+        return "row"
+    if isinstance(scan, ExplodeScan):
+        return {"explode": scan.explode}
+    return scan  # pragma: no cover
+
+
+def _strip_defaults(payload: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in payload.items() if v is not None}
+
+
+def _as_comment_block(text: str) -> str:
+    lines = text.splitlines() or [""]
+    return "\n".join(f"# {line}" if line else "#" for line in lines) + "\n"
+
+
+def build_inspector_appendix(
     dataset: CroissantDatasetModel,
     *,
     datasets_location: str | Path | None = None,
     preview_rows: int = 3,
 ) -> str:
-    """Render a mapping scaffold with inline comments for human review."""
-    lines = [
-        "# Review scaffold generated by `biotope propose-mapping`.",
-        "# Edit the YAML values below; comment lines are ignored by `biotope build`.",
-        "# Key meanings:",
-        "# - record_set: source table in the Croissant dataset",
-        "# - type: emitted BioCypher node or edge label",
-        "# - id/source/target.from: source column passed into the transform",
-        "# - transform: passthrough, as_curie, or hash_id",
-        "# - properties: columns copied onto the emitted node or edge",
-        "# - where: optional SQL WHERE clause applied before emission",
-        "",
-        f"croissant: {_yaml_inline(mapping.croissant)}",
-    ]
+    """Build the inspector comment appendix for a Croissant dataset.
 
-    context = _open_context(dataset, datasets_location, preview_rows)
-    try:
-        lines.extend(_render_nodes(mapping, dataset, context, preview_rows))
-        lines.extend(_render_edges(mapping, dataset, context, preview_rows))
-    finally:
-        if context is not None:
-            context.close()
+    Defers to :mod:`biotope.croissant.mapping.inspector` so the same logic
+    powers ``map inspect``, ``map scaffold``, and the wizard preview.
+    """
+    from biotope.croissant.mapping.inspector import render_inspector_text
 
-    return "\n".join(lines) + "\n"
-
-
-def _render_nodes(
-    mapping: Mapping,
-    dataset: CroissantDatasetModel,
-    context: AcquisitionContext | None,
-    preview_rows: int,
-) -> list[str]:
-    if not mapping.nodes:
-        return ["nodes: []"]
-
-    lines = ["nodes:"]
-    for node in mapping.nodes:
-        rs = dataset.record_set_by_name(node.record_set)
-        lines.extend(_node_comment_block(node, rs, context, preview_rows))
-        lines.extend(_dump_sequence_item(node.model_dump(by_alias=True, exclude_defaults=False)))
-    return lines
-
-
-def _render_edges(
-    mapping: Mapping,
-    dataset: CroissantDatasetModel,
-    context: AcquisitionContext | None,
-    preview_rows: int,
-) -> list[str]:
-    if not mapping.edges:
-        return ["edges: []"]
-
-    lines = ["edges:"]
-    for edge in mapping.edges:
-        rs = dataset.record_set_by_name(edge.record_set)
-        lines.extend(_edge_comment_block(edge, rs, context, preview_rows))
-        lines.extend(_dump_sequence_item(edge.model_dump(by_alias=True, exclude_defaults=False)))
-    return lines
-
-
-def _node_comment_block(
-    node: NodeMapping,
-    record_set: CroissantRecordSetModel | None,
-    context: AcquisitionContext | None,
-    preview_rows: int,
-) -> list[str]:
-    lines = [
-        f"# Record set `{node.record_set}` -> node type `{node.type}`",
-        f"# - ID: {_describe_endpoint(node.id)}",
-    ]
-    if record_set and record_set.description:
-        lines.append(f"# - Croissant description: {record_set.description}")
-    if node.properties:
-        lines.append(f"# - Properties: {', '.join(node.properties)}")
-    else:
-        lines.append("# - Properties: none")
-    if node.where:
-        lines.append(f"# - Filter: {node.where}")
-    lines.extend(_field_inventory(record_set))
-
-    preview_fields = _unique_fields([node.id.from_, *node.properties[:3]])
-    lines.extend(_sample_block(context, node.record_set, preview_fields, preview_rows))
-    return lines
-
-
-def _edge_comment_block(
-    edge: EdgeMapping,
-    record_set: CroissantRecordSetModel | None,
-    context: AcquisitionContext | None,
-    preview_rows: int,
-) -> list[str]:
-    lines = [
-        f"# Record set `{edge.record_set}` -> edge type `{edge.type}`",
-        f"# - Source: {_describe_endpoint(edge.source)}",
-        f"# - Target: {_describe_endpoint(edge.target)}",
-    ]
-    if record_set and record_set.description:
-        lines.append(f"# - Croissant description: {record_set.description}")
-    if edge.properties:
-        lines.append(f"# - Properties: {', '.join(edge.properties)}")
-    else:
-        lines.append("# - Properties: none")
-    if edge.where:
-        lines.append(f"# - Filter: {edge.where}")
-    lines.extend(_field_inventory(record_set))
-
-    preview_fields = _unique_fields([edge.source.from_, edge.target.from_, *edge.properties[:2]])
-    lines.extend(_sample_block(context, edge.record_set, preview_fields, preview_rows))
-    return lines
-
-
-def _field_inventory(record_set: CroissantRecordSetModel | None) -> list[str]:
-    if record_set is None or not record_set.field:
-        return ["# - Available fields: unavailable"]
-
-    lines = ["# - Available fields:"]
-    for field in record_set.field:
-        lines.append(f"#   - {_describe_field(field)}")
-    return lines
-
-
-def _sample_block(
-    context: AcquisitionContext | None,
-    record_set: str,
-    fields: list[str],
-    preview_rows: int,
-) -> list[str]:
-    if preview_rows <= 0:
-        return []
-    if context is None:
-        return ["# - Sample rows: unavailable (data files not resolvable from this Croissant path)"]
-
-    try:
-        rows = list(context.stream(record_set, fields=fields))
-    except Exception as exc:  # pragma: no cover - best-effort UX path
-        return [f"# - Sample rows: unavailable ({exc})"]
-
-    if not rows:
-        return ["# - Sample rows: none"]
-
-    lines = [f"# - Sample rows (first {len(rows)}; columns: {', '.join(fields)}):"]
-    for row in rows:
-        rendered = ", ".join(f"{field}={_format_value(row.get(field))}" for field in fields)
-        lines.append(f"#   - {rendered}")
-    return lines
-
-
-def _describe_field(field: CroissantFieldModel) -> str:
-    try:
-        kind = field.kind().value
-    except ValueError:
-        kind = "unknown"
-
-    detail = field.description or ""
-    if kind == FieldKind.ARRAY.value:
-        detail = detail or "repeated values"
-    elif kind == FieldKind.STRUCT.value:
-        detail = detail or f"{len(field.sub_field)} nested fields"
-
-    if detail and detail != f"Column '{field.name}'":
-        return f"{field.name} [{kind}] - {detail}"
-    return f"{field.name} [{kind}]"
-
-
-def _describe_endpoint(endpoint: Any) -> str:
-    if endpoint.transform == "passthrough":
-        return f"`{endpoint.from_}` as-is"
-    if endpoint.transform == "hash_id":
-        fields = endpoint.args.get("fields", [endpoint.from_])
-        prefix = endpoint.args.get("prefix")
-        prefix_note = f" with prefix `{prefix}`" if prefix else ""
-        return f"stable hash over {fields}{prefix_note}"
-    if endpoint.transform == "as_curie":
-        prefix = endpoint.args.get("prefix", "<prefix>")
-        return f"`{endpoint.from_}` as CURIE with prefix `{prefix}`"
-    if endpoint.args:
-        return f"`{endpoint.from_}` via `{endpoint.transform}` with args {endpoint.args}"
-    return f"`{endpoint.from_}` via `{endpoint.transform}`"
-
-
-def _open_context(
-    dataset: CroissantDatasetModel,
-    datasets_location: str | Path | None,
-    preview_rows: int,
-) -> AcquisitionContext | None:
-    if datasets_location is None or preview_rows <= 0:
-        return None
-    try:
-        return AcquisitionContext(dataset, datasets_location=datasets_location, limit=preview_rows)
-    except Exception:
-        return None
-
-
-def _dump_sequence_item(payload: dict[str, Any]) -> list[str]:
-    return yaml.safe_dump([payload], sort_keys=False, allow_unicode=True).rstrip().splitlines()
-
-
-def _yaml_inline(value: Any) -> str:
-    dumped = yaml.safe_dump(value, default_flow_style=True, allow_unicode=True).strip()
-    if dumped.endswith("\n..."):
-        dumped = dumped[:-4]
-    return dumped
-
-
-def _format_value(value: Any, *, max_items: int = 3, max_length: int = 48) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, str):
-        text = value if len(value) <= max_length else value[: max_length - 3] + "..."
-        return repr(text)
-    if isinstance(value, (list, tuple)):
-        preview = [_format_value(v, max_items=max_items, max_length=max_length) for v in value[:max_items]]
-        suffix = ", ..." if len(value) > max_items else ""
-        return "[" + ", ".join(preview) + suffix + "]"
-    if isinstance(value, dict):
-        items = list(value.items())[:max_items]
-        preview = ", ".join(f"{k}: {_format_value(v, max_items=max_items, max_length=max_length)}" for k, v in items)
-        suffix = ", ..." if len(value) > max_items else ""
-        return "{" + preview + suffix + "}"
-    return repr(value)
-
-
-def _unique_fields(fields: list[str]) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
-    for field in fields:
-        if field in seen:
-            continue
-        seen.add(field)
-        unique.append(field)
-    return unique
+    return render_inspector_text(
+        dataset,
+        datasets_location=datasets_location,
+        preview_rows=preview_rows,
+    )

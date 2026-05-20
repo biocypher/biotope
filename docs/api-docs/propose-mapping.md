@@ -1,18 +1,15 @@
 # `biotope propose-mapping`
 
-Emit a heuristic `mapping.yaml` for a Croissant file: one RecordSet → one node type, FK-shaped fields → edges. The proposal is meant for human (or agent) review before `biotope build` consumes it.
+**Deprecated.** Thin alias for [`biotope map scaffold`](map.md). Kept for backwards compatibility; new code should call `biotope map scaffold` directly.
 
-If you run it inside a biotope project, the command now writes to
-`mappings/<croissant-stem>.mapping.yaml` automatically. Use `--out` to
-override the destination or `--stdout` to print the scaffold instead.
+The old heuristic (one RecordSet → one node type, FK-shaped fields → edges) has been removed. The alias now produces an **unresolved** semantic scaffold (with one slot per `project.yaml`-declared entity/relation plus an inspector comment appendix) that a human or copilot agent then resolves via `biotope map` (wizard) or by editing the YAML directly and running `biotope map preview`.
 
-When writing YAML, `biotope propose-mapping` now emits a commented review scaffold:
+```bash
+# These are equivalent.
+biotope propose-mapping <croissant>
+biotope map scaffold <croissant>
+```
 
-- key-level guidance for `record_set`, `type`, `id`, `properties`, and `where`
-- record-set descriptions pulled from Croissant
-- available-field inventories with inferred kinds
-- sample rows from the underlying data when the Croissant file points to local files
-
-Use `--preview-rows 0` if you want to suppress sample-row comments.
+The deprecation notice is printed on each invocation.
 
 ::: biotope.commands.propose_mapping

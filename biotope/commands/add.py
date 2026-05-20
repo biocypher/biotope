@@ -154,6 +154,7 @@ def add(
             for source_dir, _metadata_dict in baked_dirs:
                 click.echo(f"  • Review {source_dir / SCAFFOLD_FILENAME}")
                 click.echo(f"    Then: biotope annotate apply {source_dir}")
+            click.echo("  • Map data into the knowledge graph: biotope map")
             click.echo("  • Finally: biotope commit -m \"message\"")
         else:
             click.echo("  1. Run 'biotope status' to see staged files")
@@ -415,8 +416,6 @@ def _bake_directory(
         excludes=[
             SCAFFOLD_FILENAME,
             f"**/{SCAFFOLD_FILENAME}",
-            ".biotope.csv",
-            "**/.biotope.csv",
             ".biotope/**",
             "**/.biotope/**",
             ".git/**",
@@ -679,6 +678,14 @@ def _generate_biotope_scaffold_from_baked(
         click.echo(f"\n📝 Generated annotation template: {scaffold_path}")
     except Exception as exc:  # noqa: BLE001
         click.echo(f"⚠️  Warning: Could not generate {SCAFFOLD_FILENAME}: {exc}")
+        return
+
+    stale_csv = source_dir / ".biotope.csv"
+    if stale_csv.is_file():
+        click.echo(
+            f"⚠️  Found stale {stale_csv} from a previous biotope version. "
+            f"The scaffold is now {SCAFFOLD_FILENAME}; you can safely delete the CSV.",
+        )
 
 
 def _human_source_path(distribution: dict[str, Any], source_dir: Path, biotope_root: Path) -> str:

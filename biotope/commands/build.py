@@ -2,9 +2,12 @@
 
 Reads every ``mappings/*.mapping.yaml`` in the project, optionally an
 ``alignment.yaml`` at the project root, and emits a ``build/`` directory
-containing ``config/schema_config.yaml``, the materialised mappings, and a
-``create_knowledge_graph.py`` entry point that streams nodes and edges via
-DuckDB into BioCypher.
+containing ``config/schema_config.yaml``, the materialised mappings, per-mapping
+generated Python under ``build/generated/<stem>/``, and a ``create_knowledge_graph.py``
+entry point.
+
+Strict: unresolved or legacy ``nodes``/``edges`` mappings cause the build to
+abort with a regeneration hint.
 """
 
 from __future__ import annotations
@@ -58,7 +61,7 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
 
     if not mapping_paths:
         click.echo(f"❌ No mapping YAML files found under {mappings_dir}.")
-        click.echo("   Run `biotope propose-mapping <croissant.json>` first.")
+        click.echo("   Run `biotope map scaffold <croissant>` first.")
         raise click.Abort
 
     if alignment_path is None:
@@ -67,7 +70,11 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
             alignment_path = candidate
 
     out_dir = out_dir or (project_root / "build")
-    result = materialize(out_dir, mapping_paths, alignment_path)
+    try:
+        result = materialize(out_dir, mapping_paths, alignment_path)
+    except ValueError as exc:
+        click.echo(f"❌ Build aborted: {exc}")
+        raise click.Abort from exc
 
     console.print(f"✅ Built BioCypher project at [cyan]{out_dir}[/cyan]")
     click.echo(json.dumps(result, indent=2, default=str))

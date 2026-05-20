@@ -10,11 +10,11 @@ from biotope.commands.chat import chat as chat_cmd
 from biotope.commands.check_data import check_data as check_data_cmd
 from biotope.commands.commit import commit as commit_cmd
 from biotope.commands.config import config as config_cmd
-from biotope.commands.describe import describe as describe_cmd
 from biotope.commands.discover import discover as discover_cmd
 from biotope.commands.get import get as get_cmd
 from biotope.commands.init import init as init_cmd
 from biotope.commands.log import log as log_cmd
+from biotope.commands.map import map_group as map_cmd
 from biotope.commands.mv import mv as mv_cmd
 from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
 from biotope.commands.propose_mapping import propose_mapping as propose_mapping_cmd
@@ -37,7 +37,9 @@ def cli(ctx: click.Context) -> None:
 
 # Project lifecycle
 cli.add_command(init_cmd, "init")
-cli.add_command(describe_cmd, "describe")
+
+# Semantic mapping (intent capture + wizard + inspect/scaffold/preview)
+cli.add_command(map_cmd, "map")
 
 # Content-level workflow
 cli.add_command(discover_cmd, "discover")
