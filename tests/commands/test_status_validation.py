@@ -80,7 +80,7 @@ def test_status_shows_annotation_status_for_add_metadata(runner, git_repo):
         "description": "Dataset for experiment3.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_e3b0c442",
                 "name": "experiment3.csv",
                 "contentUrl": "data/raw/experiment3.csv",
@@ -153,7 +153,7 @@ def test_status_shows_annotation_status_for_complete_metadata(runner, git_repo):
         "dateCreated": "2025-07-15T14:57:55.699579+00:00",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_e3b0c442",
                 "name": "experiment3.csv",
                 "contentUrl": "data/raw/experiment3.csv",
@@ -221,7 +221,7 @@ def test_status_suggests_annotate_for_incomplete_staged_metadata(runner, git_rep
         "description": "Dataset for experiment3.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_e3b0c442",
                 "name": "experiment3.csv",
                 "contentUrl": "data/raw/experiment3.csv",
@@ -253,7 +253,7 @@ def test_status_suggests_annotate_for_incomplete_staged_metadata(runner, git_rep
             result = runner.invoke(status)
             # Should suggest annotate command for incomplete staged metadata
             assert result.exit_code == 0
-            assert "biotope annotate interactive --staged" in result.output
+            assert "biotope annotate edit --staged" in result.output
             assert "staged file" in result.output or "staged files" in result.output
 
 
@@ -298,7 +298,7 @@ def test_status_does_not_suggest_annotate_for_complete_staged_metadata(runner, g
         "dateCreated": "2025-07-15T14:57:55.699579+00:00",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_e3b0c442",
                 "name": "experiment3.csv",
                 "contentUrl": "data/raw/experiment3.csv",
@@ -330,7 +330,7 @@ def test_status_does_not_suggest_annotate_for_complete_staged_metadata(runner, g
             result = runner.invoke(status)
             # Should NOT suggest annotate command for complete staged metadata
             assert result.exit_code == 0
-            assert "biotope annotate interactive --staged" not in result.output
+            assert "biotope annotate edit --staged" not in result.output
             assert "staged file" not in result.output and "staged files" not in result.output
             # Should still suggest commit
             assert "biotope commit" in result.output
@@ -372,7 +372,7 @@ def test_status_suggests_annotate_for_incomplete_tracked_metadata(runner, git_re
         "description": "Dataset for experiment3.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_e3b0c442",
                 "name": "experiment3.csv",
                 "contentUrl": "data/raw/experiment3.csv",
@@ -405,7 +405,7 @@ def test_status_suggests_annotate_for_incomplete_tracked_metadata(runner, git_re
             result = runner.invoke(status)
             # Should suggest annotate --incomplete command for incomplete tracked metadata
             assert result.exit_code == 0
-            assert "biotope annotate interactive --incomplete" in result.output
+            assert "biotope annotate edit --incomplete" in result.output
             assert "tracked file" in result.output or "tracked files" in result.output
 
 
@@ -450,7 +450,7 @@ def test_status_does_not_suggest_annotate_for_complete_tracked_metadata(runner, 
         "dateCreated": "2025-07-15T14:57:55.699579+00:00",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_e3b0c442",
                 "name": "experiment3.csv",
                 "contentUrl": "data/raw/experiment3.csv",
@@ -483,7 +483,7 @@ def test_status_does_not_suggest_annotate_for_complete_tracked_metadata(runner, 
             result = runner.invoke(status)
             # Should NOT suggest annotate --incomplete command for complete tracked metadata
             assert result.exit_code == 0
-            assert "biotope annotate interactive --incomplete" not in result.output
+            assert "biotope annotate edit --incomplete" not in result.output
             assert "tracked file" not in result.output and "tracked files" not in result.output
 
 
@@ -523,7 +523,7 @@ def test_status_shows_suggestions_for_both_staged_and_tracked_incomplete(runner,
         "description": "Dataset for tracked_incomplete.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_tracked",
                 "name": "tracked_incomplete.csv",
                 "contentUrl": "data/raw/tracked_incomplete.csv",
@@ -546,7 +546,7 @@ def test_status_shows_suggestions_for_both_staged_and_tracked_incomplete(runner,
         "description": "Dataset for staged_incomplete.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_staged",
                 "name": "staged_incomplete.csv",
                 "contentUrl": "data/raw/staged_incomplete.csv",
@@ -579,10 +579,10 @@ def test_status_shows_suggestions_for_both_staged_and_tracked_incomplete(runner,
             result = runner.invoke(status)
             # Should suggest --staged when there are incomplete staged files
             assert result.exit_code == 0
-            assert "biotope annotate interactive --staged" in result.output
+            assert "biotope annotate edit --staged" in result.output
             assert "staged file" in result.output or "staged files" in result.output
             # Should also suggest --incomplete if both exist
-            assert "biotope annotate interactive --incomplete" in result.output
+            assert "biotope annotate edit --incomplete" in result.output
             assert "tracked file" in result.output or "tracked files" in result.output 
 
 def test_status_detailed_shows_errors_for_incomplete_metadata(runner, git_repo):

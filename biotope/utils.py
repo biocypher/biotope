@@ -134,8 +134,10 @@ def is_file_tracked(file_path: Path, biotope_root: Path) -> bool:
             with open(dataset_file) as f:
                 metadata = json.load(f)
                 for distribution in metadata.get("distribution", []):
-                    if distribution.get("contentUrl") == str(
-                        file_path.relative_to(biotope_root)
+                    if (
+                        distribution.get("@type") == "cr:FileObject"
+                        and distribution.get("contentUrl")
+                        == str(file_path.relative_to(biotope_root))
                     ):
                         return True
         except (json.JSONDecodeError, KeyError):

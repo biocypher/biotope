@@ -31,7 +31,7 @@ During initialization, you can optionally collect project-level metadata that wi
 - **License**: Data usage license (e.g., MIT, CC-BY, etc.)
 - **Citation**: How to cite the project or dataset
 
-This metadata is stored in `.biotope/config/biotope.yaml` and automatically loaded when using `biotope annotate interactive`.
+This metadata is stored in `.biotope/config/biotope.yaml` and automatically loaded when using `biotope annotate edit`.
 
 ### Conditional Output Format Selection
 

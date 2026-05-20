@@ -1,5 +1,5 @@
 
-The `biotope annotate` module provides tools for creating and managing metadata annotations using the Croissant ML schema. This document provides detailed examples and instructions for working with different layers of Croissant ML.
+The `biotope annotate` module provides the editing and merge tools for Croissant metadata. Use it when you want to refine metadata interactively, review staged datasets, or apply structured edits from a `.biotope.csv` scaffold.
 
 ## Installation
 
@@ -12,17 +12,17 @@ pip install biotope
 The annotation module can be used in several ways:
 
 ```bash
-# Interactive mode with project metadata pre-fill
-biotope annotate interactive
+# Interactive edit for one file
+biotope annotate edit --file-path data/raw/experiment.csv
 
-# Interactive mode for staged files
-biotope annotate interactive --staged
+# Interactive edit for staged files
+biotope annotate edit --staged
 
-# Interactive mode for incomplete tracked files
-biotope annotate interactive --incomplete
+# Interactive edit for incomplete tracked files
+biotope annotate edit --incomplete
 
-# Create metadata from CLI parameters
-biotope annotate create
+# Apply CSV edits for a directory dataset
+biotope annotate apply data/raw/
 
 # Validate existing metadata
 biotope annotate validate --jsonld <file_name.json>
@@ -76,8 +76,8 @@ biotope config set-project-metadata
 biotope add data/raw/experiment.csv
 
 # 3. Annotate with pre-filled metadata
-biotope annotate interactive --staged
-# Form will be pre-filled with project metadata
+biotope annotate edit --staged
+# Prompts will be pre-filled with project metadata
 ```
 
 ## Croissant ML Layers
@@ -177,9 +177,9 @@ Example:
 
 ### Creating a New Dataset Annotation
 
-1. Start with the interactive mode:
+1. Start with the interactive editor:
 ```bash
-biotope annotate interactive
+biotope annotate edit --file-path data/raw/experiment.csv
 ```
 
 2. Follow the prompts to enter:
@@ -197,10 +197,22 @@ If you have files staged with `biotope add`, you can annotate them all at once:
 biotope add data/*.csv
 
 # Annotate all staged files interactively with project metadata pre-fill
-biotope annotate interactive --staged
+biotope annotate edit --staged
 ```
 
-This will run the interactive annotation process for each staged file, pre-filling metadata with both file information and project metadata.
+This runs the interactive editor for each staged file, pre-filling metadata with both file information and project metadata.
+
+### Applying Directory-Scale Edits
+
+When `biotope add` is run on a directory, it creates a `.biotope.csv` scaffold for dataset-level and record-set-level edits:
+
+```bash
+biotope add data/raw/
+$EDITOR data/raw/.biotope.csv
+biotope annotate apply data/raw/
+```
+
+This is the recommended path for human review, agent edits, and human-AI collaboration on aggregate datasets.
 
 ### Completing Incomplete Annotations
 
@@ -211,10 +223,10 @@ If you have tracked files with incomplete metadata (missing required fields), yo
 biotope status
 
 # Complete annotations for all incomplete tracked files
-biotope annotate interactive --incomplete
+biotope annotate edit --incomplete
 ```
 
-This will find all tracked files that don't meet the minimum annotation requirements and allow you to complete their metadata interactively with project metadata pre-fill.
+This finds all tracked files that don't meet the minimum annotation requirements and lets you complete their metadata interactively with project metadata pre-fill.
 
 ### Custom Pre-fill Metadata
 
@@ -222,7 +234,7 @@ You can override project metadata with custom values:
 
 ```bash
 # Pre-fill with custom metadata
-biotope annotate interactive --prefill-metadata '{"description": "Custom description", "license": "CC-BY"}'
+biotope annotate edit --prefill-metadata '{"description": "Custom description", "license": "CC-BY"}'
 ```
 
 ### Validating Existing Annotations

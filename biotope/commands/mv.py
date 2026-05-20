@@ -10,6 +10,7 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
+from biotope.metadata import FILE_OBJECT_TYPE, ensure_no_legacy_file_objects
 from biotope.utils import (
     find_biotope_root,
     is_git_repo,
@@ -101,6 +102,14 @@ def _resolve_destination_path(source: Path, destination: Path) -> Path:
     return destination
 
 
+def _load_metadata_file(metadata_file: Path) -> dict:
+    """Load metadata and reject legacy file object types."""
+    with open(metadata_file) as handle:
+        metadata = json.load(handle)
+    ensure_no_legacy_file_objects(metadata)
+    return metadata
+
+
 def _validate_move_operation(
     source: Path,
     destination: Path,
@@ -163,14 +172,13 @@ def _execute_move(
     for metadata_file in metadata_files:
         # Test if we can read and update the metadata file
         try:
-            with open(metadata_file) as f:
-                metadata = json.load(f)
+            metadata = _load_metadata_file(metadata_file)
             
             # Check if the file reference exists in this metadata
             has_reference = False
             for distribution in metadata.get("distribution", []):
                 if (
-                    distribution.get("@type") == "sc:FileObject"
+                    distribution.get("@type") == FILE_OBJECT_TYPE
                     and distribution.get("contentUrl") == str(source_rel)
                 ):
                     has_reference = True
@@ -181,7 +189,7 @@ def _execute_move(
                 test_metadata = metadata.copy()
                 for distribution in test_metadata.get("distribution", []):
                     if (
-                        distribution.get("@type") == "sc:FileObject"
+                        distribution.get("@type") == FILE_OBJECT_TYPE
                         and distribution.get("contentUrl") == str(source_rel)
                     ):
                         distribution["contentUrl"] = str(destination_rel)
@@ -359,13 +367,12 @@ def _execute_directory_move(
         # Validate simple rename metadata updates
         for metadata_file in source_metadata_dir.rglob("*.jsonld"):
             try:
-                with open(metadata_file) as f:
-                    metadata = json.load(f)
+                metadata = _load_metadata_file(metadata_file)
 
                 # Check if this metadata file needs updates
                 needs_update = False
                 for distribution in metadata.get("distribution", []):
-                    if distribution.get("@type") == "sc:FileObject":
+                    if distribution.get("@type") == FILE_OBJECT_TYPE:
                         old_content_url = distribution.get("contentUrl")
                         if old_content_url and old_content_url.startswith(str(source_rel)):
                             needs_update = True
@@ -397,15 +404,14 @@ def _execute_directory_move(
         for old_file_path, metadata_files in file_metadata_map.items():
             for metadata_file in metadata_files:
                 try:
-                    with open(metadata_file) as f:
-                        metadata = json.load(f)
+                    metadata = _load_metadata_file(metadata_file)
                     
                     # Check if this metadata file needs updates
                     needs_update = False
                     old_rel_path = old_file_path.relative_to(biotope_root)
                     for distribution in metadata.get("distribution", []):
                         if (
-                            distribution.get("@type") == "sc:FileObject"
+                            distribution.get("@type") == FILE_OBJECT_TYPE
                             and distribution.get("contentUrl") == str(old_rel_path)
                         ):
                             needs_update = True
@@ -467,12 +473,11 @@ def _execute_directory_move(
                 for metadata_file in destination_metadata_dir.rglob("*.jsonld"):
                     # Read the metadata to find what file it references
                     try:
-                        with open(metadata_file) as f:
-                            metadata = json.load(f)
+                        metadata = _load_metadata_file(metadata_file)
 
                         # Find file objects in the metadata
                         for distribution in metadata.get("distribution", []):
-                            if distribution.get("@type") == "sc:FileObject":
+                            if distribution.get("@type") == FILE_OBJECT_TYPE:
                                 old_content_url = distribution.get("contentUrl")
                                 if old_content_url and old_content_url.startswith(
                                     str(source_rel)
@@ -632,15 +637,14 @@ def _find_metadata_files_for_file(file_path: Path, biotope_root: Path) -> List[P
 
     for metadata_file in datasets_dir.rglob("*.jsonld"):
         try:
-            with open(metadata_file) as f:
-                metadata = json.load(f)
-                for distribution in metadata.get("distribution", []):
-                    if (
-                        distribution.get("@type") == "sc:FileObject"
-                        and distribution.get("contentUrl") == file_rel_path
-                    ):
-                        metadata_files.append(metadata_file)
-                        break
+            metadata = _load_metadata_file(metadata_file)
+            for distribution in metadata.get("distribution", []):
+                if (
+                    distribution.get("@type") == FILE_OBJECT_TYPE
+                    and distribution.get("contentUrl") == file_rel_path
+                ):
+                    metadata_files.append(metadata_file)
+                    break
         except (json.JSONDecodeError, IOError):
             continue
 
@@ -656,13 +660,12 @@ def _update_metadata_file_path(
 ) -> bool:
     """Update file path in a metadata file."""
     try:
-        with open(metadata_file) as f:
-            metadata = json.load(f)
+        metadata = _load_metadata_file(metadata_file)
 
         updated = False
         for distribution in metadata.get("distribution", []):
             if (
-                distribution.get("@type") == "sc:FileObject"
+                distribution.get("@type") == FILE_OBJECT_TYPE
                 and distribution.get("contentUrl") == old_path
             ):
                 distribution["contentUrl"] = new_path

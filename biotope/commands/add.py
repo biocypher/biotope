@@ -1,213 +1,215 @@
 """Add command implementation for tracking data files and metadata."""
 
+from __future__ import annotations
+
 import csv
 import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any
 
 import click
 
+from biotope.metadata import (
+    FILE_OBJECT_TYPE,
+    make_file_object,
+    merge_metadata,
+    normalize_metadata_shape,
+    parse_key_value_pairs,
+    resolve_target,
+)
 from biotope.utils import (
     find_biotope_root,
     is_git_repo,
-    stage_git_changes,
-    calculate_file_checksum,
-    load_project_metadata,
     is_file_tracked,
+    load_project_metadata,
+    stage_git_changes,
 )
 
 
 @click.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, path_type=Path))
-@click.option(
-    "--recursive",
-    "-r",
-    is_flag=True,
-    help="Add directories recursively",
-)
-@click.option(
-    "--force",
-    "-f",
-    is_flag=True,
-    help="Force add even if file already tracked",
-)
-def add(paths: tuple[Path, ...], recursive: bool, force: bool) -> None:
-    """Add data files to biotope project and stage for metadata creation.
-
-    Single-file invocations produce one ``.jsonld`` per file under
-    ``.biotope/datasets/``. Recursive directory invocations run
-    croissant-baker over the rooted tree and produce ONE directory-level
-    ``.jsonld``. Multi-part tables (e.g. partitioned parquet siblings)
-    collapse into a single FileSet + RecordSet via baker's per-handler
-    grouping, so the user chooses the dataset granularity by choosing
-    where to point ``-r``.
-    """
+@click.option("--force", "-f", is_flag=True, help="Force add even if file already tracked")
+@click.option("--name", help="Dataset name override")
+@click.option("--description", help="Dataset description override")
+@click.option("--license", "license_value", help="Dataset license")
+@click.option("--creator", help="Dataset creator name")
+@click.option("--creator-email", help="Dataset creator email")
+@click.option("--url", help="Dataset URL")
+@click.option("--citation", help="Dataset citation text")
+@click.option("--version", help="Dataset version")
+@click.option("--keyword", "keywords", multiple=True, help="Dataset keyword (repeatable)")
+@click.option("--access-restrictions", help="Dataset access restrictions")
+@click.option("--legal-obligations", help="Dataset legal obligations")
+@click.option("--collaboration-partner", help="Dataset collaboration partner")
+@click.option("--rai", "rai_pairs", multiple=True, help="Croissant RAI field as KEY=VALUE")
+def add(
+    paths: tuple[Path, ...],
+    force: bool,
+    name: str | None,
+    description: str | None,
+    license_value: str | None,
+    creator: str | None,
+    creator_email: str | None,
+    url: str | None,
+    citation: str | None,
+    version: str | None,
+    keywords: tuple[str, ...],
+    access_restrictions: str | None,
+    legal_obligations: str | None,
+    collaboration_partner: str | None,
+    rai_pairs: tuple[str, ...],
+) -> None:
+    """Add data files or rooted directories to a biotope project."""
     if not paths:
         ctx = click.get_current_context()
         click.echo(ctx.get_help())
         raise click.Abort
 
-    # Find biotope project root
+    if name and len(paths) != 1:
+        raise click.BadParameter("--name can only be used when adding one path.")
+
     biotope_root = find_biotope_root()
     if not biotope_root:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
 
-    # Check if we're in a Git repository
     if not is_git_repo(biotope_root):
         click.echo("❌ Not in a Git repository. Initialize Git first with 'git init'.")
         raise click.Abort
 
+    try:
+        rai_fields = parse_key_value_pairs(rai_pairs, "--rai")
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
+
+    overrides = {
+        "name": name,
+        "description": description,
+        "license": license_value,
+        "creator": creator,
+        "creator_email": creator_email,
+        "url": url,
+        "citation": citation,
+        "version": version,
+        "keywords": list(keywords),
+        "access_restrictions": access_restrictions,
+        "legal_obligations": legal_obligations,
+        "collaboration_partner": collaboration_partner,
+        "rai_fields": rai_fields,
+    }
+
     datasets_dir = biotope_root / ".biotope" / "datasets"
     datasets_dir.mkdir(parents=True, exist_ok=True)
 
-    added_entries: List[Path] = []
-    skipped_entries: List[Path] = []
-    baked_dirs: List[Tuple[Path, Path, dict]] = []
+    added_entries: list[Path] = []
+    skipped_entries: list[Path] = []
+    baked_dirs: list[tuple[Path, dict[str, Any]]] = []
 
     for path in paths:
         if path.is_file():
-            result = _add_file(path, biotope_root, datasets_dir, force)
+            result = _add_file(path, biotope_root, datasets_dir, force, overrides)
             if result:
                 added_entries.append(path)
             else:
                 skipped_entries.append(path)
-        elif path.is_dir() and recursive:
-            baked = _bake_directory(path, biotope_root, datasets_dir)
-            if baked is None:
-                skipped_entries.append(path)
-            else:
-                jsonld_path, metadata_dict, n_source_files = baked
-                added_entries.append(path)
-                baked_dirs.append((path, jsonld_path, metadata_dict))
-                n_record_sets = len(metadata_dict.get("recordSet", []))
-                click.echo(
-                    f"  ✨ Generated {jsonld_path.relative_to(biotope_root)} "
-                    f"({n_source_files} source file(s), {n_record_sets} record set(s))"
-                )
-        elif path.is_dir():
-            click.echo(
-                f"⚠️  Skipping directory '{path}' (use --recursive to add contents)"
-            )
+            continue
+
+        baked = _bake_directory(path, biotope_root, overrides)
+        if baked is None:
             skipped_entries.append(path)
+            continue
+
+        metadata_dict, n_source_files = baked
+        added_entries.append(path)
+        baked_dirs.append((path, metadata_dict))
+        n_record_sets = len(metadata_dict.get("recordSet", []))
+        target = resolve_target(path, biotope_root)
+        click.echo(
+            f"  ✨ Generated {target.metadata_path.relative_to(biotope_root)} "
+            f"({n_source_files} source file(s), {n_record_sets} record set(s))"
+        )
 
     if added_entries:
         stage_git_changes(biotope_root)
 
-    for source_dir, jsonld_path, metadata_dict in baked_dirs:
+    for source_dir, metadata_dict in baked_dirs:
         _generate_biotope_csv_from_baked(source_dir, metadata_dict, biotope_root)
 
     if added_entries:
-        click.echo(f"\n✅ Added {len(added_entries)} entry(ies) to biotope project:")
+        click.echo(f"\n✅ Added {len(added_entries)} entr(y/ies) to biotope project:")
         for entry in added_entries:
             click.echo(f"  + {entry}")
 
     if skipped_entries:
-        click.echo(f"\n⚠️  Skipped {len(skipped_entries)} entry(ies):")
+        click.echo(f"\n⚠️  Skipped {len(skipped_entries)} entr(y/ies):")
         for entry in skipped_entries:
             click.echo(f"  - {entry}")
 
     if added_entries:
         click.echo("\n💡 Next steps:")
         if baked_dirs:
-            for source_dir, _jsonld_path, _md in baked_dirs:
-                csv_path = source_dir / ".biotope.csv"
-                click.echo(f"  • Edit annotations: {csv_path}")
-                click.echo(f"    Then: biotope annotate batch --from-csv {csv_path}")
+            for source_dir, _metadata_dict in baked_dirs:
+                click.echo(f"  • Review {source_dir / '.biotope.csv'}")
+                click.echo(f"    Then: biotope annotate apply {source_dir}")
             click.echo("  • Finally: biotope commit -m \"message\"")
         else:
             click.echo("  1. Run 'biotope status' to see staged files")
-            click.echo(
-                "  2. Run 'biotope annotate interactive --staged' to create metadata"
-            )
+            click.echo("  2. Run 'biotope annotate edit --staged' to refine metadata")
             click.echo("  3. Run 'biotope commit -m \"message\"' to save changes")
 
+
 def _add_file(
-    file_path: Path, biotope_root: Path, datasets_dir: Path, force: bool
+    file_path: Path,
+    biotope_root: Path,
+    datasets_dir: Path,
+    force: bool,
+    overrides: dict[str, Any] | None = None,
 ) -> bool:
     """Add a single file to the biotope project."""
-
-    # Resolve the file path to absolute path if it's relative
-    if not file_path.is_absolute():
-        file_path = file_path.resolve()
-
-    # Calculate checksum
-    sha256_hash = calculate_file_checksum(file_path)
-
-    # Check if already tracked
-    if not force and is_file_tracked(file_path, biotope_root):
-        click.echo(f"⚠️  File {file_path.relative_to(biotope_root)} already tracked (use --force to override)")
+    overrides = overrides or _default_overrides()
+    abs_file = file_path.resolve()
+    try:
+        relative_path = abs_file.relative_to(biotope_root)
+    except ValueError:
+        click.echo(f"❌ File '{file_path}' is outside the biotope project.")
         return False
 
-    # Create basic metadata entry
-    metadata = {
-        "@context": {"@vocab": "https://schema.org/"},
-        "@type": "Dataset",
-        "name": str(file_path.relative_to(biotope_root)),
-        "description": f"Dataset for {file_path.name}",
-        "distribution": [
-            {
-                "@type": "sc:FileObject",
-                "@id": f"file_{sha256_hash[:8]}",
-                "name": file_path.name,
-                "contentUrl": str(file_path.relative_to(biotope_root)),
-                "sha256": sha256_hash,
-                "contentSize": file_path.stat().st_size,
-                "dateCreated": datetime.now(tz=timezone.utc).isoformat(),
-            }
-        ],
-    }
-
-    metadata["dateCreated"] = datetime.now(tz=timezone.utc).isoformat()
-
-    # Enrich with structural metadata from croissant-baker, if it can handle the file.
-    _enrich_with_baker(metadata, file_path)
-
-    # Top-level creator (from git, if available)
-    git_name, git_email = _git_user_identity(biotope_root)
-    if git_name:
-        creator_obj = {"@type": "Person", "name": git_name}
-        if git_email:
-            creator_obj["email"] = git_email
-        metadata["creator"] = creator_obj
-    else:
+    if not force and is_file_tracked(abs_file, biotope_root):
         click.echo(
-            "ℹ️  No Git identity found. Set it once to prefill 'creator' automatically:\n"
-            "    git config --global user.name  \"Your Name\"\n"
-            "    git config --global user.email \"you@example.com\""
+            f"⚠️  File {relative_path} already tracked (use --force to override)"
         )
+        return False
 
-    # Inject project-level defaults for common metadata so later CSV import is a no-op
-    try:
-        project_defaults = load_project_metadata(biotope_root)
-        for key in ("license", "citation", "cr:projectName"):
-            value = project_defaults.get(key)
-            if value and key not in metadata:
-                metadata[key] = value
-    except Exception:
-        # If project metadata cannot be loaded, proceed without it
-        pass
+    defaults = load_project_metadata(biotope_root)
+    now = datetime.now(tz=timezone.utc).isoformat()
+    metadata = merge_metadata(
+        {
+            "name": overrides.get("name") or str(relative_path),
+            "description": (
+                overrides.get("description")
+                or defaults.get("description")
+                or f"Dataset for {abs_file.name}"
+            ),
+            "distribution": [make_file_object(abs_file, biotope_root)],
+            "dateCreated": now,
+        }
+    )
 
-    # Save metadata to datasets directory with directory structure mirroring
-    relative_path = file_path.relative_to(biotope_root)
-    metadata_file = datasets_dir / relative_path.with_suffix(".jsonld")
-    metadata_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(metadata_file, "w") as f:
-        json.dump(metadata, f, indent=2)
+    _enrich_with_baker(metadata, abs_file)
+    _apply_dataset_metadata(metadata, defaults, overrides, biotope_root)
+
+    target = resolve_target(abs_file, biotope_root)
+    target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(target.metadata_path, "w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2)
 
     return True
 
-def _enrich_with_baker(metadata: dict, file_path: Path) -> None:
-    """Attach baker-derived structural metadata under ``cr:recordSet`` if available.
 
-    The shallow stub holds file-level info only. croissant-baker can extract
-    column names, types, and row counts for handled formats (CSV, Parquet,
-    JSON, FHIR, …). When a handler matches, store the extraction under
-    ``cr:recordSet`` so downstream commands (``propose-mapping``, ``build``)
-    can use it without rerunning baker.
-    """
+def _enrich_with_baker(metadata: dict[str, Any], file_path: Path) -> None:
+    """Attach baker-derived structural metadata under ``recordSet`` if available."""
     try:
         from croissant_baker.metadata_generator import find_handler, register_all_handlers
     except ImportError:
@@ -217,27 +219,33 @@ def _enrich_with_baker(metadata: dict, file_path: Path) -> None:
     handler = find_handler(file_path)
     if handler is None:
         return
+
     try:
         extracted = handler.extract_metadata(file_path)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"⚠️  baker could not extract from {file_path.name}: {exc}")
         return
 
-    record_set: dict = {
+    record_set: dict[str, Any] = {
         "@type": "cr:RecordSet",
         "name": file_path.stem,
         "field": [],
     }
     column_types = extracted.get("column_types") or {}
-    for col, ctype in column_types.items():
+    file_object_id = metadata["distribution"][0]["@id"]
+    for column_name, column_type in column_types.items():
         record_set["field"].append(
             {
                 "@type": "cr:Field",
-                "name": col,
-                "dataType": str(ctype),
-            },
+                "name": column_name,
+                "dataType": str(column_type),
+                "source": {
+                    "fileObject": {"@id": file_object_id},
+                    "extract": {"column": column_name},
+                },
+            }
         )
-    for stat_key in ("num_rows", "num_columns", "encoding_format"):
+    for stat_key in ("num_rows", "num_columns"):
         if stat_key in extracted:
             record_set[f"cr:{stat_key}"] = extracted[stat_key]
 
@@ -245,44 +253,134 @@ def _enrich_with_baker(metadata: dict, file_path: Path) -> None:
 
 
 def _git_user_identity(cwd: Path) -> tuple[str | None, str | None]:
-    """Return (name, email) from `git config`, preferring repo-local config."""
+    """Return (name, email) from git config, preferring repo-local config."""
     try:
         name = subprocess.run(
             ["git", "config", "--get", "user.name"],
             cwd=cwd,
-            capture_output=True, text=True, check=False
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout.strip()
         email = subprocess.run(
             ["git", "config", "--get", "user.email"],
             cwd=cwd,
-            capture_output=True, text=True, check=False
+            capture_output=True,
+            text=True,
+            check=False,
         ).stdout.strip()
-
-        def _normalize(value: object) -> str | None:
-            try:
-                # Coerce to string and strip; ensure empty strings become None
-                text = value if isinstance(value, str) else str(value)
-                text = text.strip()
-                return text or None
-            except Exception:
-                return None
-
-        return _normalize(name), _normalize(email)
     except FileNotFoundError:
         return None, None
 
+    if not isinstance(name, str):
+        name = None
+    if not isinstance(email, str):
+        email = None
+
+    return (name or None), (email or None)
+
+
+def _apply_dataset_metadata(
+    metadata: dict[str, Any],
+    defaults: dict[str, Any],
+    overrides: dict[str, Any],
+    biotope_root: Path,
+) -> None:
+    """Apply top-level dataset metadata from project defaults and CLI overrides."""
+    creator_node = _resolve_creator(defaults, overrides, biotope_root)
+    if creator_node:
+        metadata["creator"] = creator_node
+
+    field_mapping = {
+        "name": "name",
+        "description": "description",
+        "url": "url",
+        "license": "license",
+        "citation": "citation",
+        "version": "version",
+    }
+    for override_key, metadata_key in field_mapping.items():
+        value = overrides.get(override_key)
+        if value is not None:
+            metadata[metadata_key] = value
+        elif metadata_key not in metadata and defaults.get(metadata_key):
+            metadata[metadata_key] = defaults[metadata_key]
+
+    if overrides.get("keywords"):
+        metadata["keywords"] = list(overrides["keywords"])
+
+    extension_mapping = {
+        "cr:projectName": defaults.get("cr:projectName"),
+        "cr:accessRestrictions": overrides.get("access_restrictions")
+        if overrides.get("access_restrictions") is not None
+        else defaults.get("cr:accessRestrictions"),
+        "cr:legalObligations": overrides.get("legal_obligations")
+        if overrides.get("legal_obligations") is not None
+        else defaults.get("cr:legalObligations"),
+        "cr:collaborationPartner": overrides.get("collaboration_partner")
+        if overrides.get("collaboration_partner") is not None
+        else defaults.get("cr:collaborationPartner"),
+    }
+    for key, value in extension_mapping.items():
+        if value:
+            metadata[key] = value
+
+    for key, value in overrides.get("rai_fields", {}).items():
+        metadata[key] = value
+
+
+def _resolve_creator(
+    defaults: dict[str, Any],
+    overrides: dict[str, Any],
+    biotope_root: Path,
+) -> dict[str, str] | None:
+    """Resolve creator info from CLI, git, or project defaults."""
+    default_creator = defaults.get("creator")
+    default_name = (
+        default_creator.get("name")
+        if isinstance(default_creator, dict)
+        else None
+    )
+
+    git_name, git_email = _git_user_identity(biotope_root)
+
+    creator_name = overrides.get("creator") or default_name or git_name or overrides.get("creator_email")
+    creator_email = overrides.get("creator_email") or git_email
+
+    if not creator_name:
+        return None
+
+    creator_node = {"@type": "Person", "name": creator_name}
+    if creator_email:
+        creator_node["email"] = creator_email
+    return creator_node
+
+
+def _creator_for_baker(
+    defaults: dict[str, Any],
+    overrides: dict[str, Any],
+    biotope_root: Path,
+) -> list[dict[str, str]] | None:
+    """Resolve creator info in croissant-baker's expected shape."""
+    creator_node = _resolve_creator(defaults, overrides, biotope_root)
+    if creator_node is None:
+        return None
+    return [
+        {
+            key: value
+            for key, value in creator_node.items()
+            if key in {"name", "email", "url"}
+        }
+    ]
+
 
 def _bake_directory(
-    directory: Path, biotope_root: Path, datasets_dir: Path
-) -> Optional[Tuple[Path, dict, int]]:
-    """Run croissant-baker over ``directory``; write ONE directory-level jsonld.
-
-    Baker's handlers group multi-file siblings (e.g. partitioned parquet)
-    into a single FileSet + RecordSet, so the user chooses the dataset
-    granularity by choosing where to root ``-r``. Returns
-    ``(jsonld_path, metadata_dict, n_source_files)`` or ``None`` when
-    baking fails or no supported files were found.
-    """
+    directory: Path,
+    biotope_root: Path,
+    overrides: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], int] | None:
+    """Run croissant-baker over ``directory`` and write one directory-level JSON-LD."""
+    overrides = overrides or _default_overrides()
     try:
         from croissant_baker.metadata_generator import MetadataGenerator
     except ImportError:
@@ -298,199 +396,298 @@ def _bake_directory(
         click.echo(f"❌ Directory '{directory}' is outside the biotope project.")
         return None
 
-    output_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
-
+    target = resolve_target(abs_dir, biotope_root)
     defaults = load_project_metadata(biotope_root)
-    git_name, git_email = _git_user_identity(biotope_root)
-
-    creators = None
-    if git_name:
-        creator: dict = {"name": git_name}
-        if git_email:
-            creator["email"] = git_email
-        creators = [creator]
-    elif isinstance(defaults.get("creator"), dict) and defaults["creator"].get("name"):
-        creators = [{"name": defaults["creator"]["name"]}]
+    now = datetime.now(tz=timezone.utc).isoformat()
 
     generator = MetadataGenerator(
         dataset_path=str(abs_dir),
-        name=str(rel_dir),
-        description=defaults.get("description"),
-        url=defaults.get("url"),
-        license=defaults.get("license"),
-        citation=defaults.get("citation"),
-        creators=creators,
-        # Skip baker's per-file .biotope.csv annotation templates — these
-        # are biotope's own scaffolding, not part of the dataset.
-        excludes=[".biotope.csv", "**/.biotope.csv"],
+        name=overrides.get("name") or str(rel_dir),
+        description=overrides.get("description") or defaults.get("description"),
+        url=overrides.get("url") or defaults.get("url"),
+        license=overrides.get("license") or defaults.get("license"),
+        citation=overrides.get("citation") or defaults.get("citation"),
+        version=overrides.get("version"),
+        date_created=now,
+        creators=_creator_for_baker(defaults, overrides, biotope_root),
+        keywords=list(overrides.get("keywords") or []) or None,
+        excludes=[
+            ".biotope.csv",
+            "**/.biotope.csv",
+            ".biotope/**",
+            "**/.biotope/**",
+            ".git/**",
+            "**/.git/**",
+        ],
+        rai_fields=overrides.get("rai_fields") or None,
     )
 
     try:
-        metadata_dict = generator.generate_metadata()
+        metadata_dict = normalize_metadata_shape(generator.generate_metadata())
     except ValueError as exc:
-        click.echo(f"⚠️  Could not bake {rel_dir}: {exc}")
-        return None
+        if str(exc) != "No supported files found in the dataset":
+            click.echo(f"⚠️  Could not bake {rel_dir}: {exc}")
+            return None
+        metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
 
-    # Inject project-level Croissant-extension fields that mlcroissant
-    # doesn't expose natively.
-    for key in (
-        "cr:projectName",
-        "cr:accessRestrictions",
-        "cr:legalObligations",
-        "cr:collaborationPartner",
-    ):
-        if defaults.get(key):
-            metadata_dict[key] = defaults[key]
-    metadata_dict["dateCreated"] = datetime.now(tz=timezone.utc).isoformat()
+    metadata_dict.setdefault("dateCreated", now)
+    _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
+    _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(metadata_dict, f, indent=2, default=str)
+    target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(target.metadata_path, "w", encoding="utf-8") as handle:
+        json.dump(metadata_dict, handle, indent=2, default=str)
 
-    n_source_files = 0
-    for dist in metadata_dict.get("distribution", []):
-        atype = dist.get("@type")
-        if atype == "cr:FileObject":
-            n_source_files += 1
-        elif atype == "cr:FileSet":
-            includes = dist.get("includes")
-            patterns = (
-                [includes]
-                if isinstance(includes, str)
-                else list(includes or [])
-            )
-            for pattern in patterns:
-                n_source_files += sum(1 for p in abs_dir.glob(pattern) if p.is_file())
+    n_source_files = sum(1 for _ in _iter_directory_files(abs_dir))
+    return metadata_dict, n_source_files
 
-    return output_path, metadata_dict, n_source_files
+
+def _build_minimal_directory_metadata(
+    abs_dir: Path,
+    biotope_root: Path,
+    overrides: dict[str, Any],
+    defaults: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a minimal dataset for directories without baker-supported files."""
+    relative_dir = abs_dir.relative_to(biotope_root)
+    metadata = merge_metadata(
+        {
+            "name": overrides.get("name") or str(relative_dir),
+            "description": (
+                overrides.get("description")
+                or defaults.get("description")
+                or f"Dataset for {relative_dir}"
+            ),
+            "distribution": [],
+        }
+    )
+    for file_path in _iter_directory_files(abs_dir):
+        metadata["distribution"].append(make_file_object(file_path, biotope_root))
+    return metadata
+
+
+def _append_uncovered_file_objects(
+    metadata_dict: dict[str, Any],
+    abs_dir: Path,
+    biotope_root: Path,
+) -> None:
+    """Append file pointers for physical files not covered by croissant-baker."""
+    covered_files = _covered_files(metadata_dict, abs_dir, biotope_root)
+    distributions = metadata_dict.setdefault("distribution", [])
+
+    for file_path in _iter_directory_files(abs_dir):
+        resolved = file_path.resolve()
+        if resolved in covered_files:
+            continue
+        distributions.append(make_file_object(file_path, biotope_root))
+
+
+def _covered_files(
+    metadata_dict: dict[str, Any],
+    abs_dir: Path,
+    biotope_root: Path,
+) -> set[Path]:
+    """Resolve all physical files already covered by distribution entries."""
+    covered: set[Path] = set()
+
+    for distribution in metadata_dict.get("distribution", []) or []:
+        entry_type = distribution.get("@type")
+        if entry_type == FILE_OBJECT_TYPE:
+            content_url = distribution.get("contentUrl")
+            if not content_url:
+                continue
+            candidate = _resolve_distribution_path(content_url, abs_dir, biotope_root)
+            if candidate is not None and candidate.is_file():
+                covered.add(candidate.resolve())
+            continue
+
+        if entry_type != "cr:FileSet":
+            continue
+
+        includes = distribution.get("includes")
+        patterns = [includes] if isinstance(includes, str) else list(includes or [])
+        for pattern in patterns:
+            for candidate in abs_dir.glob(pattern):
+                if candidate.is_file():
+                    covered.add(candidate.resolve())
+
+    return covered
+
+
+def _resolve_distribution_path(
+    content_url: str,
+    abs_dir: Path,
+    biotope_root: Path,
+) -> Path | None:
+    """Resolve a contentUrl against dataset-first, then project-root semantics."""
+    dataset_candidate = abs_dir / content_url
+    if dataset_candidate.exists():
+        return dataset_candidate
+    root_candidate = biotope_root / content_url
+    if root_candidate.exists():
+        return root_candidate
+    return None
+
+
+def _iter_directory_files(abs_dir: Path):
+    """Yield physical data files under a rooted directory, skipping biotope-owned paths."""
+    for file_path in abs_dir.rglob("*"):
+        if not file_path.is_file():
+            continue
+        relative = file_path.relative_to(abs_dir)
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        yield file_path
+
+
+def _default_overrides() -> dict[str, Any]:
+    """Return the default add metadata overrides."""
+    return {
+        "name": None,
+        "description": None,
+        "license": None,
+        "creator": None,
+        "creator_email": None,
+        "url": None,
+        "citation": None,
+        "version": None,
+        "keywords": [],
+        "access_restrictions": None,
+        "legal_obligations": None,
+        "collaboration_partner": None,
+        "rai_fields": {},
+    }
 
 
 def _generate_biotope_csv_from_baked(
-    source_dir: Path, metadata_dict: dict, biotope_root: Path
+    source_dir: Path,
+    metadata_dict: dict[str, Any],
+    biotope_root: Path,
 ) -> None:
-    """Generate one CSV row per RecordSet in a directory-baked jsonld.
-
-    The annotation unit is the logical table (a RecordSet), not the
-    physical file. For partitioned tables this collapses many part-files
-    into a single editable row — which is what users actually want to
-    annotate.
-    """
+    """Generate a scoped CSV scaffold for one directory-baked dataset."""
     csv_path = source_dir / ".biotope.csv"
-
     csv_columns = [
-        "filepath",
-        "record_set",
+        "scope",
+        "record_set_id",
+        "source_path",
         "name",
         "description",
-        "data_url",
         "creator",
-        "project_name",
-        "date_created",
+        "creator_email",
+        "license",
+        "url",
+        "citation",
+        "version",
+        "keywords",
         "access_restrictions",
-        "encoding_format",
         "legal_obligations",
         "collaboration_partner",
-        "publication_date",
-        "version",
-        "license_url",
-        "citation",
+        "encoding_format",
     ]
 
     dist_by_id = {
-        d.get("@id"): d for d in metadata_dict.get("distribution", []) if d.get("@id")
+        distribution.get("@id"): distribution
+        for distribution in metadata_dict.get("distribution", [])
+        if distribution.get("@id")
     }
 
-    top_creator = ""
+    creator_name = ""
+    creator_email = ""
     creator_node = metadata_dict.get("creator")
     if isinstance(creator_node, dict):
-        top_creator = creator_node.get("name", "") or ""
-    elif isinstance(creator_node, list) and creator_node:
-        first = creator_node[0]
-        if isinstance(first, dict):
-            top_creator = first.get("name", "") or ""
+        creator_name = creator_node.get("name", "") or ""
+        creator_email = creator_node.get("email", "") or ""
 
-    top_url = metadata_dict.get("url", "") or ""
-    top_license = metadata_dict.get("license", "") or ""
-    top_citation = metadata_dict.get("citation", "") or ""
-    top_version = metadata_dict.get("version", "") or ""
-    top_date_published = metadata_dict.get("datePublished", "") or ""
-    top_date_created = (metadata_dict.get("dateCreated", "") or "")[:10]
-    top_project_name = metadata_dict.get("cr:projectName", "") or ""
-    top_access = metadata_dict.get("cr:accessRestrictions", "") or ""
-    top_legal = metadata_dict.get("cr:legalObligations", "") or ""
-    top_collab = metadata_dict.get("cr:collaborationPartner", "") or ""
+    keywords = metadata_dict.get("keywords", [])
+    if isinstance(keywords, list):
+        keywords_value = ";".join(str(keyword) for keyword in keywords)
+    else:
+        keywords_value = str(keywords or "")
 
-    try:
-        rel_dir = source_dir.resolve().relative_to(biotope_root)
-    except ValueError:
-        rel_dir = Path(source_dir.name)
+    dataset_row = {
+        "scope": "dataset",
+        "record_set_id": "",
+        "source_path": str(source_dir.relative_to(biotope_root)),
+        "name": metadata_dict.get("name", "") or "",
+        "description": metadata_dict.get("description", "") or "",
+        "creator": creator_name,
+        "creator_email": creator_email,
+        "license": metadata_dict.get("license", "") or "",
+        "url": metadata_dict.get("url", "") or "",
+        "citation": metadata_dict.get("citation", "") or "",
+        "version": metadata_dict.get("version", "") or "",
+        "keywords": keywords_value,
+        "access_restrictions": metadata_dict.get("cr:accessRestrictions", "") or "",
+        "legal_obligations": metadata_dict.get("cr:legalObligations", "") or "",
+        "collaboration_partner": metadata_dict.get("cr:collaborationPartner", "") or "",
+        "encoding_format": "",
+    }
 
-    rows = []
-    for rs in metadata_dict.get("recordSet", []):
-        source_id = _first_field_source_id(rs)
-        dist = dist_by_id.get(source_id, {})
-        atype = dist.get("@type")
-
-        if atype == "cr:FileObject":
-            filepath = dist.get("contentUrl", "") or ""
-        elif atype == "cr:FileSet":
-            includes = dist.get("includes")
-            pattern = (
-                includes
-                if isinstance(includes, str)
-                else (includes[0] if includes else "")
-            )
-            base = str(Path(pattern).parent) if pattern else ""
-            filepath = (
-                str(rel_dir / base) if base and base != "." else str(rel_dir)
-            )
-        else:
-            filepath = str(rel_dir)
-
+    rows = [dataset_row]
+    for record_set in metadata_dict.get("recordSet", []) or []:
+        source_id = _first_field_source_id(record_set)
+        distribution = dist_by_id.get(source_id, {})
         rows.append(
             {
-                "filepath": filepath,
-                "record_set": rs.get("@id", "") or "",
-                "name": rs.get("name", "") or "",
-                "description": rs.get("description", "") or "",
-                "data_url": top_url,
-                "creator": top_creator,
-                "project_name": top_project_name,
-                "date_created": top_date_created,
-                "access_restrictions": top_access,
-                "encoding_format": dist.get("encodingFormat", "") or "",
-                "legal_obligations": top_legal,
-                "collaboration_partner": top_collab,
-                "publication_date": top_date_published,
-                "version": top_version,
-                "license_url": top_license,
-                "citation": top_citation,
+                "scope": "record_set",
+                "record_set_id": record_set.get("@id", "") or "",
+                "source_path": _human_source_path(distribution, source_dir, biotope_root),
+                "name": record_set.get("name", "") or "",
+                "description": record_set.get("description", "") or "",
+                "creator": "",
+                "creator_email": "",
+                "license": "",
+                "url": "",
+                "citation": "",
+                "version": "",
+                "keywords": "",
+                "access_restrictions": "",
+                "legal_obligations": "",
+                "collaboration_partner": "",
+                "encoding_format": distribution.get("encodingFormat", "") or "",
             }
         )
 
-    if not rows:
-        click.echo("ℹ️  No record sets discovered, skipping CSV generation")
-        return
-
     try:
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=csv_columns)
+        with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=csv_columns)
             writer.writeheader()
-            for row in rows:
-                writer.writerow(row)
+            writer.writerows(rows)
         click.echo(f"\n📝 Generated annotation template: {csv_path}")
-    except Exception as e:
-        click.echo(f"⚠️  Warning: Could not generate .biotope.csv: {e}")
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"⚠️  Warning: Could not generate .biotope.csv: {exc}")
 
 
-def _first_field_source_id(record_set: dict) -> Optional[str]:
+def _human_source_path(distribution: dict[str, Any], source_dir: Path, biotope_root: Path) -> str:
+    """Return a human-readable source path for one record set row."""
+    entry_type = distribution.get("@type")
+    if entry_type == FILE_OBJECT_TYPE:
+        content_url = distribution.get("contentUrl", "") or ""
+        candidate = _resolve_distribution_path(content_url, source_dir, biotope_root)
+        if candidate is not None:
+            return str(candidate.relative_to(biotope_root))
+        return content_url
+
+    if entry_type == "cr:FileSet":
+        includes = distribution.get("includes")
+        pattern = includes if isinstance(includes, str) else (includes[0] if includes else "")
+        if not pattern:
+            return str(source_dir.relative_to(biotope_root))
+        base = Path(pattern).parent
+        source_path = source_dir / base if str(base) != "." else source_dir
+        return str(source_path.relative_to(biotope_root))
+
+    return str(source_dir.relative_to(biotope_root))
+
+
+def _first_field_source_id(record_set: dict[str, Any]) -> str | None:
     """Return the @id of the FileSet/FileObject that the first field sources."""
     for field in record_set.get("field", []) or []:
         source = field.get("source") or {}
         for key in ("fileSet", "fileObject"):
-            val = source.get(key)
-            if isinstance(val, dict) and val.get("@id"):
-                return val["@id"]
-            if isinstance(val, str) and val:
-                return val
+            value = source.get(key)
+            if isinstance(value, dict) and value.get("@id"):
+                return value["@id"]
+            if isinstance(value, str) and value:
+                return value
     return None

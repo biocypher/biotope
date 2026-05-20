@@ -169,7 +169,7 @@ The generated metadata follows the schema.org and Croissant ML standards, making
     "dateCreated": "2024-03-21",
     "distribution": [
         {
-            "@type": "sc:FileObject",
+            "@type": "cr:FileObject",
             "@id": "file_sha256hash",
             "name": "file.txt",
             "contentUrl": "data/raw/file.txt",
@@ -192,7 +192,7 @@ After downloading and staging the file, continue with the standard git-on-top wo
 
 2. **Annotate the file:**
    ```bash
-   biotope annotate interactive --staged
+   biotope annotate edit --staged
    ```
    This opens an interactive session to complete the metadata.
 
@@ -208,7 +208,7 @@ After downloading and staging the file, continue with the standard git-on-top wo
 ```bash
 biotope get https://example.com/data/expression.csv
 biotope status
-biotope annotate interactive --staged
+biotope annotate edit --staged
 biotope commit -m "Add expression dataset"
 ```
 
@@ -231,7 +231,7 @@ biotope add data/raw/expression.csv
 The `get` command integrates with the full git-on-top workflow:
 
 - Use `biotope status` to see staged files and their annotation status
-- Use `biotope annotate interactive --staged` to annotate all newly downloaded files
+- Use `biotope annotate edit --staged` to annotate all newly downloaded files
 - Use `biotope commit` to save your changes
 - Use `biotope check-data` to verify data integrity
 

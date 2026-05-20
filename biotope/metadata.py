@@ -1,0 +1,194 @@
+"""Shared Croissant metadata helpers for biotope commands."""
+
+from __future__ import annotations
+
+import copy
+import mimetypes
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from biotope.utils import calculate_file_checksum
+
+
+FILE_OBJECT_TYPE = "cr:FileObject"
+LEGACY_FILE_OBJECT_TYPE = "sc:FileObject"
+
+
+@dataclass(frozen=True)
+class DatasetTarget:
+    """Resolved dataset metadata target inside a biotope project."""
+
+    input_path: Path
+    metadata_path: Path
+    dataset_dir: Path
+    csv_path: Path
+
+
+def get_standard_context() -> dict[str, str]:
+    """Get the standard Croissant context."""
+    return {
+        "@vocab": "https://schema.org/",
+        "cr": "https://mlcommons.org/croissant/",
+        "ml": "http://ml-schema.org/",
+        "sc": "https://schema.org/",
+        "dct": "http://purl.org/dc/terms/",
+        "data": "https://mlcommons.org/croissant/data/",
+        "rai": "https://mlcommons.org/croissant/rai/",
+        "format": "https://mlcommons.org/croissant/format/",
+        "citeAs": "https://mlcommons.org/croissant/citeAs/",
+        "conformsTo": "https://mlcommons.org/croissant/conformsTo/",
+        "@language": "en",
+        "repeated": "https://mlcommons.org/croissant/repeated/",
+        "field": "https://mlcommons.org/croissant/field/",
+        "examples": "https://mlcommons.org/croissant/examples/",
+        "recordSet": "https://mlcommons.org/croissant/recordSet/",
+        "fileObject": "https://mlcommons.org/croissant/fileObject/",
+        "fileSet": "https://mlcommons.org/croissant/fileSet/",
+        "source": "https://mlcommons.org/croissant/source/",
+        "references": "https://mlcommons.org/croissant/references/",
+        "key": "https://mlcommons.org/croissant/key/",
+        "parentField": "https://mlcommons.org/croissant/parentField/",
+        "isLiveDataset": "https://mlcommons.org/croissant/isLiveDataset/",
+        "separator": "https://mlcommons.org/croissant/separator/",
+        "extract": "https://mlcommons.org/croissant/extract/",
+        "subField": "https://mlcommons.org/croissant/subField/",
+        "regex": "https://mlcommons.org/croissant/regex/",
+        "column": "https://mlcommons.org/croissant/column/",
+        "path": "https://mlcommons.org/croissant/path/",
+        "fileProperty": "https://mlcommons.org/croissant/fileProperty/",
+        "md5": "https://mlcommons.org/croissant/md5/",
+        "jsonPath": "https://mlcommons.org/croissant/jsonPath/",
+        "transform": "https://mlcommons.org/croissant/transform/",
+        "replace": "https://mlcommons.org/croissant/replace/",
+        "dataType": "https://mlcommons.org/croissant/dataType/",
+        "includes": "https://mlcommons.org/croissant/includes/",
+        "excludes": "https://mlcommons.org/croissant/excludes/",
+    }
+
+
+def merge_metadata(dynamic_metadata: dict[str, Any]) -> dict[str, Any]:
+    """Merge dynamic metadata with the standard Croissant skeleton."""
+    metadata = {
+        "@context": get_standard_context(),
+        "@type": "Dataset",
+    }
+    metadata.update(dynamic_metadata)
+    return metadata
+
+
+def normalize_metadata_shape(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy with uniform Croissant keys; reject legacy sc:FileObject."""
+    normalized = copy.deepcopy(metadata)
+
+    if "cr:recordSet" in normalized:
+        record_sets = normalized.pop("cr:recordSet") or []
+        normalized.setdefault("recordSet", [])
+        normalized["recordSet"].extend(record_sets)
+
+    for record_set in normalized.get("recordSet", []) or []:
+        if "cr:field" in record_set:
+            fields = record_set.pop("cr:field") or []
+            record_set.setdefault("field", [])
+            record_set["field"].extend(fields)
+
+    ensure_no_legacy_file_objects(normalized)
+    return normalized
+
+
+def ensure_no_legacy_file_objects(metadata: dict[str, Any]) -> None:
+    """Raise when legacy file object types are present."""
+    for distribution in metadata.get("distribution", []) or []:
+        if distribution.get("@type") == LEGACY_FILE_OBJECT_TYPE:
+            raise ValueError(
+                "Legacy sc:FileObject is no longer supported. "
+                "Please regenerate the metadata with `biotope add`."
+            )
+
+
+def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
+    """Resolve a file, dir, csv, or jsonld path to one dataset metadata target."""
+    resolved = path.resolve()
+    datasets_dir = biotope_root / ".biotope" / "datasets"
+
+    if resolved.suffix == ".jsonld":
+        metadata_path = resolved
+        try:
+            rel_metadata = metadata_path.relative_to(datasets_dir)
+        except ValueError as exc:
+            raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets") from exc
+        dataset_dir = biotope_root / rel_metadata.with_suffix("")
+        csv_path = dataset_dir / ".biotope.csv"
+        return DatasetTarget(
+            input_path=resolved,
+            metadata_path=metadata_path,
+            dataset_dir=dataset_dir,
+            csv_path=csv_path,
+        )
+
+    if resolved.is_dir():
+        rel_dir = resolved.relative_to(biotope_root)
+        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
+        return DatasetTarget(
+            input_path=resolved,
+            metadata_path=metadata_path,
+            dataset_dir=resolved,
+            csv_path=resolved / ".biotope.csv",
+        )
+
+    if resolved.name == ".biotope.csv":
+        dataset_dir = resolved.parent
+        rel_dir = dataset_dir.relative_to(biotope_root)
+        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
+        return DatasetTarget(
+            input_path=resolved,
+            metadata_path=metadata_path,
+            dataset_dir=dataset_dir,
+            csv_path=resolved,
+        )
+
+    rel_file = resolved.relative_to(biotope_root)
+    metadata_path = (datasets_dir / rel_file).with_suffix(".jsonld")
+    return DatasetTarget(
+        input_path=resolved,
+        metadata_path=metadata_path,
+        dataset_dir=resolved.parent,
+        csv_path=resolved.parent / ".biotope.csv",
+    )
+
+
+def make_file_object(
+    file_path: Path,
+    biotope_root: Path,
+    *,
+    object_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a normalized Croissant FileObject for one physical file."""
+    relative_path = file_path.relative_to(biotope_root)
+    sha256_hash = calculate_file_checksum(file_path)
+    encoding_format = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+
+    return {
+        "@type": FILE_OBJECT_TYPE,
+        "@id": object_id or f"file_{sha256_hash[:8]}",
+        "name": file_path.name,
+        "contentUrl": str(relative_path),
+        "encodingFormat": encoding_format,
+        "sha256": sha256_hash,
+        "contentSize": str(file_path.stat().st_size),
+    }
+
+
+def parse_key_value_pairs(pairs: tuple[str, ...], option_name: str) -> dict[str, str]:
+    """Parse repeated KEY=VALUE CLI options into a dict."""
+    parsed: dict[str, str] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(f"Invalid {option_name} value '{pair}'. Expected KEY=VALUE.")
+        key, value = pair.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"Invalid {option_name} value '{pair}'. Key cannot be empty.")
+        parsed[key] = value
+    return parsed
+

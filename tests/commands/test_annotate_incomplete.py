@@ -122,7 +122,7 @@ def test_interactive_incomplete_finds_incomplete_files(
         "description": "Dataset for test.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_12345678",
                 "name": "test.csv",
                 "contentUrl": "data/test.csv",
@@ -232,7 +232,7 @@ def test_interactive_incomplete_no_incomplete_files(mock_find_root, runner, git_
         "dateCreated": "2024-01-01",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_12345678",
                 "name": "complete.csv",
                 "contentUrl": "data/complete.csv",

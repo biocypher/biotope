@@ -166,6 +166,21 @@ def test_call_biotope_add_success(mock_stage, mock_add, biotope_project):
         biotope_project,
         biotope_project / ".biotope" / "datasets",
         force=False,
+        overrides={
+            "name": None,
+            "description": None,
+            "license": None,
+            "creator": None,
+            "creator_email": None,
+            "url": None,
+            "citation": None,
+            "version": None,
+            "keywords": [],
+            "access_restrictions": None,
+            "legal_obligations": None,
+            "collaboration_partner": None,
+            "rai_fields": {},
+        },
     )
     mock_stage.assert_called_once_with(biotope_project)
 

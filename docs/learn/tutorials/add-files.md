@@ -46,13 +46,13 @@ biotope add data/raw/experiment1.csv data/raw/experiment2.csv data/raw/experimen
 
 ### Adding Entire Directories
 
-To add all files in a directory, use the `--recursive` flag:
+To add all files in a directory, pass the directory path directly:
 
 ```bash
-biotope add data/raw/ --recursive
+biotope add data/raw/
 ```
 
-This will add all files in `data/raw/` and any subdirectories.
+Directory adds recurse automatically, generate aggregate metadata in `.biotope/datasets/`, and create a `.biotope.csv` scaffold inside the directory for human or agent editing.
 
 ## Understanding the Output
 
@@ -66,12 +66,12 @@ When you run `biotope add`, you'll see output like this:
 
 💡 Next steps:
   1. Run 'biotope status' to see staged files
-  2. Run 'biotope annotate interactive --staged' to create metadata
+  2. Run 'biotope annotate edit --staged' to refine metadata
   3. Run 'biotope commit -m "message"' to save changes
 
 💡 For incomplete annotations:
   1. Run 'biotope status' to see which files need annotation
-  2. Run 'biotope annotate interactive --incomplete' to complete them
+  2. Run 'biotope annotate edit --incomplete' to complete them
 ```
 
 This tells you:
@@ -129,18 +129,18 @@ To force add it anyway (useful if the file has changed):
 biotope add data/raw/experiment.csv --force
 ```
 
-### Adding Directories Without Recursive Flag
+### Directory Scaffolds
 
-If you try to add a directory without `--recursive`:
-
-```
-⚠️  Skipping directory 'data/raw/' (use --recursive to add contents)
-```
-
-To add the directory contents:
+When you add a directory, biotope creates a `.biotope.csv` file alongside the data:
 
 ```bash
-biotope add data/raw/ --recursive
+biotope add data/raw/
+```
+
+Review that scaffold, then merge your edits back into the dataset metadata:
+
+```bash
+biotope annotate apply data/raw/
 ```
 
 ### Mixed Results
@@ -177,10 +177,10 @@ your-project/
 
 ```bash
 # Add raw data
-biotope add data/raw/ --recursive
+biotope add data/raw/
 
 # Add processed data
-biotope add data/processed/ --recursive
+biotope add data/processed/
 
 # Add specific file types
 biotope add data/raw/*.csv
@@ -204,10 +204,14 @@ This shows you what metadata files are staged for commit.
 The basic metadata created by `add` is minimal. Enhance it:
 
 ```bash
-biotope annotate interactive --staged
+biotope annotate edit --staged
 ```
 
-This opens an interactive session to add detailed metadata.
+For directory datasets, review `data/raw/.biotope.csv` and then run:
+
+```bash
+biotope annotate apply data/raw/
+```
 
 ### Commit Your Changes
 
@@ -303,7 +307,7 @@ Add files as you work with them rather than all at once:
 ```bash
 # Add files as you create them
 biotope add data/raw/new_experiment.csv
-biotope annotate interactive --staged
+biotope annotate edit --staged
 biotope commit -m "Add new experiment data"
 ```
 

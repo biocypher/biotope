@@ -77,7 +77,7 @@ def biotope_project_with_file(tmp_path):
         "description": "Dataset for test.csv",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_12345678",
                 "name": "test.csv",
                 "contentUrl": "data/raw/test.csv",
@@ -439,7 +439,7 @@ def test_mv_multiple_metadata_files(biotope_project_with_file):
         "description": "Copy of test dataset",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "@id": "file_87654321",
                 "name": "test.csv",
                 "contentUrl": "data/raw/test.csv",
@@ -589,12 +589,12 @@ def test_update_metadata_file_path_multiple_distributions():
         "name": "test",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "other/file.csv",
                 "sha256": "other_checksum"
             },
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "old/path.csv",
                 "sha256": "old_checksum"
             }
@@ -639,7 +639,7 @@ def test_update_metadata_file_path_file_size_error():
             "name": "test",
             "distribution": [
                 {
-                    "@type": "sc:FileObject",
+                    "@type": "cr:FileObject",
                     "contentUrl": "old/path.csv",
                     "sha256": "old_checksum"
                 }
@@ -667,7 +667,7 @@ def test_update_metadata_file_path_write_permission_error():
         "name": "test",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "old/path.csv",
                 "sha256": "old_checksum"
             }
@@ -714,7 +714,7 @@ def test_find_metadata_files_corrupted_json():
         good_metadata = {
             "distribution": [
                 {
-                    "@type": "sc:FileObject",
+                    "@type": "cr:FileObject",
                     "contentUrl": "test/file.csv"
                 }
             ]
@@ -748,7 +748,7 @@ def test_mv_with_special_characters_in_filename(runner, biotope_project_with_fil
         "name": "special_test",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "data/raw/test file (1) [copy].csv",
                 "sha256": "abc123",
                 "contentSize": 100
@@ -792,7 +792,7 @@ def test_mv_empty_file(runner, biotope_project_with_file):
         "name": "empty_test",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "data/raw/empty.csv",
                 "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 "contentSize": 0
@@ -1020,7 +1020,7 @@ def biotope_project_with_directory(tmp_path):
             "description": f"Dataset for {file_path.name}",
             "distribution": [
                 {
-                    "@type": "sc:FileObject",
+                    "@type": "cr:FileObject",
                     "@id": file_id,
                     "name": file_path.name,
                     "contentUrl": str(rel_path),
@@ -1494,7 +1494,7 @@ def test_mv_metadata_validation_with_multiple_files(runner, biotope_project_with
         "name": "test_copy",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "data/raw/test.csv",
                 "sha256": "def456"
             }
@@ -1552,7 +1552,7 @@ def test_mv_metadata_validation_with_one_corrupted_file(runner, biotope_project_
         "name": "test_copy",
         "distribution": [
             {
-                "@type": "sc:FileObject",
+                "@type": "cr:FileObject",
                 "contentUrl": "data/raw/test.csv",
                 "sha256": "def456"
             }
@@ -1619,4 +1619,27 @@ def test_mv_directory_validation_with_corrupted_metadata(runner, biotope_project
                 assert source_dir.exists()
                 assert not destination.exists()
     finally:
-        os.chdir(original_cwd) 
+        os.chdir(original_cwd)
+
+
+def test_mv_rejects_legacy_sc_file_object(runner, biotope_project_with_file):
+    """Legacy sc:FileObject metadata should fail fast."""
+    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+    metadata = json.loads(metadata_file.read_text())
+    metadata["distribution"][0]["@type"] = "sc:FileObject"
+    metadata_file.write_text(json.dumps(metadata, indent=2))
+
+    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(biotope_project_with_file)
+        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
+            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+                result = runner.invoke(mv, [str(source_file), str(destination)])
+    finally:
+        os.chdir(original_cwd)
+
+    assert result.exit_code != 0
+    assert "Legacy sc:FileObject is no longer supported" in str(result.exception)

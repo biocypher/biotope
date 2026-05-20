@@ -14,10 +14,10 @@ biotope init
 biotope add data/raw/experiment.csv
 
 # 3. Create metadata (like staging changes)
-biotope annotate interactive --staged
+biotope annotate edit --staged
 
 # Or complete incomplete annotations
-biotope annotate interactive --incomplete
+biotope annotate edit --incomplete
 
 # 4. Commit your metadata
 biotope commit -m "Add RNA-seq dataset with quality metrics"
@@ -84,7 +84,7 @@ Adds data files to your project and prepares them for metadata creation.
 
 ```bash
 biotope add data/raw/experiment.csv
-biotope add data/raw/ --recursive  # Add entire directory
+biotope add data/raw/              # Add entire directory recursively
 ```
 
 ### `biotope mv`
@@ -223,7 +223,7 @@ biotope init
 biotope add data/raw/experiment.csv
 
 # 3. Create metadata (pre-filled with project metadata)
-biotope annotate interactive --staged
+biotope annotate edit --staged
 
 # 4. Commit and share
 biotope commit -m "Add experiment dataset"
@@ -237,7 +237,7 @@ biotope push
 biotope add data/raw/new-experiment.csv
 
 # 2. Create metadata (with project metadata pre-fill)
-biotope annotate interactive --staged
+biotope annotate edit --staged
 
 # 3. Commit and share
 biotope commit -m "Add new experiment: 24 samples, 3 conditions"
@@ -268,7 +268,7 @@ biotope push
 biotope status
 
 # 2. Edit metadata files or re-annotate
-biotope annotate interactive -f data/raw/experiment.csv
+biotope annotate edit --file-path data/raw/experiment.csv
 
 # 3. Commit changes
 biotope commit -m "Update experiment description and add QC metrics"
@@ -281,7 +281,7 @@ biotope commit -m "Update experiment description and add QC metrics"
 biotope status
 
 # 2. Complete annotations for all incomplete tracked files
-biotope annotate interactive --incomplete
+biotope annotate edit --incomplete
 
 # 3. Commit the completed annotations
 biotope commit -m "Complete metadata for all tracked datasets"
@@ -298,7 +298,7 @@ biotope config set-project-metadata
 biotope config show-project-metadata
 
 # 3. Use in annotation (automatically pre-filled)
-biotope annotate interactive --staged
+biotope annotate edit --staged
 ```
 
 ### Working with Your Team
@@ -309,7 +309,7 @@ biotope pull
 
 # 2. Make your changes
 biotope add data/raw/my-experiment.csv
-biotope annotate interactive --staged
+biotope annotate edit --staged
 
 # 3. Share your work
 biotope commit -m "Add my experiment dataset"

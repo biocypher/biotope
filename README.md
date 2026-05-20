@@ -24,8 +24,9 @@ cd my-kg
 biotope describe --entity gene --entity disease --entity drug \
                  --relation gene_associated_with_disease
 
-biotope add data/ot.parquet --license CC-BY-4.0    # baker fills Croissant fields
-biotope propose-mapping .biotope/datasets/ot.jsonld --out mappings/ot.mapping.yaml
+biotope add data/opentargets --license CC-BY-4.0 --creator "Open Targets"
+biotope annotate apply data/opentargets            # after reviewing data/opentargets/.biotope.csv
+biotope propose-mapping .biotope/datasets/data/opentargets.jsonld --out mappings/opentargets.mapping.yaml
 biotope propose-alignment mappings/*.mapping.yaml --out alignment.yaml
 biotope build
 biotope view

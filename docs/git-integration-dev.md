@@ -313,7 +313,7 @@ def _update_metadata_file_path(metadata_file: Path, old_path: str, new_path: str
     
     updated = False
     for distribution in metadata.get("distribution", []):
-        if distribution.get("@type") == "sc:FileObject":
+        if distribution.get("@type") == "cr:FileObject":
             if distribution.get("contentUrl") == old_path:
                 distribution["contentUrl"] = new_path
                 distribution["sha256"] = new_checksum
@@ -359,7 +359,7 @@ def _get_recorded_checksum(file_path: Path, biotope_root: Path) -> Optional[str]
         with open(dataset_file) as f:
             metadata = json.load(f)
             for distribution in metadata.get("distribution", []):
-                if distribution.get("@type") == "sc:FileObject":
+                if distribution.get("@type") == "cr:FileObject":
                     content_url = distribution.get("contentUrl")
                     if content_url and (biotope_root / content_url) == file_path:
                         return distribution.get("sha256")
@@ -711,7 +711,7 @@ All metadata follows Croissant ML standard:
   "description": "RNA-seq experiment data",
   "distribution": [
     {
-      "@type": "sc:FileObject",
+      "@type": "cr:FileObject",
       "@id": "file_abc123",
       "name": "experiment.csv",
       "contentUrl": "data/raw/experiment.csv",

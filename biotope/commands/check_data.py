@@ -9,6 +9,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from biotope.metadata import FILE_OBJECT_TYPE, ensure_no_legacy_file_objects
 from biotope.utils import find_biotope_root
 
 
@@ -45,10 +46,18 @@ def check_data(file: Optional[Path], fix: bool) -> None:
 
     if file:
         # Check single file
-        results = [_check_single_file(file, biotope_root)]
+        try:
+            results = [_check_single_file(file, biotope_root)]
+        except ValueError as exc:
+            click.echo(f"❌ {exc}")
+            raise click.Abort from exc
     else:
         # Check all tracked files
-        results = check_all_files(biotope_root)
+        try:
+            results = check_all_files(biotope_root)
+        except ValueError as exc:
+            click.echo(f"❌ {exc}")
+            raise click.Abort from exc
 
     # Display results
     _display_check_results(results, console, fix)
@@ -94,8 +103,9 @@ def check_all_files(biotope_root: Path) -> List[Dict]:
             try:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
+                    ensure_no_legacy_file_objects(metadata)
                     for distribution in metadata.get("distribution", []):
-                        if distribution.get("@type") == "sc:FileObject":
+                        if distribution.get("@type") == FILE_OBJECT_TYPE:
                             content_url = distribution.get("contentUrl")
                             if content_url:
                                 file_path = biotope_root / content_url
@@ -122,8 +132,9 @@ def _get_recorded_checksum(file_path: Path, biotope_root: Path) -> Optional[str]
             try:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
+                    ensure_no_legacy_file_objects(metadata)
                     for distribution in metadata.get("distribution", []):
-                        if distribution.get("@type") == "sc:FileObject":
+                        if distribution.get("@type") == FILE_OBJECT_TYPE:
                             content_url = distribution.get("contentUrl")
                             if content_url and (biotope_root / content_url) == file_path:
                                 return distribution.get("sha256")

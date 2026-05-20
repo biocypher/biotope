@@ -26,7 +26,7 @@ graph LR
         
         subgraph "Enhanced Metadata"
             direction TB
-            H --> I[Interactive Annotation]
+            H --> I[Review CSV or Edit Metadata]
             I --> J[Pre-filled with Project Metadata]
             J --> K[Complete Metadata]
         end
@@ -64,7 +64,7 @@ biotope init
 biotope add data/raw/experiment.csv
 
 # Annotate with project metadata pre-fill
-biotope annotate interactive --staged
+biotope annotate edit --staged
 
 # Commit changes
 biotope commit -m "Add experiment dataset"
@@ -85,7 +85,7 @@ biotope get https://example.com/data/file.csv
 biotope status
 
 # Annotate with project metadata pre-fill
-biotope annotate interactive --staged
+biotope annotate edit --staged
 
 # Commit changes
 biotope commit -m "Add downloaded dataset"
@@ -103,7 +103,7 @@ biotope config set-project-metadata
 biotope config show-project-metadata
 
 # Use in annotation (automatically pre-filled)
-biotope annotate interactive --staged
+biotope annotate edit --staged
 ```
 
 ## Tutorials

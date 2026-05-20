@@ -143,7 +143,7 @@ Project metadata automatically pre-fills annotation forms:
 biotope config set-project-metadata
 
 # Use in annotation (metadata will be pre-filled)
-biotope annotate interactive --staged
+biotope annotate edit --staged
 ```
 
 ### Validation Configuration

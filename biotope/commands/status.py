@@ -204,17 +204,17 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
 
     # Suggest annotate for staged files if needed
     if has_incomplete_annotations:
-        console.print(f"  • Run 'biotope annotate interactive --staged' to complete metadata annotations for staged files")
+        console.print(f"  • Run 'biotope annotate edit --staged' to complete metadata annotations for staged files")
     # Suggest annotate for incomplete tracked files if needed
     if has_incomplete_tracked:
-        console.print(f"  • Run 'biotope annotate interactive --incomplete' to complete metadata annotations for all tracked files")
+        console.print(f"  • Run 'biotope annotate edit --incomplete' to complete metadata annotations for all tracked files")
     # Suggest commit if there are staged files
     if total_staged > 0:
         console.print(f"  • Run 'biotope commit -m \"message\"' to commit changes")
     # Suggest add/annotate/commit if there are only modified or untracked files
     elif total_modified > 0 or total_untracked > 0:
         console.print(f"  • Run 'biotope add <data_file>' to add data files")
-        console.print(f"  • Run 'biotope annotate interactive --staged' to create metadata")
+        console.print(f"  • Run 'biotope annotate edit --staged' to create metadata")
         console.print(f"  • Run 'biotope commit -m \"message\"' to commit changes")
 
 

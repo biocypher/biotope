@@ -54,7 +54,22 @@ biotope add <path> \
 
 `biotope add` runs croissant-baker on the file(s) to autogenerate the Croissant
 JSON-LD in `.biotope/datasets/`. Pass the metadata that the baker *cannot*
-infer (license, creator, access restrictions, legal obligations) as flags.
+infer (license, creator, creator email, description, access restrictions,
+legal obligations, collaboration details, and any RAI metadata) as flags.
+
+If the dataset is a directory, `biotope add <dir>` recurses automatically and
+also writes `<dir>/.biotope.csv` for bulk human review. After editing that
+scaffold, apply it with:
+
+```bash
+biotope annotate apply <dir>
+```
+
+You can override one field across the whole apply step with:
+
+```bash
+biotope annotate apply <dir> --set creator="Open Targets Consortium"
+```
 
 To find datasets the user does *not* yet have:
 
@@ -106,6 +121,8 @@ Report counts and obvious anomalies back to the user. Never claim a build
 
 - Use flags, not interactive prompts. If you'd be tempted to run
   `biotope init --interactive`, prefer setting the flags directly.
+- Prefer `biotope annotate apply` over interactive editing when a dataset
+  already has a `.biotope.csv` scaffold.
 - Never bypass git-tracked metadata — `biotope add`, `biotope commit`,
   `biotope mv` exist for that.
 - If a command's output looks wrong, fix the inputs (purpose, mapping,

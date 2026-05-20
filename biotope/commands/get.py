@@ -62,7 +62,27 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
         datasets_dir.mkdir(parents=True, exist_ok=True)
 
         # Add the file using the same logic as the add command
-        success = _add_file(file_path, biotope_root, datasets_dir, force=False)
+        success = _add_file(
+            file_path,
+            biotope_root,
+            datasets_dir,
+            force=False,
+            overrides={
+                "name": None,
+                "description": None,
+                "license": None,
+                "creator": None,
+                "creator_email": None,
+                "url": None,
+                "citation": None,
+                "version": None,
+                "keywords": [],
+                "access_restrictions": None,
+                "legal_obligations": None,
+                "collaboration_partner": None,
+                "rai_fields": {},
+            },
+        )
 
         if success:
             # Stage changes in Git
