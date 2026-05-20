@@ -62,6 +62,20 @@ SCALAR_KIND_MAP: dict[str, FieldKind] = {
     CroissantScalarType.FLOAT.value: FieldKind.FLOAT,
     CroissantScalarType.DATE.value: FieldKind.DATE,
     CroissantScalarType.URL.value: FieldKind.URL,
+    # Croissant 1.0 extension types: typed integer / float precisions.
+    # Precision is irrelevant for BioCypher mapping; collapse to INTEGER / FLOAT.
+    "cr:Bool": FieldKind.BOOLEAN,
+    "cr:Int8": FieldKind.INTEGER,
+    "cr:Int16": FieldKind.INTEGER,
+    "cr:Int32": FieldKind.INTEGER,
+    "cr:Int64": FieldKind.INTEGER,
+    "cr:UInt8": FieldKind.INTEGER,
+    "cr:UInt16": FieldKind.INTEGER,
+    "cr:UInt32": FieldKind.INTEGER,
+    "cr:UInt64": FieldKind.INTEGER,
+    "cr:Float16": FieldKind.FLOAT,
+    "cr:Float32": FieldKind.FLOAT,
+    "cr:Float64": FieldKind.FLOAT,
 }
 
 
