@@ -161,6 +161,14 @@ def init(
             subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             click.echo(f"⚠️  git init failed: {exc}")
+        else:
+            scaffold_paths = [".gitignore", "AGENTS.md", ".biotope/"]
+            if visible:
+                scaffold_paths.append(project_yaml_path.relative_to(project_dir).as_posix())
+            try:
+                subprocess.run(["git", "add", *scaffold_paths], cwd=project_dir, check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+                click.echo(f"⚠️  Could not stage scaffold files: {exc}")
 
     if interactive:
         editor = os.environ.get("EDITOR", "vi")
