@@ -83,16 +83,18 @@ This consults the BioCypher-adapter registry against the
 ## Propose mappings and alignments
 
 ```bash
-biotope propose-mapping .biotope/datasets/<name>.jsonld \
-  --out mappings/<name>.mapping.yaml
+biotope propose-mapping .biotope/datasets/<name>.jsonld
 
-biotope propose-alignment mappings/*.mapping.yaml \
-  --out alignment.yaml
+biotope propose-alignment mappings/*.mapping.yaml
 ```
 
 Both commands emit YAML for the human to review. Show the user the diff before
 moving on. Do not invent CURIE prefixes or entity types — leave the defaults
 unless the user has told you which BioCypher types to target.
+
+`biotope propose-mapping` writes commented review scaffolds. Use the inline
+field inventory and sample rows to explain what a record set contains before
+you rewrite `type`, `id`, `properties`, or `where`.
 
 ## Build the graph
 

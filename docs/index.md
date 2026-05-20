@@ -16,7 +16,8 @@ cd my-kg
 biotope describe --entity gene --entity disease --entity drug \
                  --relation gene_associated_with_disease
 biotope add data/ot.parquet --license CC-BY-4.0
-biotope propose-mapping .biotope/datasets/ot.jsonld --out mappings/ot.mapping.yaml
+biotope propose-mapping .biotope/datasets/ot.jsonld
+# Review the commented scaffold, then refine entity types / IDs / properties
 biotope build
 biotope view
 ```

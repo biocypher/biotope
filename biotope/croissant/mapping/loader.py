@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from biotope.croissant.mapping.model import Mapping
+from biotope.croissant.mapping.render import render_mapping_yaml
 
 
 def load_mapping(path: str | Path) -> Mapping:
@@ -17,9 +18,4 @@ def load_mapping(path: str | Path) -> Mapping:
 
 def dump_mapping(mapping: Mapping, path: str | Path) -> None:
     """Serialise a :class:`Mapping` to ``path`` as YAML."""
-    Path(path).write_text(
-        yaml.safe_dump(
-            mapping.model_dump(by_alias=True, exclude_defaults=False),
-            sort_keys=False,
-        ),
-    )
+    Path(path).write_text(render_mapping_yaml(mapping))

@@ -52,3 +52,16 @@ def test_field_kind_supports_croissant_numeric_extensions(data_type: str, expect
     """Regression: baker emits cr:Int64 / cr:Float64; mapper must accept them."""
     field = CroissantFieldModel(name="x", dataType=data_type)
     assert field.kind() == expected_kind
+
+
+def test_field_kind_recognises_cr_is_array() -> None:
+    """Regression: baker emits `cr:isArray`, not `repeated`."""
+    field = CroissantFieldModel.model_validate(
+        {
+            "name": "transcriptIds",
+            "dataType": "sc:Text",
+            "cr:isArray": True,
+        },
+    )
+    assert field.repeated is True
+    assert field.kind() == FieldKind.ARRAY

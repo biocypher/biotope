@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from biotope.croissant.api import propose_mapping as api_propose_mapping
 from biotope.croissant.acquisition import AcquisitionContext
 from biotope.croissant.spec import load_from_path
 from biotope.croissant.mapping import compile_mapping, default_mapping, load_mapping
@@ -45,3 +46,15 @@ def test_compile_and_stream_nodes(minimal_croissant: Path, gene_csv: Path) -> No
     node_ids = {n[0] for n in nodes}
     assert "ENSG00000139618" in node_ids
     assert all(n[1] == "genes" for n in nodes)
+
+
+def test_propose_mapping_scaffold_embeds_sample_rows(minimal_croissant: Path, gene_csv: Path, tmp_path: Path) -> None:
+    croissant_path = tmp_path / "minimal.croissant.json"
+    croissant_path.write_text(minimal_croissant.read_text())
+    (tmp_path / "genes.csv").write_text(gene_csv.read_text())
+
+    result = api_propose_mapping(croissant_path, preview_rows=2)
+
+    assert "# - Sample rows (first 2; columns: ensembl_id, symbol, biotype):" in result["yaml"]
+    assert "BRCA2" in result["yaml"]
+    assert "TP53" in result["yaml"]

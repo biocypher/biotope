@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.request import urlopen
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -96,7 +96,10 @@ class CroissantFieldModel(ConfiguredBaseModel):
     name: str
     description: str | None = None
     data_type: str | None = None
-    repeated: bool = False
+    repeated: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("repeated", "isArray", "cr:isArray"),
+    )
     sub_field: list[CroissantFieldModel] = Field(default_factory=list)
 
     def kind(self) -> FieldKind:

@@ -26,7 +26,7 @@ console = Console()
     "--mappings-dir",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
-    help="Directory of mapping.yaml files. Default: <project_root>/mappings.",
+    help="Directory of mapping YAML files. Default: <project_root>/mappings.",
 )
 @click.option(
     "--alignment",
@@ -54,13 +54,11 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
     )
 
     mappings_dir = mappings_dir or (project_root / "mappings")
-    mapping_paths = sorted(mappings_dir.glob("*.mapping.yaml")) + sorted(mappings_dir.glob("*.yaml"))
-    mapping_paths = [p for p in mapping_paths if p.name.endswith((".mapping.yaml", "mapping.yaml"))]
-    mapping_paths = list(dict.fromkeys(mapping_paths))  # de-dup, preserve order
+    mapping_paths = _discover_mapping_paths(mappings_dir)
 
     if not mapping_paths:
-        click.echo(f"❌ No *.mapping.yaml files found under {mappings_dir}.")
-        click.echo("   Run `biotope propose-mapping <croissant.json> --out mappings/<name>.mapping.yaml` first.")
+        click.echo(f"❌ No mapping YAML files found under {mappings_dir}.")
+        click.echo("   Run `biotope propose-mapping <croissant.json>` first.")
         raise click.Abort
 
     if alignment_path is None:
@@ -73,3 +71,34 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
 
     console.print(f"✅ Built BioCypher project at [cyan]{out_dir}[/cyan]")
     click.echo(json.dumps(result, indent=2, default=str))
+
+
+def _discover_mapping_paths(mappings_dir: Path) -> list[Path]:
+    """Return mapping YAML paths, preferring `*.mapping.yaml` over `*.yaml` duplicates."""
+    candidates = sorted(mappings_dir.glob("*.yaml")) + sorted(mappings_dir.glob("*.yml"))
+    selected: dict[str, Path] = {}
+
+    for path in candidates:
+        key = _mapping_identity(path)
+        existing = selected.get(key)
+        if existing is None or _mapping_path_rank(path) > _mapping_path_rank(existing):
+            selected[key] = path
+
+    return list(selected.values())
+
+
+def _mapping_identity(path: Path) -> str:
+    name = path.name
+    for suffix in (".mapping.yaml", ".mapping.yml", ".yaml", ".yml"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+def _mapping_path_rank(path: Path) -> int:
+    name = path.name
+    if name.endswith((".mapping.yaml", ".mapping.yml")):
+        return 2
+    if name.endswith((".yaml", ".yml")):
+        return 1
+    return 0

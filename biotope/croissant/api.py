@@ -22,6 +22,7 @@ from biotope.croissant.alignment.model import (
 )
 from biotope.croissant.mapping.defaults import default_mapping
 from biotope.croissant.mapping.loader import load_mapping
+from biotope.croissant.mapping.render import render_review_scaffold
 from biotope.croissant.registry.client import LocalRegistryClient, RegistryClient
 from biotope.croissant.spec import load_from_path, load_from_url
 
@@ -93,7 +94,12 @@ def discover_sources(
     }
 
 
-def propose_mapping(croissant_path: str | Path, *, write_to: str | Path | None = None) -> dict[str, Any]:
+def propose_mapping(
+    croissant_path: str | Path,
+    *,
+    write_to: str | Path | None = None,
+    preview_rows: int = 3,
+) -> dict[str, Any]:
     """Generate a heuristic ``mapping.yaml`` for a Croissant file."""
     path_str = str(croissant_path)
     dataset = (
@@ -103,9 +109,37 @@ def propose_mapping(croissant_path: str | Path, *, write_to: str | Path | None =
     )
     mapping = default_mapping(dataset, croissant_path=path_str)
     payload = mapping.model_dump(by_alias=True, exclude_defaults=False)
+    scaffold = render_review_scaffold(
+        mapping,
+        dataset,
+        datasets_location=_infer_datasets_location(croissant_path),
+        preview_rows=preview_rows,
+    )
     if write_to is not None:
-        Path(write_to).write_text(yaml.safe_dump(payload, sort_keys=False))
-    return {"mapping": payload, "wrote": str(write_to) if write_to else None}
+        Path(write_to).write_text(scaffold)
+    return {
+        "mapping": payload,
+        "yaml": scaffold,
+        "wrote": str(write_to) if write_to else None,
+    }
+
+
+def _infer_datasets_location(croissant_path: str | Path) -> Path | None:
+    """Best-effort local data root for preview sampling."""
+    path_str = str(croissant_path)
+    if path_str.startswith(("http://", "https://")):
+        return None
+
+    path = Path(path_str).resolve()
+    for parent in path.parents:
+        if parent.name == "datasets" and parent.parent.name == ".biotope":
+            rel = path.relative_to(parent).with_suffix("")
+            biotope_root = parent.parent.parent
+            candidate = biotope_root / rel
+            if candidate.exists():
+                return candidate if candidate.is_dir() else candidate.parent
+            return biotope_root
+    return path.parent
 
 
 def propose_alignment(
@@ -139,9 +173,10 @@ def propose_alignment(
         equivalences=equivalences,
     )
     payload = alignment.model_dump(by_alias=True, exclude_defaults=False, mode="json")
+    yaml_text = yaml.safe_dump(payload, sort_keys=False)
     if write_to is not None:
-        Path(write_to).write_text(yaml.safe_dump(payload, sort_keys=False))
-    return {"alignment": payload, "wrote": str(write_to) if write_to else None}
+        Path(write_to).write_text(yaml_text)
+    return {"alignment": payload, "yaml": yaml_text, "wrote": str(write_to) if write_to else None}
 
 
 def materialize(
