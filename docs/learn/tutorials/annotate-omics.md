@@ -1,5 +1,5 @@
 
-The `biotope annotate` module provides the editing and merge tools for Croissant metadata. Use it when you want to refine metadata interactively, review staged datasets, or apply structured edits from a `.biotope.csv` scaffold.
+The `biotope annotate` module provides the editing and merge tools for Croissant metadata. Use it when you want to refine metadata interactively, review staged datasets, or apply structured edits from a `.biotope.yaml` scaffold.
 
 ## Installation
 
@@ -21,7 +21,7 @@ biotope annotate edit --staged
 # Interactive edit for incomplete tracked files
 biotope annotate edit --incomplete
 
-# Apply CSV edits for a directory dataset
+# Apply YAML scaffold edits for a directory dataset
 biotope annotate apply data/raw/
 
 # Validate existing metadata
@@ -204,11 +204,11 @@ This runs the interactive editor for each staged file, pre-filling metadata with
 
 ### Applying Directory-Scale Edits
 
-When `biotope add` is run on a directory, it creates a `.biotope.csv` scaffold for dataset-level and record-set-level edits:
+When `biotope add` is run on a directory, it creates a `.biotope.yaml` scaffold for dataset-level and record-set-level edits:
 
 ```bash
 biotope add data/raw/
-$EDITOR data/raw/.biotope.csv
+$EDITOR data/raw/.biotope.yaml
 biotope annotate apply data/raw/
 ```
 

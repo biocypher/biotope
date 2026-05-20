@@ -68,7 +68,7 @@ biotope add data/raw/experiment.csv --force
 4. Appends `cr:FileObject` pointers for unparseable files in directory adds.
 5. Stages `.biotope/` changes in Git.
 
-When you add a directory, biotope also writes `<dir>/.biotope.csv` so the
+When you add a directory, biotope also writes `<dir>/.biotope.yaml` so the
 dataset can be refined collaboratively with `biotope annotate apply`.
 
 ## Follow-on workflow

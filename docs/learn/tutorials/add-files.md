@@ -52,7 +52,7 @@ To add all files in a directory, pass the directory path directly:
 biotope add data/raw/
 ```
 
-Directory adds recurse automatically, generate aggregate metadata in `.biotope/datasets/`, and create a `.biotope.csv` scaffold inside the directory for human or agent editing.
+Directory adds recurse automatically, generate aggregate metadata in `.biotope/datasets/`, and create a `.biotope.yaml` scaffold inside the directory for human or agent editing.
 
 ## Understanding the Output
 
@@ -131,7 +131,7 @@ biotope add data/raw/experiment.csv --force
 
 ### Directory Scaffolds
 
-When you add a directory, biotope creates a `.biotope.csv` file alongside the data:
+When you add a directory, biotope creates a `.biotope.yaml` file alongside the data:
 
 ```bash
 biotope add data/raw/
@@ -207,7 +207,7 @@ The basic metadata created by `add` is minimal. Enhance it:
 biotope annotate edit --staged
 ```
 
-For directory datasets, review `data/raw/.biotope.csv` and then run:
+For directory datasets, review `data/raw/.biotope.yaml` and then run:
 
 ```bash
 biotope annotate apply data/raw/

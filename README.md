@@ -25,7 +25,7 @@ biotope describe --entity gene --entity disease --entity drug \
                  --relation gene_associated_with_disease
 
 biotope add data/opentargets --license CC-BY-4.0 --creator "Open Targets"
-biotope annotate apply data/opentargets            # after reviewing data/opentargets/.biotope.csv
+biotope annotate apply data/opentargets            # after reviewing data/opentargets/.biotope.yaml
 biotope propose-mapping .biotope/datasets/data/opentargets.jsonld --out mappings/opentargets.mapping.yaml
 biotope propose-alignment mappings/*.mapping.yaml --out alignment.yaml
 biotope build

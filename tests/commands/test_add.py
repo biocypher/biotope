@@ -174,20 +174,24 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     assert any(item["@type"] == "cr:FileObject" for item in distribution)
     assert any(item.get("contentUrl") == "data/mixed/README.md" for item in distribution)
 
-    csv_path = data_dir / ".biotope.csv"
-    from biotope.commands.add import _generate_biotope_csv_from_baked
+    scaffold_path = data_dir / ".biotope.yaml"
+    from biotope.commands.add import _generate_biotope_scaffold_from_baked
+    import yaml
 
-    _generate_biotope_csv_from_baked(data_dir, metadata_dict, project_root)
-    assert csv_path.exists()
-    rows = csv_path.read_text().splitlines()
-    assert rows[0].startswith("scope,record_set_id,source_path")
-    assert any(line.startswith("dataset,") for line in rows[1:])
+    _generate_biotope_scaffold_from_baked(data_dir, metadata_dict, project_root)
+    assert scaffold_path.exists()
+    payload = yaml.safe_load(scaffold_path.read_text())
+    assert isinstance(payload, dict)
+    assert isinstance(payload["dataset"], dict)
+    assert payload["dataset"]["source_path"] == "data/mixed"
+    assert isinstance(payload["record_sets"], list)
+    assert payload["record_sets"]
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
-@mock.patch("biotope.commands.add._generate_biotope_csv_from_baked")
+@mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_directory_recurses_by_default(
     mock_stage,
@@ -219,7 +223,7 @@ def test_add_command_directory_recurses_by_default(
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
-@mock.patch("biotope.commands.add._generate_biotope_csv_from_baked")
+@mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_resolves_relative_directory(
     mock_stage,

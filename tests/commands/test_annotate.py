@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import os
 import subprocess
@@ -10,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from biotope.commands.annotate import annotate, load, validate
@@ -149,64 +149,36 @@ def annotated_project(tmp_path):
     }
     metadata_path.write_text(json.dumps(metadata, indent=2))
 
-    csv_path = data_dir / ".biotope.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "scope",
-                "record_set_id",
-                "source_path",
-                "name",
-                "description",
-                "creator",
-                "creator_email",
-                "license",
-                "url",
-                "citation",
-                "version",
-                "keywords",
-                "access_restrictions",
-                "legal_obligations",
-                "collaboration_partner",
-                "encoding_format",
-            ],
-        )
-        writer.writeheader()
-        writer.writerow(
+    scaffold_path = data_dir / ".biotope.yaml"
+    scaffold = {
+        "dataset": {
+            "source_path": "data/raw/opentargets",
+            "name": "Open Targets",
+            "description": "OT v3",
+            "creator": "Open Targets",
+            "license": "CC-BY-4.0",
+            "keywords": ["gene", "disease"],
+        },
+        "record_sets": [
             {
-                "scope": "dataset",
-                "record_set_id": "",
-                "source_path": "data/raw/opentargets",
-                "name": "Open Targets",
-                "description": "OT v3",
-                "creator": "Open Targets",
-                "license": "CC-BY-4.0",
-                "keywords": "gene;disease",
-            }
-        )
-        writer.writerow(
-            {
-                "scope": "record_set",
-                "record_set_id": "#genes",
+                "id": "#genes",
                 "source_path": "data/raw/opentargets/genes",
                 "name": "genes",
                 "description": "Gene table",
                 "encoding_format": "application/vnd.apache.parquet",
-            }
-        )
-        writer.writerow(
+            },
             {
-                "scope": "record_set",
-                "record_set_id": "#diseases",
+                "id": "#diseases",
                 "source_path": "data/raw/opentargets/diseases",
                 "name": "diseases",
                 "description": "Disease table",
                 "encoding_format": "application/parquet",
-            }
-        )
+            },
+        ],
+    }
+    scaffold_path.write_text(yaml.safe_dump(scaffold, sort_keys=False))
 
-    return project_root, data_dir, csv_path, metadata_path
+    return project_root, data_dir, scaffold_path, metadata_path
 
 
 @mock.patch("subprocess.run")
@@ -268,7 +240,7 @@ def test_annotate_help_lists_apply_and_edit(runner):
 
 
 def test_apply_directory_updates_dataset_and_record_sets(runner, annotated_project):
-    project_root, data_dir, _csv_path, metadata_path = annotated_project
+    project_root, data_dir, _scaffold_path, metadata_path = annotated_project
 
     with runner.isolated_filesystem():
         original_cwd = Path.cwd()
@@ -278,7 +250,7 @@ def test_apply_directory_updates_dataset_and_record_sets(runner, annotated_proje
         finally:
             os.chdir(original_cwd)
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     updated = json.loads(metadata_path.read_text())
     assert updated["description"] == "OT v3"
     assert updated["keywords"] == ["gene", "disease"]
@@ -286,8 +258,8 @@ def test_apply_directory_updates_dataset_and_record_sets(runner, annotated_proje
     assert updated["distribution"][0]["encodingFormat"] == "application/vnd.apache.parquet"
 
 
-def test_apply_csv_with_set_override(runner, annotated_project):
-    project_root, _data_dir, csv_path, metadata_path = annotated_project
+def test_apply_scaffold_with_set_override(runner, annotated_project):
+    project_root, _data_dir, scaffold_path, metadata_path = annotated_project
 
     with runner.isolated_filesystem():
         original_cwd = Path.cwd()
@@ -295,75 +267,48 @@ def test_apply_csv_with_set_override(runner, annotated_project):
             os.chdir(project_root)
             result = runner.invoke(
                 annotate,
-                ["apply", str(csv_path), "--set", "creator=Open Targets Consortium"],
+                ["apply", str(scaffold_path), "--set", "creator=Open Targets Consortium"],
             )
         finally:
             os.chdir(original_cwd)
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     updated = json.loads(metadata_path.read_text())
     assert updated["creator"]["name"] == "Open Targets Consortium"
 
 
 def test_apply_rejects_unknown_record_set_id(runner, annotated_project):
-    project_root, data_dir, csv_path, _metadata_path = annotated_project
-    rows = list(csv.DictReader(csv_path.open()))
-    rows.append(
-        {
-            "scope": "record_set",
-            "record_set_id": "#unknown",
-            "source_path": str(data_dir),
-            "name": "unknown",
-            "description": "Unknown",
-            "creator": "",
-            "creator_email": "",
-            "license": "",
-            "url": "",
-            "citation": "",
-            "version": "",
-            "keywords": "",
-            "access_restrictions": "",
-            "legal_obligations": "",
-            "collaboration_partner": "",
-            "encoding_format": "",
-        }
-    )
-    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
+    project_root, _data_dir, scaffold_path, _metadata_path = annotated_project
+    scaffold = yaml.safe_load(scaffold_path.read_text())
+    scaffold["record_sets"].append({"id": "#unknown", "name": "unknown", "description": "Unknown"})
+    scaffold_path.write_text(yaml.safe_dump(scaffold, sort_keys=False))
 
     with runner.isolated_filesystem():
         original_cwd = Path.cwd()
         try:
             os.chdir(project_root)
-            result = runner.invoke(annotate, ["apply", str(csv_path)])
+            result = runner.invoke(annotate, ["apply", str(scaffold_path)])
         finally:
             os.chdir(original_cwd)
 
     assert result.exit_code != 0
-    assert "Unknown record_set_id" in result.output
+    assert "Unknown record_set id" in result.output
 
 
-def test_apply_rejects_duplicate_dataset_row(runner, annotated_project):
-    project_root, _data_dir, csv_path, _metadata_path = annotated_project
-    rows = list(csv.DictReader(csv_path.open()))
-    rows.insert(1, dict(rows[0]))
-    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
+def test_apply_rejects_scaffold_without_dataset_block(runner, annotated_project):
+    project_root, _data_dir, scaffold_path, _metadata_path = annotated_project
+    scaffold_path.write_text(yaml.safe_dump({"record_sets": []}, sort_keys=False))
 
     with runner.isolated_filesystem():
         original_cwd = Path.cwd()
         try:
             os.chdir(project_root)
-            result = runner.invoke(annotate, ["apply", str(csv_path)])
+            result = runner.invoke(annotate, ["apply", str(scaffold_path)])
         finally:
             os.chdir(original_cwd)
 
     assert result.exit_code != 0
-    assert "exactly one scope=dataset row" in result.output
+    assert "must contain a `dataset` block" in result.output
 
 
 def test_interactive_alias_still_invokes_hidden_command(runner):

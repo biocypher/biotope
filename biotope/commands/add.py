@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -10,9 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import click
+import yaml
 
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
+    SCAFFOLD_FILENAME,
     make_file_object,
     merge_metadata,
     normalize_metadata_shape,
@@ -135,7 +136,7 @@ def add(
         stage_git_changes(biotope_root)
 
     for source_dir, metadata_dict in baked_dirs:
-        _generate_biotope_csv_from_baked(source_dir, metadata_dict, biotope_root)
+        _generate_biotope_scaffold_from_baked(source_dir, metadata_dict, biotope_root)
 
     if added_entries:
         click.echo(f"\n✅ Added {len(added_entries)} entr(y/ies) to biotope project:")
@@ -151,7 +152,7 @@ def add(
         click.echo("\n💡 Next steps:")
         if baked_dirs:
             for source_dir, _metadata_dict in baked_dirs:
-                click.echo(f"  • Review {source_dir / '.biotope.csv'}")
+                click.echo(f"  • Review {source_dir / SCAFFOLD_FILENAME}")
                 click.echo(f"    Then: biotope annotate apply {source_dir}")
             click.echo("  • Finally: biotope commit -m \"message\"")
         else:
@@ -412,6 +413,8 @@ def _bake_directory(
         creators=_creator_for_baker(defaults, overrides, biotope_root),
         keywords=list(overrides.get("keywords") or []) or None,
         excludes=[
+            SCAFFOLD_FILENAME,
+            f"**/{SCAFFOLD_FILENAME}",
             ".biotope.csv",
             "**/.biotope.csv",
             ".biotope/**",
@@ -604,31 +607,13 @@ def _default_overrides() -> dict[str, Any]:
     }
 
 
-def _generate_biotope_csv_from_baked(
+def _generate_biotope_scaffold_from_baked(
     source_dir: Path,
     metadata_dict: dict[str, Any],
     biotope_root: Path,
 ) -> None:
-    """Generate a scoped CSV scaffold for one directory-baked dataset."""
-    csv_path = source_dir / ".biotope.csv"
-    csv_columns = [
-        "scope",
-        "record_set_id",
-        "source_path",
-        "name",
-        "description",
-        "creator",
-        "creator_email",
-        "license",
-        "url",
-        "citation",
-        "version",
-        "keywords",
-        "access_restrictions",
-        "legal_obligations",
-        "collaboration_partner",
-        "encoding_format",
-    ]
+    """Generate a scoped YAML scaffold for one directory-baked dataset."""
+    scaffold_path = source_dir / SCAFFOLD_FILENAME
 
     dist_by_id = {
         distribution.get("@id"): distribution
@@ -645,13 +630,13 @@ def _generate_biotope_csv_from_baked(
 
     keywords = metadata_dict.get("keywords", [])
     if isinstance(keywords, list):
-        keywords_value = ";".join(str(keyword) for keyword in keywords)
+        keywords_value = [str(k) for k in keywords]
+    elif keywords:
+        keywords_value = [str(keywords)]
     else:
-        keywords_value = str(keywords or "")
+        keywords_value = []
 
-    dataset_row = {
-        "scope": "dataset",
-        "record_set_id": "",
+    dataset_block = {
         "source_path": str(source_dir.relative_to(biotope_root)),
         "name": metadata_dict.get("name", "") or "",
         "description": metadata_dict.get("description", "") or "",
@@ -665,42 +650,35 @@ def _generate_biotope_csv_from_baked(
         "access_restrictions": metadata_dict.get("cr:accessRestrictions", "") or "",
         "legal_obligations": metadata_dict.get("cr:legalObligations", "") or "",
         "collaboration_partner": metadata_dict.get("cr:collaborationPartner", "") or "",
-        "encoding_format": "",
     }
 
-    rows = [dataset_row]
+    record_set_blocks: list[dict[str, Any]] = []
     for record_set in metadata_dict.get("recordSet", []) or []:
         source_id = _first_field_source_id(record_set)
         distribution = dist_by_id.get(source_id, {})
-        rows.append(
+        record_set_blocks.append(
             {
-                "scope": "record_set",
-                "record_set_id": record_set.get("@id", "") or "",
+                "id": record_set.get("@id", "") or "",
                 "source_path": _human_source_path(distribution, source_dir, biotope_root),
                 "name": record_set.get("name", "") or "",
                 "description": record_set.get("description", "") or "",
-                "creator": "",
-                "creator_email": "",
-                "license": "",
-                "url": "",
-                "citation": "",
-                "version": "",
-                "keywords": "",
-                "access_restrictions": "",
-                "legal_obligations": "",
-                "collaboration_partner": "",
                 "encoding_format": distribution.get("encodingFormat", "") or "",
             }
         )
 
+    payload = {"dataset": dataset_block, "record_sets": record_set_blocks}
+    header = (
+        f"# {SCAFFOLD_FILENAME} — edit, then `biotope annotate apply {source_dir.relative_to(biotope_root)}`\n"
+        "# Empty strings are placeholders; fill in or leave blank.\n"
+        "# Schema: dataset (one block) + record_sets (list, joined by `id`).\n\n"
+    )
     try:
-        with open(csv_path, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=csv_columns)
-            writer.writeheader()
-            writer.writerows(rows)
-        click.echo(f"\n📝 Generated annotation template: {csv_path}")
+        with open(scaffold_path, "w", encoding="utf-8") as handle:
+            handle.write(header)
+            yaml.safe_dump(payload, handle, sort_keys=False, allow_unicode=True)
+        click.echo(f"\n📝 Generated annotation template: {scaffold_path}")
     except Exception as exc:  # noqa: BLE001
-        click.echo(f"⚠️  Warning: Could not generate .biotope.csv: {exc}")
+        click.echo(f"⚠️  Warning: Could not generate {SCAFFOLD_FILENAME}: {exc}")
 
 
 def _human_source_path(distribution: dict[str, Any], source_dir: Path, biotope_root: Path) -> str:

@@ -15,6 +15,9 @@ FILE_OBJECT_TYPE = "cr:FileObject"
 LEGACY_FILE_OBJECT_TYPE = "sc:FileObject"
 
 
+SCAFFOLD_FILENAME = ".biotope.yaml"
+
+
 @dataclass(frozen=True)
 class DatasetTarget:
     """Resolved dataset metadata target inside a biotope project."""
@@ -22,7 +25,7 @@ class DatasetTarget:
     input_path: Path
     metadata_path: Path
     dataset_dir: Path
-    csv_path: Path
+    scaffold_path: Path
 
 
 def get_standard_context() -> dict[str, str]:
@@ -118,12 +121,11 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
         except ValueError as exc:
             raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets") from exc
         dataset_dir = biotope_root / rel_metadata.with_suffix("")
-        csv_path = dataset_dir / ".biotope.csv"
         return DatasetTarget(
             input_path=resolved,
             metadata_path=metadata_path,
             dataset_dir=dataset_dir,
-            csv_path=csv_path,
+            scaffold_path=dataset_dir / SCAFFOLD_FILENAME,
         )
 
     if resolved.is_dir():
@@ -133,10 +135,10 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
             input_path=resolved,
             metadata_path=metadata_path,
             dataset_dir=resolved,
-            csv_path=resolved / ".biotope.csv",
+            scaffold_path=resolved / SCAFFOLD_FILENAME,
         )
 
-    if resolved.name == ".biotope.csv":
+    if resolved.name == SCAFFOLD_FILENAME:
         dataset_dir = resolved.parent
         rel_dir = dataset_dir.relative_to(biotope_root)
         metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
@@ -144,7 +146,7 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
             input_path=resolved,
             metadata_path=metadata_path,
             dataset_dir=dataset_dir,
-            csv_path=resolved,
+            scaffold_path=resolved,
         )
 
     rel_file = resolved.relative_to(biotope_root)
@@ -153,7 +155,7 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
         input_path=resolved,
         metadata_path=metadata_path,
         dataset_dir=resolved.parent,
-        csv_path=resolved.parent / ".biotope.csv",
+        scaffold_path=resolved.parent / SCAFFOLD_FILENAME,
     )
 
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import csv
 import getpass
 import hashlib
 import json
@@ -13,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import click
+import yaml
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -21,6 +21,7 @@ from rich.table import Table
 
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
+    SCAFFOLD_FILENAME,
     ensure_no_legacy_file_objects,
     get_standard_context as shared_get_standard_context,
     merge_metadata as shared_merge_metadata,
@@ -59,7 +60,7 @@ def annotate(ctx: click.Context) -> None:
     help="Apply KEY=VALUE overrides. Use dataset.<field>=... or record_set.<field>=... for explicit scope.",
 )
 def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
-    """Apply scoped CSV annotations to one dataset JSON-LD."""
+    """Apply a scoped YAML scaffold to one dataset JSON-LD."""
     console = Console()
     biotope_root = find_biotope_root()
     if not biotope_root:
@@ -78,19 +79,19 @@ def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
         except ValueError as exc:
             click.echo(f"❌ {exc}")
             raise click.Abort from exc
-        csv_path = target.csv_path
-        if not csv_path.exists():
+        scaffold_path = target.scaffold_path
+        if not scaffold_path.exists():
             click.echo(
-                f"❌ No .biotope.csv in {resolved}. Run `biotope add {path}` first."
+                f"❌ No {SCAFFOLD_FILENAME} in {resolved}. Run `biotope add {path}` first."
             )
             raise click.Abort
     else:
-        csv_path = resolved
-        if csv_path.suffix != ".csv":
-            click.echo("❌ annotate apply expects a directory or a CSV file.")
+        scaffold_path = resolved
+        if scaffold_path.suffix not in {".yaml", ".yml"}:
+            click.echo("❌ annotate apply expects a directory or a YAML scaffold.")
             raise click.Abort
         try:
-            target = resolve_target(csv_path.parent, biotope_root)
+            target = resolve_target(scaffold_path.parent, biotope_root)
         except ValueError as exc:
             click.echo(f"❌ {exc}")
             raise click.Abort from exc
@@ -99,7 +100,7 @@ def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
         click.echo(f"❌ Target metadata file not found: {target.metadata_path}")
         raise click.Abort
 
-    updated = _apply_scoped_csv(console, csv_path, target, overrides, biotope_root)
+    updated = _apply_scaffold(console, scaffold_path, target, overrides, biotope_root)
     if updated:
         try:
             subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
@@ -1178,34 +1179,37 @@ DATASET_ONLY_SET_FIELDS = {
 RECORD_SET_ONLY_SET_FIELDS = {"encoding_format"}
 
 
-def _apply_scoped_csv(
+def _apply_scaffold(
     console: Console,
-    csv_path: Path,
+    scaffold_path: Path,
     target,
     overrides: dict[str, str],
     biotope_root: Path,
 ) -> bool:
-    """Apply one scoped CSV to one resolved dataset target."""
-    console.print(f"[bold blue]Applying annotations from {csv_path}[/]")
+    """Apply one scoped YAML scaffold to one resolved dataset target."""
+    console.print(f"[bold blue]Applying annotations from {scaffold_path}[/]")
     console.print("─" * 50)
 
-    with open(csv_path, newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        rows = list(reader)
+    try:
+        with open(scaffold_path, encoding="utf-8") as handle:
+            scaffold = yaml.safe_load(handle) or {}
+    except yaml.YAMLError as exc:
+        console.print(f"❌ Invalid YAML in {scaffold_path}: {exc}")
+        raise click.Abort from exc
 
-    if not rows:
-        console.print("❌ CSV file is empty")
+    if not isinstance(scaffold, dict):
+        console.print(f"❌ {SCAFFOLD_FILENAME} must be a mapping with `dataset` and `record_sets`")
         raise click.Abort
 
-    if "scope" not in (reader.fieldnames or []):
-        console.print("❌ CSV file must contain a 'scope' column")
+    dataset_block = scaffold.get("dataset")
+    if not isinstance(dataset_block, dict):
+        console.print(f"❌ {SCAFFOLD_FILENAME} must contain a `dataset` block")
         raise click.Abort
 
-    dataset_rows = [row for row in rows if (row.get("scope") or "").strip() == "dataset"]
-    if len(dataset_rows) != 1:
-        console.print("❌ CSV must contain exactly one scope=dataset row")
+    record_set_blocks = scaffold.get("record_sets") or []
+    if not isinstance(record_set_blocks, list):
+        console.print(f"❌ `record_sets` must be a list")
         raise click.Abort
-    record_set_rows = [row for row in rows if (row.get("scope") or "").strip() == "record_set"]
 
     try:
         with open(target.metadata_path, encoding="utf-8") as handle:
@@ -1219,7 +1223,7 @@ def _apply_scoped_csv(
     updated_metadata = copy.deepcopy(metadata)
     dataset_overrides, record_set_overrides = _split_set_overrides(overrides)
 
-    dataset_row = dict(dataset_rows[0])
+    dataset_row = _scaffold_block_to_row(dataset_block)
     _apply_row_overrides(dataset_row, dataset_overrides)
     _merge_dataset_row(updated_metadata, dataset_row)
 
@@ -1229,16 +1233,19 @@ def _apply_scoped_csv(
         if record_set.get("@id")
     }
 
-    for row in record_set_rows:
-        record_set_id = (row.get("record_set_id") or "").strip()
+    for entry in record_set_blocks:
+        if not isinstance(entry, dict):
+            console.print("❌ each `record_sets` entry must be a mapping")
+            raise click.Abort
+        record_set_id = str(entry.get("id") or "").strip()
         if not record_set_id:
-            console.print("❌ record_set rows must include record_set_id")
+            console.print("❌ record_set entries must include `id`")
             raise click.Abort
         if record_set_id not in record_sets_by_id:
-            console.print(f"❌ Unknown record_set_id in CSV: {record_set_id}")
+            console.print(f"❌ Unknown record_set id in scaffold: {record_set_id}")
             raise click.Abort
 
-        record_row = dict(row)
+        record_row = _scaffold_block_to_row(entry)
         _apply_row_overrides(record_row, record_set_overrides)
         _merge_record_set_row(updated_metadata, record_sets_by_id[record_set_id], record_row)
 
@@ -1251,6 +1258,19 @@ def _apply_scoped_csv(
 
     console.print(f"✅ Updated {target.metadata_path.relative_to(biotope_root)}")
     return True
+
+
+def _scaffold_block_to_row(block: dict[str, Any]) -> dict[str, str]:
+    """Convert a YAML scaffold mapping to the flat row dict the mergers expect."""
+    row: dict[str, str] = {}
+    for key, value in block.items():
+        if value is None:
+            row[str(key)] = ""
+        elif isinstance(value, list):
+            row[str(key)] = ";".join(str(v) for v in value)
+        else:
+            row[str(key)] = str(value)
+    return row
 
 
 def _split_set_overrides(overrides: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
