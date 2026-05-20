@@ -441,39 +441,46 @@ def test_add_command_no_paths(runner):
 
 @mock.patch("biotope.utils.find_biotope_root")
 @mock.patch("biotope.utils.is_git_repo")
-@mock.patch("biotope.commands.add._add_file")
+@mock.patch("biotope.commands.add._bake_directory")
+@mock.patch("biotope.commands.add._generate_biotope_csv_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_recursive(
-    mock_stage, mock_add_file, mock_is_git, mock_find_root, runner, git_repo
+    mock_stage,
+    mock_csv,
+    mock_bake,
+    mock_is_git,
+    mock_find_root,
+    runner,
+    git_repo,
 ):
-    """Test add command with recursive flag."""
-    # Setup mocks
+    """Recursive add invokes croissant-baker once per directory argument."""
     mock_find_root.return_value = git_repo
     mock_is_git.return_value = True
-    mock_add_file.return_value = True
-    
+
     # Create a directory structure with files
     data_dir = git_repo / "data"
     data_dir.mkdir()
-    
-    file1 = data_dir / "file1.txt"
-    file1.write_text("content1")
-    
+    (data_dir / "file1.txt").write_text("content1")
     subdir = data_dir / "subdir"
     subdir.mkdir()
-    
-    file2 = subdir / "file2.txt"
-    file2.write_text("content2")
-    
-    # Run command with recursive flag
+    (subdir / "file2.txt").write_text("content2")
+
+    fake_jsonld = git_repo / ".biotope" / "datasets" / "data.jsonld"
+    fake_metadata = {
+        "recordSet": [{"@id": "rs", "name": "rs", "field": []}],
+        "distribution": [],
+    }
+    mock_bake.return_value = (fake_jsonld, fake_metadata, 2)
+
     with runner.isolated_filesystem():
         os.chdir(git_repo)
         result = runner.invoke(add, ["--recursive", str(data_dir)])
-    
+
     assert result.exit_code == 0
-    # Should be called twice (once for each file)
-    assert mock_add_file.call_count == 2
+    # One bake invocation per recursive directory argument.
+    assert mock_bake.call_count == 1
     mock_stage.assert_called_once_with(git_repo)
+    mock_csv.assert_called_once()
 
 
 @mock.patch("biotope.utils.find_biotope_root")
@@ -540,5 +547,5 @@ def test_add_command_mixed_success_and_failure(
     assert mock_add_file.call_count == 2
     # Should stage changes since at least one file was added
     mock_stage.assert_called_once_with(git_repo)
-    assert "Added 1 file(s)" in result.output
-    assert "Skipped 1 file(s)" in result.output 
+    assert "Added 1 entry(ies)" in result.output
+    assert "Skipped 1 entry(ies)" in result.output
