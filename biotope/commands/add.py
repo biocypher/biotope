@@ -123,7 +123,7 @@ def add(
 
         metadata_dict, n_source_files = baked
         added_entries.append(path)
-        baked_dirs.append((path, metadata_dict))
+        baked_dirs.append((path.resolve(), metadata_dict))
         n_record_sets = len(metadata_dict.get("recordSet", []))
         target = resolve_target(path, biotope_root)
         click.echo(

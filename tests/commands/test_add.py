@@ -189,6 +189,37 @@ def test_add_command_directory_recurses_by_default(
 
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add.is_git_repo")
+@mock.patch("biotope.commands.add._bake_directory")
+@mock.patch("biotope.commands.add._generate_biotope_csv_from_baked")
+@mock.patch("biotope.commands.add.stage_git_changes")
+def test_add_command_resolves_relative_directory(
+    mock_stage,
+    mock_csv,
+    mock_bake,
+    mock_is_git,
+    mock_find_root,
+    runner,
+    git_repo,
+):
+    """Regression: relative dir argument must not break CSV scaffold writing."""
+    mock_find_root.return_value = git_repo
+    mock_is_git.return_value = True
+
+    (git_repo / "data").mkdir()
+    fake_metadata = {"recordSet": [], "distribution": []}
+    mock_bake.return_value = (fake_metadata, 1)
+
+    os.chdir(git_repo)
+    result = runner.invoke(add, ["data"])
+
+    assert result.exit_code == 0, result.output
+    csv_source_dir = mock_csv.call_args.args[0]
+    assert csv_source_dir.is_absolute()
+    assert csv_source_dir == (git_repo / "data").resolve()
+
+
+@mock.patch("biotope.commands.add.find_biotope_root")
+@mock.patch("biotope.commands.add.is_git_repo")
 def test_add_command_rejects_name_for_multiple_paths(mock_is_git, mock_find_root, runner, git_repo):
     mock_find_root.return_value = git_repo
     mock_is_git.return_value = True
