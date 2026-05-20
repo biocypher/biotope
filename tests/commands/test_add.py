@@ -127,6 +127,35 @@ def test_add_file_relative_path_already_tracked(git_repo):
         os.chdir(original_cwd)
 
 
+def test_dedupe_file_objects_covered_by_filesets(tmp_path):
+    """Regression: baker emits FileSet + per-file FileObjects; keep only the FileSet."""
+    from biotope.commands.add import _dedupe_file_objects_covered_by_filesets
+
+    project_root = tmp_path / "project"
+    data_dir = project_root / "data" / "partitions"
+    data_dir.mkdir(parents=True)
+    (project_root / ".biotope" / "datasets").mkdir(parents=True)
+    (data_dir / "part-00.parquet").write_bytes(b"x")
+    (data_dir / "part-01.parquet").write_bytes(b"y")
+    (data_dir / "_SUCCESS").write_text("")
+
+    metadata = {
+        "distribution": [
+            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+            {"@type": "cr:FileObject", "@id": "fo1", "contentUrl": "part-00.parquet"},
+            {"@type": "cr:FileObject", "@id": "fo2", "contentUrl": "part-01.parquet"},
+            {"@type": "cr:FileObject", "@id": "fo3", "contentUrl": "data/partitions/_SUCCESS"},
+        ]
+    }
+    _dedupe_file_objects_covered_by_filesets(metadata, data_dir, project_root)
+
+    types = [(d.get("@type"), d.get("@id")) for d in metadata["distribution"]]
+    assert ("cr:FileSet", "fs") in types
+    assert ("cr:FileObject", "fo3") in types  # genuinely uncovered survives
+    assert ("cr:FileObject", "fo1") not in types
+    assert ("cr:FileObject", "fo2") not in types
+
+
 def test_bake_directory_tracks_unparseable_files(tmp_path):
     project_root = tmp_path / "project"
     data_dir = project_root / "data" / "mixed"

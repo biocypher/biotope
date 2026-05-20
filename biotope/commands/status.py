@@ -9,6 +9,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from biotope.metadata import DatasetStats, summarize_metadata
 from biotope.validation import (
     get_annotation_status_for_files,
     get_all_tracked_files,
@@ -16,6 +17,15 @@ from biotope.validation import (
     load_biotope_config,
 )
 from biotope.utils import find_biotope_root, is_git_repo
+
+
+def _load_dataset_stats(biotope_root: Path, metadata_file: str) -> Optional[DatasetStats]:
+    """Load a tracked metadata JSON-LD and return its structural stats."""
+    try:
+        with open(biotope_root / metadata_file, encoding="utf-8") as handle:
+            return summarize_metadata(json.load(handle))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 @click.command()
@@ -112,17 +122,24 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
     tracked_metadata_files = get_all_tracked_files(biotope_root)
     tracked_annotation_status = {}
     has_incomplete_tracked = False
+    dataset_stats: Dict[str, Optional[DatasetStats]] = {}
     if tracked_metadata_files:
         tracked_annotation_status = get_annotation_status_for_files(biotope_root, tracked_metadata_files)
-        
+
         console.print(f"\n[bold blue]Tracked Datasets:[/]")
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Dataset", style="green")
+        table.add_column("RecordSets", style="cyan", justify="right")
+        table.add_column("FileSets", style="cyan", justify="right")
+        table.add_column("FileObjects", style="cyan", justify="right")
         table.add_column("Annotated", style="yellow")
         table.add_column("Status", style="cyan")
-        
+
         for file_path in tracked_metadata_files:
             dataset_name = Path(file_path).stem
+            stats = _load_dataset_stats(biotope_root, file_path)
+            dataset_stats[file_path] = stats
+
             if file_path in tracked_annotation_status:
                 is_annotated, errors = tracked_annotation_status[file_path]
                 annotation_status = "✅" if is_annotated else "⚠️"
@@ -130,13 +147,33 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
             else:
                 annotation_status = "❌"
                 status_text = "Error reading metadata"
-            
-            table.add_row(dataset_name, annotation_status, status_text)
+
+            if stats is None:
+                record_sets = file_sets = file_objects = "—"
+            else:
+                record_sets = str(stats.record_sets)
+                file_sets = str(stats.file_sets)
+                file_objects = str(stats.file_objects)
+
+            table.add_row(dataset_name, record_sets, file_sets, file_objects, annotation_status, status_text)
         console.print(table)
-        
+
         has_incomplete_tracked = any(not is_annotated for is_annotated, _ in tracked_annotation_status.values())
-        
+
         if detailed:
+            for file_path in tracked_metadata_files:
+                stats = dataset_stats.get(file_path)
+                if stats is None or not stats.record_set_details:
+                    continue
+                dataset_name = Path(file_path).stem
+                console.print(f"\n[bold blue]{dataset_name} — RecordSets:[/]")
+                rs_table = Table(show_header=True, header_style="bold magenta")
+                rs_table.add_column("Name", style="green")
+                rs_table.add_column("Fields", style="cyan", justify="right")
+                for rs_name, field_count in stats.record_set_details:
+                    rs_table.add_row(rs_name, str(field_count))
+                console.print(rs_table)
+
             files_with_errors = []
             for file_path, (is_annotated, errors) in tracked_annotation_status.items():
                 if not is_annotated and errors:
@@ -185,11 +222,20 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
     tracked_annotated = sum(1 for is_annotated, _ in tracked_annotation_status.values() if is_annotated)
     tracked_unannotated = len(tracked_annotation_status) - tracked_annotated
     
+    total_record_sets = sum(s.record_sets for s in dataset_stats.values() if s is not None)
+    total_file_sets = sum(s.file_sets for s in dataset_stats.values() if s is not None)
+    total_file_objects = sum(s.file_objects for s in dataset_stats.values() if s is not None)
+
     console.print(f"\n[bold]Summary:[/]")
     console.print(f"  Staged: {total_staged} file(s) ({staged_annotated} annotated, {staged_unannotated} unannotated)")
     console.print(f"  Modified: {total_modified} file(s)")
     console.print(f"  Untracked: {total_untracked} file(s)")
     console.print(f"  Tracked datasets: {len(tracked_metadata_files)} ({tracked_annotated} annotated, {tracked_unannotated} unannotated)")
+    if tracked_metadata_files:
+        console.print(
+            f"  Structure: {total_record_sets} record set(s), "
+            f"{total_file_sets} file set(s), {total_file_objects} file object(s)"
+        )
     
     # Check if there are staged metadata files that need annotation
     has_incomplete_annotations = any(not is_annotated for is_annotated, _ in staged_annotation_status.values())

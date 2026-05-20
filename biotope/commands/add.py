@@ -432,6 +432,7 @@ def _bake_directory(
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
+    _dedupe_file_objects_covered_by_filesets(metadata_dict, abs_dir, biotope_root)
     _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root)
 
     target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -464,6 +465,50 @@ def _build_minimal_directory_metadata(
     for file_path in _iter_directory_files(abs_dir):
         metadata["distribution"].append(make_file_object(file_path, biotope_root))
     return metadata
+
+
+def _dedupe_file_objects_covered_by_filesets(
+    metadata_dict: dict[str, Any],
+    abs_dir: Path,
+    biotope_root: Path,
+) -> None:
+    """Drop baker FileObjects whose contentUrl is already covered by a FileSet glob.
+
+    Baker emits both a FileSet (with `includes` glob) and a FileObject per
+    physical file. RecordSet field sources only reference the FileSet, so the
+    per-file FileObjects are redundant. Keep FileObjects only when they are
+    genuinely standalone (not glob-covered).
+    """
+    distributions = metadata_dict.get("distribution", []) or []
+    fileset_covered: set[Path] = set()
+    for distribution in distributions:
+        if distribution.get("@type") != "cr:FileSet":
+            continue
+        includes = distribution.get("includes")
+        patterns = [includes] if isinstance(includes, str) else list(includes or [])
+        for pattern in patterns:
+            for candidate in abs_dir.glob(pattern):
+                if candidate.is_file():
+                    fileset_covered.add(candidate.resolve())
+
+    if not fileset_covered:
+        return
+
+    deduped: list[dict[str, Any]] = []
+    for distribution in distributions:
+        if distribution.get("@type") != FILE_OBJECT_TYPE:
+            deduped.append(distribution)
+            continue
+        content_url = distribution.get("contentUrl")
+        if not content_url:
+            deduped.append(distribution)
+            continue
+        resolved = _resolve_distribution_path(content_url, abs_dir, biotope_root)
+        if resolved is not None and resolved.resolve() in fileset_covered:
+            continue
+        deduped.append(distribution)
+
+    metadata_dict["distribution"] = deduped
 
 
 def _append_uncovered_file_objects(

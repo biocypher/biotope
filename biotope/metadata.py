@@ -179,6 +179,38 @@ def make_file_object(
     }
 
 
+@dataclass(frozen=True)
+class DatasetStats:
+    """Structural counts derived from one Croissant Dataset JSON-LD."""
+
+    record_sets: int
+    file_sets: int
+    file_objects: int
+    record_set_details: tuple[tuple[str, int], ...]  # (name, field_count) per RecordSet
+
+
+def summarize_metadata(metadata: dict[str, Any]) -> DatasetStats:
+    """Count RecordSets, FileSets, FileObjects, and per-RecordSet field counts."""
+    record_sets = metadata.get("recordSet", []) or []
+    distributions = metadata.get("distribution", []) or []
+
+    file_set_count = sum(1 for d in distributions if d.get("@type") == "cr:FileSet")
+    file_object_count = sum(1 for d in distributions if d.get("@type") == FILE_OBJECT_TYPE)
+
+    details: list[tuple[str, int]] = []
+    for record_set in record_sets:
+        name = record_set.get("name") or record_set.get("@id") or "?"
+        fields = record_set.get("field", []) or []
+        details.append((str(name), len(fields)))
+
+    return DatasetStats(
+        record_sets=len(record_sets),
+        file_sets=file_set_count,
+        file_objects=file_object_count,
+        record_set_details=tuple(details),
+    )
+
+
 def parse_key_value_pairs(pairs: tuple[str, ...], option_name: str) -> dict[str, str]:
     """Parse repeated KEY=VALUE CLI options into a dict."""
     parsed: dict[str, str] = {}
