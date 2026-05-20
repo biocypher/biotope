@@ -82,7 +82,7 @@ def test_get_command_full_workflow(biotope_project, sample_data_file):
         with open(metadata_files[0]) as f:
             metadata = json.load(f)
         
-        assert metadata["@type"] == "Dataset"
+        assert metadata["@type"] == "sc:Dataset"
         assert "sample_data" in metadata["name"]
         assert len(metadata["distribution"]) == 1
         assert metadata["distribution"][0]["name"] == "sample_data.csv"

@@ -74,7 +74,7 @@ def merge_metadata(dynamic_metadata: dict[str, Any]) -> dict[str, Any]:
     """Merge dynamic metadata with the standard Croissant skeleton."""
     metadata = {
         "@context": get_standard_context(),
-        "@type": "Dataset",
+        "@type": "sc:Dataset",
     }
     metadata.update(dynamic_metadata)
     return metadata

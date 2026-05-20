@@ -85,7 +85,7 @@ def _validate_metadata_files(biotope_root: Path) -> bool:
                 metadata = json.load(f)
             
             # Basic validation - check required fields
-            if not metadata.get("@type") == "Dataset":
+            if metadata.get("@type") not in {"Dataset", "sc:Dataset"}:
                 click.echo(f"⚠️  Warning: {dataset_file.name} missing @type: Dataset")
             
             if not metadata.get("name"):

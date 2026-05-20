@@ -573,7 +573,7 @@ def edit(
     # Update metadata with new values while preserving any existing fields
     new_metadata = {
         "@context": get_standard_context(),  # Use the standard context
-        "@type": "Dataset",
+        "@type": "sc:Dataset",
         "name": dataset_name,
         "description": description,
         "url": data_source,
@@ -1078,7 +1078,7 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     # Update metadata with new values while preserving any existing fields
     new_metadata = {
         "@context": get_standard_context(),  # Use the standard context
-        "@type": "Dataset",
+        "@type": "sc:Dataset",
         "name": dataset_name,
         "description": description,
         "url": data_source,
