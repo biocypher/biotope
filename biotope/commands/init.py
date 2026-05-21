@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import sys
+from importlib.metadata import PackageNotFoundError, version as _installed_version
 from pathlib import Path
 
 import click
@@ -32,6 +33,47 @@ PURPOSE_PROMPT = (
 console = Console()
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
+
+# Biocypher floor mirrors biotope's own runtime pin — `head_ontology: null`
+# headless support landed in 0.14.0 (biocypher PR #523) and the generated
+# `build/create_knowledge_graph.py` depends on it.
+BIOCYPHER_REQ = "biocypher>=0.14.0,<1"
+
+
+def _installed_biotope_version() -> str:
+    """Best-effort: the running biotope's version, or a sane floor on miss."""
+    try:
+        return _installed_version("biotope")
+    except PackageNotFoundError:
+        return "0.5.0"
+
+
+def _emit_pyproject(name: str, purpose: str) -> str:
+    """Build the starter ``pyproject.toml`` for a new biotope project.
+
+    Floor-only pin on biotope (per project policy): the project resolves to
+    whatever biotope is on the index at install time, so projects stay
+    current without explicit bumps. The user can tighten to ``==`` later if
+    they want reproducibility.
+    """
+    biotope_floor = _installed_biotope_version()
+    desc = (purpose or f"Biotope knowledge-graph project: {name}").replace('"', '\\"')
+    return (
+        f"[project]\n"
+        f'name = "{name}"\n'
+        f'version = "0.1.0"\n'
+        f'description = "{desc}"\n'
+        f'requires-python = ">=3.10,<3.13"\n'
+        f"dependencies = [\n"
+        f'    "biotope>={biotope_floor}",\n'
+        f'    "{BIOCYPHER_REQ}",\n'
+        f"]\n"
+        f"\n"
+        f"[build-system]\n"
+        f'requires = ["setuptools>=61"]\n'
+        f'build-backend = "setuptools.build_meta"\n'
+    )
+
 
 DEFAULT_BIOTOPE_CONFIG: dict = {
     "version": "0.1",
@@ -156,6 +198,17 @@ def init(
     if not gitignore.exists():
         gitignore.write_text("data/raw/\ndata/processed/\n__pycache__/\n*.pyc\n.venv/\n")
 
+    # A starter pyproject so the project is self-contained: each biotope
+    # project owns its dependency set and can be reproduced with
+    # `uv sync` / `pip install -e .` without relying on whichever env
+    # happened to run `biotope init`. Skip if the user already has one
+    # (e.g. they're initialising inside an existing Python project).
+    pyproject_path = project_dir / "pyproject.toml"
+    pyproject_was_written = False
+    if not pyproject_path.exists():
+        pyproject_path.write_text(_emit_pyproject(name, purpose))
+        pyproject_was_written = True
+
     if not no_git:
         try:
             subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
@@ -163,6 +216,8 @@ def init(
             click.echo(f"⚠️  git init failed: {exc}")
         else:
             scaffold_paths = [".gitignore", "AGENTS.md", ".biotope/"]
+            if pyproject_was_written:
+                scaffold_paths.append("pyproject.toml")
             if visible:
                 scaffold_paths.append(project_yaml_path.relative_to(project_dir).as_posix())
             try:
@@ -182,6 +237,14 @@ def init(
     console.print(f"   project.yaml: [dim]{project_yaml_path.relative_to(project_dir)}[/dim]")
     if purpose:
         console.print(f"   purpose: [dim]{purpose}[/dim]")
+    if pyproject_was_written:
+        console.print(
+            "   Next: [bold]cd "
+            f"{project_dir.name}[/bold] and install deps:\n"
+            "         [bold]uv sync[/bold]   (or: pip install -e .)\n"
+            "         then [bold]biotope map[/bold] to capture intent."
+        )
+    elif purpose:
         console.print(
             "   Next: add entities and relations with "
             "[bold]biotope map --entity ... --relation ...[/bold].",

@@ -30,6 +30,34 @@ def test_init_default_layout(tmp_path: Path) -> None:
     assert (root / ".biotope" / "project.yaml").is_file()
     assert (root / "AGENTS.md").is_file()
     assert (root / ".gitignore").is_file()
+    assert (root / "pyproject.toml").is_file()
+
+
+def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None:
+    """The generated pyproject must pin biotope (floor) and biocypher>=0.14."""
+    runner = CliRunner()
+    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
+    assert result.exit_code == 0, result.output
+
+    pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
+    assert 'name = "myproj"' in pyproject
+    assert "biotope>=" in pyproject
+    assert "biocypher>=0.14.0" in pyproject
+    assert "requires-python" in pyproject
+
+
+def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
+    """If the user already has a pyproject (init inside an existing project), keep it."""
+    target = tmp_path / "myproj"
+    target.mkdir()
+    user_pyproject = '[project]\nname = "user-owned"\nversion = "9.9.9"\n'
+    (target / "pyproject.toml").write_text(user_pyproject)
+
+    runner = CliRunner()
+    result = _invoke(runner, ".", "--dir", str(target), "--no-git", "--no-prompt")
+    assert result.exit_code == 0, result.output
+
+    assert (target / "pyproject.toml").read_text() == user_pyproject
 
 
 def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:
