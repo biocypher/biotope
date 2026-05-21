@@ -58,6 +58,11 @@ def _emit_pyproject(name: str, purpose: str) -> str:
     """
     biotope_floor = _installed_biotope_version()
     desc = (purpose or f"Biotope knowledge-graph project: {name}").replace('"', '\\"')
+    # Hatchling as the build backend: it doesn't auto-scan the source tree
+    # for packages, so `data/` and `mappings/` won't be mistaken for Python
+    # distributions (which is what setuptools' flat-layout discovery does).
+    # `only-include = []` produces an empty wheel — biotope projects are
+    # workspaces that declare deps, not Python distributions that ship code.
     return (
         f"[project]\n"
         f'name = "{name}"\n'
@@ -70,8 +75,11 @@ def _emit_pyproject(name: str, purpose: str) -> str:
         f"]\n"
         f"\n"
         f"[build-system]\n"
-        f'requires = ["setuptools>=61"]\n'
-        f'build-backend = "setuptools.build_meta"\n'
+        f'requires = ["hatchling"]\n'
+        f'build-backend = "hatchling.build"\n'
+        f"\n"
+        f"[tool.hatch.build.targets.wheel]\n"
+        f"bypass-selection = true\n"
     )
 
 

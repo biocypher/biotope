@@ -46,6 +46,22 @@ def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None
     assert "requires-python" in pyproject
 
 
+def test_emitted_pyproject_uses_hatchling_and_skips_package_discovery(
+    tmp_path: Path,
+) -> None:
+    """Hatchling is the build backend (no setuptools flat-layout footgun on
+    `data/`/`mappings/`) and the wheel target ships nothing — biotope projects
+    are workspaces that declare deps, not Python distributions."""
+    runner = CliRunner()
+    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
+    assert result.exit_code == 0, result.output
+
+    pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
+    assert 'build-backend = "hatchling.build"' in pyproject
+    assert "[tool.hatch.build.targets.wheel]" in pyproject
+    assert "bypass-selection = true" in pyproject
+
+
 def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
     """If the user already has a pyproject (init inside an existing project), keep it."""
     target = tmp_path / "myproj"
