@@ -253,17 +253,50 @@ def _load_or_init_draft(
 
 
 def _sync_slots_from_intent(draft: dict[str, Any], project: Project) -> dict[str, Any]:
-    """Ensure every entity/relation declared in project.yaml has a slot in the draft."""
-    entities = dict(draft.get("entities") or {})
-    for raw in project.required_entities:
-        key = to_snake_case(raw)
-        entities.setdefault(key, {"scan": "row"})
-    draft["entities"] = entities
+    """Two-way sync the draft against ``project.yaml``'s required lists.
 
+    * Add a slot for any entity/relation newly declared in intent.
+    * Drop slots whose intent has been removed.
+    * Cascade: when an entity is removed, *clear* (but don't delete) any
+      relation endpoints that referenced it — the relation slot stays
+      because intent still wants it, just marked unresolved so the user
+      sees it needs re-pointing.
+    """
+    target_entity_keys = {to_snake_case(raw) for raw in project.required_entities}
+    target_relation_keys = {to_snake_case(raw) for raw in project.required_relations}
+
+    entities = dict(draft.get("entities") or {})
     relations = dict(draft.get("relations") or {})
-    for raw in project.required_relations:
-        key = to_snake_case(raw)
+
+    removed_entities = [k for k in entities if k not in target_entity_keys]
+    for key in removed_entities:
+        del entities[key]
+        console.print(f"[yellow]Removed entity slot:[/yellow] {key}")
+
+    for key in [k for k in relations if k not in target_relation_keys]:
+        del relations[key]
+        console.print(f"[yellow]Removed relation slot:[/yellow] {key}")
+
+    # Cascade: clear endpoints of *surviving* relations that pointed at a removed entity.
+    for rel_key, rel in relations.items():
+        cleared: list[str] = []
+        for side in ("source", "target"):
+            side_data = rel.get(side) or {}
+            if side_data.get("entity") in removed_entities:
+                rel.pop(side, None)
+                cleared.append(side)
+        if cleared:
+            console.print(
+                f"[yellow]Cleared {', '.join(cleared)} of relation[/yellow] {rel_key} — "
+                "referenced a removed entity; re-point it from the menu."
+            )
+
+    for key in target_entity_keys:
+        entities.setdefault(key, {"scan": "row"})
+    for key in target_relation_keys:
         relations.setdefault(key, {"scan": "row"})
+
+    draft["entities"] = entities
     draft["relations"] = relations
     return draft
 
