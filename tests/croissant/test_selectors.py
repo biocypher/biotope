@@ -58,6 +58,12 @@ def test_bare_item_returns_whole_element() -> None:
     assert resolve_selector(sel, ctx) == "A"
 
 
+def test_as_curie_refuses_array_value() -> None:
+    """Stringifying a list into a CURIE would produce garbage like `ensembl:['A','B']`."""
+    sel = Selector(field="x", transform="as_curie", args={"prefix": "ensembl"})
+    assert resolve_selector(sel, _ctx({"x": ["A", "B"]})) is None
+
+
 def test_unknown_transform_raises() -> None:
     sel = Selector(field="x", transform="not_a_thing")
     with pytest.raises(KeyError):

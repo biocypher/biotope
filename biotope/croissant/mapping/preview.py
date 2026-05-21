@@ -89,7 +89,10 @@ class MappingPreview:
     entities: list[EntityProjection] = field(default_factory=list)
     relations: list[RelationProjection] = field(default_factory=list)
     sample_node_tuples: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
-    sample_edge_tuples: list[tuple[str, str, str, str, dict[str, Any]]] = field(default_factory=list)
+    # BioCypher 5-tuple: (relationship_id_or_None, source_id, target_id, label, properties).
+    sample_edge_tuples: list[tuple[str | None, str, str, str, dict[str, Any]]] = field(
+        default_factory=list
+    )
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -102,7 +105,7 @@ class MappingPreview:
             },
             "samples": {
                 "nodes": [list(t[:2]) + [t[2]] for t in self.sample_node_tuples],
-                "edges": [list(t[:4]) + [t[4]] for t in self.sample_edge_tuples],
+                "edges": [list(t) for t in self.sample_edge_tuples],
             },
         }
 
@@ -156,6 +159,7 @@ def _validate_against_dataset(
         field_index = {f.name: f for f in rs.fields}
         _validate_scan(entity, path, field_index, preview)
         _validate_selector(entity.id, f"{path}.id", field_index, mapping.ids, preview)
+        _validate_id_not_array(entity, f"{path}.id", field_index, mapping.ids, preview)
         for prop_name, prop in entity.properties.items():
             _validate_selector(prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview)
 
@@ -199,6 +203,65 @@ def _validate_against_dataset(
             _validate_selector(
                 prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview
             )
+        if relation.source is not None and relation.target is not None:
+            src_field = _selector_field(relation.source.as_selector(), mapping.ids)
+            tgt_field = _selector_field(relation.target.as_selector(), mapping.ids)
+            if src_field is not None and src_field == tgt_field:
+                preview.findings.append(
+                    ValidationFinding(
+                        "warning",
+                        path,
+                        f"source and target resolve to the same field {src_field!r} — "
+                        "edges will be self-loops",
+                    )
+                )
+
+
+def _validate_id_not_array(
+    entity: EntityMapping,
+    path: str,
+    field_index: dict[str, Any],
+    ids: dict[str, Selector],
+    preview: MappingPreview,
+) -> None:
+    """Refuse an `id` selector that resolves to an array-typed field under `scan: row`.
+
+    Array-valued IDs produce malformed literal strings like ``"['CHEMBL748', ...]"``
+    when stringified. The fix is `scan: {explode: <field>}` with `id: {field: "$item"}`
+    (or pick a scalar id field).
+    """
+    selector = entity.id
+    if selector is None:
+        return
+    field_name = _selector_field(selector, ids)
+    if field_name is None or field_name.startswith("$item"):
+        return
+    info = field_index.get(field_name)
+    if info is None:
+        return
+    if info.kind == FieldKind.ARRAY.value and not isinstance(entity.scan, ExplodeScan):
+        preview.findings.append(
+            ValidationFinding(
+                "error",
+                path,
+                f"id field {field_name!r} is array-typed; either set "
+                f"`scan: {{explode: {field_name}}}` and `id: {{field: \"$item\"}}`, "
+                "or pick a scalar id field",
+            )
+        )
+
+
+def _selector_field(selector: Selector, ids: dict[str, Selector]) -> str | None:
+    """Resolve a selector to the field it ultimately reads from, following `use:`."""
+    seen: set[str] = set()
+    cur = selector
+    while cur is not None:
+        if cur.use is not None and cur.use in ids and cur.use not in seen:
+            seen.add(cur.use)
+            cur = ids[cur.use]
+            continue
+        return cur.field
+    return None
 
 
 def _validate_scan(

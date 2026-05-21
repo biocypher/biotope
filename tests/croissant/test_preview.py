@@ -76,6 +76,76 @@ def test_resolved_entity_projected_with_namespace(minimal_croissant: Path) -> No
     assert "symbol" in ent.properties
 
 
+def test_preview_rejects_array_field_as_id_under_row_scan(tmp_path) -> None:
+    """An array-typed field used as `id` with `scan: row` should produce an error finding."""
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {
+          "@type": "sc:Dataset",
+          "name": "ot",
+          "recordSet": [{
+            "@id": "drug", "name": "drug",
+            "field": [
+              {"name": "chemblIds", "dataType": "sc:Text", "repeated": true},
+              {"name": "name", "dataType": "sc:Text"}
+            ]
+          }]
+        }
+        """
+    )
+    from biotope.croissant.spec import load_from_path
+
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "entities": {
+                "drug": {"record_set": "drug", "id": "chemblIds", "properties": {"name": "name"}}
+            },
+        }
+    )
+    result = preview_mapping(mapping, load_from_path(croissant_path))
+    errors = [f for f in result.findings if f.severity == "error"]
+    assert any("array-typed" in f.message for f in errors), [
+        (f.severity, f.path, f.message) for f in result.findings
+    ]
+
+
+def test_preview_warns_when_source_equals_target_field(tmp_path) -> None:
+    """A relation whose source and target read the same field should warn (self-loops)."""
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {
+          "@type": "sc:Dataset",
+          "name": "ot",
+          "recordSet": [{
+            "@id": "rs", "name": "rs",
+            "field": [{"name": "id", "dataType": "sc:Text"}]
+          }]
+        }
+        """
+    )
+    from biotope.croissant.spec import load_from_path
+
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "entities": {"e": {"record_set": "rs", "id": "id"}},
+            "relations": {
+                "self_loop": {
+                    "record_set": "rs",
+                    "source": {"entity": "e", "field": "id"},
+                    "target": {"entity": "e", "field": "id"},
+                }
+            },
+        }
+    )
+    result = preview_mapping(mapping, load_from_path(croissant_path))
+    warnings = [f for f in result.findings if f.severity == "warning"]
+    assert any("self-loops" in f.message for f in warnings)
+
+
 def test_preview_emits_sample_tuples_when_data_available(
     minimal_croissant: Path,
     gene_csv: Path,

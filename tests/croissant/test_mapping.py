@@ -197,9 +197,138 @@ def test_compile_emits_edge_tuples(two_recordsets_croissant: Path, two_recordset
     with AcquisitionContext(dataset, datasets_location=two_recordsets_dir) as ctx:
         adapter = compile_mapping(mapping, ctx)
         edges = list(adapter.get_edges())
-    assert {e[0] for e in edges} == {"G1", "G2"}
-    assert all(e[2] == "gene_in_disease" for e in edges)
+    # BioCypher edge tuple: (rel_id, source_id, target_id, label, properties).
+    assert all(e[0] is None for e in edges)
+    assert {e[1] for e in edges} == {"G1", "G2"}
+    assert all(e[3] == "gene_in_disease" for e in edges)
     assert all("score" in e[4] for e in edges)
+
+
+def test_edge_tuple_uses_biocypher_5_tuple_shape(
+    two_recordsets_croissant: Path, two_recordsets_dir: Path
+) -> None:
+    """Regression: edges must be (rel_id, src, tgt, label, props), not (src, tgt, label, label, props)."""
+    dataset = load_from_path(two_recordsets_croissant)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(two_recordsets_croissant),
+            "entities": {
+                "gene": {"record_set": "genes", "id": "gene_id"},
+                "disease": {"record_set": "gene_disease", "id": "disease_id"},
+            },
+            "relations": {
+                "gene_in_disease": {
+                    "record_set": "gene_disease",
+                    "source": {"entity": "gene", "field": "gene_id"},
+                    "target": {"entity": "disease", "field": "disease_id"},
+                }
+            },
+        }
+    )
+    with AcquisitionContext(dataset, datasets_location=two_recordsets_dir) as ctx:
+        adapter = compile_mapping(mapping, ctx)
+        edges = list(adapter.get_edges())
+    assert edges, "expected at least one edge"
+    for tup in edges:
+        assert len(tup) == 5, tup
+        rel_id, src, tgt, label, props = tup
+        assert rel_id is None, "relationship_id should be None in v1"
+        assert src in {"G1", "G2"}
+        assert tgt in {"D1", "D2"}
+        assert label == "gene_in_disease", f"label position is wrong: {tup}"
+        assert isinstance(props, dict)
+
+
+def test_explode_with_item_id_emits_one_node_per_array_element(tmp_path: Path) -> None:
+    """Regression: drug entity with `scan: {explode: chemblIds}` + `id: $item` works."""
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"ot",
+         "distribution":[{"@id":"moa-fileset","@type":"cr:FileSet",
+                          "includes":"moa.csv","encodingFormat":"text/csv"}],
+         "recordSet":[{"@id":"moa","name":"moa",
+           "field":[
+             {"name":"actionType","dataType":"sc:Text"},
+             {"name":"chemblIds","dataType":"sc:Text","repeated":true,
+              "source":{"fileSet":{"@id":"moa-fileset"}}}
+           ]}]}
+        """
+    )
+    # NOTE: CSV doesn't natively store array columns; we use the runtime path that
+    # iterates a Python list directly.
+    from biotope.croissant.acquisition.context import RecordRow
+    from biotope.croissant.mapping.compile import iter_entity_tuples
+    from biotope.croissant.spec import load_from_path
+
+    dataset = load_from_path(croissant_path)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "entities": {
+                "drug": {
+                    "record_set": "moa",
+                    "scan": {"explode": "chemblIds"},
+                    "id": {
+                        "field": "$item",
+                        "transform": "as_curie",
+                        "args": {"prefix": "chembl"},
+                    },
+                }
+            },
+        }
+    )
+
+    # Build a synthetic context that yields one row with two array elements
+    # without needing actual data files.
+    class _StubCtx:
+        def stream(self, record_set, fields=None, where=None):
+            yield RecordRow(
+                record_set="moa",
+                values={"chemblIds": ["CHEMBL748", "CHEMBL1420"], "actionType": "ACTIVATOR"},
+            )
+
+    nodes = list(iter_entity_tuples(mapping, _StubCtx()))
+    assert {n[0] for n in nodes} == {"chembl:CHEMBL748", "chembl:CHEMBL1420"}
+    assert all(n[1] == "drug" for n in nodes)
+
+
+def test_explode_with_raw_field_id_drops_rows_under_scalar_guard(tmp_path: Path) -> None:
+    """The OP's bug: explode scan + `id: chemblIds` (raw field) yields lists → all dropped."""
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"ot",
+         "recordSet":[{"@id":"moa","name":"moa",
+           "field":[
+             {"name":"chemblIds","dataType":"sc:Text","repeated":true}
+           ]}]}
+        """
+    )
+    from biotope.croissant.acquisition.context import RecordRow
+    from biotope.croissant.mapping.compile import iter_entity_tuples
+    from biotope.croissant.spec import load_from_path
+
+    load_from_path(croissant_path)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "entities": {
+                "drug": {
+                    "record_set": "moa",
+                    "scan": {"explode": "chemblIds"},
+                    "id": "chemblIds",  # wrong: reads the whole array from the base row
+                }
+            },
+        }
+    )
+
+    class _StubCtx:
+        def stream(self, record_set, fields=None, where=None):
+            yield RecordRow(record_set="moa", values={"chemblIds": ["A", "B"]})
+
+    nodes = list(iter_entity_tuples(mapping, _StubCtx()))
+    assert nodes == [], "non-scalar ids must be dropped, not emitted as 'list literals'"
 
 
 def test_named_id_via_use(minimal_croissant: Path, gene_csv: Path) -> None:

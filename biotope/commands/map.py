@@ -583,9 +583,11 @@ def _render_preview_rich(mapping: Mapping, result) -> None:
             for tup in result.sample_node_tuples:
                 lines.append(f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r})")
         if result.sample_edge_tuples:
-            lines.append("[bold]Sample edge tuples:[/bold]")
+            lines.append("[bold]Sample edge tuples (rel_id, source, target, label, props):[/bold]")
             for tup in result.sample_edge_tuples:
-                lines.append(f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r}, {tup[3]!r}, {tup[4]!r})")
+                lines.append(
+                    f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r}, {tup[3]!r}, {tup[4]!r})"
+                )
         console.print(Panel("\n".join(lines), title="Samples", border_style="dim", expand=False))
 
 

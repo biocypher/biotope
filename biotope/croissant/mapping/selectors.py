@@ -102,6 +102,11 @@ def _passthrough(value: Any, args: dict[str, Any]) -> Any:
 def _as_curie(value: Any, args: dict[str, Any]) -> str | None:
     if value is None or value == "":
         return None
+    if isinstance(value, list | tuple | dict):
+        # Refuse to build a CURIE from a structured value — produces garbage strings
+        # like "ensembl:['x','y']". The mapping needs `scan: {explode: <field>}`
+        # to project the array into one row per element.
+        return None
     prefix = args.get("prefix")
     if prefix is None:
         msg = "as_curie requires args.prefix"

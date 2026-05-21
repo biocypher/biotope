@@ -525,12 +525,28 @@ def _edit_entity_slot(
         existing=entity.get("id"),
         propose_promotion=True,
         draft=draft,
+        scan=entity.get("scan"),
     )
 
     entity["properties"] = _pick_properties(rs, entity.get("properties") or {})
 
     entities[key] = entity
     draft["entities"] = entities
+
+
+def _id_field_options(rs, explode_field: str | None) -> list[str]:
+    """Field options for an id picker. Prepends `$item` / `$item.<sub>` under explode."""
+    options: list[str] = []
+    if explode_field:
+        # Find the exploded field's metadata to suggest sub-fields if it's a struct array.
+        explode_info = next((f for f in rs.fields if f.name == explode_field), None)
+        if explode_info and explode_info.sub_fields:
+            options.append("$item")
+            options.extend(f"$item.{sub}" for sub in explode_info.sub_fields)
+        else:
+            options.append("$item")
+    options.extend(f.name for f in rs.fields)
+    return options
 
 
 def _pick_record_set(inspection: DatasetInspection, current: str | None) -> str | None:
@@ -590,7 +606,15 @@ def _pick_id_selector(
     existing: Any,
     propose_promotion: bool,
     draft: dict[str, Any],
+    scan: Any = None,
 ) -> dict[str, Any]:
+    """Prompt for an id selector.
+
+    When ``scan`` is ``{explode: <field>}``, this offers ``$item`` /
+    ``$item.<sub_field>`` choices instead of raw field names. If the user
+    picks the exploded field by name, it is auto-rewritten to ``$item``.
+    """
+    explode_field = scan.get("explode") if isinstance(scan, dict) else None
     while True:
         actions = ["field"]
         if ids:
@@ -601,17 +625,30 @@ def _pick_id_selector(
             "[dim]ID selector actions:[/dim] "
             f"{', '.join(actions)} (current: {existing or 'unset'})"
         )
+        if explode_field:
+            console.print(
+                f"[dim]This entity uses `scan: {{explode: {explode_field}}}` — "
+                "the id should resolve to the current element (`$item`) or a "
+                f"subfield of `$item`, not to `{explode_field}` itself.[/dim]"
+            )
         action = Prompt.ask(
             "Choose action",
             choices=actions,
             default="use" if isinstance(existing, dict) and existing.get("use") else "field",
         )
         if action == "field":
+            options = _id_field_options(rs, explode_field)
             field = _pick_from(
-                [f.name for f in rs.fields],
+                options,
                 prompt="ID field",
                 default=(existing or {}).get("field"),
             )
+            # If the user picked the exploded field by raw name, rewrite to $item.
+            if explode_field and field == explode_field:
+                console.print(
+                    f"[yellow]→ rewriting `{field}` to `$item` (explode-aware).[/yellow]"
+                )
+                field = "$item"
             transform = Prompt.ask(
                 "Transform", choices=["passthrough", "as_curie"], default="passthrough"
             )
@@ -636,9 +673,8 @@ def _pick_id_selector(
                 args["prefix"] = prefix.strip()
             return {"transform": "hash_id", "args": args}
         if action == "promote":
-            # Build a draft selector first, then store it under ids:
             sub = _pick_id_selector(
-                rs, ids, existing=existing, propose_promotion=False, draft=draft
+                rs, ids, existing=existing, propose_promotion=False, draft=draft, scan=scan,
             )
             name = Prompt.ask("Name for the new reusable id (snake_case)")
             ids_block = dict(draft.get("ids") or {})
@@ -701,6 +737,7 @@ def _edit_relation_slot(
             existing=relation.get(side),
             label=side,
             inspection=inspection,
+            scan=relation.get("scan"),
         )
         # Re-read project after potential inline entity creation
         project = Project.load(project_path)
@@ -720,6 +757,7 @@ def _pick_endpoint(
     existing: Any,
     label: str,
     inspection: DatasetInspection,
+    scan: Any = None,
 ) -> dict[str, Any]:
     entities = list((draft.get("entities") or {}).keys())
     console.print(f"[dim]Endpoint `{label}` — pick referenced entity[/dim]")
@@ -751,6 +789,7 @@ def _pick_endpoint(
         existing=existing,
         propose_promotion=True,
         draft=draft,
+        scan=scan,
     )
     selector["entity"] = entity_ref
     # Reorder so `entity` comes first in the YAML.
