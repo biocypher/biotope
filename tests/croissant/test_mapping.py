@@ -376,6 +376,44 @@ def test_multi_axis_explode_cartesian_product(tmp_path: Path) -> None:
     assert all(e[3] == "drug_has_target" and e[0] is None for e in edges)
 
 
+def test_multi_axis_explode_excludes_axis_refs_from_projection(tmp_path: Path) -> None:
+    """`$<axis>` selectors must NOT end up in the DuckDB column projection.
+
+    Regression for the `Binder Error: Referenced column "$chembl" not found` bug.
+    """
+    from biotope.croissant.mapping.compile import _relation_fields
+
+    mapping = Mapping.model_validate(
+        {
+            "croissant": "x.json",
+            "entities": {"e": {"record_set": "rs", "id": "id"}},
+            "relations": {
+                "r": {
+                    "record_set": "rs",
+                    "scan": {"explode": {"chembl": "chemblIds", "target": "targets"}},
+                    "source": {
+                        "entity": "e",
+                        "field": "$chembl",
+                        "transform": "as_curie",
+                        "args": {"prefix": "chembl"},
+                    },
+                    "target": {
+                        "entity": "e",
+                        "field": "$target",
+                        "transform": "as_curie",
+                        "args": {"prefix": "ensembl"},
+                    },
+                }
+            },
+        }
+    )
+    projected = _relation_fields(mapping.relations["r"]) or []
+    # Must include the array fields themselves (we need to read them) but never
+    # the `$<axis>` placeholders.
+    assert "chemblIds" in projected and "targets" in projected
+    assert not any(p.startswith("$") for p in projected), projected
+
+
 def test_multi_axis_explode_rejects_unknown_axis_in_selector(tmp_path: Path) -> None:
     """Selectors that reference a `$<axis>` not declared in the scan must fail validation."""
     from pydantic import ValidationError

@@ -146,14 +146,15 @@ def _relation_fields(relation: RelationMapping) -> list[str] | None:
 
 
 def _add_selector_fields(selector: Selector | None, out: set[str]) -> None:
+    """Collect base-row fields referenced by ``selector`` (skip explode-axis refs)."""
     if selector is None:
         return
     if selector.transform == "hash_id":
         for f in selector.args.get("fields", []):
-            if isinstance(f, str) and not f.startswith("$item"):
+            if isinstance(f, str) and not f.startswith("$"):
                 out.add(f)
         return
-    if selector.field is not None and not selector.field.startswith("$item"):
+    if selector.field is not None and not selector.field.startswith("$"):
         out.add(selector.field)
 
 

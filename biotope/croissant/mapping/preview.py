@@ -234,7 +234,9 @@ def _validate_id_not_array(
     if selector is None:
         return
     field_name = _selector_field(selector, ids)
-    if field_name is None or field_name.startswith("$item"):
+    # `$<axis>` selectors resolve to an exploded element, not the raw array field
+    # on the row — skip the array-id check for them.
+    if field_name is None or field_name.startswith("$"):
         return
     info = field_index.get(field_name)
     if info is None:
@@ -308,7 +310,7 @@ def _validate_selector(
         )
     if (
         selector.field is not None
-        and not selector.field.startswith("$item")
+        and not selector.field.startswith("$")
         and selector.field not in field_index
     ):
         preview.findings.append(

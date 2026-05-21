@@ -111,6 +111,61 @@ def test_preview_rejects_array_field_as_id_under_row_scan(tmp_path) -> None:
     ]
 
 
+def test_preview_does_not_warn_on_axis_selectors(tmp_path) -> None:
+    """`$<axis>` references must not be flagged as 'field not declared on record set'."""
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {
+          "@type":"sc:Dataset","name":"ot",
+          "recordSet":[
+            {"@id":"drug","name":"drug","field":[{"name":"chembl","dataType":"sc:Text"}]},
+            {"@id":"gene","name":"gene","field":[{"name":"ens","dataType":"sc:Text"}]},
+            {"@id":"moa","name":"moa","field":[
+              {"name":"chemblIds","dataType":"sc:Text","repeated":true},
+              {"name":"targets","dataType":"sc:Text","repeated":true}
+            ]}
+          ]
+        }
+        """
+    )
+    from biotope.croissant.spec import load_from_path
+
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "entities": {
+                "drug": {"record_set": "drug", "id": "chembl"},
+                "gene": {"record_set": "gene", "id": "ens"},
+            },
+            "relations": {
+                "drug_has_target": {
+                    "record_set": "moa",
+                    "scan": {"explode": {"chembl": "chemblIds", "target": "targets"}},
+                    "source": {
+                        "entity": "drug",
+                        "field": "$chembl",
+                        "transform": "as_curie",
+                        "args": {"prefix": "chembl"},
+                    },
+                    "target": {
+                        "entity": "gene",
+                        "field": "$target",
+                        "transform": "as_curie",
+                        "args": {"prefix": "ensembl"},
+                    },
+                }
+            },
+        }
+    )
+    result = preview_mapping(mapping, load_from_path(croissant_path))
+    bad = [
+        f for f in result.findings
+        if "$" in f.message and "not declared on the chosen record set" in f.message
+    ]
+    assert bad == [], f"axis selectors falsely flagged: {bad}"
+
+
 def test_preview_warns_when_source_equals_target_field(tmp_path) -> None:
     """A relation whose source and target read the same field should warn (self-loops)."""
     croissant_path = tmp_path / "ot.jsonld"
