@@ -133,12 +133,64 @@ class RowScan(_Model):
 
 
 class ExplodeScan(_Model):
-    """Yield one record per element of an array-typed field on each base row."""
+    """Yield one record per element (or Cartesian-product combination) of array-typed fields.
 
-    explode: str
+    Single-field form (string): the field's elements are projected under the
+    default axis name ``item``; selectors reference them as ``$item`` (or
+    ``$item.<subfield>`` when the array is of structs).
+
+    Multi-field form (dict): each axis ``<name>: <field>`` becomes accessible
+    via ``$<name>``; the runtime yields one context per element of the
+    Cartesian product across all axes.
+    """
+
+    axes: dict[str, str]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "explode" in data:
+            explode = data["explode"]
+            if isinstance(explode, str):
+                return {"axes": {"item": explode}}
+            if isinstance(explode, dict):
+                # axis_name -> field_name
+                if not explode:
+                    msg = "scan.explode dict must not be empty"
+                    raise ValueError(msg)
+                for axis_name, field_name in explode.items():
+                    if not _is_axis_name(axis_name):
+                        raise ValueError(
+                            f"scan.explode axis name {axis_name!r} must be snake_case "
+                            "(no leading $; reserved name `row` cannot be reused)"
+                        )
+                    if not isinstance(field_name, str):
+                        raise ValueError(
+                            f"scan.explode.{axis_name} must map to a field name (str), "
+                            f"got {type(field_name).__name__}"
+                        )
+                return {"axes": dict(explode)}
+            raise ValueError(
+                f"scan.explode must be a field name or a {{axis: field, ...}} dict; "
+                f"got {type(explode).__name__}"
+            )
+        return data
+
+    @property
+    def explode(self) -> str | dict[str, str]:
+        """YAML-side projection: a string for single-axis, a dict for multi-axis."""
+        if list(self.axes.keys()) == ["item"]:
+            return self.axes["item"]
+        return dict(self.axes)
 
 
 Scan = RowScan | ExplodeScan
+
+
+def _is_axis_name(name: str) -> bool:
+    if name == "row":
+        return False
+    return bool(_SNAKE_RE.match(name))
 
 
 def _coerce_scan(value: Any) -> Scan:
@@ -151,7 +203,7 @@ def _coerce_scan(value: Any) -> Scan:
             return ExplodeScan.model_validate(value)
         if value == {} or value.get("kind") == "row":
             return RowScan()
-    msg = f"Unsupported scan {value!r}; expected 'row' or {{explode: <field>}}"
+    msg = f"Unsupported scan {value!r}; expected 'row' or {{explode: <field-or-dict>}}"
     raise ValueError(msg)
 
 
@@ -333,22 +385,35 @@ class Mapping(_Model):
         others: Any,
         where: str | None,
     ) -> None:
-        if where is not None and "$item" in where:
-            msg = f"{path}.where: `$item` is not valid inside `where`"
-            raise ValueError(msg)
-        if isinstance(scan, ExplodeScan):
-            return  # $item is allowed inside selectors when exploding
+        if where is not None and "$" in where:
+            # Any explode-axis reference is invalid in `where` — `where` runs on the
+            # base row before explode.
+            if "$item" in where:
+                raise ValueError(f"{path}.where: `$item` is not valid inside `where`")
+            for token in re.findall(r"\$[a-z][a-z0-9_]*", where):
+                raise ValueError(
+                    f"{path}.where: explode-axis reference {token!r} is not valid inside `where` "
+                    "(where runs on the base row before explode)"
+                )
+        axes = scan.axes if isinstance(scan, ExplodeScan) else {}
         candidates: list[Selector] = []
         if primary is not None:
             candidates.append(primary)
         candidates.extend(others)
         for sel in candidates:
-            if sel.field is not None and sel.field.startswith("$item"):
-                msg = (
-                    f"{path}: `$item` selectors are only valid when `scan: explode`; "
+            if sel.field is None or not sel.field.startswith("$"):
+                continue
+            axis = _axis_name_from_field(sel.field)
+            if not axes:
+                raise ValueError(
+                    f"{path}: `${axis}` selectors are only valid when `scan: explode`; "
                     f"got `field: {sel.field!r}` with `scan: row`"
                 )
-                raise ValueError(msg)
+            if axis not in axes:
+                raise ValueError(
+                    f"{path}: `${axis}` is not an axis of this scan; "
+                    f"declared axes: {sorted(axes)}"
+                )
 
     # --- resolution helpers ---------------------------------------------------
 
@@ -381,6 +446,12 @@ _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def _is_snake_case(name: str) -> bool:
     return bool(_SNAKE_RE.match(name))
+
+
+def _axis_name_from_field(field: str) -> str:
+    """Extract the axis name from a `$<axis>` or `$<axis>.<sub>` selector field."""
+    body = field[1:].split(".", 1)[0]
+    return body
 
 
 def to_snake_case(text: str) -> str:

@@ -47,7 +47,15 @@ def test_scan_coercion_accepts_row_and_explode() -> None:
     assert isinstance(e.scan, RowScan)
     e2 = EntityMapping.model_validate({"scan": {"explode": "diseases"}})
     assert isinstance(e2.scan, ExplodeScan)
-    assert e2.scan.explode == "diseases"
+    assert e2.scan.axes == {"item": "diseases"}
+    assert e2.scan.explode == "diseases"  # single-axis projects as string
+
+    e3 = EntityMapping.model_validate(
+        {"scan": {"explode": {"drug": "chemblIds", "target": "targets"}}}
+    )
+    assert isinstance(e3.scan, ExplodeScan)
+    assert e3.scan.axes == {"drug": "chemblIds", "target": "targets"}
+    assert e3.scan.explode == {"drug": "chemblIds", "target": "targets"}
 
 
 def test_legacy_nodes_edges_are_rejected() -> None:
@@ -291,6 +299,126 @@ def test_explode_with_item_id_emits_one_node_per_array_element(tmp_path: Path) -
     nodes = list(iter_entity_tuples(mapping, _StubCtx()))
     assert {n[0] for n in nodes} == {"chembl:CHEMBL748", "chembl:CHEMBL1420"}
     assert all(n[1] == "drug" for n in nodes)
+
+
+def test_multi_axis_explode_cartesian_product(tmp_path: Path) -> None:
+    """Two explode axes produce one edge per (axis1, axis2) combination per row."""
+    from biotope.croissant.acquisition.context import RecordRow
+    from biotope.croissant.mapping.compile import iter_relation_tuples
+    from biotope.croissant.spec import load_from_path
+
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"ot",
+         "recordSet":[
+           {"@id":"drug","name":"drug","field":[{"name":"chembl","dataType":"sc:Text"}]},
+           {"@id":"gene","name":"gene","field":[{"name":"ens","dataType":"sc:Text"}]},
+           {"@id":"moa","name":"moa","field":[
+              {"name":"chemblIds","dataType":"sc:Text","repeated":true},
+              {"name":"targets","dataType":"sc:Text","repeated":true}
+           ]}
+         ]}
+        """
+    )
+    load_from_path(croissant_path)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "entities": {
+                "drug": {"record_set": "drug", "id": "chembl"},
+                "gene": {"record_set": "gene", "id": "ens"},
+            },
+            "relations": {
+                "drug_has_target": {
+                    "record_set": "moa",
+                    "scan": {"explode": {"drug": "chemblIds", "target": "targets"}},
+                    "source": {
+                        "entity": "drug",
+                        "field": "$drug",
+                        "transform": "as_curie",
+                        "args": {"prefix": "chembl"},
+                    },
+                    "target": {
+                        "entity": "gene",
+                        "field": "$target",
+                        "transform": "as_curie",
+                        "args": {"prefix": "ensembl"},
+                    },
+                }
+            },
+        }
+    )
+
+    class _StubCtx:
+        def stream(self, record_set, fields=None, where=None):
+            yield RecordRow(
+                record_set="moa",
+                values={
+                    "chemblIds": ["CHEMBL1", "CHEMBL2"],
+                    "targets": ["ENSG1", "ENSG2", "ENSG3"],
+                },
+            )
+
+    edges = list(iter_relation_tuples(mapping, _StubCtx()))
+    # 2 drugs × 3 targets = 6 edges
+    assert len(edges) == 6
+    pairs = {(e[1], e[2]) for e in edges}
+    assert pairs == {
+        ("chembl:CHEMBL1", "ensembl:ENSG1"),
+        ("chembl:CHEMBL1", "ensembl:ENSG2"),
+        ("chembl:CHEMBL1", "ensembl:ENSG3"),
+        ("chembl:CHEMBL2", "ensembl:ENSG1"),
+        ("chembl:CHEMBL2", "ensembl:ENSG2"),
+        ("chembl:CHEMBL2", "ensembl:ENSG3"),
+    }
+    # Label slot is still at index 3, rel_id is None.
+    assert all(e[3] == "drug_has_target" and e[0] is None for e in edges)
+
+
+def test_multi_axis_explode_rejects_unknown_axis_in_selector(tmp_path: Path) -> None:
+    """Selectors that reference a `$<axis>` not declared in the scan must fail validation."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="is not an axis"):
+        Mapping.model_validate(
+            {
+                "croissant": "x.json",
+                "entities": {"e": {"record_set": "rs", "id": "id"}},
+                "relations": {
+                    "r": {
+                        "record_set": "rs",
+                        "scan": {"explode": {"drug": "chemblIds"}},
+                        "source": {"entity": "e", "field": "$drug"},
+                        "target": {"entity": "e", "field": "$mystery"},
+                    }
+                },
+            }
+        )
+
+
+def test_multi_axis_explode_round_trip_yaml(tmp_path: Path) -> None:
+    """Multi-axis YAML must serialise back to a dict form (not a bare string)."""
+    mapping = Mapping.model_validate(
+        {
+            "croissant": "x.json",
+            "entities": {"e": {"record_set": "rs", "id": "id"}},
+            "relations": {
+                "r": {
+                    "record_set": "rs",
+                    "scan": {"explode": {"drug": "chemblIds", "tgt": "targets"}},
+                    "source": {"entity": "e", "field": "$drug"},
+                    "target": {"entity": "e", "field": "$tgt"},
+                }
+            },
+        }
+    )
+    yaml_path = tmp_path / "m.mapping.yaml"
+    dump_mapping(mapping, yaml_path)
+    reloaded = load_mapping(yaml_path)
+    rel_scan = reloaded.relations["r"].scan
+    assert isinstance(rel_scan, ExplodeScan)
+    assert rel_scan.axes == {"drug": "chemblIds", "tgt": "targets"}
 
 
 def test_explode_with_raw_field_id_drops_rows_under_scalar_guard(tmp_path: Path) -> None:

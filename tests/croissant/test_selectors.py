@@ -9,8 +9,9 @@ from biotope.croissant.mapping.selectors import ResolutionContext, resolve_selec
 
 
 def _ctx(values: dict | None = None, *, item=None, ids=None) -> ResolutionContext:
+    items = {"item": item} if item is not None else None
     return ResolutionContext(
-        row=RecordRow(record_set="rs", values=values or {}), item=item, ids=ids
+        row=RecordRow(record_set="rs", values=values or {}), items=items, ids=ids
     )
 
 

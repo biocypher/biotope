@@ -534,17 +534,26 @@ def _edit_entity_slot(
     draft["entities"] = entities
 
 
-def _id_field_options(rs, explode_field: str | None) -> list[str]:
-    """Field options for an id picker. Prepends `$item` / `$item.<sub>` under explode."""
+def _axes_from_scan(scan: Any) -> dict[str, str]:
+    """Return ``{axis_name: array_field}`` for any scan shape (or empty for row scans)."""
+    if not isinstance(scan, dict):
+        return {}
+    explode = scan.get("explode")
+    if isinstance(explode, str):
+        return {"item": explode}
+    if isinstance(explode, dict):
+        return dict(explode)
+    return {}
+
+
+def _id_field_options(rs, axes: dict[str, str]) -> list[str]:
+    """Field options for an id picker. Prepends `$<axis>` / `$<axis>.<sub>` per axis."""
     options: list[str] = []
-    if explode_field:
-        # Find the exploded field's metadata to suggest sub-fields if it's a struct array.
-        explode_info = next((f for f in rs.fields if f.name == explode_field), None)
-        if explode_info and explode_info.sub_fields:
-            options.append("$item")
-            options.extend(f"$item.{sub}" for sub in explode_info.sub_fields)
-        else:
-            options.append("$item")
+    for axis_name, array_field in axes.items():
+        axis_info = next((f for f in rs.fields if f.name == array_field), None)
+        options.append(f"${axis_name}")
+        if axis_info and axis_info.sub_fields:
+            options.extend(f"${axis_name}.{sub}" for sub in axis_info.sub_fields)
     options.extend(f.name for f in rs.fields)
     return options
 
@@ -576,27 +585,84 @@ def _pick_record_set(inspection: DatasetInspection, current: str | None) -> str 
 
 
 def _pick_scan(rs, current: Any) -> Any:
+    """Prompt for a scan: row, single-axis explode, or multi-axis (cross-product) explode."""
     if not rs.array_fields:
         return "row"
     current_explode = (
         current.get("explode") if isinstance(current, dict) and "explode" in current else None
     )
+    current_is_multi = isinstance(current_explode, dict)
     console.print(
         f"[dim]Explode-eligible arrays:[/dim] {', '.join(rs.array_fields)}"
     )
     choice = Prompt.ask(
-        "Scan kind: [r]ow or [e]xplode <array>",
-        choices=["r", "e"],
-        default="e" if current_explode else "r",
+        "Scan kind: [r]ow, [e]xplode one array, or [m]ulti-axis cross-product",
+        choices=["r", "e", "m"],
+        default="m" if current_is_multi else ("e" if current_explode else "r"),
     )
     if choice == "r":
         return "row"
-    field = _pick_from(
-        rs.array_fields,
-        prompt="Explode field",
-        default=current_explode or rs.array_fields[0],
+    if choice == "e":
+        field = _pick_from(
+            rs.array_fields,
+            prompt="Explode field",
+            default=current_explode if isinstance(current_explode, str) else rs.array_fields[0],
+        )
+        return {"explode": field}
+    # Multi-axis: collect axis_name → field pairs.
+    console.print(
+        "[dim]Multi-axis explode: each row is expanded to the Cartesian product "
+        "of the listed arrays. Selectors reference each axis as `$<axis>` "
+        "(e.g. `$drug`, `$target`).[/dim]"
     )
-    return {"explode": field}
+    existing_axes: dict[str, str] = current_explode if current_is_multi else {}
+    axes: dict[str, str] = {}
+    used_fields: set[str] = set()
+    remaining = [f for f in rs.array_fields if f not in used_fields]
+    seed_axes = list(existing_axes.items()) or [(_default_axis_name(remaining[0]), remaining[0])]
+    for axis_name, field in seed_axes:
+        axes[axis_name] = field
+        used_fields.add(field)
+    # Allow editing the seeded list.
+    while True:
+        console.print("Current axes: " + (", ".join(f"${k}={v}" for k, v in axes.items()) or "(none)"))
+        if not Confirm.ask("Add another axis?", default=False):
+            break
+        remaining = [f for f in rs.array_fields if f not in used_fields]
+        if not remaining:
+            console.print("[yellow]All array fields already in use.[/yellow]")
+            break
+        field = _pick_from(remaining, prompt="Axis field", default=remaining[0])
+        suggested = _default_axis_name(field)
+        # Avoid collisions
+        i = 2
+        candidate = suggested
+        while candidate in axes:
+            candidate = f"{suggested}_{i}"
+            i += 1
+        axis_name = Prompt.ask("Axis name (used as `$<name>` in selectors)", default=candidate)
+        axes[axis_name] = field
+        used_fields.add(field)
+    if len(axes) == 1:
+        only_field = next(iter(axes.values()))
+        return {"explode": only_field}
+    return {"explode": axes}
+
+
+def _default_axis_name(field_name: str) -> str:
+    """Derive a default axis name from a field name (drop common suffixes like 'Ids')."""
+    name = field_name
+    for suffix in ("Ids", "_ids", "Names", "_names", "List", "_list"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    # Coerce to snake_case
+    out = ""
+    for i, ch in enumerate(name):
+        if ch.isupper() and i > 0 and out and out[-1] != "_":
+            out += "_"
+        out += ch.lower()
+    return out or field_name.lower()
 
 
 def _pick_id_selector(
@@ -614,7 +680,7 @@ def _pick_id_selector(
     ``$item.<sub_field>`` choices instead of raw field names. If the user
     picks the exploded field by name, it is auto-rewritten to ``$item``.
     """
-    explode_field = scan.get("explode") if isinstance(scan, dict) else None
+    axes = _axes_from_scan(scan)
     while True:
         actions = ["field"]
         if ids:
@@ -625,11 +691,12 @@ def _pick_id_selector(
             "[dim]ID selector actions:[/dim] "
             f"{', '.join(actions)} (current: {existing or 'unset'})"
         )
-        if explode_field:
+        if axes:
+            axis_list = ", ".join(f"${k} (={v})" for k, v in axes.items())
             console.print(
-                f"[dim]This entity uses `scan: {{explode: {explode_field}}}` — "
-                "the id should resolve to the current element (`$item`) or a "
-                f"subfield of `$item`, not to `{explode_field}` itself.[/dim]"
+                f"[dim]This slot uses explode axes: {axis_list}. "
+                "The id should resolve to one of these elements or a subfield, "
+                "not the raw array.[/dim]"
             )
         action = Prompt.ask(
             "Choose action",
@@ -637,18 +704,20 @@ def _pick_id_selector(
             default="use" if isinstance(existing, dict) and existing.get("use") else "field",
         )
         if action == "field":
-            options = _id_field_options(rs, explode_field)
+            options = _id_field_options(rs, axes)
             field = _pick_from(
                 options,
                 prompt="ID field",
                 default=(existing or {}).get("field"),
             )
-            # If the user picked the exploded field by raw name, rewrite to $item.
-            if explode_field and field == explode_field:
-                console.print(
-                    f"[yellow]→ rewriting `{field}` to `$item` (explode-aware).[/yellow]"
-                )
-                field = "$item"
+            # If the user picked an exploded array field by raw name, rewrite to `$<axis>`.
+            for axis_name, array_field in axes.items():
+                if field == array_field:
+                    console.print(
+                        f"[yellow]→ rewriting `{field}` to `${axis_name}` (explode-aware).[/yellow]"
+                    )
+                    field = f"${axis_name}"
+                    break
             transform = Prompt.ask(
                 "Transform", choices=["passthrough", "as_curie"], default="passthrough"
             )

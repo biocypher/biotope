@@ -30,13 +30,26 @@ from biotope.croissant.mapping.model import Selector
 
 @dataclass
 class ResolutionContext:
-    """Per-row evaluation context for selector resolution."""
+    """Per-row evaluation context for selector resolution.
+
+    For explode scans, ``items`` maps each axis name to its current element
+    (Cartesian product across axes when multiple are declared). The legacy
+    single-axis form lives under axis name ``"item"`` and is also surfaced as
+    the ``item`` property for backwards compatibility.
+    """
 
     row: RecordRow
-    item: Any = None
-    """The current ``$item`` value when an explode scan is active. ``None`` for row scans."""
+    items: dict[str, Any] | None = None
+    """Mapping of explode-axis name → current element value. ``None`` for row scans."""
     ids: Mapping[str, Selector] | None = None
     """Named reusable selectors (``ids:`` block of the mapping)."""
+
+    @property
+    def item(self) -> Any:
+        """Backwards-compatible alias for ``items['item']`` under single-axis explode."""
+        if self.items is None:
+            return None
+        return self.items.get("item")
 
 
 def resolve_selector(selector: Selector, ctx: ResolutionContext) -> Any:
@@ -61,15 +74,16 @@ def resolve_selector(selector: Selector, ctx: ResolutionContext) -> Any:
 # Field extraction
 # ---------------------------------------------------------------------------
 
-_ITEM_PREFIX = "$item"
-
-
 def _extract_value(field: str, ctx: ResolutionContext) -> Any:
-    if field == _ITEM_PREFIX:
-        return ctx.item
-    if field.startswith(_ITEM_PREFIX + "."):
-        subpath = field[len(_ITEM_PREFIX) + 1 :]
-        return _walk_path(ctx.item, subpath)
+    if field.startswith("$"):
+        axis, _, subpath = field[1:].partition(".")
+        items = ctx.items or {}
+        if axis not in items:
+            return None
+        value = items[axis]
+        if not subpath:
+            return value
+        return _walk_path(value, subpath)
     return ctx.row.get(field)
 
 

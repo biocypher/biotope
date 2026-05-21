@@ -128,7 +128,7 @@ def _entity_fields(entity: EntityMapping) -> list[str] | None:
     for prop in entity.properties.values():
         _add_selector_fields(prop, fields)
     if isinstance(entity.scan, ExplodeScan):
-        fields.add(entity.scan.explode)
+        fields.update(entity.scan.axes.values())
     return _materialise_field_set(fields, entity.scan)
 
 
@@ -141,7 +141,7 @@ def _relation_fields(relation: RelationMapping) -> list[str] | None:
     for prop in relation.properties.values():
         _add_selector_fields(prop, fields)
     if isinstance(relation.scan, ExplodeScan):
-        fields.add(relation.scan.explode)
+        fields.update(relation.scan.axes.values())
     return _materialise_field_set(fields, relation.scan)
 
 

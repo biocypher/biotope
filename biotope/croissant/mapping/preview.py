@@ -271,23 +271,25 @@ def _validate_scan(
     preview: MappingPreview,
 ) -> None:
     if isinstance(target.scan, ExplodeScan):
-        info = field_index.get(target.scan.explode)
-        if info is None:
-            preview.findings.append(
-                ValidationFinding(
-                    "error",
-                    f"{path}.scan.explode",
-                    f"unknown field {target.scan.explode!r}",
-                )
+        for axis_name, array_field in target.scan.axes.items():
+            info = field_index.get(array_field)
+            label = (
+                f"{path}.scan.explode"
+                if list(target.scan.axes) == ["item"]
+                else f"{path}.scan.explode.{axis_name}"
             )
-        elif info.kind != FieldKind.ARRAY.value:
-            preview.findings.append(
-                ValidationFinding(
-                    "error",
-                    f"{path}.scan.explode",
-                    f"field {target.scan.explode!r} is {info.kind!r}, not an array",
+            if info is None:
+                preview.findings.append(
+                    ValidationFinding("error", label, f"unknown field {array_field!r}")
                 )
-            )
+            elif info.kind != FieldKind.ARRAY.value:
+                preview.findings.append(
+                    ValidationFinding(
+                        "error",
+                        label,
+                        f"field {array_field!r} is {info.kind!r}, not an array",
+                    )
+                )
 
 
 def _validate_selector(

@@ -129,7 +129,10 @@ def _scan_payload(scan: Scan) -> Any:
     if isinstance(scan, RowScan):
         return "row"
     if isinstance(scan, ExplodeScan):
-        return {"explode": scan.explode}
+        # Single-axis form sugars back to a bare string so YAML stays compact.
+        if list(scan.axes.keys()) == ["item"]:
+            return {"explode": scan.axes["item"]}
+        return {"explode": dict(scan.axes)}
     return scan  # pragma: no cover
 
 
