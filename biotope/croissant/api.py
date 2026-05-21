@@ -13,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from biotope.croissant.acquisition import infer_datasets_location
 from biotope.croissant.alignment.model import (
     Alignment,
     Equivalence,
@@ -124,7 +125,7 @@ def scaffold_mapping(
         required_entities=required_entities or [],
         required_relations=required_relations or [],
     )
-    datasets_location = _infer_datasets_location(croissant_path)
+    datasets_location = infer_datasets_location(croissant_path)
     appendix = build_inspector_appendix(
         dataset,
         datasets_location=datasets_location,
@@ -170,30 +171,6 @@ def propose_mapping(
     )
 
 
-def _infer_datasets_location(croissant_path: str | Path) -> Path | None:
-    """Best-effort on-disk data root for preview sampling.
-
-    For Croissants under ``.biotope/datasets/<rel>.jsonld`` returns the matching
-    ``<project>/<rel>/`` data directory; ``includes`` paths in baker-generated
-    Croissants are relative to that directory, not to the project root.
-    """
-    path_str = str(croissant_path)
-    if path_str.startswith(("http://", "https://")):
-        return None
-
-    path = Path(path_str).resolve()
-    for parent in path.parents:
-        if parent.name == "datasets" and parent.parent.name == ".biotope":
-            biotope_root = parent.parent.parent
-            try:
-                rel = path.relative_to(parent).with_suffix("")
-            except ValueError:
-                return biotope_root
-            data_dir = biotope_root / rel
-            if data_dir.exists():
-                return data_dir if data_dir.is_dir() else data_dir.parent
-            return biotope_root
-    return path.parent
 
 
 def propose_alignment(

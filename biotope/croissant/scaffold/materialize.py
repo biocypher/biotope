@@ -170,7 +170,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from biotope.croissant.acquisition import AcquisitionContext
+from biotope.croissant.acquisition import AcquisitionContext, infer_datasets_location
 from biotope.croissant.mapping import compile_mapping, load_mapping
 from biotope.croissant.spec import load_from_path
 
@@ -181,7 +181,9 @@ def build_adapter():
     """Load `{stem}`'s mapping and return a compiled BioCypher-compatible adapter."""
     mapping = load_mapping(_MAPPING_FILE)
     dataset = load_from_path(mapping.croissant)
-    context = AcquisitionContext(dataset, datasets_location=Path(mapping.croissant).parent)
+    context = AcquisitionContext(
+        dataset, datasets_location=infer_datasets_location(mapping.croissant)
+    )
     return compile_mapping(mapping, context)
 '''
 
@@ -286,11 +288,20 @@ def materialize_project(
 
     biocypher_config_path = project_dir / "config" / "biocypher_config.yaml"
     if not biocypher_config_path.exists():
+        # `head_ontology: null` opts into BioCypher's headless mode: no remote
+        # Biolink retrieval at build time. The per-build class hierarchy is
+        # defined exclusively by `schema_config.yaml`, which biotope
+        # regenerates deterministically from the resolved mappings on every
+        # run. Schema evolution happens between builds via `project.yaml`
+        # + `biotope map`, never within a build. Requires biocypher with the
+        # NullOntology shim; older versions ignore the key and will still
+        # fetch Biolink — upgrade if you see network errors on first run.
         biocypher_config_path.write_text(
             "biocypher:\n"
             "  dbms: csv\n"
             "  log_to_disk: true\n"
-            "  output_directory: biocypher-out\n",
+            "  output_directory: biocypher-out\n"
+            "  head_ontology: null\n",
         )
 
     stems: list[str] = []

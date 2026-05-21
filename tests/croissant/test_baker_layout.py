@@ -13,8 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from biotope.commands.map import _infer_datasets_location
-from biotope.croissant.acquisition import AcquisitionContext
+from biotope.croissant.acquisition import AcquisitionContext, infer_datasets_location
 from biotope.croissant.spec import load_from_path
 
 
@@ -98,7 +97,7 @@ def baker_project(tmp_path: Path) -> tuple[Path, Path]:
 def test_infer_datasets_location_returns_data_dir(baker_project: tuple[Path, Path], monkeypatch) -> None:
     project, croissant = baker_project
     monkeypatch.chdir(project)
-    inferred = _infer_datasets_location(croissant)
+    inferred = infer_datasets_location(croissant)
     assert inferred == project / "data" / "raw" / "ot"
 
 

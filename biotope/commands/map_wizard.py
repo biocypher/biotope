@@ -23,6 +23,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from biotope.croissant.acquisition import infer_datasets_location
 from biotope.croissant.mapping import (
     DatasetInspection,
     Mapping,
@@ -54,7 +55,7 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
     from biotope.commands.map import _load_croissant  # avoid circular import at module load
 
     dataset = _load_croissant(str(croissant_path))
-    datasets_location = _infer_datasets_location(croissant_path)
+    datasets_location = infer_datasets_location(croissant_path)
     inspection = inspect_dataset(
         dataset, datasets_location=datasets_location, preview_rows=3
     )
@@ -66,7 +67,8 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
         Panel(
             f"[bold]Project:[/bold] {project.name}\n"
             f"[bold]Croissant:[/bold] {croissant_path}\n"
-            f"[bold]Mapping:[/bold] {mapping_path}",
+            f"[bold]Mapping:[/bold] {mapping_path}\n"
+            "[dim]Tip: Ctrl+C cancels the current step (or quits at the main menu).[/dim]",
             title="biotope map",
             border_style="cyan",
         )
@@ -74,12 +76,15 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
 
     # Intent capture on first run if empty
     if not (project.required_entities or project.required_relations):
-        if Confirm.ask(
-            "No entities or relations declared yet. Capture intent now?", default=True
-        ):
-            project = _intent_capture(project_path, project)
-            draft = _sync_slots_from_intent(draft, project)
-            _autosave(mapping_path, draft, dataset, datasets_location, project)
+        try:
+            if Confirm.ask(
+                "No entities or relations declared yet. Capture intent now?", default=True
+            ):
+                project = _intent_capture(project_path, project)
+                draft = _sync_slots_from_intent(draft, project)
+                _autosave(mapping_path, draft, dataset, datasets_location, project)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]↩ Skipped intent capture.[/yellow]")
 
     _main_loop(
         project_path=project_path,
@@ -199,14 +204,6 @@ def _show_empty_state(project_root: Path) -> None:
             border_style="yellow",
         )
     )
-
-
-def _infer_datasets_location(croissant_path: str | Path) -> Path | None:
-    path = Path(croissant_path).resolve()
-    for parent in path.parents:
-        if parent.name == "datasets" and parent.parent.name == ".biotope":
-            return parent.parent.parent
-    return path.parent
 
 
 def _mapping_stem(path: Path) -> str:
@@ -361,24 +358,32 @@ def _main_loop(
 ) -> None:
     while True:
         _render_progress(draft, project)
-        choice = _menu_choice(draft)
+        try:
+            choice = _menu_choice(draft)
+        except KeyboardInterrupt:
+            console.print(f"\n💾 Saved to [cyan]{mapping_path}[/cyan]")
+            return
         if choice == "quit":
             console.print(f"💾 Saved to [cyan]{mapping_path}[/cyan]")
             return
-        if choice == "intent":
-            project = _intent_capture(project_path, project)
-            draft = _sync_slots_from_intent(draft, project)
-        elif choice == "preview":
-            _show_preview(draft, dataset, datasets_location)
+        try:
+            if choice == "intent":
+                project = _intent_capture(project_path, project)
+                draft = _sync_slots_from_intent(draft, project)
+            elif choice == "preview":
+                _show_preview(draft, dataset, datasets_location)
+                continue
+            elif choice.startswith("entity:"):
+                key = choice.split(":", 1)[1]
+                _edit_entity_slot(draft, key, inspection)
+            elif choice.startswith("relation:"):
+                key = choice.split(":", 1)[1]
+                _edit_relation_slot(draft, key, inspection, project_path, project)
+                # Relation editing may have added new entities; re-sync from project.
+                project = Project.load(project_path)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]↩ Cancelled — back to menu (no changes saved for this step).[/yellow]")
             continue
-        elif choice.startswith("entity:"):
-            key = choice.split(":", 1)[1]
-            _edit_entity_slot(draft, key, inspection)
-        elif choice.startswith("relation:"):
-            key = choice.split(":", 1)[1]
-            _edit_relation_slot(draft, key, inspection, project_path, project)
-            # Relation editing may have added new entities; re-sync from project.
-            project = Project.load(project_path)
         _autosave(mapping_path, draft, dataset, datasets_location, project)
 
 
@@ -553,7 +558,9 @@ def _edit_entity_slot(
     rs = inspection.by_name(rs_name)
     assert rs is not None
 
-    entity["scan"] = _pick_scan(rs, entity.get("scan"))
+    old_scan = entity.get("scan")
+    entity["scan"] = _pick_scan(rs, old_scan)
+    _apply_scan_change(entity, old_scan, entity["scan"])
 
     namespace = entity.get("namespace")
     new_namespace = Prompt.ask(
@@ -641,11 +648,28 @@ def _pick_scan(rs, current: Any) -> Any:
     console.print(
         f"[dim]Explode-eligible arrays:[/dim] {', '.join(rs.array_fields)}"
     )
-    choice = Prompt.ask(
-        "Scan kind — (r)ow, (e)xplode one array, or (m)ulti-axis cross-product",
-        choices=["r", "e", "m"],
-        default="m" if current_is_multi else ("e" if current_explode else "r"),
-    )
+
+    # When the slot already has a multi-axis explode, offer in-place editing so
+    # the user can rename / drop / add axes without replaying the full prompt
+    # flow (which would also clobber the rename detection downstream).
+    if current_is_multi:
+        action = Prompt.ask(
+            "Scan kind — (k)eep current, edit a(x)es, (r)ow, (e)xplode one, (m)ulti-axis replace",
+            choices=["k", "x", "r", "e", "m"],
+            default="k",
+        )
+        if action == "k":
+            return current
+        if action == "x":
+            return {"explode": _edit_axes(rs, dict(current_explode))}
+        choice = action  # fall through to the standard handlers below
+    else:
+        choice = Prompt.ask(
+            "Scan kind — (r)ow, (e)xplode one array, or (m)ulti-axis cross-product",
+            choices=["r", "e", "m"],
+            default="e" if current_explode else "r",
+        )
+
     if choice == "r":
         return "row"
     if choice == "e":
@@ -655,17 +679,16 @@ def _pick_scan(rs, current: Any) -> Any:
             default=current_explode if isinstance(current_explode, str) else rs.array_fields[0],
         )
         return {"explode": field}
-    # Multi-axis: collect axis_name → field pairs.
+    # Multi-axis (replace): collect axis_name → field pairs from scratch.
     console.print(
         "[dim]Multi-axis explode: each row is expanded to the Cartesian product "
         "of the listed arrays. Selectors reference each axis as `$<axis>` "
         "(e.g. `$drug`, `$target`).[/dim]"
     )
-    existing_axes: dict[str, str] = current_explode if current_is_multi else {}
     axes: dict[str, str] = {}
     used_fields: set[str] = set()
     remaining = [f for f in rs.array_fields if f not in used_fields]
-    seed_axes = list(existing_axes.items()) or [(_default_axis_name(remaining[0]), remaining[0])]
+    seed_axes = [(_default_axis_name(remaining[0]), remaining[0])]
     for axis_name, field in seed_axes:
         axes[axis_name] = field
         used_fields.add(field)
@@ -679,20 +702,196 @@ def _pick_scan(rs, current: Any) -> Any:
             console.print("[yellow]All array fields already in use.[/yellow]")
             break
         field = _pick_from(remaining, prompt="Axis field", default=remaining[0])
-        suggested = _default_axis_name(field)
-        # Avoid collisions
-        i = 2
-        candidate = suggested
-        while candidate in axes:
-            candidate = f"{suggested}_{i}"
-            i += 1
-        axis_name = Prompt.ask("Axis name (used as `$<name>` in selectors)", default=candidate)
+        axis_name = _prompt_axis_name(field, axes)
         axes[axis_name] = field
         used_fields.add(field)
     if len(axes) == 1:
         only_field = next(iter(axes.values()))
         return {"explode": only_field}
     return {"explode": axes}
+
+
+def _prompt_axis_name(field: str, existing_axes: dict[str, str]) -> str:
+    """Ask for an axis name, suggesting one derived from the field and avoiding collisions."""
+    suggested = _default_axis_name(field)
+    i = 2
+    candidate = suggested
+    while candidate in existing_axes:
+        candidate = f"{suggested}_{i}"
+        i += 1
+    return Prompt.ask("Axis name (used as `$<name>` in selectors)", default=candidate)
+
+
+def _edit_axes(rs, axes: dict[str, str]) -> dict[str, str] | str:
+    """Rename / drop / add axes in place. Returns the new explode value.
+
+    Collapses to a single-field string explode when only one axis remains, so
+    the output shape mirrors what ``_pick_scan`` produces.
+    """
+    while True:
+        console.print("Axes:")
+        for i, (name, field) in enumerate(axes.items(), start=1):
+            console.print(f"  {i}. ${name} = {field}")
+        actions = []
+        if axes:
+            actions.extend(["rename", "drop"])
+        actions.extend(["add", "done"])
+        action = Prompt.ask("Axis action", choices=actions, default="done")
+        if action == "done":
+            if not axes:
+                console.print("[red]Need at least one axis. Add one or pick a different scan kind.[/red]")
+                continue
+            break
+        if action == "rename":
+            idx = IntPrompt.ask("Axis # to rename", default=1)
+            names = list(axes)
+            if not 1 <= idx <= len(names):
+                continue
+            old_name = names[idx - 1]
+            new_name = Prompt.ask(f"New name for ${old_name}", default=old_name).strip()
+            if not new_name or new_name == old_name:
+                continue
+            if new_name in axes:
+                console.print(f"[yellow]Axis ${new_name} already exists.[/yellow]")
+                continue
+            # Preserve insertion order while renaming the key.
+            axes = {(new_name if k == old_name else k): v for k, v in axes.items()}
+        elif action == "drop":
+            idx = IntPrompt.ask("Axis # to drop", default=1)
+            names = list(axes)
+            if not 1 <= idx <= len(names):
+                continue
+            dropped = names[idx - 1]
+            del axes[dropped]
+            console.print(f"[yellow]Dropped axis[/yellow] ${dropped}")
+        elif action == "add":
+            used_fields = set(axes.values())
+            remaining = [f for f in rs.array_fields if f not in used_fields]
+            if not remaining:
+                console.print("[yellow]All array fields already in use.[/yellow]")
+                continue
+            field = _pick_from(remaining, prompt="Axis field", default=remaining[0])
+            new_name = _prompt_axis_name(field, axes)
+            axes[new_name] = field
+    if len(axes) == 1:
+        return next(iter(axes.values()))
+    return axes
+
+
+def _diff_axes(old_scan: Any, new_scan: Any) -> tuple[dict[str, str], list[str]]:
+    """Compare two scans' axes; return ``(renames, removed)``.
+
+    Renames are detected by pairing axis names that disappeared with names
+    that appeared and share the same field. Anything left unmatched is treated
+    as removed so callers can clear stale ``$<axis>`` selectors.
+    """
+    old = _axes_from_scan(old_scan)
+    new = _axes_from_scan(new_scan)
+    common = set(old) & set(new)
+    disappeared = [n for n in old if n not in common]
+    appeared = [n for n in new if n not in common]
+    renames: dict[str, str] = {}
+    matched: set[str] = set()
+    for new_name in appeared:
+        for old_name in disappeared:
+            if old_name in matched:
+                continue
+            if old[old_name] == new[new_name]:
+                renames[old_name] = new_name
+                matched.add(old_name)
+                break
+    removed = [n for n in disappeared if n not in matched]
+    return renames, removed
+
+
+def _rewrite_selector(
+    sel: Any,
+    renames: dict[str, str],
+    removed: list[str],
+) -> tuple[Any, bool]:
+    """Apply axis renames to a selector value; return ``(new_value, has_removed_ref)``.
+
+    Walks dicts, lists, and string leaves. A single pass over the original
+    strings means swaps (e.g. drug↔target) are atomic.
+    """
+    has_removed = False
+
+    def walk(v: Any) -> Any:
+        nonlocal has_removed
+        if isinstance(v, str) and v.startswith("$"):
+            rest = v[1:]
+            if "." in rest:
+                axis, sub = rest.split(".", 1)
+                suffix = "." + sub
+            else:
+                axis, suffix = rest, ""
+            if axis in removed:
+                has_removed = True
+                return v
+            if axis in renames:
+                return f"${renames[axis]}{suffix}"
+            return v
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        return v
+
+    return walk(sel), has_removed
+
+
+def _rewrite_axis_refs(
+    slot: dict[str, Any],
+    renames: dict[str, str],
+    removed: list[str],
+) -> list[str]:
+    """Mutate a slot so its selectors track the renamed / removed axes.
+
+    Selectors that reference a removed axis are dropped entirely (mirroring
+    the entity-removal cascade in ``_sync_slots_from_intent``) so the user
+    is forced to re-point them. Returns the list of cleared selector labels
+    for user-facing messaging.
+    """
+    if not renames and not removed:
+        return []
+    cleared: list[str] = []
+    for key in ("id", "source", "target"):
+        if key in slot:
+            new_val, dropped = _rewrite_selector(slot[key], renames, removed)
+            if dropped:
+                del slot[key]
+                cleared.append(key)
+            else:
+                slot[key] = new_val
+    props = slot.get("properties") or {}
+    kept: dict[str, Any] = {}
+    for name, val in props.items():
+        new_val, dropped = _rewrite_selector(val, renames, removed)
+        if dropped:
+            cleared.append(f"properties.{name}")
+        else:
+            kept[name] = new_val
+    if props:
+        slot["properties"] = kept
+    return cleared
+
+
+def _apply_scan_change(slot: dict[str, Any], old_scan: Any, new_scan: Any) -> None:
+    """Diff axes between ``old_scan`` and ``new_scan`` and rewrite selectors in ``slot``."""
+    renames, removed = _diff_axes(old_scan, new_scan)
+    if not renames and not removed:
+        return
+    cleared = _rewrite_axis_refs(slot, renames, removed)
+    if renames:
+        console.print(
+            "[yellow]Renamed axis references:[/yellow] "
+            + ", ".join(f"${o}→${n}" for o, n in renames.items())
+        )
+    if cleared:
+        console.print(
+            "[yellow]Cleared selectors referencing removed axes:[/yellow] "
+            + ", ".join(cleared)
+        )
 
 
 def _default_axis_name(field_name: str) -> str:
@@ -841,7 +1040,9 @@ def _edit_relation_slot(
     rs = inspection.by_name(rs_name)
     assert rs is not None
 
-    relation["scan"] = _pick_scan(rs, relation.get("scan"))
+    old_scan = relation.get("scan")
+    relation["scan"] = _pick_scan(rs, old_scan)
+    _apply_scan_change(relation, old_scan, relation["scan"])
 
     for side in ("source", "target"):
         relation[side] = _pick_endpoint(

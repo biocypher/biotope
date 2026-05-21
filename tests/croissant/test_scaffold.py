@@ -38,7 +38,11 @@ def test_materialize_minimal(tmp_path: Path, minimal_croissant: Path) -> None:
     result = materialize(project_dir, [mapping_path])
 
     assert (project_dir / "config" / "schema_config.yaml").exists()
-    assert (project_dir / "config" / "biocypher_config.yaml").exists()
+    biocypher_config = project_dir / "config" / "biocypher_config.yaml"
+    assert biocypher_config.exists()
+    bc_yaml = yaml.safe_load(biocypher_config.read_text())
+    # Headless by default: no remote Biolink fetch on build.
+    assert bc_yaml["biocypher"]["head_ontology"] is None
     assert (project_dir / "mappings" / "minimal.mapping.yaml").exists()
     assert (project_dir / "create_knowledge_graph.py").exists()
     assert (project_dir / "generated" / "minimal" / "adapter.py").is_file()

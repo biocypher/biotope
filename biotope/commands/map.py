@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.panel import Panel
 
+from biotope.croissant.acquisition import infer_datasets_location
 from biotope.croissant.api import scaffold_mapping
 from biotope.croissant.mapping import (
     Mapping,
@@ -185,7 +186,7 @@ def _render_intent(project_path: Path, project: Project) -> None:
 def inspect(croissant: str, as_json: bool, preview_rows: int) -> None:
     """Inspect a Croissant dataset deterministically."""
     dataset = _load_croissant(croissant)
-    datasets_location = _infer_datasets_location(croissant)
+    datasets_location = infer_datasets_location(croissant)
     inspection = inspect_dataset(
         dataset,
         datasets_location=datasets_location,
@@ -269,7 +270,7 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
             raise click.Abort
     mapping = load_mapping(mapping_path)
     dataset = _load_croissant(mapping.croissant)
-    datasets_location = _infer_datasets_location(mapping.croissant)
+    datasets_location = infer_datasets_location(mapping.croissant)
     result = preview_mapping(
         mapping,
         dataset,
@@ -502,29 +503,6 @@ def _discover_single_mapping() -> Path | None:
         return None
     candidates = sorted(mappings_dir.glob("*.mapping.yaml")) + sorted(mappings_dir.glob("*.mapping.yml"))
     return candidates[0] if len(candidates) == 1 else None
-
-
-def _infer_datasets_location(croissant_path: str | Path) -> Path | None:
-    """Locate the on-disk data root for a Croissant file.
-
-    Baker writes per-directory Croissants at
-    ``<project>/.biotope/datasets/<rel>.jsonld``, with ``includes`` paths
-    relative to the original data directory at ``<project>/<rel>/``.
-    """
-    path_str = str(croissant_path)
-    if path_str.startswith(("http://", "https://")):
-        return None
-    path = Path(path_str).resolve()
-    for parent in path.parents:
-        if parent.name == "datasets" and parent.parent.name == ".biotope":
-            biotope_root = parent.parent.parent
-            try:
-                rel = path.relative_to(parent).with_suffix("")
-            except ValueError:
-                return biotope_root
-            data_dir = biotope_root / rel
-            return data_dir if data_dir.exists() else biotope_root
-    return path.parent
 
 
 def _render_preview_rich(mapping: Mapping, result) -> None:

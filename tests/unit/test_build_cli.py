@@ -70,6 +70,9 @@ def test_full_walkthrough(tmp_path: Path, monkeypatch) -> None:
     assert (build_dir / "config" / "schema_config.yaml").is_file()
     assert (build_dir / "generated" / "minimal" / "adapter.py").is_file()
     assert "project_dir" in r.output
+    # Headless contract: the generated biocypher_config opts out of Biolink.
+    bc_cfg = yaml.safe_load((build_dir / "config" / "biocypher_config.yaml").read_text())
+    assert bc_cfg["biocypher"]["head_ontology"] is None
 
 
 def test_build_rejects_unresolved_mapping(tmp_path: Path, monkeypatch) -> None:

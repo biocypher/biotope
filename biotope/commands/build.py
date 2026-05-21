@@ -8,6 +8,17 @@ entry point.
 
 Strict: unresolved or legacy ``nodes``/``edges`` mappings cause the build to
 abort with a regeneration hint.
+
+**Headless ontology by default.** The generated ``biocypher_config.yaml`` sets
+``head_ontology: null``, so the per-build class hierarchy is defined exclusively
+by ``schema_config.yaml`` (regenerated deterministically from the resolved
+mappings on every run). This avoids the remote Biolink fetch that has historically
+made graph builds slow and fragile. Schema evolution happens *between* builds,
+via ``project.yaml`` (``required_entities`` / ``required_relations``) and
+``biotope map`` — never within a single build, so agents cannot reassign node
+classes once the schema is locked in. To re-enable the Biolink hierarchy for a
+specific project, edit the generated ``build/config/biocypher_config.yaml``
+(biotope's "only write if missing" guard preserves user-authored configs).
 """
 
 from __future__ import annotations
