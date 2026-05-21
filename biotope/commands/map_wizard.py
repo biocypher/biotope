@@ -609,7 +609,7 @@ def _pick_scan(rs, current: Any) -> Any:
         f"[dim]Explode-eligible arrays:[/dim] {', '.join(rs.array_fields)}"
     )
     choice = Prompt.ask(
-        "Scan kind: [r]ow, [e]xplode one array, or [m]ulti-axis cross-product",
+        "Scan kind — (r)ow, (e)xplode one array, or (m)ulti-axis cross-product",
         choices=["r", "e", "m"],
         default="m" if current_is_multi else ("e" if current_explode else "r"),
     )
