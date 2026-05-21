@@ -40,6 +40,9 @@ dependencies = [
     "jinja2>=3.1.6,<4",
     "duckdb>=1.0,<2",
     "croissant-baker>=0.3,<1",
+    # `head_ontology: null` headless-mode support landed in 0.14.0 (PR #523).
+    # The generated `build/create_knowledge_graph.py` relies on it.
+    "biocypher>=0.14.0,<1",
 ]
 
 [project.optional-dependencies]
