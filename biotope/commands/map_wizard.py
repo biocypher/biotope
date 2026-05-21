@@ -438,13 +438,21 @@ def _intent_capture(project_path: Path, project: Project) -> Project:
     )
     data = project.model_dump()
 
-    if Confirm.ask("Update purpose?", default=False):
-        data["purpose"] = Prompt.ask("Purpose", default=project.purpose or "")
+    # Purpose: bare prompt; empty input keeps the current value.
+    console.print("[dim]Enter a new purpose, or press Enter to keep the current one.[/dim]")
+    purpose_input = Prompt.ask("Purpose", default="", show_default=False)
+    if purpose_input.strip():
+        data["purpose"] = purpose_input.strip()
 
-    while Confirm.ask("Add an entity?", default=not data["required_entities"]):
-        name = Prompt.ask("Entity name (free text)").strip()
-        if name:
-            data["required_entities"].append(name)
+    # Entities: bare prompt loop; empty input ends the loop.
+    console.print(
+        "[dim]Add entities one per line. Press Enter on an empty line to stop.[/dim]"
+    )
+    while True:
+        name = Prompt.ask("Entity name", default="", show_default=False).strip()
+        if not name:
+            break
+        data["required_entities"].append(name)
 
     if data["required_entities"] and Confirm.ask("Remove an entity?", default=False):
         idx = _pick_index("Entity to remove", data["required_entities"])
@@ -452,10 +460,15 @@ def _intent_capture(project_path: Path, project: Project) -> Project:
             removed = data["required_entities"].pop(idx)
             console.print(f"[yellow]Removed entity:[/yellow] {removed}")
 
-    while Confirm.ask("Add a relation?", default=not data["required_relations"]):
-        name = Prompt.ask("Relation name (free text)").strip()
-        if name:
-            data["required_relations"].append(name)
+    # Relations: same flat loop.
+    console.print(
+        "[dim]Add relations one per line. Press Enter on an empty line to stop.[/dim]"
+    )
+    while True:
+        name = Prompt.ask("Relation name", default="", show_default=False).strip()
+        if not name:
+            break
+        data["required_relations"].append(name)
 
     if data["required_relations"] and Confirm.ask("Remove a relation?", default=False):
         idx = _pick_index("Relation to remove", data["required_relations"])
