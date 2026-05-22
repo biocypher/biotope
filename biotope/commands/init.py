@@ -188,8 +188,7 @@ def init(
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / ".biotope" / "datasets").mkdir(parents=True, exist_ok=True)
     (project_dir / ".biotope" / "workflows").mkdir(parents=True, exist_ok=True)
-    (project_dir / "data" / "raw").mkdir(parents=True, exist_ok=True)
-    (project_dir / "data" / "processed").mkdir(parents=True, exist_ok=True)
+    (project_dir / "data").mkdir(parents=True, exist_ok=True)
     (project_dir / "mappings").mkdir(exist_ok=True)
 
     config_path = project_dir / ".biotope" / "config.yaml"
@@ -206,7 +205,7 @@ def init(
 
     gitignore = project_dir / ".gitignore"
     if not gitignore.exists():
-        gitignore.write_text("data/raw/\ndata/processed/\n__pycache__/\n*.pyc\n.venv/\n")
+        gitignore.write_text("data/\n__pycache__/\n*.pyc\n.venv/\n")
 
     # A starter pyproject so the project is self-contained: each biotope
     # project owns its dependency set and can be reproduced with

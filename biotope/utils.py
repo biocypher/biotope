@@ -8,18 +8,21 @@ from typing import Optional
 import click
 
 
-def find_biotope_root() -> Optional[Path]:
+def find_biotope_root(start: Path | None = None) -> Optional[Path]:
     """
     Find the biotope project root directory.
 
-    Searches upward from the current working directory to find a directory
-    containing a .biotope/ subdirectory. Enforces that .git and .biotope
-    must be in the same directory.
+    Searches upward from ``start`` (default: current working directory) to find
+    a directory containing a .biotope/ subdirectory. Enforces that .git and
+    .biotope must be in the same directory.
+
+    Args:
+        start: Directory to begin the upward search from. Defaults to ``Path.cwd()``.
 
     Returns:
         Path to the biotope project root, or None if not found
     """
-    current = Path.cwd()
+    current = (start if start is not None else Path.cwd()).resolve()
     while current != current.parent:
         if (current / ".biotope").exists():
             if not (current / ".git").exists():

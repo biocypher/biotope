@@ -80,9 +80,9 @@ def baker_project(tmp_path: Path) -> tuple[Path, Path]:
     Returns: (project_root, croissant_path).
     """
     project = tmp_path / "proj"
-    (project / ".biotope" / "datasets" / "data" / "raw").mkdir(parents=True)
-    croissant = project / ".biotope" / "datasets" / "data" / "raw" / "ot.jsonld"
-    data_dir = project / "data" / "raw" / "ot"
+    (project / ".biotope" / "datasets" / "data" / "inputs").mkdir(parents=True)
+    croissant = project / ".biotope" / "datasets" / "data" / "inputs" / "ot.jsonld"
+    data_dir = project / "data" / "inputs" / "ot"
 
     # Write a couple of tiny CSV files masquerading as parquet for the path
     # resolution test (we only assert the resolved glob path, not actual reads).
@@ -99,13 +99,13 @@ def test_infer_datasets_location_returns_data_dir(baker_project: tuple[Path, Pat
     project, croissant = baker_project
     monkeypatch.chdir(project)
     inferred = infer_datasets_location(croissant)
-    assert inferred == project / "data" / "raw" / "ot"
+    assert inferred == project / "data" / "inputs" / "ot"
 
 
 def test_acquisition_resolves_fileset_via_field_source(baker_project: tuple[Path, Path]) -> None:
     project, croissant = baker_project
     dataset = load_from_path(croissant)
-    data_dir = project / "data" / "raw" / "ot"
+    data_dir = project / "data" / "inputs" / "ot"
 
     with AcquisitionContext(dataset, datasets_location=data_dir) as ctx:
         target_path = ctx._resolve_path(dataset.record_set_by_name("target"))

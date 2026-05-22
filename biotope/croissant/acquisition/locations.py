@@ -2,8 +2,8 @@
 
 A biotope project stores Croissant manifests under ``.biotope/datasets/`` at
 paths that mirror the original data location (e.g. data at
-``<root>/data/raw/opentargets/`` → manifest at
-``.biotope/datasets/data/raw/opentargets.jsonld``). Within those manifests,
+``<root>/data/opentargets/`` → manifest at
+``.biotope/datasets/data/opentargets.jsonld``). Within those manifests,
 ``contentUrl`` / FileSet ``includes`` values are relative to the *original*
 data directory, not to where the manifest lives. So a single source of truth
 for "given a manifest path, where is its data root" keeps the wizard preview
@@ -28,8 +28,8 @@ def infer_datasets_location(croissant_path: str | Path) -> Path | None:
 
     Examples
     --------
-    >>> infer_datasets_location("/proj/.biotope/datasets/data/raw/opentargets.jsonld")
-    PosixPath('/proj/data/raw/opentargets')   # if that directory exists
+    >>> infer_datasets_location("/proj/.biotope/datasets/data/opentargets.jsonld")
+    PosixPath('/proj/data/opentargets')   # if that directory exists
 
     >>> infer_datasets_location("https://example.com/dataset.jsonld") is None
     True

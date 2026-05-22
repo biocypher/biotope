@@ -21,9 +21,9 @@ def runner():
 def tracked_project(tmp_path):
     project_root = tmp_path
     (project_root / ".git").mkdir()
-    datasets_dir = project_root / ".biotope" / "datasets" / "data" / "raw"
+    datasets_dir = project_root / ".biotope" / "datasets" / "data" / "inputs"
     datasets_dir.mkdir(parents=True)
-    data_file = project_root / "data" / "raw" / "test.csv"
+    data_file = project_root / "data" / "inputs" / "test.csv"
     data_file.parent.mkdir(parents=True, exist_ok=True)
     data_file.write_text("gene,expression\nBRCA1,12.5")
 
@@ -39,7 +39,7 @@ def tracked_project(tmp_path):
                 "@type": "cr:FileObject",
                 "@id": "file_1",
                 "name": "test.csv",
-                "contentUrl": "data/raw/test.csv",
+                "contentUrl": "data/inputs/test.csv",
                 "sha256": checksum,
             }
         ],

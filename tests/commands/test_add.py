@@ -58,7 +58,7 @@ def test_find_biotope_root(biotope_project):
     with mock.patch("pathlib.Path.cwd", return_value=biotope_project):
         assert find_biotope_root() == biotope_project
 
-    subdir = biotope_project / "data" / "raw"
+    subdir = biotope_project / "data" / "inputs"
     subdir.mkdir(parents=True)
     with mock.patch("pathlib.Path.cwd", return_value=subdir):
         assert find_biotope_root() == biotope_project
@@ -109,7 +109,7 @@ def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
 
 
 def test_add_file_relative_path_already_tracked(git_repo):
-    data_dir = git_repo / "data" / "raw"
+    data_dir = git_repo / "data" / "inputs"
     data_dir.mkdir(parents=True)
     target_file = data_dir / "experiment.csv"
     target_file.write_text("gene,expression\nBRCA1,12.5")
@@ -119,7 +119,7 @@ def test_add_file_relative_path_already_tracked(git_repo):
     original_cwd = Path.cwd()
     try:
         os.chdir(git_repo)
-        relative_path = Path("data/raw/experiment.csv")
+        relative_path = Path("data/inputs/experiment.csv")
         assert _add_file(relative_path, git_repo, datasets_dir, False) is True
         assert _add_file(relative_path, git_repo, datasets_dir, False) is False
         assert _add_file(relative_path, git_repo, datasets_dir, True) is True
@@ -168,17 +168,17 @@ def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
     from biotope.commands.add import _resolve_dataset_ref
 
     project = tmp_path / "proj"
-    datasets_dir = project / ".biotope" / "datasets" / "data" / "raw"
+    datasets_dir = project / ".biotope" / "datasets" / "data" / "inputs"
     datasets_dir.mkdir(parents=True)
 
-    data_file = project / "data" / "raw" / "kidney.pdf"
+    data_file = project / "data" / "inputs" / "kidney.pdf"
     data_file.parent.mkdir(parents=True, exist_ok=True)
     data_file.write_text("pdf")
 
     manifest = datasets_dir / "kidney.jsonld"
     manifest.write_text("{}")
 
-    canonical = "data/raw/kidney"
+    canonical = "data/inputs/kidney"
     assert _resolve_dataset_ref(canonical, project) == canonical
     assert _resolve_dataset_ref(str(data_file), project) == canonical
     assert _resolve_dataset_ref(str(manifest), project) == canonical

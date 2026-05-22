@@ -107,7 +107,7 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
     "--output-dir",
     "-o",
     type=click.Path(file_okay=False),
-    default="data/raw",
+    default="data",
     help="Directory to save downloaded files",
 )
 @click.option(
@@ -115,13 +115,28 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
     is_flag=True,
     help="Download file without adding to biotope project",
 )
-def get(url: str, output_dir: str, no_add: bool) -> None:
-    """Download a file and integrate with biotope workflow."""
-    # Find biotope project root
+@click.pass_context
+def get(ctx: click.Context, url: str, output_dir: str, no_add: bool) -> None:
+    """Download a file and integrate with biotope workflow.
+
+    If run outside a biotope project, scaffolds one in ``output_dir`` first so
+    the download has a home. This mirrors the behaviour proposed in PR #11.
+    """
+    output_path = Path(output_dir)
+
     biotope_root = find_biotope_root()
     if not biotope_root:
-        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
+        # No surrounding project — scaffold one in-place at output_dir so the
+        # download can be tracked. Uses init's non-interactive path.
+        from biotope.commands.init import init as init_cmd
+
+        output_path.mkdir(parents=True, exist_ok=True)
+        click.echo(f"📦 No biotope project found; initialising one at {output_path}")
+        ctx.invoke(init_cmd, name=".", dir=output_path, no_prompt=True)
+        biotope_root = find_biotope_root(start=output_path)
+        if not biotope_root:
+            click.echo("❌ Failed to initialise biotope project.")
+            raise click.Abort
 
     # Check if we're in a Git repository
     if not is_git_repo(biotope_root):
@@ -129,7 +144,6 @@ def get(url: str, output_dir: str, no_add: bool) -> None:
         raise click.Abort
 
     # Create output directory if it doesn't exist
-    output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Download the file

@@ -39,16 +39,16 @@ dataset scope for shared fields. Use `dataset.<field>=...` or
 
 ```bash
 # Apply the scaffold next to a dataset directory
-biotope annotate apply data/raw/opentargets
+biotope annotate apply data/opentargets
 
 # Apply an explicit scaffold file
-biotope annotate apply data/raw/opentargets/.biotope.yaml
+biotope annotate apply data/opentargets/.biotope.yaml
 
 # Override one dataset field at apply time
-biotope annotate apply data/raw/opentargets --set creator="Open Targets Consortium"
+biotope annotate apply data/opentargets --set creator="Open Targets Consortium"
 
 # Override a record-set field across all record-set rows
-biotope annotate apply data/raw/opentargets --set record_set.description="Needs review"
+biotope annotate apply data/opentargets --set record_set.description="Needs review"
 ```
 
 ### Scaffold format
@@ -58,7 +58,7 @@ scaffold has one `dataset` block and a `record_sets` list:
 
 ```yaml
 dataset:
-  source_path: data/raw/opentargets
+  source_path: data/opentargets
   name: Open Targets
   description: OT v3
   creator: Open Targets
@@ -72,12 +72,12 @@ dataset:
 
 record_sets:
   - id: "#genes"
-    source_path: data/raw/opentargets/genes
+    source_path: data/opentargets/genes
     name: genes
     description: Gene table
     encoding_format: application/parquet
   - id: "#diseases"
-    source_path: data/raw/opentargets/diseases
+    source_path: data/opentargets/diseases
     name: diseases
     description: Disease table
     encoding_format: application/parquet
@@ -112,7 +112,7 @@ biotope annotate edit [OPTIONS]
 ```bash
 biotope annotate edit --staged
 biotope annotate edit --incomplete
-biotope annotate edit --file-path data/raw/experiment.csv
+biotope annotate edit --file-path data/experiment.csv
 ```
 
 `biotope annotate interactive` remains available as a hidden alias.

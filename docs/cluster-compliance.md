@@ -203,7 +203,7 @@ done
 # 2. For each raw item: derive a baker-annotatable artifact (extract tables
 #    from a PDF, fetch a remote URL into the project, …) and re-add it,
 #    pointing back at the original via --derived-from.
-biotope add data/extracted/report.csv --derived-from data/raw/report.pdf
+biotope add data/report_tables.csv --derived-from data/report.pdf
 
 # 3. The new artifact bakes cleanly and lands as 'processed'. The raw input
 #    is still tracked for provenance.

@@ -45,23 +45,23 @@ def _write_manifest(project_dir: Path, rel_id: str, distribution: list[dict]) ->
 
 
 def test_whole_dataset_rename_moves_data_and_manifest(runner: CliRunner, project: Path) -> None:
-    """`biotope mv data/raw/ot data/processed/ot` is the primary multi-file
+    """`biotope mv data/inputs/ot data/outputs/ot` is the primary multi-file
     case: data dir moves, manifest renames to mirror, contentUrls and the
     `name` field are rewritten."""
-    data_dir = project / "data" / "raw" / "ot"
+    data_dir = project / "data" / "inputs" / "ot"
     data_dir.mkdir(parents=True)
     (data_dir / "README.md").write_text("notes")
     (data_dir / "part-00.parquet").write_bytes(b"x")
 
     _write_manifest(
         project,
-        "data/raw/ot",
+        "data/inputs/ot",
         distribution=[
             {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
             {
                 "@type": "cr:FileObject",
                 "@id": "fo",
-                "contentUrl": "data/raw/ot/README.md",
+                "contentUrl": "data/inputs/ot/README.md",
                 "sha256": "abc",
                 "contentSize": "5",
             },
@@ -77,7 +77,7 @@ def test_whole_dataset_rename_moves_data_and_manifest(runner: CliRunner, project
                 mv,
                 [
                     str(data_dir),
-                    str(project / "data" / "processed" / "ot"),
+                    str(project / "data" / "outputs" / "ot"),
                     "-r",
                 ],
             )
@@ -85,22 +85,22 @@ def test_whole_dataset_rename_moves_data_and_manifest(runner: CliRunner, project
 
     # Data moved.
     assert not data_dir.exists()
-    new_dir = project / "data" / "processed" / "ot"
+    new_dir = project / "data" / "outputs" / "ot"
     assert (new_dir / "README.md").exists()
     assert (new_dir / "part-00.parquet").exists()
 
     # Manifest renamed; old path is gone.
-    old_manifest = project / ".biotope" / "datasets" / "data" / "raw" / "ot.jsonld"
-    new_manifest = project / ".biotope" / "datasets" / "data" / "processed" / "ot.jsonld"
+    old_manifest = project / ".biotope" / "datasets" / "data" / "inputs" / "ot.jsonld"
+    new_manifest = project / ".biotope" / "datasets" / "data" / "outputs" / "ot.jsonld"
     assert not old_manifest.exists()
     assert new_manifest.exists()
 
     # contentUrls and name are rewritten; FileSet `includes` is unchanged
     # (relative to dataset_dir).
     metadata = json.loads(new_manifest.read_text())
-    assert metadata["name"] == "data/processed/ot"
+    assert metadata["name"] == "data/outputs/ot"
     urls = [d["contentUrl"] for d in metadata["distribution"] if d["@type"] == "cr:FileObject"]
-    assert urls == ["data/processed/ot/README.md"]
+    assert urls == ["data/outputs/ot/README.md"]
     fileset = next(d for d in metadata["distribution"] if d["@type"] == "cr:FileSet")
     assert fileset["includes"] == "*.parquet"
 
@@ -109,7 +109,7 @@ def test_whole_dataset_rename_carries_nested_manifests(runner: CliRunner, projec
     """If the user has nested sub-datasets under the moved dir, their
     manifests under .biotope/datasets/<source_rel>/ must move alongside,
     and their contentUrl prefixes must be rewritten."""
-    parent = project / "data" / "raw" / "ot"
+    parent = project / "data" / "inputs" / "ot"
     parent.mkdir(parents=True)
     sub = parent / "target"
     sub.mkdir()
@@ -117,19 +117,19 @@ def test_whole_dataset_rename_carries_nested_manifests(runner: CliRunner, projec
 
     _write_manifest(
         project,
-        "data/raw/ot",
+        "data/inputs/ot",
         distribution=[
             {
                 "@type": "cr:FileObject",
                 "@id": "fo_outer",
-                "contentUrl": "data/raw/ot/notes.md",
+                "contentUrl": "data/inputs/ot/notes.md",
                 "sha256": "abc",
                 "contentSize": "5",
             },
             {
                 "@type": "cr:FileObject",
                 "@id": "fo_outer2",
-                "contentUrl": "data/raw/ot/other.md",
+                "contentUrl": "data/inputs/ot/other.md",
                 "sha256": "abc",
                 "contentSize": "5",
             },
@@ -139,7 +139,7 @@ def test_whole_dataset_rename_carries_nested_manifests(runner: CliRunner, projec
     (parent / "other.md").write_text("other")
     _write_manifest(
         project,
-        "data/raw/ot/target",
+        "data/inputs/ot/target",
         distribution=[
             {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
         ],
@@ -154,24 +154,24 @@ def test_whole_dataset_rename_carries_nested_manifests(runner: CliRunner, projec
                 mv,
                 [
                     str(parent),
-                    str(project / "data" / "processed" / "ot"),
+                    str(project / "data" / "outputs" / "ot"),
                     "-r",
                 ],
             )
     assert r.exit_code == 0, r.output
 
     # Top-level manifest renamed.
-    new_top = project / ".biotope" / "datasets" / "data" / "processed" / "ot.jsonld"
+    new_top = project / ".biotope" / "datasets" / "data" / "outputs" / "ot.jsonld"
     assert new_top.exists()
     metadata = json.loads(new_top.read_text())
     urls = sorted(d["contentUrl"] for d in metadata["distribution"] if d["@type"] == "cr:FileObject")
-    assert urls == ["data/processed/ot/notes.md", "data/processed/ot/other.md"]
+    assert urls == ["data/outputs/ot/notes.md", "data/outputs/ot/other.md"]
 
     # Nested sub-dataset manifest carried along.
-    new_sub = project / ".biotope" / "datasets" / "data" / "processed" / "ot" / "target.jsonld"
+    new_sub = project / ".biotope" / "datasets" / "data" / "outputs" / "ot" / "target.jsonld"
     assert new_sub.exists()
     # Old nested path cleaned up.
-    old_sub = project / ".biotope" / "datasets" / "data" / "raw" / "ot" / "target.jsonld"
+    old_sub = project / ".biotope" / "datasets" / "data" / "inputs" / "ot" / "target.jsonld"
     assert not old_sub.exists()
 
 

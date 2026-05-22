@@ -638,7 +638,7 @@ def _resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
     sans the ``.jsonld`` suffix — the same key biotope already uses to mirror
     manifests onto the data tree. Accepts:
 
-    * the canonical id itself (``"data/raw/kidney_pdf"``),
+    * the canonical id itself (``"data/kidney_pdf"``),
     * a path to the data file/dir,
     * a path to the ``.jsonld`` manifest.
 
@@ -683,7 +683,7 @@ def _resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
 
     msg = (
         f"--derived-from {ref!r}: no manifest found under .biotope/datasets/. "
-        "Pass a dataset name (e.g. 'data/raw/kidney_pdf'), a data path, or a "
+        "Pass a dataset name (e.g. 'data/kidney_pdf'), a data path, or a "
         ".jsonld path of an existing dataset."
     )
     raise ValueError(msg)

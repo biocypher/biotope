@@ -86,7 +86,7 @@ raw section — they've been consumed already. Don't re-process them. If you
 add a derived artifact (e.g. a JSON extracted from a PDF), record the link:
 
 ```bash
-biotope add data/extracted/annual_report.json --derived-from data/raw/annual_report.pdf
+biotope add data/annual_report_tables.json --derived-from data/annual_report.pdf
 ```
 
 This is how the agent says "I'm done with that raw input" without renaming
@@ -145,27 +145,40 @@ RAI metadata) as flags on the `add` call.
 
 ### Choosing what to `add`
 
-**Default: one call, on the highest folder that is the whole pull.** If the
-user copied a directory containing many subdirectories
-(`data/source_pull/{primary/, secondary/, links/, …}`), run
-`biotope add data/source_pull` — a single manifest covers the whole tree,
-with FileSet globs handling the per-subdirectory structured files and
-FileObjects handling stragglers.
+The rule is simple: **one directory argument → one manifest, recursively
+covering the whole tree.** biotope does not split subdirectories into
+separate datasets, and it does not split a flat folder's files into
+separate manifests. Whether the folder contains a handful of files at the
+top level or a nest of subdirectories, the result is one composite
+Croissant document with FileSet globs and FileObject entries describing
+the structure inside.
 
 ```bash
-biotope add data/source_pull        # one call, one manifest, one dataset
+# Parent containing several subdirectories that together are one pull.
+biotope add data/source_pull         # one manifest at data/source_pull.jsonld
+
+# Flat directory of files that together are one dataset (e.g. partitioned
+# parquet). Same outcome — one composite, not one per file.
+biotope add data/partitioned_table   # one manifest at data/partitioned_table.jsonld
 ```
 
-**Do not** subdivide by running `add` per subdirectory unless the user
-explicitly wants each subdirectory tracked as its own dataset (rare; only
-makes sense when subdirectories are unrelated data sources that happen to
-share a parent). The multi-file manifest model handles internal structure
-fine without splitting.
+If the user genuinely has **multiple independent datasets** under a shared
+parent, give them separate manifests by passing each as its own path:
+
+```bash
+biotope add data/study_a data/study_b data/study_c   # three manifests
+```
 
 **Anti-pattern**: pointing `biotope add` at individual files inside a
-partitioned table (`data/source_pull/primary/part-0000.parquet`) — you'll
-get one manifest per file. Stop, delete the generated manifests, and add
-the top-level folder instead.
+multi-file dataset (`data/partitioned_table/part-0000.parquet`). You'll get
+one manifest per file, defeating the composite-Croissant model. Stop,
+delete the generated manifests, and add the parent folder instead.
+
+**Anti-pattern**: subdividing by running `add` per subdirectory of a single
+logical dataset (`biotope add data/source_pull/primary` then
+`data/source_pull/secondary`). The multi-file manifest already handles
+internal structure — splitting it across manifests fragments lineage and
+breaks downstream `biotope map` scaffolding.
 
 ### Finding more data
 

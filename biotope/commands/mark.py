@@ -44,7 +44,7 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
 
     Examples::
 
-        biotope mark data/raw/kidney_pdf processed --derived-from data/processed/kidney_extracted
+        biotope mark data/kidney_pdf processed --derived-from data/kidney_extracted
         biotope mark data/ot/target mapped
     """
     biotope_root = find_biotope_root()

@@ -1,6 +1,7 @@
 """Tests for the get command."""
 
 import subprocess
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -294,15 +295,26 @@ def test_get_command_no_add_flag(mock_download, runner, biotope_project):
     assert "File downloaded. To add to biotope project:" in result.output
 
 
-def test_get_command_not_in_biotope_project(runner):
-    """Test get command when not in a biotope project."""
+@mock.patch("biotope.commands.get.download_file")
+@mock.patch("biotope.commands.get._call_biotope_add")
+def test_get_command_autoinits_when_not_in_project(mock_add, mock_download, runner, tmp_path):
+    """When run outside a biotope project, `get` scaffolds one in output_dir."""
     from biotope.commands.get import get
 
-    with mock.patch("biotope.commands.get.find_biotope_root", return_value=None):
-        result = runner.invoke(get, ["https://example.com/test.txt"])
+    downloaded = tmp_path / "data" / "test.txt"
+    mock_download.return_value = downloaded
+    mock_add.return_value = True
 
-    assert result.exit_code == 1
-    assert "❌ Not in a biotope project" in result.output
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(
+            get,
+            ["https://example.com/test.txt"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "initialising one at data" in result.output
+        # init should have created .biotope/ at the output_dir
+        assert (Path("data") / ".biotope").is_dir()
 
 
 def test_get_command_not_in_git_repo(runner, biotope_project):

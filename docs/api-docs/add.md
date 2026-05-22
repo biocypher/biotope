@@ -44,13 +44,13 @@ biotope add [OPTIONS] [PATHS]...
 ### Add a single file
 
 ```bash
-biotope add data/raw/experiment.csv --license CC-BY-4.0
+biotope add data/experiment.csv --license CC-BY-4.0
 ```
 
 ### Add a directory
 
 ```bash
-biotope add data/raw/opentargets \
+biotope add data/opentargets \
   --license CC-BY-4.0 \
   --creator "Open Targets" \
   --description "Open Targets release"
@@ -59,7 +59,7 @@ biotope add data/raw/opentargets \
 ### Force re-add a tracked file
 
 ```bash
-biotope add data/raw/experiment.csv --force
+biotope add data/experiment.csv --force
 ```
 
 ## What It Does
@@ -76,8 +76,8 @@ dataset can be refined collaboratively with `biotope annotate apply`.
 ## Follow-on workflow
 
 ```bash
-biotope add data/raw/opentargets --license CC-BY-4.0 --creator "Open Targets"
-biotope annotate apply data/raw/opentargets
+biotope add data/opentargets --license CC-BY-4.0 --creator "Open Targets"
+biotope annotate apply data/opentargets
 biotope status
 biotope commit -m "Track Open Targets dataset"
 ```

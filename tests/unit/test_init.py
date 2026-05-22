@@ -23,8 +23,7 @@ def test_init_default_layout(tmp_path: Path) -> None:
     root = tmp_path / "myproj"
     assert (root / ".biotope" / "datasets").is_dir()
     assert (root / ".biotope" / "workflows").is_dir()
-    assert (root / "data" / "raw").is_dir()
-    assert (root / "data" / "processed").is_dir()
+    assert (root / "data").is_dir()
     assert (root / "mappings").is_dir()
     assert (root / ".biotope" / "config.yaml").is_file()
     assert (root / ".biotope" / "project.yaml").is_file()

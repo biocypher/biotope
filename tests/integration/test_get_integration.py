@@ -52,10 +52,10 @@ def test_get_command_full_workflow(biotope_project, sample_data_file):
 
     # Mock the download to return our sample file
     with mock.patch("biotope.commands.get.download_file") as mock_download:
-        # Copy sample file to data/raw directory within the biotope project
-        data_raw_dir = biotope_project / "data" / "raw"
-        data_raw_dir.mkdir(parents=True)
-        downloaded_file = data_raw_dir / "sample_data.csv"
+        # Copy sample file to data/inputs directory within the biotope project
+        data_dir = biotope_project / "data" / "inputs"
+        data_dir.mkdir(parents=True)
+        downloaded_file = data_dir / "sample_data.csv"
         downloaded_file.write_text(sample_data_file.read_text())
 
         mock_download.return_value = downloaded_file
@@ -102,7 +102,7 @@ def test_get_command_with_no_add_flag(biotope_project, sample_data_file):
     runner = CliRunner()
 
     with mock.patch("biotope.commands.get.download_file") as mock_download:
-        data_raw_dir = biotope_project / "data" / "raw"
+        data_raw_dir = biotope_project / "data" / "inputs"
         data_raw_dir.mkdir(parents=True)
         downloaded_file = data_raw_dir / "sample_data.csv"
         downloaded_file.write_text(sample_data_file.read_text())
@@ -170,17 +170,23 @@ def test_get_command_download_failure(biotope_project):
         assert "❌ Failed to download file" in result.output
 
 
-def test_get_command_not_in_biotope_project(tmp_path):
-    """Test get command when not in a biotope project."""
+@mock.patch("biotope.commands.get.download_file")
+@mock.patch("biotope.commands.get._call_biotope_add")
+def test_get_command_autoinits_when_not_in_project(mock_add, mock_download, tmp_path):
+    """When run outside a biotope project, `get` scaffolds one in the output dir."""
     from biotope.commands.get import get
 
+    mock_add.return_value = True
+    mock_download.return_value = tmp_path / "data" / "test.csv"
+
     runner = CliRunner()
-
-    with mock.patch("biotope.commands.get.find_biotope_root", return_value=None):
+    with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(get, ["https://example.com/test.csv"])
+        assert result.exit_code == 0, result.output
+        assert "initialising one at data" in result.output
+        from pathlib import Path
 
-    assert result.exit_code == 1
-    assert "❌ Not in a biotope project" in result.output
+        assert (Path("data") / ".biotope").is_dir()
 
 
 def test_get_command_not_in_git_repo(biotope_project):
@@ -227,8 +233,7 @@ def test_get_command_with_content_disposition_header(biotope_project):
         assert "✅ Downloaded:" in result.output
 
         # Check that the file was downloaded with the custom filename
-        data_raw_dir = biotope_project / "data" / "raw"
-        custom_file = data_raw_dir / "custom_filename.csv"
+        custom_file = biotope_project / "data" / "custom_filename.csv"
         assert custom_file.exists()
 
         # Check that it was added to biotope project

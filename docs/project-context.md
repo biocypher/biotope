@@ -11,7 +11,10 @@ my-kg/
 │   ├── config.yaml         technical settings (validation, registries)
 │   ├── datasets/           one Croissant .jsonld per tracked file
 │   └── workflows/          (reserved)
-├── data/{raw,processed}/   actual data; gitignored by default
+├── data/                   tracked datasets; gitignored. Organise as you see
+│                            fit — biotope doesn't prescribe subdirs. Pipeline
+│                            state lives in each manifest's biotope:status,
+│                            not in the directory name.
 ├── mappings/               *.mapping.yaml — declarative KG mappings
 ├── alignment.yaml          (optional) cross-Croissant alignment
 ├── build/                  output of `biotope build`

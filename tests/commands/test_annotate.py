@@ -77,9 +77,9 @@ def sample_metadata_file(tmp_path):
 def annotated_project(tmp_path):
     project_root = tmp_path
     (project_root / ".git").mkdir()
-    datasets_dir = project_root / ".biotope" / "datasets" / "data" / "raw"
+    datasets_dir = project_root / ".biotope" / "datasets" / "data" / "inputs"
     datasets_dir.mkdir(parents=True)
-    data_dir = project_root / "data" / "raw" / "opentargets"
+    data_dir = project_root / "data" / "inputs" / "opentargets"
     data_dir.mkdir(parents=True)
 
     metadata_path = datasets_dir / "opentargets.jsonld"
@@ -90,7 +90,7 @@ def annotated_project(tmp_path):
             "sc": "https://schema.org/",
         },
         "@type": "Dataset",
-        "name": "data/raw/opentargets",
+        "name": "data/inputs/opentargets",
         "description": "Open Targets dataset",
         "creator": {"@type": "Person", "name": "Open Targets"},
         "license": "CC-BY-4.0",
@@ -99,7 +99,7 @@ def annotated_project(tmp_path):
                 "@type": "cr:FileObject",
                 "@id": "file_genes",
                 "name": "genes.parquet",
-                "contentUrl": "data/raw/opentargets/genes.parquet",
+                "contentUrl": "data/inputs/opentargets/genes.parquet",
                 "encodingFormat": "application/parquet",
                 "sha256": "abc123",
             },
@@ -107,7 +107,7 @@ def annotated_project(tmp_path):
                 "@type": "cr:FileObject",
                 "@id": "file_diseases",
                 "name": "diseases.parquet",
-                "contentUrl": "data/raw/opentargets/diseases.parquet",
+                "contentUrl": "data/inputs/opentargets/diseases.parquet",
                 "encodingFormat": "application/parquet",
                 "sha256": "def456",
             },
@@ -152,7 +152,7 @@ def annotated_project(tmp_path):
     scaffold_path = data_dir / ".biotope.yaml"
     scaffold = {
         "dataset": {
-            "source_path": "data/raw/opentargets",
+            "source_path": "data/inputs/opentargets",
             "name": "Open Targets",
             "description": "OT v3",
             "creator": "Open Targets",
@@ -162,14 +162,14 @@ def annotated_project(tmp_path):
         "record_sets": [
             {
                 "id": "#genes",
-                "source_path": "data/raw/opentargets/genes",
+                "source_path": "data/inputs/opentargets/genes",
                 "name": "genes",
                 "description": "Gene table",
                 "encoding_format": "application/vnd.apache.parquet",
             },
             {
                 "id": "#diseases",
-                "source_path": "data/raw/opentargets/diseases",
+                "source_path": "data/inputs/opentargets/diseases",
                 "name": "diseases",
                 "description": "Disease table",
                 "encoding_format": "application/parquet",

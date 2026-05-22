@@ -64,7 +64,7 @@ def biotope_project_with_file(tmp_path):
     git_dir.mkdir()
 
     # Create test data file
-    data_dir = tmp_path / "data" / "raw"
+    data_dir = tmp_path / "data" / "inputs"
     data_dir.mkdir(parents=True)
     test_file = data_dir / "test.csv"
     test_file.write_text("gene,expression\nBRCA1,12.5")
@@ -80,7 +80,7 @@ def biotope_project_with_file(tmp_path):
                 "@type": "cr:FileObject",
                 "@id": "file_12345678",
                 "name": "test.csv",
-                "contentUrl": "data/raw/test.csv",
+                "contentUrl": "data/inputs/test.csv",
                 "sha256": "abc123",
                 "contentSize": 100,
                 "dateCreated": "2023-01-01T00:00:00Z",
@@ -89,7 +89,7 @@ def biotope_project_with_file(tmp_path):
     }
 
     # Create metadata file in directory structure that mirrors data file location
-    metadata_dir = datasets_dir / "data" / "raw"
+    metadata_dir = datasets_dir / "data" / "inputs"
     metadata_dir.mkdir(parents=True, exist_ok=True)
     metadata_file = metadata_dir / "test.jsonld"
     with open(metadata_file, "w") as f:
@@ -109,7 +109,7 @@ def git_repo(biotope_project):
 
 def test_find_metadata_files_for_file(biotope_project_with_file):
     """Test finding metadata files that reference a data file."""
-    test_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    test_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
     metadata_files = _find_metadata_files_for_file(test_file, biotope_project_with_file)
 
     assert len(metadata_files) == 1
@@ -118,7 +118,7 @@ def test_find_metadata_files_for_file(biotope_project_with_file):
 
 def test_find_metadata_files_for_file_no_matches(biotope_project_with_file):
     """Test finding metadata files when no matches exist."""
-    nonexistent_file = biotope_project_with_file / "data" / "raw" / "nonexistent.csv"
+    nonexistent_file = biotope_project_with_file / "data" / "inputs" / "nonexistent.csv"
     metadata_files = _find_metadata_files_for_file(nonexistent_file, biotope_project_with_file)
 
     assert len(metadata_files) == 0
@@ -136,17 +136,17 @@ def test_find_metadata_files_for_file_no_datasets_dir(biotope_project):
 
 def test_update_metadata_file_path(biotope_project_with_file):
     """Test updating file path in metadata file."""
-    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
 
     # Create the destination directory and file for size calculation
-    dest_dir = biotope_project_with_file / "data" / "processed"
+    dest_dir = biotope_project_with_file / "data" / "outputs"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file = dest_dir / "test.csv"
     dest_file.write_text("gene,expression\nBRCA1,12.5")  # Same content as source
 
     # Update the path
     result = _update_metadata_file_path(
-        metadata_file, "data/raw/test.csv", "data/processed/test.csv", "new_checksum_123", biotope_project_with_file
+        metadata_file, "data/inputs/test.csv", "data/outputs/test.csv", "new_checksum_123", biotope_project_with_file
     )
 
     assert result is True
@@ -156,20 +156,20 @@ def test_update_metadata_file_path(biotope_project_with_file):
         metadata = json.load(f)
 
     distribution = metadata["distribution"][0]
-    assert distribution["contentUrl"] == "data/processed/test.csv"
+    assert distribution["contentUrl"] == "data/outputs/test.csv"
     assert distribution["sha256"] == "new_checksum_123"
     assert "dateModified" in distribution
 
 
 def test_update_metadata_file_path_no_match(biotope_project_with_file):
     """Test updating file path when no matching file object exists."""
-    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
 
     # Try to update a path that doesn't exist in metadata
     result = _update_metadata_file_path(
         metadata_file,
-        "data/raw/nonexistent.csv",
-        "data/processed/nonexistent.csv",
+        "data/inputs/nonexistent.csv",
+        "data/outputs/nonexistent.csv",
         "new_checksum_123",
         biotope_project_with_file,
     )
@@ -179,12 +179,12 @@ def test_update_metadata_file_path_no_match(biotope_project_with_file):
 
 def test_update_metadata_file_path_invalid_json(biotope_project):
     """Test updating file path with invalid JSON."""
-    metadata_file = biotope_project / ".biotope" / "datasets" / "data" / "raw" / "invalid.jsonld"
+    metadata_file = biotope_project / ".biotope" / "datasets" / "data" / "inputs" / "invalid.jsonld"
     metadata_file.parent.mkdir(parents=True, exist_ok=True)
     metadata_file.write_text("invalid json content")
 
     result = _update_metadata_file_path(
-        metadata_file, "data/raw/test.csv", "data/processed/test.csv", "new_checksum_123", biotope_project
+        metadata_file, "data/inputs/test.csv", "data/outputs/test.csv", "new_checksum_123", biotope_project
     )
 
     assert result is False
@@ -212,7 +212,7 @@ def test_validate_move_operation_same_file(biotope_project):
 
 def test_validate_move_operation_biotope_internal_file(biotope_project):
     """Test validation when trying to move biotope internal files."""
-    source = biotope_project / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+    source = biotope_project / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_text("metadata content")
     destination = biotope_project / "test.jsonld"
@@ -306,8 +306,8 @@ def test_mv_file_not_tracked(runner, biotope_project):
 
 def test_mv_successful_move(runner, biotope_project_with_file):
     """Test successful mv command execution."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     # Change to biotope project directory
     original_cwd = Path.cwd()
@@ -331,17 +331,17 @@ def test_mv_successful_move(runner, biotope_project_with_file):
 
                     # Metadata should be updated and moved to new location
                     metadata_file = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.jsonld"
                     )
                     with open(metadata_file) as f:
                         metadata = json.load(f)
 
-                    assert metadata["distribution"][0]["contentUrl"] == "data/processed/test.csv"
+                    assert metadata["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
                     assert "dateModified" in metadata["distribution"][0]
 
                     # Original metadata file should no longer exist
                     original_metadata_file = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
                     )
                     assert not original_metadata_file.exists()
     finally:
@@ -350,8 +350,8 @@ def test_mv_successful_move(runner, biotope_project_with_file):
 
 def test_mv_force_overwrite(runner, biotope_project_with_file):
     """Test mv command with force overwrite."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "existing.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "existing.csv"
 
     # Create existing destination file
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -400,7 +400,7 @@ def test_mv_no_metadata_files(runner, biotope_project):
 
 def test_mv_creates_destination_directory(runner, biotope_project_with_file):
     """Test that mv creates destination directory structure."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
     destination = biotope_project_with_file / "data" / "deep" / "nested" / "structure" / "test.csv"
 
     # Ensure destination directory doesn't exist
@@ -437,18 +437,18 @@ def test_mv_multiple_metadata_files(biotope_project_with_file):
                 "@type": "cr:FileObject",
                 "@id": "file_87654321",
                 "name": "test.csv",
-                "contentUrl": "data/raw/test.csv",
+                "contentUrl": "data/inputs/test.csv",
                 "sha256": "def456",
                 "contentSize": 100,
             }
         ],
     }
 
-    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test_copy.jsonld"
     with open(second_metadata_file, "w") as f:
         json.dump(second_metadata, f, indent=2)
 
-    test_file = biotope_project_with_file / "data" / "raw" / "test.csv"
+    test_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
     metadata_files = _find_metadata_files_for_file(test_file, biotope_project_with_file)
 
     # Should find both metadata files
@@ -495,8 +495,8 @@ def test_resolve_destination_path_to_existing_file():
 
 def test_mv_to_existing_directory(runner, biotope_project_with_file):
     """Test mv command when destination is an existing directory."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination_dir = biotope_project_with_file / "data" / "processed"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination_dir = biotope_project_with_file / "data" / "outputs"
     destination_dir.mkdir(parents=True, exist_ok=True)
 
     original_cwd = Path.cwd()
@@ -516,7 +516,7 @@ def test_mv_to_existing_directory(runner, biotope_project_with_file):
 
                     # Metadata should be updated
                     metadata_file = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.jsonld"
                     )
                     assert metadata_file.exists()
     finally:
@@ -676,7 +676,7 @@ def test_find_metadata_files_corrupted_json():
 def test_mv_with_special_characters_in_filename(runner, biotope_project_with_file):
     """Test mv with special characters in filenames."""
     # Create file with special characters
-    special_file = biotope_project_with_file / "data" / "raw" / "test file (1) [copy].csv"
+    special_file = biotope_project_with_file / "data" / "inputs" / "test file (1) [copy].csv"
     special_file.write_text("gene,expression\nBRCA1,12.5")
 
     # Create corresponding metadata
@@ -687,18 +687,20 @@ def test_mv_with_special_characters_in_filename(runner, biotope_project_with_fil
         "distribution": [
             {
                 "@type": "cr:FileObject",
-                "contentUrl": "data/raw/test file (1) [copy].csv",
+                "contentUrl": "data/inputs/test file (1) [copy].csv",
                 "sha256": "abc123",
                 "contentSize": 100,
             }
         ],
     }
 
-    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test file (1) [copy].jsonld"
+    metadata_file = (
+        biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test file (1) [copy].jsonld"
+    )
     with open(metadata_file, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    destination = biotope_project_with_file / "data" / "processed" / "cleaned file.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "cleaned file.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -720,7 +722,7 @@ def test_mv_with_special_characters_in_filename(runner, biotope_project_with_fil
 def test_mv_empty_file(runner, biotope_project_with_file):
     """Test mv with an empty file."""
     # Create empty file
-    empty_file = biotope_project_with_file / "data" / "raw" / "empty.csv"
+    empty_file = biotope_project_with_file / "data" / "inputs" / "empty.csv"
     empty_file.write_text("")
 
     # Create corresponding metadata
@@ -731,18 +733,18 @@ def test_mv_empty_file(runner, biotope_project_with_file):
         "distribution": [
             {
                 "@type": "cr:FileObject",
-                "contentUrl": "data/raw/empty.csv",
+                "contentUrl": "data/inputs/empty.csv",
                 "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 "contentSize": 0,
             }
         ],
     }
 
-    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "empty.jsonld"
+    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "empty.jsonld"
     with open(metadata_file, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    destination = biotope_project_with_file / "data" / "processed" / "empty.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "empty.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -769,8 +771,8 @@ def test_mv_relative_paths(runner, biotope_project_with_file):
         os.chdir(biotope_project_with_file)
 
         # Use relative paths
-        source_rel = "data/raw/test.csv"
-        destination_rel = "data/processed/test.csv"
+        source_rel = "data/inputs/test.csv"
+        destination_rel = "data/outputs/test.csv"
 
         with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
@@ -779,8 +781,8 @@ def test_mv_relative_paths(runner, biotope_project_with_file):
                     assert result.exit_code == 0
 
                     # Files should be moved using resolved paths
-                    source_abs = biotope_project_with_file / "data" / "raw" / "test.csv"
-                    dest_abs = biotope_project_with_file / "data" / "processed" / "test.csv"
+                    source_abs = biotope_project_with_file / "data" / "inputs" / "test.csv"
+                    dest_abs = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
                     assert not source_abs.exists()
                     assert dest_abs.exists()
@@ -790,11 +792,11 @@ def test_mv_relative_paths(runner, biotope_project_with_file):
 
 def test_mv_metadata_already_exists_at_destination(runner, biotope_project_with_file):
     """Test mv when metadata file already exists at destination location."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     # Create destination metadata file that already exists
-    dest_metadata_dir = biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed"
+    dest_metadata_dir = biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs"
     dest_metadata_dir.mkdir(parents=True, exist_ok=True)
     existing_metadata_file = dest_metadata_dir / "test.jsonld"
     existing_metadata_file.write_text('{"existing": "metadata"}')
@@ -815,7 +817,7 @@ def test_mv_metadata_already_exists_at_destination(runner, biotope_project_with_
 
                     # Should contain the updated metadata, not the old "existing" content
                     assert "distribution" in updated_metadata
-                    assert updated_metadata["distribution"][0]["contentUrl"] == "data/processed/test.csv"
+                    assert updated_metadata["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
     finally:
         os.chdir(original_cwd)
 
@@ -826,8 +828,8 @@ def test_execute_move_checksum_calculation_error(biotope_project_with_file):
 
     from biotope.commands.mv import _execute_move
 
-    source = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
     console = Console()
 
     # Mock checksum calculation to fail
@@ -842,8 +844,8 @@ def test_execute_move_shutil_move_error(biotope_project_with_file):
 
     from biotope.commands.mv import _execute_move
 
-    source = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
     console = Console()
 
     # Mock shutil.move to fail
@@ -858,8 +860,8 @@ def test_execute_move_metadata_file_move_fails(biotope_project_with_file):
 
     from biotope.commands.mv import _execute_move
 
-    source = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
     console = Console()
 
     # Create destination directory to avoid mkdir issues
@@ -891,8 +893,8 @@ def test_execute_move_metadata_file_move_fails(biotope_project_with_file):
 
 def test_mv_directory_without_recursive_flag(runner, biotope_project_with_file):
     """Test mv command on directory without --recursive flag (should fail)."""
-    source_dir = biotope_project_with_file / "data" / "raw"
-    destination = biotope_project_with_file / "data" / "processed"
+    source_dir = biotope_project_with_file / "data" / "inputs"
+    destination = biotope_project_with_file / "data" / "outputs"
 
     original_cwd = Path.cwd()
     try:
@@ -1120,8 +1122,8 @@ def test_mv_directory_mixed_tracked_files(runner, biotope_project_with_directory
 
 def test_mv_metadata_validation_fails_before_move(runner, biotope_project_with_file):
     """Test mv command when metadata validation fails before file move."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1144,8 +1146,8 @@ def test_mv_metadata_validation_fails_before_move(runner, biotope_project_with_f
 
 def test_mv_metadata_write_permission_fails_before_move(runner, biotope_project_with_file):
     """Test mv command when metadata write permission fails during validation."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1168,8 +1170,8 @@ def test_mv_metadata_write_permission_fails_before_move(runner, biotope_project_
 
 def test_mv_rollback_on_checksum_calculation_failure(runner, biotope_project_with_file):
     """Test mv command rolls back when checksum calculation fails after file move."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1192,8 +1194,8 @@ def test_mv_rollback_on_checksum_calculation_failure(runner, biotope_project_wit
 
 def test_mv_rollback_on_metadata_update_failure(runner, biotope_project_with_file):
     """Test mv command when metadata update fails after file move."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1217,8 +1219,8 @@ def test_mv_rollback_on_metadata_update_failure(runner, biotope_project_with_fil
 
 def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_file):
     """Test mv command rolls back when metadata file move fails after data file move."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1416,8 +1418,8 @@ def test_mv_rollback_on_json_decode_error_in_directory_move(runner, biotope_proj
 
 def test_mv_rollback_on_rollback_failure(runner, biotope_project_with_file):
     """Test mv command when rollback itself fails."""
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1446,15 +1448,15 @@ def test_mv_metadata_validation_with_multiple_files(runner, biotope_project_with
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "Dataset",
         "name": "test_copy",
-        "distribution": [{"@type": "cr:FileObject", "contentUrl": "data/raw/test.csv", "sha256": "def456"}],
+        "distribution": [{"@type": "cr:FileObject", "contentUrl": "data/inputs/test.csv", "sha256": "def456"}],
     }
 
-    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test_copy.jsonld"
     with open(second_metadata_file, "w") as f:
         json.dump(second_metadata, f, indent=2)
 
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1467,11 +1469,9 @@ def test_mv_metadata_validation_with_multiple_files(runner, biotope_project_with
                     assert result.exit_code == 0
 
                     # Both metadata files should be updated and moved to the new location
-                    metadata1 = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test.jsonld"
-                    )
+                    metadata1 = biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.jsonld"
                     metadata2 = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test_copy.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test_copy.jsonld"
                     )
 
                     assert metadata1.exists()
@@ -1480,18 +1480,18 @@ def test_mv_metadata_validation_with_multiple_files(runner, biotope_project_with
                     # Both should reference the new path
                     with open(metadata1) as f:
                         meta1 = json.load(f)
-                    assert meta1["distribution"][0]["contentUrl"] == "data/processed/test.csv"
+                    assert meta1["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
 
                     with open(metadata2) as f:
                         meta2 = json.load(f)
-                    assert meta2["distribution"][0]["contentUrl"] == "data/processed/test.csv"
+                    assert meta2["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
 
                     # Original metadata files should no longer exist
                     original_metadata1 = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
                     )
                     original_metadata2 = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test_copy.jsonld"
                     )
                     assert not original_metadata1.exists()
                     assert not original_metadata2.exists()
@@ -1506,18 +1506,18 @@ def test_mv_metadata_validation_with_one_corrupted_file(runner, biotope_project_
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "Dataset",
         "name": "test_copy",
-        "distribution": [{"@type": "cr:FileObject", "contentUrl": "data/raw/test.csv", "sha256": "def456"}],
+        "distribution": [{"@type": "cr:FileObject", "contentUrl": "data/inputs/test.csv", "sha256": "def456"}],
     }
 
-    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+    second_metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test_copy.jsonld"
     with open(second_metadata_file, "w") as f:
         json.dump(second_metadata, f, indent=2)
 
     # Corrupt the second metadata file
     second_metadata_file.write_text("invalid json content")
 
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:
@@ -1537,13 +1537,13 @@ def test_mv_metadata_validation_with_one_corrupted_file(runner, biotope_project_
 
                     # Only the valid metadata file should be moved
                     valid_metadata = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "processed" / "test.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.jsonld"
                     )
                     assert valid_metadata.exists()
 
                     # Corrupted metadata file should remain in original location
                     corrupted_metadata = (
-                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test_copy.jsonld"
+                        biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test_copy.jsonld"
                     )
                     assert corrupted_metadata.exists()
     finally:
@@ -1578,13 +1578,13 @@ def test_mv_directory_validation_with_corrupted_metadata(runner, biotope_project
 
 def test_mv_rejects_legacy_sc_file_object(runner, biotope_project_with_file):
     """Legacy sc:FileObject metadata should fail fast."""
-    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "raw" / "test.jsonld"
+    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
     metadata = json.loads(metadata_file.read_text())
     metadata["distribution"][0]["@type"] = "sc:FileObject"
     metadata_file.write_text(json.dumps(metadata, indent=2))
 
-    source_file = biotope_project_with_file / "data" / "raw" / "test.csv"
-    destination = biotope_project_with_file / "data" / "processed" / "test.csv"
+    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
+    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
 
     original_cwd = Path.cwd()
     try:

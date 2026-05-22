@@ -2,9 +2,9 @@
 
 Two modes that mirror how ``biotope add`` introduces things:
 
-* **Whole-dataset:** ``biotope rm data/raw/kidney_pdf`` — delete the data
-  directory and its manifest at ``.biotope/datasets/data/raw/kidney_pdf.jsonld``.
-* **Single file in a multi-file manifest:** ``biotope rm data/raw/things/foo.csv``
+* **Whole-dataset:** ``biotope rm data/kidney_pdf`` — delete the data
+  directory and its manifest at ``.biotope/datasets/data/kidney_pdf.jsonld``.
+* **Single file in a multi-file manifest:** ``biotope rm data/things/foo.csv``
   — drop the matching ``cr:FileObject`` from the manifest covering the file's
   dataset directory, and delete the file on disk.
 
@@ -77,7 +77,7 @@ def rm(target: Path, keep_data: bool, force: bool) -> None:
         return
 
     # Path doesn't exist on disk — accept canonical dataset id (`biotope rm
-    # data/raw/kidney_pdf` after the dir is already gone, for example).
+    # data/kidney_pdf` after the dir is already gone, for example).
     try:
         rel_id = _resolve_dataset_ref(str(target), biotope_root)
     except ValueError as exc:

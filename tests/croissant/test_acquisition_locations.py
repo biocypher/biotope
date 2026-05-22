@@ -14,14 +14,14 @@ def test_biotope_managed_manifest_resolves_to_existing_parallel_data_dir(tmp_pat
     """Manifest under `.biotope/datasets/<rel>.jsonld` with matching data dir
     returns `<root>/<rel>` — the base for relative `includes` globs."""
     root = tmp_path
-    (root / "data" / "raw" / "opentargets").mkdir(parents=True)
-    manifest = root / ".biotope" / "datasets" / "data" / "raw" / "opentargets.jsonld"
+    (root / "data" / "inputs" / "opentargets").mkdir(parents=True)
+    manifest = root / ".biotope" / "datasets" / "data" / "inputs" / "opentargets.jsonld"
     manifest.parent.mkdir(parents=True)
     manifest.write_text("{}")
 
     location = infer_datasets_location(manifest)
 
-    assert location == (root / "data" / "raw" / "opentargets").resolve()
+    assert location == (root / "data" / "inputs" / "opentargets").resolve()
 
 
 def test_biotope_managed_falls_back_to_project_root_when_data_dir_missing(
@@ -67,11 +67,11 @@ def test_string_argument_is_accepted(tmp_path: Path) -> None:
 def test_includes_glob_composes_correctly(tmp_path: Path) -> None:
     """End-to-end sanity: location joined with a FileSet `includes` glob hits the data."""
     root = tmp_path
-    data_dir = root / "data" / "raw" / "opentargets" / "drug_moa"
+    data_dir = root / "data" / "inputs" / "opentargets" / "drug_moa"
     data_dir.mkdir(parents=True)
     (data_dir / "part-00000.snappy.parquet").write_bytes(b"")
 
-    manifest = root / ".biotope" / "datasets" / "data" / "raw" / "opentargets.jsonld"
+    manifest = root / ".biotope" / "datasets" / "data" / "inputs" / "opentargets.jsonld"
     manifest.parent.mkdir(parents=True)
     manifest.write_text("{}")
 

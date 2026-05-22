@@ -28,7 +28,7 @@ def test_map_rejects_biotope_yaml_scaffold(tmp_path: Path, monkeypatch) -> None:
     project_dir = _init_project(tmp_path)
     monkeypatch.chdir(project_dir)
 
-    data_dir = project_dir / "data" / "raw" / "ot"
+    data_dir = project_dir / "data" / "inputs" / "ot"
     data_dir.mkdir(parents=True)
     (data_dir / ".biotope.yaml").write_text("# annotation scaffold\nfoo: bar\n")
 
@@ -44,18 +44,18 @@ def test_map_suggests_canonical_croissant_jsonld(tmp_path: Path, monkeypatch) ->
     project_dir = _init_project(tmp_path)
     monkeypatch.chdir(project_dir)
 
-    data_dir = project_dir / "data" / "raw" / "ot"
+    data_dir = project_dir / "data" / "inputs" / "ot"
     data_dir.mkdir(parents=True)
     (data_dir / ".biotope.yaml").write_text("dataset: {}\n")
 
     # Simulate the canonical layout: .biotope/datasets/<rel>.jsonld (file, not dir).
-    canonical = project_dir / ".biotope" / "datasets" / "data" / "raw" / "ot.jsonld"
+    canonical = project_dir / ".biotope" / "datasets" / "data" / "inputs" / "ot.jsonld"
     canonical.parent.mkdir(parents=True, exist_ok=True)
     canonical.write_text("{}\n")
 
     r = runner.invoke(map_group, ["-c", str(data_dir / ".biotope.yaml")])
     assert r.exit_code != 0
-    assert ".biotope/datasets/data/raw/ot.jsonld" in r.output
+    assert ".biotope/datasets/data/inputs/ot.jsonld" in r.output
 
 
 def test_map_inspect_rejects_yaml(tmp_path: Path, monkeypatch) -> None:
@@ -90,11 +90,11 @@ def test_map_accepts_data_dir_and_resolves_canonical_croissant(
     project_dir = _init_project(tmp_path)
     monkeypatch.chdir(project_dir)
 
-    data_dir = project_dir / "data" / "raw" / "ot"
+    data_dir = project_dir / "data" / "inputs" / "ot"
     data_dir.mkdir(parents=True)
     (data_dir / "dummy.txt").write_text("placeholder")
 
-    canonical = project_dir / ".biotope" / "datasets" / "data" / "raw" / "ot.jsonld"
+    canonical = project_dir / ".biotope" / "datasets" / "data" / "inputs" / "ot.jsonld"
     canonical.parent.mkdir(parents=True, exist_ok=True)
     canonical.write_text(minimal_croissant_jsonld.read_text())
 
@@ -127,7 +127,7 @@ def test_map_data_dir_without_add_suggests_add(tmp_path: Path, monkeypatch) -> N
     project_dir = _init_project(tmp_path)
     monkeypatch.chdir(project_dir)
 
-    data_dir = project_dir / "data" / "raw" / "not-yet-added"
+    data_dir = project_dir / "data" / "inputs" / "not-yet-added"
     data_dir.mkdir(parents=True)
 
     r = runner.invoke(map_group, ["-c", str(data_dir)])
