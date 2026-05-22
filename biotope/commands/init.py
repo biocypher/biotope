@@ -15,7 +15,8 @@ import os
 import shutil
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError, version as _installed_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _installed_version
 from pathlib import Path
 
 import click
@@ -23,6 +24,7 @@ import yaml
 from rich.console import Console
 
 from biotope.project_model import Project, resolve_project_path
+
 
 PURPOSE_PROMPT = (
     "What is the main purpose or aim of this project?\n"

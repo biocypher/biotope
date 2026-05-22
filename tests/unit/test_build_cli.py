@@ -13,6 +13,7 @@ from biotope.commands.map import map_group
 from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
 from biotope.commands.propose_mapping import propose_mapping
 
+
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "croissant"
 
 

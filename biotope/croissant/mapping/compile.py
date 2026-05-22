@@ -24,12 +24,12 @@ from biotope.croissant.mapping.model import (
     ExplodeScan,
     Mapping,
     RelationMapping,
-    RowScan,
     Selector,
     to_sentence_case,
 )
 from biotope.croissant.mapping.scans import build_scan_operation
-from biotope.croissant.mapping.selectors import ResolutionContext, resolve_selector
+from biotope.croissant.mapping.selectors import resolve_selector
+
 
 NodeTuple = tuple[str, str, dict[str, Any]]
 # BioCypher edge tuple: (relationship_id, source_id, target_id, relationship_label, properties).
@@ -72,10 +72,7 @@ def iter_entity_tuples(
             node_id = resolve_selector(entity.id, ctx)  # type: ignore[arg-type]
             if not _is_scalar_id(node_id):
                 continue
-            properties = {
-                prop_name: resolve_selector(prop, ctx)
-                for prop_name, prop in entity.properties.items()
-            }
+            properties = {prop_name: resolve_selector(prop, ctx) for prop_name, prop in entity.properties.items()}
             yield (str(node_id), label, properties)
 
 
@@ -107,10 +104,7 @@ def iter_relation_tuples(
             target_id = resolve_selector(relation.target.as_selector(), ctx)  # type: ignore[union-attr]
             if not _is_scalar_id(source_id) or not _is_scalar_id(target_id):
                 continue
-            properties = {
-                prop_name: resolve_selector(prop, ctx)
-                for prop_name, prop in relation.properties.items()
-            }
+            properties = {prop_name: resolve_selector(prop, ctx) for prop_name, prop in relation.properties.items()}
             yield (None, str(source_id), str(target_id), label, properties)
 
 
@@ -121,9 +115,7 @@ def _is_scalar_id(value: Any) -> bool:
     return isinstance(value, str | int | float | bool)
 
 
-def _entity_fields(
-    entity: EntityMapping, ids: dict[str, Selector] | None = None
-) -> list[str] | None:
+def _entity_fields(entity: EntityMapping, ids: dict[str, Selector] | None = None) -> list[str] | None:
     """Compute the union of base fields referenced by ``entity``."""
     ids = ids or {}
     fields: set[str] = set()
@@ -135,9 +127,7 @@ def _entity_fields(
     return _materialise_field_set(fields, entity.scan)
 
 
-def _relation_fields(
-    relation: RelationMapping, ids: dict[str, Selector] | None = None
-) -> list[str] | None:
+def _relation_fields(relation: RelationMapping, ids: dict[str, Selector] | None = None) -> list[str] | None:
     ids = ids or {}
     fields: set[str] = set()
     if relation.source is not None:

@@ -17,6 +17,7 @@ from pydantic.alias_generators import to_pascal, to_snake
 
 from biotope.croissant.spec import CroissantDatasetModel, CroissantFieldModel, FieldKind
 
+
 ELEMENT_FIELD_NAME = "element"
 DESCRIPTION_WIDTH = 80
 DOCSTRING_INDENT = 4

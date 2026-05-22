@@ -36,6 +36,7 @@ from biotope.metadata import (
 )
 from biotope.utils import find_biotope_root, stage_git_changes
 
+
 console = Console()
 
 
@@ -108,9 +109,7 @@ def _remove_whole_dataset(
             f"❌ {data_dir.relative_to(biotope_root) if data_dir.is_relative_to(biotope_root) else data_dir} "
             "is not a tracked dataset (no manifest under .biotope/datasets/)."
         )
-        click.echo(
-            "   If you wanted to remove a single tracked file, pass the file path instead."
-        )
+        click.echo("   If you wanted to remove a single tracked file, pass the file path instead.")
         raise click.Abort
 
     if not force:
@@ -130,8 +129,7 @@ def _remove_whole_dataset(
 
     stage_git_changes(biotope_root)
     console.print(
-        f"[green]✓[/green] Removed dataset [cyan]{manifest.stem}[/cyan]"
-        + ("" if keep_data else " (data deleted)")
+        f"[green]✓[/green] Removed dataset [cyan]{manifest.stem}[/cyan]" + ("" if keep_data else " (data deleted)")
     )
 
 
@@ -172,8 +170,7 @@ def _remove_single_file(
     distribution = metadata.get("distribution", []) or []
     before = len(distribution)
     metadata["distribution"] = [
-        d for d in distribution
-        if not (d.get("@type") == FILE_OBJECT_TYPE and d.get("contentUrl") == file_rel)
+        d for d in distribution if not (d.get("@type") == FILE_OBJECT_TYPE and d.get("contentUrl") == file_rel)
     ]
     if len(metadata["distribution"]) == before:
         click.echo(f"❌ {file_rel}: no matching FileObject in {manifest_path}.")

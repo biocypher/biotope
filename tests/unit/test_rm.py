@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from biotope.commands.init import init
@@ -28,12 +27,16 @@ def _write_manifest(
 ) -> Path:
     manifest_path = project_dir / ".biotope" / "datasets" / f"{rel_id}.jsonld"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps({
-        "@type": "sc:Dataset",
-        "name": rel_id,
-        "distribution": distribution or [],
-        "biotope:status": status,
-    }))
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "@type": "sc:Dataset",
+                "name": rel_id,
+                "distribution": distribution or [],
+                "biotope:status": status,
+            }
+        )
+    )
     return manifest_path
 
 
@@ -113,9 +116,7 @@ def test_rm_directory_without_manifest_refuses(tmp_path: Path, monkeypatch) -> N
 # ---------------------------------------------------------------------------
 
 
-def test_rm_single_file_object_keeps_other_distribution_entries(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_rm_single_file_object_keeps_other_distribution_entries(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     project_dir = _project(runner, tmp_path)
     monkeypatch.chdir(project_dir)
@@ -225,7 +226,5 @@ def test_rm_keep_data_for_file(tmp_path: Path, monkeypatch) -> None:
         r = runner.invoke(rm, [str(target), "--force", "--keep-data"])
     assert r.exit_code == 0, r.output
     assert target.exists()  # disk untouched
-    metadata = json.loads(
-        (project_dir / ".biotope" / "datasets" / "data" / "ot.jsonld").read_text()
-    )
+    metadata = json.loads((project_dir / ".biotope" / "datasets" / "data" / "ot.jsonld").read_text())
     assert all(d["contentUrl"] != "data/ot/README.md" for d in metadata["distribution"])

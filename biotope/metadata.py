@@ -117,8 +117,7 @@ def ensure_no_legacy_file_objects(metadata: dict[str, Any]) -> None:
     for distribution in metadata.get("distribution", []) or []:
         if distribution.get("@type") == LEGACY_FILE_OBJECT_TYPE:
             raise ValueError(
-                "Legacy sc:FileObject is no longer supported. "
-                "Please regenerate the metadata with `biotope add`."
+                "Legacy sc:FileObject is no longer supported. " "Please regenerate the metadata with `biotope add`."
             )
 
 
@@ -259,9 +258,7 @@ def file_coverage_in_manifest(
     return "fileset" if fileset_hit else None
 
 
-def _fileset_covers(
-    fileset: dict[str, Any], dataset_dir: Path, file_path: Path
-) -> bool:
+def _fileset_covers(fileset: dict[str, Any], dataset_dir: Path, file_path: Path) -> bool:
     if not dataset_dir.is_dir():
         return False
     includes = fileset.get("includes")
@@ -420,4 +417,3 @@ def parse_key_value_pairs(pairs: tuple[str, ...], option_name: str) -> dict[str,
             raise ValueError(f"Invalid {option_name} value '{pair}'. Key cannot be empty.")
         parsed[key] = value
     return parsed
-

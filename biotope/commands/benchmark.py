@@ -15,6 +15,7 @@ from rich.console import Console
 
 from biotope.project_model import find_project
 
+
 console = Console()
 
 
@@ -38,9 +39,7 @@ def benchmark(build_dir: Path | None, out: Path | None) -> None:
         if project_path is None:
             click.echo("❌ No project.yaml found. Pass --build-dir or run `biotope init` first.")
             raise click.Abort
-        project_root = (
-            project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
-        )
+        project_root = project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
         build_dir = project_root / "build"
 
     report = {

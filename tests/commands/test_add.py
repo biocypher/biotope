@@ -150,7 +150,10 @@ def test_add_file_status_override(git_repo):
     target.write_text("ignore me")
     datasets_dir = git_repo / ".biotope" / "datasets"
     _add_file(
-        target, git_repo, datasets_dir, False,
+        target,
+        git_repo,
+        datasets_dir,
+        False,
         overrides={**_default_overrides_for_test(), "status_override": "processed"},
     )
 
@@ -197,18 +200,25 @@ def test_add_file_derived_from_writes_provenance(git_repo):
     # Seed an existing manifest to derive from.
     src_manifest = git_repo / ".biotope" / "datasets" / "raw_pdf.jsonld"
     src_manifest.parent.mkdir(parents=True, exist_ok=True)
-    src_manifest.write_text(json.dumps({
-        "@type": "sc:Dataset",
-        "name": "raw_pdf",
-        "distribution": [],
-        "biotope:status": "raw",
-    }))
+    src_manifest.write_text(
+        json.dumps(
+            {
+                "@type": "sc:Dataset",
+                "name": "raw_pdf",
+                "distribution": [],
+                "biotope:status": "raw",
+            }
+        )
+    )
 
     target = git_repo / "extracted.json"
     target.write_text("{}")
     datasets_dir = git_repo / ".biotope" / "datasets"
     _add_file(
-        target, git_repo, datasets_dir, False,
+        target,
+        git_repo,
+        datasets_dir,
+        False,
         overrides={**_default_overrides_for_test(), "derived_from": ["raw_pdf"]},
     )
 
@@ -219,6 +229,7 @@ def test_add_file_derived_from_writes_provenance(git_repo):
 
 def _default_overrides_for_test():
     from biotope.commands.add import _default_overrides
+
     return _default_overrides()
 
 
@@ -239,20 +250,24 @@ def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
     (data_dir / "README.md").write_text("notes")
 
     manifest = project_root / ".biotope" / "datasets" / "data" / "ot" / "target.jsonld"
-    manifest.write_text(json.dumps({
-        "@type": "sc:Dataset",
-        "name": "data/ot/target",
-        "distribution": [
-            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+    manifest.write_text(
+        json.dumps(
             {
-                "@type": "cr:FileObject",
-                "@id": "fo_readme",
-                "contentUrl": "data/ot/target/README.md",
-                "sha256": "deadbeef",
-                "contentSize": "5",
-            },
-        ],
-    }))
+                "@type": "sc:Dataset",
+                "name": "data/ot/target",
+                "distribution": [
+                    {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+                    {
+                        "@type": "cr:FileObject",
+                        "@id": "fo_readme",
+                        "contentUrl": "data/ot/target/README.md",
+                        "sha256": "deadbeef",
+                        "contentSize": "5",
+                    },
+                ],
+            }
+        )
+    )
 
     # FileSet-covered: previously missed; now tracked.
     assert is_file_tracked(data_dir / "part-00.parquet", project_root)
@@ -312,8 +327,9 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     assert any(item.get("contentUrl") == "data/mixed/README.md" for item in distribution)
 
     scaffold_path = data_dir / ".biotope.yaml"
-    from biotope.commands.add import _generate_biotope_scaffold_from_baked
     import yaml
+
+    from biotope.commands.add import _generate_biotope_scaffold_from_baked
 
     _generate_biotope_scaffold_from_baked(data_dir, metadata_dict, project_root)
     assert scaffold_path.exists()

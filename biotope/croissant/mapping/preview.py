@@ -90,9 +90,7 @@ class MappingPreview:
     relations: list[RelationProjection] = field(default_factory=list)
     sample_node_tuples: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
     # BioCypher 5-tuple: (relationship_id_or_None, source_id, target_id, label, properties).
-    sample_edge_tuples: list[tuple[str | None, str, str, str, dict[str, Any]]] = field(
-        default_factory=list
-    )
+    sample_edge_tuples: list[tuple[str | None, str, str, str, dict[str, Any]]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -178,15 +176,11 @@ def _validate_against_dataset(
         _validate_scan(relation, path, field_index, preview)
         for side_name, endpoint in (("source", relation.source), ("target", relation.target)):
             if endpoint is None:
-                preview.findings.append(
-                    ValidationFinding("warning", f"{path}.{side_name}", "endpoint not set")
-                )
+                preview.findings.append(ValidationFinding("warning", f"{path}.{side_name}", "endpoint not set"))
                 continue
             if endpoint.entity is None:
                 preview.findings.append(
-                    ValidationFinding(
-                        "error", f"{path}.{side_name}.entity", "endpoint entity not set"
-                    )
+                    ValidationFinding("error", f"{path}.{side_name}.entity", "endpoint entity not set")
                 )
             elif endpoint.entity not in mapping.entities:
                 preview.findings.append(
@@ -196,13 +190,9 @@ def _validate_against_dataset(
                         f"references unknown entity {endpoint.entity!r}",
                     )
                 )
-            _validate_selector(
-                endpoint.as_selector(), f"{path}.{side_name}", field_index, mapping.ids, preview
-            )
+            _validate_selector(endpoint.as_selector(), f"{path}.{side_name}", field_index, mapping.ids, preview)
         for prop_name, prop in relation.properties.items():
-            _validate_selector(
-                prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview
-            )
+            _validate_selector(prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview)
         if relation.source is not None and relation.target is not None:
             src_field = _selector_field(relation.source.as_selector(), mapping.ids)
             tgt_field = _selector_field(relation.target.as_selector(), mapping.ids)
@@ -211,8 +201,7 @@ def _validate_against_dataset(
                     ValidationFinding(
                         "warning",
                         path,
-                        f"source and target resolve to the same field {src_field!r} — "
-                        "edges will be self-loops",
+                        f"source and target resolve to the same field {src_field!r} — " "edges will be self-loops",
                     )
                 )
 
@@ -247,7 +236,7 @@ def _validate_id_not_array(
                 "error",
                 path,
                 f"id field {field_name!r} is array-typed; either set "
-                f"`scan: {{explode: {field_name}}}` and `id: {{field: \"$item\"}}`, "
+                f'`scan: {{explode: {field_name}}}` and `id: {{field: "$item"}}`, '
                 "or pick a scalar id field",
             )
         )
@@ -275,15 +264,9 @@ def _validate_scan(
     if isinstance(target.scan, ExplodeScan):
         for axis_name, array_field in target.scan.axes.items():
             info = field_index.get(array_field)
-            label = (
-                f"{path}.scan.explode"
-                if list(target.scan.axes) == ["item"]
-                else f"{path}.scan.explode.{axis_name}"
-            )
+            label = f"{path}.scan.explode" if list(target.scan.axes) == ["item"] else f"{path}.scan.explode.{axis_name}"
             if info is None:
-                preview.findings.append(
-                    ValidationFinding("error", label, f"unknown field {array_field!r}")
-                )
+                preview.findings.append(ValidationFinding("error", label, f"unknown field {array_field!r}"))
             elif info.kind != FieldKind.ARRAY.value:
                 preview.findings.append(
                     ValidationFinding(
@@ -305,14 +288,8 @@ def _validate_selector(
         preview.findings.append(ValidationFinding("warning", path, "selector not set"))
         return
     if selector.use is not None and selector.use not in ids:
-        preview.findings.append(
-            ValidationFinding("error", f"{path}.use", f"unknown id {selector.use!r}")
-        )
-    if (
-        selector.field is not None
-        and not selector.field.startswith("$")
-        and selector.field not in field_index
-    ):
+        preview.findings.append(ValidationFinding("error", f"{path}.use", f"unknown id {selector.use!r}"))
+    if selector.field is not None and not selector.field.startswith("$") and selector.field not in field_index:
         preview.findings.append(
             ValidationFinding(
                 "warning",
@@ -329,8 +306,7 @@ def _project_schema(mapping: Mapping, preview: MappingPreview) -> None:
         schema_term = entity.schema_term or to_sentence_case(name)
         namespace = entity.namespace or _derive_namespace(entity.id, mapping.ids) or "id"
         properties = {
-            prop_name: _property_type(prop, entity.record_set, mapping)
-            for prop_name, prop in entity.properties.items()
+            prop_name: _property_type(prop, entity.record_set, mapping) for prop_name, prop in entity.properties.items()
         }
         preview.entities.append(
             EntityProjection(
@@ -399,21 +375,15 @@ def _emit_sample_tuples(
     preview: MappingPreview,
 ) -> None:
     try:
-        with AcquisitionContext(
-            dataset, datasets_location=datasets_location, limit=sample_rows
-        ) as ctx:
+        with AcquisitionContext(dataset, datasets_location=datasets_location, limit=sample_rows) as ctx:
             for tup in iter_entity_tuples(mapping, ctx, only_resolved=True):
                 preview.sample_node_tuples.append(tup)
                 if len(preview.sample_node_tuples) >= sample_rows * max(1, len(mapping.entities)):
                     break
-        with AcquisitionContext(
-            dataset, datasets_location=datasets_location, limit=sample_rows
-        ) as ctx:
+        with AcquisitionContext(dataset, datasets_location=datasets_location, limit=sample_rows) as ctx:
             for tup in iter_relation_tuples(mapping, ctx, only_resolved=True):
                 preview.sample_edge_tuples.append(tup)
                 if len(preview.sample_edge_tuples) >= sample_rows * max(1, len(mapping.relations)):
                     break
     except Exception as exc:  # pragma: no cover — best-effort preview
-        preview.findings.append(
-            ValidationFinding("warning", "samples", f"could not stream samples: {exc}")
-        )
+        preview.findings.append(ValidationFinding("warning", "samples", f"could not stream samples: {exc}"))

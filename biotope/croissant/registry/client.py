@@ -82,8 +82,11 @@ class HttpRegistryClient:
 
         response = httpx.get(f"{self.base_url}/registry.json", timeout=self.timeout)
         response.raise_for_status()
-        payload = response.json() if response.headers.get("content-type", "").startswith("application/json") \
+        payload = (
+            response.json()
+            if response.headers.get("content-type", "").startswith("application/json")
             else json.loads(response.text)
+        )
         self._cache = [AdapterMeta.model_validate(item) for item in payload]
         return self._cache
 

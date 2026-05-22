@@ -1,4 +1,5 @@
 """Tests for the deterministic inspector service."""
+
 from __future__ import annotations
 
 import json

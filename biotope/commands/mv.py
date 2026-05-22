@@ -36,10 +36,10 @@ from biotope.metadata import (
     file_coverage_in_manifest,
 )
 from biotope.utils import (
-    find_biotope_root,
-    is_git_repo,
     calculate_file_checksum,
+    find_biotope_root,
     is_file_tracked,
+    is_git_repo,
     stage_git_changes,
 )
 
@@ -88,9 +88,7 @@ def mv(
     # Handle directory vs file validation
     if source.is_dir():
         if not recursive:
-            click.echo(
-                f"❌ '{source}' is a directory. Use --recursive (-r) to move directories."
-            )
+            click.echo(f"❌ '{source}' is a directory. Use --recursive (-r) to move directories.")
             raise click.Abort
 
         # Check if directory contains any tracked files
@@ -105,9 +103,7 @@ def mv(
             raise click.Abort
 
     # Validate move operation and get actual destination
-    actual_destination = _validate_move_operation(
-        source, destination, biotope_root, force
-    )
+    actual_destination = _validate_move_operation(source, destination, biotope_root, force)
 
     # Execute move
     if source.is_dir():
@@ -167,17 +163,13 @@ def _validate_move_operation(
 
     # Check destination conflicts
     if actual_destination.exists() and not force:
-        click.echo(
-            f"❌ Destination '{actual_destination}' exists. Use --force to overwrite."
-        )
+        click.echo(f"❌ Destination '{actual_destination}' exists. Use --force to overwrite.")
         raise click.Abort
 
     return actual_destination
 
 
-def _execute_move(
-    source: Path, destination: Path, biotope_root: Path, console: Console
-) -> None:
+def _execute_move(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
     """Execute the actual move operation."""
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -192,9 +184,7 @@ def _execute_move(
     # manifest is single-file (one FileObject, no FileSet) — i.e. the
     # historical 1-manifest-per-file shape.
     if any(_is_multi_file_manifest_at(m) for m in metadata_files):
-        _execute_move_for_multifile(
-            source, destination, biotope_root, metadata_files, console
-        )
+        _execute_move_for_multifile(source, destination, biotope_root, metadata_files, console)
         return
 
     # Calculate source and destination relative paths for metadata file naming
@@ -207,48 +197,45 @@ def _execute_move(
         # Test if we can read and update the metadata file
         try:
             metadata = _load_metadata_file(metadata_file)
-            
+
             # Check if the file reference exists in this metadata
             has_reference = False
             for distribution in metadata.get("distribution", []):
-                if (
-                    distribution.get("@type") == FILE_OBJECT_TYPE
-                    and distribution.get("contentUrl") == str(source_rel)
-                ):
+                if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == str(source_rel):
                     has_reference = True
                     break
-            
+
             if has_reference:
                 # Test if we can write to the metadata file
                 test_metadata = metadata.copy()
                 for distribution in test_metadata.get("distribution", []):
-                    if (
-                        distribution.get("@type") == FILE_OBJECT_TYPE
-                        and distribution.get("contentUrl") == str(source_rel)
+                    if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == str(
+                        source_rel
                     ):
                         distribution["contentUrl"] = str(destination_rel)
                         distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
                         break
-                
+
                 # Test write by writing to a temporary file
                 import tempfile
-                with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=metadata_file.parent) as temp_file:
+
+                with tempfile.NamedTemporaryFile(mode="w", delete=False, dir=metadata_file.parent) as temp_file:
                     json.dump(test_metadata, temp_file, indent=2)
                     temp_file_path = Path(temp_file.name)
-                
+
                 # Clean up test file
                 temp_file_path.unlink()
                 validation_results.append((metadata_file, True))
             else:
                 validation_results.append((metadata_file, False))
-                
+
         except (json.JSONDecodeError, IOError, OSError) as e:
             validation_results.append((metadata_file, False, str(e)))
 
     # Check if all metadata files can be updated
     failed_validations = [r for r in validation_results if not r[1]]
     if failed_validations:
-        console.print(f"[bold red]❌ Failed to validate metadata updates:[/]")
+        console.print("[bold red]❌ Failed to validate metadata updates:[/]")
         for failed in failed_validations:
             if len(failed) > 2:
                 console.print(f"  - {failed[0]}: {failed[2]}")
@@ -293,13 +280,7 @@ def _execute_move(
 
                 # Calculate new metadata file path based on the data file's new location
                 # Keep the original metadata file name to avoid conflicts
-                new_metadata_path = (
-                    biotope_root
-                    / ".biotope"
-                    / "datasets"
-                    / destination_rel.parent
-                    / metadata_file.name
-                )
+                new_metadata_path = biotope_root / ".biotope" / "datasets" / destination_rel.parent / metadata_file.name
 
                 # Move the metadata file to mirror the new data file structure
                 if new_metadata_path != metadata_file:
@@ -319,7 +300,7 @@ def _execute_move(
     # Rollback if needed
     if rollback_needed:
         console.print("[bold yellow]🔄 Rolling back changes...[/]")
-        
+
         # Rollback metadata file moves
         for old_path, new_path in reversed(moved_metadata_files):
             try:
@@ -327,13 +308,13 @@ def _execute_move(
                     shutil.move(str(new_path), str(old_path))
             except OSError as e:
                 console.print(f"[bold red]❌ Failed to rollback metadata file move: {e}[/]")
-        
+
         # Rollback data file move
         try:
             shutil.move(str(destination), str(source))
-        except OSError as e:
+        except OSError:
             console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
-        
+
         raise click.Abort
 
     if updated_files or moved_metadata_files:
@@ -345,9 +326,7 @@ def _execute_move(
             f"[bold green]To:[/] {destination}\n"
             f"[bold blue]📝 Updated {len(updated_files)} metadata file(s)[/]"
             + (
-                f"\n[bold blue]📁 Moved {len(moved_metadata_files)} metadata file(s)[/]"
-                if moved_metadata_files
-                else ""
+                f"\n[bold blue]📁 Moved {len(moved_metadata_files)} metadata file(s)[/]" if moved_metadata_files else ""
             ),
             title="Move Complete",
         )
@@ -370,9 +349,7 @@ def _find_tracked_files_in_directory(directory: Path, biotope_root: Path) -> Lis
     return tracked_files
 
 
-def _execute_directory_move(
-    source: Path, destination: Path, biotope_root: Path, console: Console
-) -> None:
+def _execute_directory_move(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
     """Execute move operation for a directory and all its tracked files."""
     # Whole-dataset rename/relocate: if the source dir mirrors a manifest at
     # `.biotope/datasets/<source_rel>.jsonld`, this is the primary case. Move
@@ -400,13 +377,11 @@ def _execute_directory_move(
     destination_metadata_dir = biotope_root / ".biotope" / "datasets" / destination_rel
 
     # Check if this is a simple directory rename (same parent directory)
-    is_simple_rename = (
-        source.parent == destination.parent and source_metadata_dir.exists()
-    )
+    is_simple_rename = source.parent == destination.parent and source_metadata_dir.exists()
 
     # Pre-validate metadata updates
     validation_results = []
-    
+
     if is_simple_rename and source_metadata_dir.exists():
         # Validate simple rename metadata updates
         for metadata_file in source_metadata_dir.rglob("*.jsonld"):
@@ -421,20 +396,21 @@ def _execute_directory_move(
                         if old_content_url and old_content_url.startswith(str(source_rel)):
                             needs_update = True
                             break
-                
+
                 if needs_update:
                     # Test write by writing to a temporary file
                     import tempfile
-                    with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=metadata_file.parent) as temp_file:
+
+                    with tempfile.NamedTemporaryFile(mode="w", delete=False, dir=metadata_file.parent) as temp_file:
                         json.dump(metadata, temp_file, indent=2)
                         temp_file_path = Path(temp_file.name)
-                    
+
                     # Clean up test file
                     temp_file_path.unlink()
                     validation_results.append((metadata_file, True))
                 else:
                     validation_results.append((metadata_file, False))
-                    
+
             except (json.JSONDecodeError, IOError, OSError) as e:
                 validation_results.append((metadata_file, False, str(e)))
     else:
@@ -449,38 +425,38 @@ def _execute_directory_move(
             for metadata_file in metadata_files:
                 try:
                     metadata = _load_metadata_file(metadata_file)
-                    
+
                     # Check if this metadata file needs updates
                     needs_update = False
                     old_rel_path = old_file_path.relative_to(biotope_root)
                     for distribution in metadata.get("distribution", []):
-                        if (
-                            distribution.get("@type") == FILE_OBJECT_TYPE
-                            and distribution.get("contentUrl") == str(old_rel_path)
+                        if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == str(
+                            old_rel_path
                         ):
                             needs_update = True
                             break
-                    
+
                     if needs_update:
                         # Test write by writing to a temporary file
                         import tempfile
-                        with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=metadata_file.parent) as temp_file:
+
+                        with tempfile.NamedTemporaryFile(mode="w", delete=False, dir=metadata_file.parent) as temp_file:
                             json.dump(metadata, temp_file, indent=2)
                             temp_file_path = Path(temp_file.name)
-                        
+
                         # Clean up test file
                         temp_file_path.unlink()
                         validation_results.append((metadata_file, True))
                     else:
                         validation_results.append((metadata_file, False))
-                        
+
                 except (json.JSONDecodeError, IOError, OSError) as e:
                     validation_results.append((metadata_file, False, str(e)))
 
     # Check if all metadata files can be updated
     failed_validations = [r for r in validation_results if not r[1]]
     if failed_validations:
-        console.print(f"[bold red]❌ Failed to validate metadata updates:[/]")
+        console.print("[bold red]❌ Failed to validate metadata updates:[/]")
         for failed in failed_validations:
             if len(failed) > 2:
                 console.print(f"  - {failed[0]}: {failed[2]}")
@@ -523,13 +499,9 @@ def _execute_directory_move(
                         for distribution in metadata.get("distribution", []):
                             if distribution.get("@type") == FILE_OBJECT_TYPE:
                                 old_content_url = distribution.get("contentUrl")
-                                if old_content_url and old_content_url.startswith(
-                                    str(source_rel)
-                                ):
+                                if old_content_url and old_content_url.startswith(str(source_rel)):
                                     # Update the path from source to destination
-                                    new_content_url = old_content_url.replace(
-                                        str(source_rel), str(destination_rel), 1
-                                    )
+                                    new_content_url = old_content_url.replace(str(source_rel), str(destination_rel), 1)
                                     new_data_file = biotope_root / new_content_url
 
                                     if new_data_file.exists():
@@ -587,12 +559,7 @@ def _execute_directory_move(
                         updated_files.append(metadata_file)
 
                         # Calculate new metadata file path based on the data file's new location
-                        new_metadata_path = (
-                            biotope_root
-                            / ".biotope"
-                            / "datasets"
-                            / new_rel_path.with_suffix(".jsonld")
-                        )
+                        new_metadata_path = biotope_root / ".biotope" / "datasets" / new_rel_path.with_suffix(".jsonld")
 
                         # Move the metadata file to mirror the new data file structure
                         if new_metadata_path != metadata_file:
@@ -619,13 +586,13 @@ def _execute_directory_move(
     # Rollback if needed
     if rollback_needed:
         console.print("[bold yellow]🔄 Rolling back changes...[/]")
-        
+
         # Rollback directory move
         try:
             shutil.move(str(destination), str(source))
-        except OSError as e:
+        except OSError:
             console.print(f"[bold red]❌ Failed to rollback directory move. Directory is at {destination}[/]")
-        
+
         raise click.Abort
 
     if updated_files:
@@ -695,9 +662,7 @@ def _find_metadata_files_for_file(file_path: Path, biotope_root: Path) -> List[P
     return metadata_files
 
 
-def _whole_dataset_rename(
-    source: Path, destination: Path, biotope_root: Path, console: Console
-) -> None:
+def _whole_dataset_rename(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
     """Rename / relocate a whole dataset.
 
     Triggered when ``source`` is the data directory of a tracked dataset
@@ -718,17 +683,14 @@ def _whole_dataset_rename(
 
     if new_top_manifest.exists():
         console.print(
-            f"[bold red]❌ Destination manifest already exists:[/] "
-            f"{new_top_manifest.relative_to(biotope_root)}"
+            f"[bold red]❌ Destination manifest already exists:[/] " f"{new_top_manifest.relative_to(biotope_root)}"
         )
         raise click.Abort
 
     # Collect every manifest to move: the top-level one, plus any nested
     # sub-dataset manifests under .biotope/datasets/<source_rel>/.
     nested_root = datasets_dir / source_rel
-    nested_manifests = (
-        list(nested_root.rglob("*.jsonld")) if nested_root.is_dir() else []
-    )
+    nested_manifests = list(nested_root.rglob("*.jsonld")) if nested_root.is_dir() else []
     manifests_to_move = [(top_manifest, new_top_manifest)]
     for old in nested_manifests:
         rel_under_source = old.relative_to(nested_root)
@@ -780,9 +742,7 @@ def _whole_dataset_rename(
     )
 
 
-def _rewrite_manifest_paths(
-    manifest_path: Path, old_prefix: str, new_prefix: str
-) -> None:
+def _rewrite_manifest_paths(manifest_path: Path, old_prefix: str, new_prefix: str) -> None:
     """Rewrite every ``contentUrl`` and the ``name`` field whose value starts
     with the old dataset prefix. FileSet ``includes`` patterns are relative
     to the dataset dir and need no rewriting."""
@@ -791,7 +751,7 @@ def _rewrite_manifest_paths(
 
     name = metadata.get("name")
     if isinstance(name, str) and (name == old_prefix or name.startswith(old_prefix + "/")):
-        metadata["name"] = new_prefix + name[len(old_prefix):]
+        metadata["name"] = new_prefix + name[len(old_prefix) :]
 
     old_with_sep = old_prefix + "/"
     for distribution in metadata.get("distribution", []) or []:
@@ -803,7 +763,7 @@ def _rewrite_manifest_paths(
         if content_url == old_prefix:
             distribution["contentUrl"] = new_prefix
         elif content_url.startswith(old_with_sep):
-            distribution["contentUrl"] = new_prefix + content_url[len(old_prefix):]
+            distribution["contentUrl"] = new_prefix + content_url[len(old_prefix) :]
 
     with open(manifest_path, "w") as handle:
         json.dump(metadata, handle, indent=2)
@@ -932,9 +892,7 @@ def _execute_move_for_multifile(
         try:
             shutil.move(str(destination), str(source))
         except OSError:
-            console.print(
-                f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]"
-            )
+            console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
         console.print(f"[bold red]❌ Failed to calculate checksum: {exc}[/]")
         raise click.Abort
 
@@ -984,10 +942,7 @@ def _update_metadata_file_path(
 
         updated = False
         for distribution in metadata.get("distribution", []):
-            if (
-                distribution.get("@type") == FILE_OBJECT_TYPE
-                and distribution.get("contentUrl") == old_path
-            ):
+            if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == old_path:
                 distribution["contentUrl"] = new_path
                 distribution["sha256"] = new_checksum
                 distribution["dateModified"] = datetime.now(timezone.utc).isoformat()

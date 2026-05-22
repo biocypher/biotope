@@ -17,13 +17,13 @@ from biotope.commands.log import log as log_cmd
 from biotope.commands.map import map_group as map_cmd
 from biotope.commands.mark import mark as mark_cmd
 from biotope.commands.mv import mv as mv_cmd
-from biotope.commands.queue import queue as queue_cmd
-from biotope.commands.rm import rm as rm_cmd
 from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
 from biotope.commands.propose_mapping import propose_mapping as propose_mapping_cmd
 from biotope.commands.pull import pull as pull_cmd
 from biotope.commands.push import push as push_cmd
+from biotope.commands.queue import queue as queue_cmd
 from biotope.commands.read import read as read_cmd
+from biotope.commands.rm import rm as rm_cmd
 from biotope.commands.search import search as search_cmd
 from biotope.commands.status import status as status_cmd
 from biotope.commands.view import view as view_cmd

@@ -10,7 +10,6 @@ when status needs to be rolled back after a de-resolve.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import click
 from rich.console import Console
@@ -24,6 +23,7 @@ from biotope.metadata import (
 )
 from biotope.utils import find_biotope_root
 
+
 console = Console()
 
 
@@ -34,8 +34,7 @@ console = Console()
     "--derived-from",
     "derived_from",
     multiple=True,
-    help="Add `prov:wasDerivedFrom` pointer (repeatable). Same ref forms as "
-    "`biotope add --derived-from`.",
+    help="Add `prov:wasDerivedFrom` pointer (repeatable). Same ref forms as " "`biotope add --derived-from`.",
 )
 def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
     """Set DATASET's biotope:status to STATUS (raw | processed | mapped).

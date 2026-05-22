@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from biotope.croissant.mapping.model import ExplodeScan, RowScan, Scan
 from biotope.croissant.mapping.selectors import ResolutionContext
 
+
 if TYPE_CHECKING:
     from biotope.croissant.acquisition.context import AcquisitionContext
 

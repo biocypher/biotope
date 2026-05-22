@@ -1,4 +1,5 @@
 """Tests for the preview engine."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,9 +35,7 @@ def test_validation_flags_missing_record_set(minimal_croissant: Path) -> None:
         }
     )
     result = preview_mapping(mapping, _load_dataset(minimal_croissant))
-    assert any(
-        f.severity == "error" and "unknown record_set" in f.message for f in result.findings
-    )
+    assert any(f.severity == "error" and "unknown record_set" in f.message for f in result.findings)
 
 
 def test_validation_flags_unknown_field(minimal_croissant: Path) -> None:
@@ -99,16 +98,12 @@ def test_preview_rejects_array_field_as_id_under_row_scan(tmp_path) -> None:
     mapping = Mapping.model_validate(
         {
             "croissant": str(croissant_path),
-            "entities": {
-                "drug": {"record_set": "drug", "id": "chemblIds", "properties": {"name": "name"}}
-            },
+            "entities": {"drug": {"record_set": "drug", "id": "chemblIds", "properties": {"name": "name"}}},
         }
     )
     result = preview_mapping(mapping, load_from_path(croissant_path))
     errors = [f for f in result.findings if f.severity == "error"]
-    assert any("array-typed" in f.message for f in errors), [
-        (f.severity, f.path, f.message) for f in result.findings
-    ]
+    assert any("array-typed" in f.message for f in errors), [(f.severity, f.path, f.message) for f in result.findings]
 
 
 def test_preview_does_not_warn_on_axis_selectors(tmp_path) -> None:
@@ -159,10 +154,7 @@ def test_preview_does_not_warn_on_axis_selectors(tmp_path) -> None:
         }
     )
     result = preview_mapping(mapping, load_from_path(croissant_path))
-    bad = [
-        f for f in result.findings
-        if "$" in f.message and "not declared on the chosen record set" in f.message
-    ]
+    bad = [f for f in result.findings if "$" in f.message and "not declared on the chosen record set" in f.message]
     assert bad == [], f"axis selectors falsely flagged: {bad}"
 
 
@@ -222,9 +214,7 @@ def test_preview_emits_sample_tuples_when_data_available(
             },
         }
     )
-    result = preview_mapping(
-        mapping, load_from_path(croissant_path), datasets_location=tmp_path, sample_rows=2
-    )
+    result = preview_mapping(mapping, load_from_path(croissant_path), datasets_location=tmp_path, sample_rows=2)
     assert len(result.sample_node_tuples) >= 1
     node = result.sample_node_tuples[0]
     assert node[1] == "gene"

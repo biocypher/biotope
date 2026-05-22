@@ -25,8 +25,8 @@ from biotope.metadata import (
 )
 from biotope.utils import (
     find_biotope_root,
-    is_git_repo,
     is_file_tracked,
+    is_git_repo,
     load_project_metadata,
     stage_git_changes,
 )
@@ -53,8 +53,7 @@ from biotope.utils import (
     "status_override",
     type=click.Choice(["raw", "processed"]),
     default=None,
-    help="Override pipeline state. Default: 'processed' if baker produced a "
-    "complete record set, 'raw' otherwise.",
+    help="Override pipeline state. Default: 'processed' if baker produced a " "complete record set, 'raw' otherwise.",
 )
 @click.option(
     "--derived-from",
@@ -182,7 +181,7 @@ def add(
                 click.echo(f"  • Review {source_dir / SCAFFOLD_FILENAME}")
                 click.echo(f"    Then: biotope annotate apply {source_dir}")
             click.echo("  • Map data into the knowledge graph: biotope map")
-            click.echo("  • Finally: biotope commit -m \"message\"")
+            click.echo('  • Finally: biotope commit -m "message"')
         else:
             click.echo("  1. Run 'biotope status' to see staged files")
             click.echo("  2. Run 'biotope annotate edit --staged' to refine metadata")
@@ -206,9 +205,7 @@ def _add_file(
         return False
 
     if not force and is_file_tracked(abs_file, biotope_root):
-        click.echo(
-            f"⚠️  File {relative_path} already tracked (use --force to override)"
-        )
+        click.echo(f"⚠️  File {relative_path} already tracked (use --force to override)")
         return False
 
     defaults = load_project_metadata(biotope_root)
@@ -217,9 +214,7 @@ def _add_file(
         {
             "name": overrides.get("name") or str(relative_path),
             "description": (
-                overrides.get("description")
-                or defaults.get("description")
-                or f"Dataset for {abs_file.name}"
+                overrides.get("description") or defaults.get("description") or f"Dataset for {abs_file.name}"
             ),
             "distribution": [make_file_object(abs_file, biotope_root)],
             "dateCreated": now,
@@ -366,11 +361,7 @@ def _resolve_creator(
 ) -> dict[str, str] | None:
     """Resolve creator info from CLI, git, or project defaults."""
     default_creator = defaults.get("creator")
-    default_name = (
-        default_creator.get("name")
-        if isinstance(default_creator, dict)
-        else None
-    )
+    default_name = default_creator.get("name") if isinstance(default_creator, dict) else None
 
     git_name, git_email = _git_user_identity(biotope_root)
 
@@ -395,13 +386,7 @@ def _creator_for_baker(
     creator_node = _resolve_creator(defaults, overrides, biotope_root)
     if creator_node is None:
         return None
-    return [
-        {
-            key: value
-            for key, value in creator_node.items()
-            if key in {"name", "email", "url"}
-        }
-    ]
+    return [{key: value for key, value in creator_node.items() if key in {"name", "email", "url"}}]
 
 
 def _bake_directory(
@@ -414,9 +399,7 @@ def _bake_directory(
     try:
         from croissant_baker.metadata_generator import MetadataGenerator
     except ImportError:
-        click.echo(
-            "❌ croissant-baker is not installed. Install with `uv pip install croissant-baker`."
-        )
+        click.echo("❌ croissant-baker is not installed. Install with `uv pip install croissant-baker`.")
         return None
 
     abs_dir = directory.resolve()
@@ -486,9 +469,7 @@ def _build_minimal_directory_metadata(
         {
             "name": overrides.get("name") or str(relative_dir),
             "description": (
-                overrides.get("description")
-                or defaults.get("description")
-                or f"Dataset for {relative_dir}"
+                overrides.get("description") or defaults.get("description") or f"Dataset for {relative_dir}"
             ),
             "distribution": [],
         }
@@ -637,9 +618,7 @@ def _default_overrides() -> dict[str, Any]:
     }
 
 
-def _apply_pipeline_state(
-    metadata: dict[str, Any], overrides: dict[str, Any]
-) -> None:
+def _apply_pipeline_state(metadata: dict[str, Any], overrides: dict[str, Any]) -> None:
     """Stamp ``biotope:status`` + ``prov:wasDerivedFrom`` on a fresh manifest.
 
     Status: explicit ``--status`` override wins; otherwise classify from the

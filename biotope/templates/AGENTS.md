@@ -13,14 +13,14 @@ exposed as a flag on a biotope command.
    to fit a convenient mapping. Any concept named in `purpose:` that you are
    about to encode as anything *other* than a first-class entity/relation is a
    stop sign — ask first.
-2. **Data lives inside the project.** A biotope project owns its data. The
+1. **Data lives inside the project.** A biotope project owns its data. The
    manifest at `.biotope/datasets/<rel>.jsonld` addresses `<project>/<rel>/`,
    so files outside the project tree are not ingestible. Acceptable shapes:
    copy into the project, or fetch via `biotope get <url>`. Symlinks that
    point outside the project root are rejected — they break self-containment
    (collaborators get a broken link) and let the target's contents drift
    without changing the tracked manifest.
-3. **`--clear-entities` / `--clear-relations` are destructive.** They erase
+1. **`--clear-entities` / `--clear-relations` are destructive.** They erase
    the user's declared schema. Use only when the user has explicitly asked you
    to drop and rewrite intent — never as a tidy-up before re-encoding.
 
@@ -58,9 +58,9 @@ Before any technical work, elicit the user's **competence questions** in their
 own words:
 
 1. What concrete domain questions should this graph answer?
-2. What entity types (the nouns of the user's domain) are involved?
-3. What relations between them matter?
-4. Which datasets does the user already have on disk, and which would need to
+1. What entity types (the nouns of the user's domain) are involved?
+1. What relations between them matter?
+1. Which datasets does the user already have on disk, and which would need to
    be discovered or generated?
 
 You may already find some of these answers in `.biotope/project.yaml`. If so,

@@ -74,6 +74,7 @@ def resolve_selector(selector: Selector, ctx: ResolutionContext) -> Any:
 # Field extraction
 # ---------------------------------------------------------------------------
 
+
 def _extract_value(field: str, ctx: ResolutionContext) -> Any:
     if field.startswith("$"):
         axis, _, subpath = field[1:].partition(".")

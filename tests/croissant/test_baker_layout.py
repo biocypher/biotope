@@ -6,6 +6,7 @@ referenced from each field's ``source.fileSet.@id``. The Croissant JSON-LD
 lives under ``.biotope/datasets/<rel>.jsonld`` and ``includes`` paths are
 relative to the data directory at ``<project>/<rel>/``.
 """
+
 from __future__ import annotations
 
 import json
@@ -131,11 +132,7 @@ def test_acquisition_falls_back_to_id_minus_fileset_when_field_source_missing(
                 "includes": "target/*.parquet",
             }
         ],
-        "recordSet": [
-            {"@id": "target", "name": "target", "field": [
-                {"name": "id", "dataType": "sc:Text"}
-            ]}
-        ],
+        "recordSet": [{"@id": "target", "name": "target", "field": [{"name": "id", "dataType": "sc:Text"}]}],
     }
     cpath = tmp_path / "ot.jsonld"
     cpath.write_text(json.dumps(croissant_dict))

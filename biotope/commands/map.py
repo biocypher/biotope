@@ -32,7 +32,8 @@ from biotope.croissant.mapping import (
     render_inspection_text,
 )
 from biotope.croissant.spec import CroissantDatasetModel, load_from_path, load_from_url
-from biotope.project_model import Project, find_project, resolve_project_path
+from biotope.project_model import Project, find_project
+
 
 console = Console()
 
@@ -183,25 +184,18 @@ def _warn_destructive_clears(
     sections: list[str] = []
     if clear_entities and project.required_entities:
         joined = "\n".join(f"  • {e}" for e in project.required_entities)
-        sections.append(
-            f"[bold]required_entities[/bold] ({len(project.required_entities)} item(s)):\n{joined}"
-        )
+        sections.append(f"[bold]required_entities[/bold] ({len(project.required_entities)} item(s)):\n{joined}")
     if clear_relations and project.required_relations:
         joined = "\n".join(f"  • {r}" for r in project.required_relations)
-        sections.append(
-            f"[bold]required_relations[/bold] ({len(project.required_relations)} item(s)):\n{joined}"
-        )
+        sections.append(f"[bold]required_relations[/bold] ({len(project.required_relations)} item(s)):\n{joined}")
     if clear_sources and project.data_sources:
         joined = "\n".join(f"  • {s}" for s in project.data_sources)
-        sections.append(
-            f"[bold]data_sources[/bold] ({len(project.data_sources)} item(s)):\n{joined}"
-        )
+        sections.append(f"[bold]data_sources[/bold] ({len(project.data_sources)} item(s)):\n{joined}")
     if not sections:
         return
     body = (
         "About to erase the following from the project's declared intent.\n"
-        "If the user did not explicitly ask for this, stop and confirm first.\n\n"
-        + "\n\n".join(sections)
+        "If the user did not explicitly ask for this, stop and confirm first.\n\n" + "\n\n".join(sections)
     )
     console.print(
         Panel(
@@ -294,8 +288,7 @@ def scaffold(croissant: str, out: Path | None, to_stdout: bool, preview_rows: in
         unresolved = result.get("unresolved") or []
         if unresolved:
             console.print(
-                f"[yellow]ℹ[/yellow] {len(unresolved)} unresolved slot(s); "
-                f"run [bold]biotope map[/bold] to resolve."
+                f"[yellow]ℹ[/yellow] {len(unresolved)} unresolved slot(s); " f"run [bold]biotope map[/bold] to resolve."
             )
     else:
         click.echo(result["yaml"], nl=False)
@@ -375,9 +368,7 @@ def _load_croissant(path: str) -> CroissantDatasetModel:
         try:
             return load_from_url(path)
         except Exception as exc:
-            console.print(
-                f"❌ Could not load Croissant file from URL: [cyan]{path}[/cyan]\n   {exc}"
-            )
+            console.print(f"❌ Could not load Croissant file from URL: [cyan]{path}[/cyan]\n   {exc}")
             raise click.Abort from exc
 
     p = Path(path)
@@ -407,12 +398,15 @@ def _load_croissant(path: str) -> CroissantDatasetModel:
         suggestion = _suggest_croissant_jsonld(p)
         console.print(
             Panel(
-                f"This is a [yellow]biotope annotate scaffold[/yellow], not a Croissant JSON-LD file.\n"
-                f"`biotope map` expects the Croissant metadata for a dataset, which lives under "
-                f"[cyan].biotope/datasets/[/cyan].\n\n"
-                + (f"Try:  [bold]biotope map -c {suggestion}[/bold]" if suggestion else
-                   "Run [bold]biotope add <data>[/bold] first to generate the Croissant file under "
-                   "[cyan].biotope/datasets/[/cyan]."),
+                "This is a [yellow]biotope annotate scaffold[/yellow], not a Croissant JSON-LD file.\n"
+                "`biotope map` expects the Croissant metadata for a dataset, which lives under "
+                "[cyan].biotope/datasets/[/cyan].\n\n"
+                + (
+                    f"Try:  [bold]biotope map -c {suggestion}[/bold]"
+                    if suggestion
+                    else "Run [bold]biotope add <data>[/bold] first to generate the Croissant file under "
+                    "[cyan].biotope/datasets/[/cyan]."
+                ),
                 title=str(p),
                 border_style="red",
             )
@@ -459,9 +453,7 @@ def _resolve_data_dir_to_croissant(data_dir: Path) -> Path | None:
     canonical = datasets_root / f"{rel}.jsonld"
     if canonical.is_file():
         return canonical
-    nested = sorted((datasets_root / rel).rglob("*.jsonld")) + sorted(
-        (datasets_root / rel).rglob("*.croissant.json")
-    )
+    nested = sorted((datasets_root / rel).rglob("*.jsonld")) + sorted((datasets_root / rel).rglob("*.croissant.json"))
     return nested[0] if nested else None
 
 
@@ -474,9 +466,7 @@ def discover_croissants(project_root: Path) -> list[Path]:
     datasets_root = project_root / ".biotope" / "datasets"
     if not datasets_root.is_dir():
         return []
-    files = sorted(datasets_root.rglob("*.jsonld")) + sorted(
-        datasets_root.rglob("*.croissant.json")
-    )
+    files = sorted(datasets_root.rglob("*.jsonld")) + sorted(datasets_root.rglob("*.croissant.json"))
     # Stable de-dup while preserving order.
     seen: set[Path] = set()
     out: list[Path] = []
@@ -514,9 +504,7 @@ def _suggest_croissant_jsonld(annotate_scaffold: Path) -> str | None:
         candidates += sorted((datasets_root / rel).rglob("*.jsonld"))
         candidates += sorted((datasets_root / rel).rglob("*.croissant.json"))
     if not candidates:
-        candidates = sorted(datasets_root.rglob("*.jsonld")) + sorted(
-            datasets_root.rglob("*.croissant.json")
-        )
+        candidates = sorted(datasets_root.rglob("*.jsonld")) + sorted(datasets_root.rglob("*.croissant.json"))
     if not candidates:
         return None
     try:
@@ -635,11 +623,7 @@ def _render_preview_rich(mapping: Mapping, result) -> None:
                 f"  {r.key} -> {r.schema_term} [{r.source} -> {r.target}, input_label={r.input_label}]\n"
                 f"    properties: {props}"
             )
-        console.print(
-            Panel(
-                "\n".join(sections), title="Projected schema", border_style="cyan", expand=False
-            )
-        )
+        console.print(Panel("\n".join(sections), title="Projected schema", border_style="cyan", expand=False))
     if result.sample_node_tuples or result.sample_edge_tuples:
         lines = []
         if result.sample_node_tuples:
@@ -649,9 +633,7 @@ def _render_preview_rich(mapping: Mapping, result) -> None:
         if result.sample_edge_tuples:
             lines.append("[bold]Sample edge tuples (rel_id, source, target, label, props):[/bold]")
             for tup in result.sample_edge_tuples:
-                lines.append(
-                    f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r}, {tup[3]!r}, {tup[4]!r})"
-                )
+                lines.append(f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r}, {tup[3]!r}, {tup[4]!r})")
         console.print(Panel("\n".join(lines), title="Samples", border_style="dim", expand=False))
 
 

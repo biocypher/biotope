@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import copy
 import getpass
-import hashlib
 import json
 import subprocess
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import click
@@ -23,11 +22,15 @@ from biotope.metadata import (
     FILE_OBJECT_TYPE,
     SCAFFOLD_FILENAME,
     ensure_no_legacy_file_objects,
-    get_standard_context as shared_get_standard_context,
-    merge_metadata as shared_merge_metadata,
     normalize_metadata_shape,
     parse_key_value_pairs,
     resolve_target,
+)
+from biotope.metadata import (
+    get_standard_context as shared_get_standard_context,
+)
+from biotope.metadata import (
+    merge_metadata as shared_merge_metadata,
 )
 from biotope.utils import find_biotope_root
 
@@ -81,9 +84,7 @@ def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
             raise click.Abort from exc
         scaffold_path = target.scaffold_path
         if not scaffold_path.exists():
-            click.echo(
-                f"❌ No {SCAFFOLD_FILENAME} in {resolved}. Run `biotope add {path}` first."
-            )
+            click.echo(f"❌ No {SCAFFOLD_FILENAME} in {resolved}. Run `biotope add {path}` first.")
             raise click.Abort
     else:
         scaffold_path = resolved
@@ -236,18 +237,24 @@ def edit(
     incomplete: bool = False,
 ) -> None:
     """Interactive annotation process for files.
-    
+
     This command supports multiple modes:
     1. Single file annotation: --file-path
     2. Staged files annotation: --staged
     3. Incomplete files annotation: --incomplete
-    
+
     For bulk annotation from CSV files, use: biotope annotate apply <dir-or-csv>
-    
+
     Examples:
         biotope annotate edit --file-path data.csv
         biotope annotate edit --staged
         biotope annotate edit --incomplete
+
+    Args:
+        file_path: Path to a single file to annotate.
+        prefill_metadata: JSON string of metadata to pre-fill the prompts with.
+        staged: Annotate all staged files.
+        incomplete: Annotate all tracked files with incomplete metadata.
     """
     console = Console()
 
@@ -258,8 +265,9 @@ def edit(
     biotope_root = find_biotope_root()
     if biotope_root:
         from biotope.utils import load_project_metadata
+
         project_metadata = load_project_metadata(biotope_root)
-        
+
         # Merge project metadata with any provided prefill metadata
         # Project metadata takes precedence for common fields
         for key, value in project_metadata.items():
@@ -274,23 +282,23 @@ def edit(
         if not biotope_root:
             click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
             raise click.Abort
-        
+
         staged_files = get_staged_files(biotope_root)
         if not staged_files:
             click.echo("❌ No files staged. Use 'biotope add <file>' first.")
             raise click.Abort
-        
+
         console.print(f"[bold blue]Annotating {len(staged_files)} staged file(s)[/]")
-        
+
         for i, file_info in enumerate(staged_files):
             file_path = biotope_root / file_info["file_path"]
             console.print(f"\n[bold green]File {i+1}/{len(staged_files)}: {file_path.name}[/]")
-            
+
             # Find the existing metadata file for this data file
             datasets_dir = biotope_root / ".biotope" / "datasets"
             relative_path = file_path.relative_to(biotope_root)
-            metadata_file = datasets_dir / relative_path.with_suffix('.jsonld')
-            
+            metadata_file = datasets_dir / relative_path.with_suffix(".jsonld")
+
             # Check if metadata file exists
             if metadata_file.exists():
                 # Load existing metadata to pre-fill
@@ -299,22 +307,23 @@ def edit(
                         existing_metadata = normalize_metadata_shape(json.load(f))
                 except (json.JSONDecodeError, IOError):
                     existing_metadata = {}
-                
+
                 # Extract file information from existing metadata
                 file_metadata = {
                     "name": existing_metadata.get("name", file_path.stem),
                     "description": existing_metadata.get("description", f"Dataset for {file_path.name}"),
-                    "distribution": existing_metadata.get("distribution", [])
+                    "distribution": existing_metadata.get("distribution", []),
                 }
-                
+
                 # Merge with project metadata
                 if biotope_root:
                     from biotope.utils import load_project_metadata
+
                     project_metadata = load_project_metadata(biotope_root)
                     for key, value in project_metadata.items():
                         if key not in file_metadata and key not in existing_metadata:
                             file_metadata[key] = value
-                
+
                 # Run interactive annotation for this file (updating existing)
                 _run_interactive_annotation(console, metadata_file, file_metadata, biotope_root, update_existing=True)
             else:
@@ -329,22 +338,23 @@ def edit(
                             "name": file_path.name,
                             "contentUrl": str(file_path.relative_to(biotope_root)),
                             "sha256": file_info["sha256"],
-                            "contentSize": file_info["size"]
+                            "contentSize": file_info["size"],
                         }
-                    ]
+                    ],
                 }
-                
+
                 # Merge with project metadata
                 if biotope_root:
                     from biotope.utils import load_project_metadata
+
                     project_metadata = load_project_metadata(biotope_root)
                     for key, value in project_metadata.items():
                         if key not in file_metadata:
                             file_metadata[key] = value
-                
+
                 # Run interactive annotation for this file (creating new)
                 _run_interactive_annotation(console, file_path, file_metadata, biotope_root)
-        
+
         return
 
     # Handle incomplete files
@@ -352,56 +362,54 @@ def edit(
         if not biotope_root:
             click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
             raise click.Abort
-        
+
         # Get all tracked files and check their annotation status
         from biotope.validation import get_all_tracked_files, get_annotation_status_for_files
-        
+
         tracked_files = get_all_tracked_files(biotope_root)
         if not tracked_files:
             click.echo("❌ No tracked files found. Use 'biotope add <file>' first.")
             raise click.Abort
-        
+
         annotation_status = get_annotation_status_for_files(biotope_root, tracked_files)
-        incomplete_files = [
-            file_path for file_path, (is_annotated, _) in annotation_status.items() 
-            if not is_annotated
-        ]
-        
+        incomplete_files = [file_path for file_path, (is_annotated, _) in annotation_status.items() if not is_annotated]
+
         if not incomplete_files:
             click.echo("✅ All tracked files are properly annotated!")
             return
-        
+
         console.print(f"[bold blue]Found {len(incomplete_files)} file(s) with incomplete annotation[/]")
-        
+
         for i, file_path in enumerate(incomplete_files):
             metadata_file = biotope_root / file_path
             console.print(f"\n[bold green]File {i+1}/{len(incomplete_files)}: {metadata_file.stem}[/]")
-            
+
             # Load existing metadata to pre-fill
             try:
                 with open(metadata_file) as f:
                     existing_metadata = normalize_metadata_shape(json.load(f))
             except (json.JSONDecodeError, IOError):
                 existing_metadata = {}
-            
+
             # Extract file information from existing metadata
             file_info = {
                 "name": existing_metadata.get("name", metadata_file.stem),
                 "description": existing_metadata.get("description", f"Dataset for {metadata_file.stem}"),
-                "distribution": existing_metadata.get("distribution", [])
+                "distribution": existing_metadata.get("distribution", []),
             }
-            
+
             # Merge with project metadata for missing fields
             if biotope_root:
                 from biotope.utils import load_project_metadata
+
                 project_metadata = load_project_metadata(biotope_root)
                 for key, value in project_metadata.items():
                     if key not in file_info and key not in existing_metadata:
                         file_info[key] = value
-            
+
             # Run interactive annotation for this file (updating existing)
             _run_interactive_annotation(console, metadata_file, file_info, biotope_root, update_existing=True)
-        
+
         return
 
     # If file path is provided, use it
@@ -422,23 +430,24 @@ def edit(
     # Show project metadata info if available
     if biotope_root:
         from biotope.utils import load_project_metadata
+
         project_metadata = load_project_metadata(biotope_root)
         if project_metadata:
             console.print("[bold green]Project Metadata Available[/]")
             console.print("─" * 50)
             console.print("The following project-level metadata will be used as defaults:")
-            
+
             table = Table(show_header=False)
             table.add_column("Field", style="cyan")
             table.add_column("Value", style="green")
-            
+
             for key, value in project_metadata.items():
                 if key == "creator" and isinstance(value, dict):
                     display_value = value.get("name", str(value))
                 else:
                     display_value = str(value)
                 table.add_row(key, display_value)
-            
+
             console.print(table)
             console.print()
 
@@ -527,12 +536,10 @@ def edit(
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
         default_format = distribution[0].get("encodingFormat", "")
-    
+
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
-        default=metadata.get("encodingFormat")
-        or metadata.get("format")
-        or default_format,
+        default=metadata.get("encodingFormat") or metadata.get("format") or default_format,
     )
 
     legal_obligations = click.prompt(
@@ -653,7 +660,8 @@ def edit(
                 file_name = click.prompt("File name (including extension)")
                 content_url = click.prompt("Content URL (where the file can be accessed)")
                 encoding_format = click.prompt(
-                    "Encoding format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
+                    "Encoding format (MIME type, e.g., text/csv, application/json, "
+                    "application/x-hdf5, application/fastq)",
                 )
 
                 file_object = {
@@ -691,7 +699,8 @@ def edit(
 
                 # File pattern information
                 encoding_format = click.prompt(
-                    "Encoding format of files in this set (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
+                    "Encoding format of files in this set (MIME type, e.g., text/csv, "
+                    "application/json, application/x-hdf5, application/fastq)",
                     default="",
                 )
                 if encoding_format:
@@ -868,12 +877,9 @@ def edit(
         biotope_root = find_biotope_root()
         if biotope_root:
             import subprocess
-            subprocess.run(
-                ["git", "add", ".biotope/"],
-                cwd=biotope_root,
-                check=True
-            )
-            console.print(f"✅ Staged changes in Git")
+
+            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
+            console.print("✅ Staged changes in Git")
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass  # Not in a biotope project or Git not available
 
@@ -931,11 +937,13 @@ def interactive(
     )
 
 
-def _run_interactive_annotation(console: Console, file_path: Path, prefill_metadata: dict, biotope_root: Path, update_existing: bool = False) -> None:
+def _run_interactive_annotation(
+    console: Console, file_path: Path, prefill_metadata: dict, biotope_root: Path, update_existing: bool = False
+) -> None:
     """Run interactive annotation for a specific file."""
     # Start with pre-filled metadata
     metadata = merge_metadata(prefill_metadata)
-    
+
     # Create a nice header for this file
     console.print(
         Panel(
@@ -943,14 +951,14 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
             subtitle="Interactive metadata creation",
         ),
     )
-    
+
     console.print(Markdown("This wizard will help you document your scientific dataset with standardized metadata."))
     console.print()
-    
+
     # Section: Basic Information
     console.print("[bold green]Basic Dataset Information[/]")
     console.print("─" * 50)
-    
+
     # Use pre-filled name if available, otherwise prompt
     dataset_name = metadata.get("name", "")
     if not dataset_name:
@@ -963,41 +971,41 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
             "Dataset name (a short, descriptive title; no spaces allowed)",
             default=dataset_name,
         )
-    
+
     description = click.prompt(
         "Dataset description (what does this dataset contain and what is it used for?)",
         default=metadata.get("description", ""),
     )
-    
+
     # Section: Source Information
     console.print("\n[bold green]Data Source Information[/]")
     console.print("─" * 50)
     console.print("Where did this data come from? (e.g., a URL, database name, or experiment)")
     data_source = click.prompt("Data source", default=metadata.get("url", ""))
-    
+
     # Section: Ownership and Dates
     console.print("\n[bold green]Ownership and Dates[/]")
     console.print("─" * 50)
-    
+
     project_name = click.prompt(
         "Project name",
         default=metadata.get("cr:projectName", Path.cwd().name),
     )
-    
+
     contact = click.prompt(
         "Contact person (email preferred)",
         default=metadata.get("creator", {}).get("name", getpass.getuser()),
     )
-    
+
     date = click.prompt(
         "Creation date (YYYY-MM-DD)",
         default=metadata.get("dateCreated", datetime.now(tz=timezone.utc).isoformat()),
     )
-    
+
     # Section: Access Information
     console.print("\n[bold green]Access Information[/]")
     console.print("─" * 50)
-    
+
     # Create a table for examples
     table = Table(title="Access Restriction Examples")
     table.add_column("Type", style="cyan")
@@ -1007,12 +1015,12 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     table.add_row("Approval", "Requires explicit approval from data owner")
     table.add_row("Embargo", "Will become public after a specific date")
     console.print(table)
-    
+
     has_access_restrictions = Confirm.ask(
         "Does this dataset have access restrictions?",
         default=bool(metadata.get("cr:accessRestrictions")),
     )
-    
+
     access_restrictions = None
     if has_access_restrictions:
         access_restrictions = Prompt.ask(
@@ -1021,60 +1029,58 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
         )
         if not access_restrictions.strip():
             access_restrictions = None
-    
+
     # Section: Additional Information
     console.print("\n[bold green]Additional Information[/]")
     console.print("─" * 50)
     console.print("[italic]The following fields are optional but recommended for scientific datasets[/]")
-    
+
     # Get default format from distribution if available
     default_format = ""
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
         default_format = distribution[0].get("encodingFormat", "")
-    
+
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
-        default=metadata.get("encodingFormat")
-        or metadata.get("format")
-        or default_format,
+        default=metadata.get("encodingFormat") or metadata.get("format") or default_format,
     )
-    
+
     legal_obligations = click.prompt(
         "Legal obligations (e.g., citation requirements, licenses)",
         default=metadata.get("cr:legalObligations", ""),
     )
-    
+
     collaboration_partner = click.prompt(
         "Collaboration partner and institute",
         default=metadata.get("cr:collaborationPartner", ""),
     )
-    
+
     # Section: Publication Information
     console.print("\n[bold green]Publication Information[/]")
     console.print("─" * 50)
     console.print("[italic]The following fields are recommended for proper dataset citation[/]")
-    
+
     publication_date = click.prompt(
         "Publication date (YYYY-MM-DD)",
         default=metadata.get("datePublished", date),  # Use creation date as default
     )
-    
+
     version = click.prompt(
         "Dataset version",
         default=metadata.get("version", "1.0"),
     )
-    
+
     license_url = click.prompt(
         "License URL",
         default=metadata.get("license", "https://creativecommons.org/licenses/by/4.0/"),
     )
-    
+
     citation = click.prompt(
         "Citation text",
         default=metadata.get("citation", f"Please cite this dataset as: {dataset_name} ({date.split('-')[0]})"),
     )
-    
+
     # Update metadata with new values while preserving any existing fields
     new_metadata = {
         "@context": get_standard_context(),  # Use the standard context
@@ -1093,11 +1099,11 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
         "license": license_url,
         "citation": citation,
     }
-    
+
     # Only add access restrictions if they exist
     if access_restrictions:
         new_metadata["cr:accessRestrictions"] = access_restrictions
-    
+
     # Add optional fields if provided
     if format:
         new_metadata["encodingFormat"] = format
@@ -1105,26 +1111,26 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
         new_metadata["cr:legalObligations"] = legal_obligations
     if collaboration_partner:
         new_metadata["cr:collaborationPartner"] = collaboration_partner
-    
+
     # Update metadata while preserving pre-filled values (especially distribution)
     for key, value in new_metadata.items():
         if key not in ["distribution"]:  # Don't overwrite distribution
             metadata[key] = value
-    
+
     # Initialize distribution array for FileObjects/FileSets if it doesn't exist
     if "distribution" not in metadata:
         metadata["distribution"] = []
-    
+
     # Update the distribution with the new format if provided
     if format and metadata["distribution"]:
         for distribution in metadata["distribution"]:
             if distribution.get("@type") == FILE_OBJECT_TYPE:
                 distribution["encodingFormat"] = format
-    
+
     # Save to datasets directory
     datasets_dir = biotope_root / ".biotope" / "datasets"
     datasets_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Determine output path
     if update_existing:
         # Keep the existing filename when updating
@@ -1132,7 +1138,7 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     else:
         # Use the dataset name for the filename, not the original file name
         output_path = datasets_dir / f"{dataset_name}.jsonld"
-    
+
     metadata = normalize_metadata_shape(metadata)
     with open(output_path, "w") as f:
         json.dump(metadata, f, indent=2)
@@ -1140,13 +1146,10 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     # Stage the changes in Git
     try:
         import subprocess
-        subprocess.run(
-            ["git", "add", ".biotope/"],
-            cwd=biotope_root,
-            check=True
-        )
+
+        subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
         console.print(f"✅ Created metadata: {output_path}")
-        console.print(f"✅ Staged changes in Git")
+        console.print("✅ Staged changes in Git")
     except subprocess.CalledProcessError as e:
         console.print(f"✅ Created metadata: {output_path}")
         console.print(f"⚠️  Warning: Could not stage changes in Git: {e}")
@@ -1208,7 +1211,7 @@ def _apply_scaffold(
 
     record_set_blocks = scaffold.get("record_sets") or []
     if not isinstance(record_set_blocks, list):
-        console.print(f"❌ `record_sets` must be a list")
+        console.print("❌ `record_sets` must be a list")
         raise click.Abort
 
     try:
@@ -1365,31 +1368,24 @@ def get_staged_files(biotope_root: Path) -> list:
     """Get list of staged files from Git."""
     import json
     import subprocess
+
     staged_files = []
-    
+
     try:
         # Get the git root directory to understand relative paths
         git_root_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "rev-parse", "--show-toplevel"], cwd=biotope_root, capture_output=True, text=True, check=True
         )
         git_root = Path(git_root_result.stdout.strip())
-        
+
         # Calculate the relative path from git root to biotope root
         biotope_relative_to_git = biotope_root.relative_to(git_root)
-        
+
         # Get staged files from Git
         result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "diff", "--cached", "--name-only"], cwd=biotope_root, capture_output=True, text=True, check=True
         )
-        
+
         for file_path in result.stdout.splitlines():
             # Handle both cases: biotope project at git root and in subdirectory
             if biotope_relative_to_git == Path("."):
@@ -1401,10 +1397,10 @@ def get_staged_files(biotope_root: Path) -> list:
                 expected_prefix = f"{biotope_relative_to_git}/.biotope/datasets/"
                 if file_path.startswith(str(biotope_relative_to_git) + "/"):
                     # Strip the biotope relative path to get the path relative to biotope root
-                    metadata_file_path = file_path[len(str(biotope_relative_to_git)) + 1:]
+                    metadata_file_path = file_path[len(str(biotope_relative_to_git)) + 1 :]
                 else:
                     continue
-            
+
             if file_path.startswith(expected_prefix) and file_path.endswith(".jsonld"):
                 # Read the metadata file to get file information
                 metadata_file = biotope_root / metadata_file_path
@@ -1413,15 +1409,17 @@ def get_staged_files(biotope_root: Path) -> list:
                         metadata = normalize_metadata_shape(json.load(f))
                         for distribution in metadata.get("distribution", []):
                             if distribution.get("@type") == FILE_OBJECT_TYPE:
-                                staged_files.append({
-                                    "file_path": distribution.get("contentUrl"),
-                                    "sha256": distribution.get("sha256"),
-                                    "size": distribution.get("contentSize")
-                                })
+                                staged_files.append(
+                                    {
+                                        "file_path": distribution.get("contentUrl"),
+                                        "sha256": distribution.get("sha256"),
+                                        "size": distribution.get("contentSize"),
+                                    }
+                                )
                 except (json.JSONDecodeError, KeyError):
                     continue
-                    
+
     except subprocess.CalledProcessError:
         pass
-    
+
     return staged_files

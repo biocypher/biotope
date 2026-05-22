@@ -1,4 +1,5 @@
 """Tests for the alignment over the semantic IR (entity-keyed references)."""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -28,6 +28,7 @@ from biotope.metadata import (
 )
 from biotope.utils import find_biotope_root
 
+
 console = Console()
 
 
@@ -71,14 +72,8 @@ def queue(status_filter: str | None, as_json: bool, sort: str) -> None:
 
     # Hide raw entries that have been consumed (something else derivesFrom them).
     consumed_ids = {src for entry in entries for src in entry.derived_from}
-    raw_active = [
-        e for e in entries
-        if e.status == STATUS_RAW and e.dataset_id not in consumed_ids
-    ]
-    raw_consumed = [
-        e for e in entries
-        if e.status == STATUS_RAW and e.dataset_id in consumed_ids
-    ]
+    raw_active = [e for e in entries if e.status == STATUS_RAW and e.dataset_id not in consumed_ids]
+    raw_consumed = [e for e in entries if e.status == STATUS_RAW and e.dataset_id in consumed_ids]
     processed = [e for e in entries if e.status == STATUS_PROCESSED]
     mapped = [e for e in entries if e.status == STATUS_MAPPED]
 
@@ -125,9 +120,7 @@ def _scan_manifests(biotope_root: Path) -> list[_QueueEntry]:
                 metadata = json.load(handle)
         except (OSError, ValueError):
             continue
-        dataset_id = str(
-            manifest_path.relative_to(datasets_dir).with_suffix("")
-        )
+        dataset_id = str(manifest_path.relative_to(datasets_dir).with_suffix(""))
         entries.append(
             _QueueEntry(
                 dataset_id=dataset_id,
@@ -186,8 +179,7 @@ def _render(
     # small dim section — they're not actionable but they're worth seeing.
     if not status_filter and raw_consumed:
         console.print(
-            f"\n[dim]Raw inputs already consumed "
-            f"(their derivatives are in the queue): {len(raw_consumed)}[/dim]",
+            f"\n[dim]Raw inputs already consumed " f"(their derivatives are in the queue): {len(raw_consumed)}[/dim]",
             no_wrap=True,
         )
         for entry in raw_consumed:
@@ -199,9 +191,7 @@ def _render(
             no_wrap=True,
         )
         for owner, missing in dangling:
-            console.print(
-                f"  [red]• {owner} → {missing} (not found)[/red]", no_wrap=True
-            )
+            console.print(f"  [red]• {owner} → {missing} (not found)[/red]", no_wrap=True)
 
     if not any_emitted:
         console.print("[dim]No datasets match this filter.[/dim]")
@@ -235,10 +225,7 @@ def _emit_json(
         "sections": sections,
         "raw_consumed": [_serialise(e) for e in raw_consumed],
         "anomalies": {
-            "dangling_provenance": [
-                {"dataset": owner, "missing_source": missing}
-                for owner, missing in dangling
-            ],
+            "dangling_provenance": [{"dataset": owner, "missing_source": missing} for owner, missing in dangling],
         },
     }
     click.echo(json.dumps(payload, indent=2, default=str))

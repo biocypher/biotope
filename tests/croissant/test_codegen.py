@@ -15,7 +15,7 @@ def test_render_minimal_module(minimal_croissant: Path) -> None:
     assert "class FieldGenesSymbol(ScalarField):" in rendered
     assert "class FieldGenesBiotype(ScalarField):" in rendered
     # Late attributes are emitted after the class bodies.
-    assert "DatasetGenes.id = \"genes\"" in rendered
+    assert 'DatasetGenes.id = "genes"' in rendered
 
 
 def test_rendered_module_is_executable(minimal_croissant: Path, tmp_path: Path) -> None:

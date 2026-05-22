@@ -1,4 +1,5 @@
 """Tests for the semantic mapping IR (entities/relations)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -30,9 +31,7 @@ from biotope.croissant.spec import load_from_path
 
 
 def test_string_shorthand_normalises_to_field_selector() -> None:
-    entity = EntityMapping.model_validate(
-        {"record_set": "rs", "id": "ensembl_id", "properties": {"symbol": "symbol"}}
-    )
+    entity = EntityMapping.model_validate({"record_set": "rs", "id": "ensembl_id", "properties": {"symbol": "symbol"}})
     assert entity.id == Selector(field="ensembl_id")
     assert entity.properties["symbol"] == Selector(field="symbol")
 
@@ -50,9 +49,7 @@ def test_scan_coercion_accepts_row_and_explode() -> None:
     assert e2.scan.axes == {"item": "diseases"}
     assert e2.scan.explode == "diseases"  # single-axis projects as string
 
-    e3 = EntityMapping.model_validate(
-        {"scan": {"explode": {"drug": "chemblIds", "target": "targets"}}}
-    )
+    e3 = EntityMapping.model_validate({"scan": {"explode": {"drug": "chemblIds", "target": "targets"}}})
     assert isinstance(e3.scan, ExplodeScan)
     assert e3.scan.axes == {"drug": "chemblIds", "target": "targets"}
     assert e3.scan.explode == {"drug": "chemblIds", "target": "targets"}
@@ -212,9 +209,7 @@ def test_compile_emits_edge_tuples(two_recordsets_croissant: Path, two_recordset
     assert all("score" in e[4] for e in edges)
 
 
-def test_edge_tuple_uses_biocypher_5_tuple_shape(
-    two_recordsets_croissant: Path, two_recordsets_dir: Path
-) -> None:
+def test_edge_tuple_uses_biocypher_5_tuple_shape(two_recordsets_croissant: Path, two_recordsets_dir: Path) -> None:
     """Regression: edges must be (rel_id, src, tgt, label, props), not (src, tgt, label, label, props)."""
     dataset = load_from_path(two_recordsets_croissant)
     mapping = Mapping.model_validate(
@@ -267,9 +262,7 @@ def test_explode_with_item_id_emits_one_node_per_array_element(tmp_path: Path) -
     # iterates a Python list directly.
     from biotope.croissant.acquisition.context import RecordRow
     from biotope.croissant.mapping.compile import iter_entity_tuples
-    from biotope.croissant.spec import load_from_path
 
-    dataset = load_from_path(croissant_path)
     mapping = Mapping.model_validate(
         {
             "croissant": str(croissant_path),

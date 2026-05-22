@@ -2,6 +2,7 @@
 both the wizard preview and the generated build adapter to anchor relative
 ``contentUrl`` / FileSet ``includes`` values inside biotope-tracked manifests.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

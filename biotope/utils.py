@@ -13,7 +13,7 @@ def find_biotope_root() -> Optional[Path]:
     Find the biotope project root directory.
 
     Searches upward from the current working directory to find a directory
-    containing a .biotope/ subdirectory. Enforces that .git and .biotope 
+    containing a .biotope/ subdirectory. Enforces that .git and .biotope
     must be in the same directory.
 
     Returns:
@@ -40,7 +40,7 @@ def is_git_repo(directory: Path) -> bool:
         True if the directory is a Git repository, False otherwise
     """
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["git", "rev-parse", "--git-dir"],
             cwd=directory,
             capture_output=True,
@@ -94,19 +94,13 @@ def load_project_metadata(biotope_root: Path) -> dict:
         croissant_metadata["cr:projectName"] = project_metadata["project_name"]
 
     if project_metadata.get("access_restrictions"):
-        croissant_metadata["cr:accessRestrictions"] = project_metadata[
-            "access_restrictions"
-        ]
+        croissant_metadata["cr:accessRestrictions"] = project_metadata["access_restrictions"]
 
     if project_metadata.get("legal_obligations"):
-        croissant_metadata["cr:legalObligations"] = project_metadata[
-            "legal_obligations"
-        ]
+        croissant_metadata["cr:legalObligations"] = project_metadata["legal_obligations"]
 
     if project_metadata.get("collaboration_partner"):
-        croissant_metadata["cr:collaborationPartner"] = project_metadata[
-            "collaboration_partner"
-        ]
+        croissant_metadata["cr:collaborationPartner"] = project_metadata["collaboration_partner"]
 
     return croissant_metadata
 

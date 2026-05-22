@@ -27,11 +27,15 @@ def project(tmp_path: Path) -> Path:
 def _write_manifest(project_dir: Path, rel_id: str, distribution: list[dict]) -> Path:
     manifest_path = project_dir / ".biotope" / "datasets" / f"{rel_id}.jsonld"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps({
-        "@type": "sc:Dataset",
-        "name": rel_id,
-        "distribution": distribution,
-    }))
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "@type": "sc:Dataset",
+                "name": rel_id,
+                "distribution": distribution,
+            }
+        )
+    )
     return manifest_path
 
 
@@ -40,9 +44,7 @@ def _write_manifest(project_dir: Path, rel_id: str, distribution: list[dict]) ->
 # ---------------------------------------------------------------------------
 
 
-def test_whole_dataset_rename_moves_data_and_manifest(
-    runner: CliRunner, project: Path
-) -> None:
+def test_whole_dataset_rename_moves_data_and_manifest(runner: CliRunner, project: Path) -> None:
     """`biotope mv data/raw/ot data/processed/ot` is the primary multi-file
     case: data dir moves, manifest renames to mirror, contentUrls and the
     `name` field are rewritten."""
@@ -51,21 +53,34 @@ def test_whole_dataset_rename_moves_data_and_manifest(
     (data_dir / "README.md").write_text("notes")
     (data_dir / "part-00.parquet").write_bytes(b"x")
 
-    _write_manifest(project, "data/raw/ot", distribution=[
-        {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-        {"@type": "cr:FileObject", "@id": "fo", "contentUrl": "data/raw/ot/README.md",
-         "sha256": "abc", "contentSize": "5"},
-    ])
+    _write_manifest(
+        project,
+        "data/raw/ot",
+        distribution=[
+            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+            {
+                "@type": "cr:FileObject",
+                "@id": "fo",
+                "contentUrl": "data/raw/ot/README.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+        ],
+    )
 
     with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
         with mock.patch("biotope.commands.mv.stage_git_changes"):
             import os
+
             os.chdir(project)
-            r = runner.invoke(mv, [
-                str(data_dir),
-                str(project / "data" / "processed" / "ot"),
-                "-r",
-            ])
+            r = runner.invoke(
+                mv,
+                [
+                    str(data_dir),
+                    str(project / "data" / "processed" / "ot"),
+                    "-r",
+                ],
+            )
     assert r.exit_code == 0, r.output
 
     # Data moved.
@@ -90,9 +105,7 @@ def test_whole_dataset_rename_moves_data_and_manifest(
     assert fileset["includes"] == "*.parquet"
 
 
-def test_whole_dataset_rename_carries_nested_manifests(
-    runner: CliRunner, project: Path
-) -> None:
+def test_whole_dataset_rename_carries_nested_manifests(runner: CliRunner, project: Path) -> None:
     """If the user has nested sub-datasets under the moved dir, their
     manifests under .biotope/datasets/<source_rel>/ must move alongside,
     and their contentUrl prefixes must be rewritten."""
@@ -102,27 +115,49 @@ def test_whole_dataset_rename_carries_nested_manifests(
     sub.mkdir()
     (sub / "x.parquet").write_bytes(b"x")
 
-    _write_manifest(project, "data/raw/ot", distribution=[
-        {"@type": "cr:FileObject", "@id": "fo_outer",
-         "contentUrl": "data/raw/ot/notes.md", "sha256": "abc", "contentSize": "5"},
-        {"@type": "cr:FileObject", "@id": "fo_outer2",
-         "contentUrl": "data/raw/ot/other.md", "sha256": "abc", "contentSize": "5"},
-    ])
+    _write_manifest(
+        project,
+        "data/raw/ot",
+        distribution=[
+            {
+                "@type": "cr:FileObject",
+                "@id": "fo_outer",
+                "contentUrl": "data/raw/ot/notes.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+            {
+                "@type": "cr:FileObject",
+                "@id": "fo_outer2",
+                "contentUrl": "data/raw/ot/other.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+        ],
+    )
     (parent / "notes.md").write_text("notes")
     (parent / "other.md").write_text("other")
-    _write_manifest(project, "data/raw/ot/target", distribution=[
-        {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-    ])
+    _write_manifest(
+        project,
+        "data/raw/ot/target",
+        distribution=[
+            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+        ],
+    )
 
     with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
         with mock.patch("biotope.commands.mv.stage_git_changes"):
             import os
+
             os.chdir(project)
-            r = runner.invoke(mv, [
-                str(parent),
-                str(project / "data" / "processed" / "ot"),
-                "-r",
-            ])
+            r = runner.invoke(
+                mv,
+                [
+                    str(parent),
+                    str(project / "data" / "processed" / "ot"),
+                    "-r",
+                ],
+            )
     assert r.exit_code == 0, r.output
 
     # Top-level manifest renamed.
@@ -145,26 +180,39 @@ def test_whole_dataset_rename_carries_nested_manifests(
 # ---------------------------------------------------------------------------
 
 
-def test_file_object_rename_within_dataset_updates_contentUrl_in_place(
-    runner: CliRunner, project: Path
-) -> None:
+def test_file_object_rename_within_dataset_updates_contentUrl_in_place(runner: CliRunner, project: Path) -> None:
     data_dir = project / "data" / "ot"
     data_dir.mkdir(parents=True)
     src = data_dir / "README.md"
     src.write_text("notes")
 
-    _write_manifest(project, "data/ot", distribution=[
-        {"@type": "cr:FileObject", "@id": "f1",
-         "contentUrl": "data/ot/README.md", "sha256": "abc", "contentSize": "5"},
-        {"@type": "cr:FileObject", "@id": "f2",
-         "contentUrl": "data/ot/CHANGELOG.md", "sha256": "abc", "contentSize": "5"},
-    ])
+    _write_manifest(
+        project,
+        "data/ot",
+        distribution=[
+            {
+                "@type": "cr:FileObject",
+                "@id": "f1",
+                "contentUrl": "data/ot/README.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+            {
+                "@type": "cr:FileObject",
+                "@id": "f2",
+                "contentUrl": "data/ot/CHANGELOG.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+        ],
+    )
 
     dst = data_dir / "README_v2.md"
     with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
         with mock.patch("biotope.commands.mv.stage_git_changes"):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
                 import os
+
                 os.chdir(project)
                 r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code == 0, r.output
@@ -181,9 +229,7 @@ def test_file_object_rename_within_dataset_updates_contentUrl_in_place(
     assert urls == ["data/ot/CHANGELOG.md", "data/ot/README_v2.md"]
 
 
-def test_file_object_cross_dataset_move_refused(
-    runner: CliRunner, project: Path
-) -> None:
+def test_file_object_cross_dataset_move_refused(runner: CliRunner, project: Path) -> None:
     """Moving a file out of its dataset_dir would leave the manifest with a
     stray contentUrl outside its own dataset — refuse."""
     src_dir = project / "data" / "ot"
@@ -191,12 +237,26 @@ def test_file_object_cross_dataset_move_refused(
     src = src_dir / "README.md"
     src.write_text("notes")
 
-    _write_manifest(project, "data/ot", distribution=[
-        {"@type": "cr:FileObject", "@id": "f1",
-         "contentUrl": "data/ot/README.md", "sha256": "abc", "contentSize": "5"},
-        {"@type": "cr:FileObject", "@id": "f2",
-         "contentUrl": "data/ot/other.md", "sha256": "abc", "contentSize": "5"},
-    ])
+    _write_manifest(
+        project,
+        "data/ot",
+        distribution=[
+            {
+                "@type": "cr:FileObject",
+                "@id": "f1",
+                "contentUrl": "data/ot/README.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+            {
+                "@type": "cr:FileObject",
+                "@id": "f2",
+                "contentUrl": "data/ot/other.md",
+                "sha256": "abc",
+                "contentSize": "5",
+            },
+        ],
+    )
 
     other_dir = project / "data" / "elsewhere"
     other_dir.mkdir(parents=True)
@@ -205,6 +265,7 @@ def test_file_object_cross_dataset_move_refused(
     with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
         with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
             import os
+
             os.chdir(project)
             r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code != 0
@@ -214,9 +275,7 @@ def test_file_object_cross_dataset_move_refused(
     assert not dst.exists()
 
 
-def test_fileset_rename_pattern_still_matches(
-    runner: CliRunner, project: Path
-) -> None:
+def test_fileset_rename_pattern_still_matches(runner: CliRunner, project: Path) -> None:
     """Renaming a FileSet-covered file to a name that still matches the
     glob succeeds with no manifest update."""
     data_dir = project / "data" / "ot"
@@ -224,15 +283,20 @@ def test_fileset_rename_pattern_still_matches(
     src = data_dir / "part-00.parquet"
     src.write_bytes(b"x")
 
-    _write_manifest(project, "data/ot", distribution=[
-        {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-    ])
+    _write_manifest(
+        project,
+        "data/ot",
+        distribution=[
+            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+        ],
+    )
 
     dst = data_dir / "part-renamed.parquet"
     with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
         with mock.patch("biotope.commands.mv.stage_git_changes"):
             with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
                 import os
+
                 os.chdir(project)
                 r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code == 0, r.output
@@ -244,9 +308,7 @@ def test_fileset_rename_pattern_still_matches(
     assert metadata["distribution"][0]["includes"] == "*.parquet"
 
 
-def test_fileset_rename_pattern_no_longer_matches_refused(
-    runner: CliRunner, project: Path
-) -> None:
+def test_fileset_rename_pattern_no_longer_matches_refused(runner: CliRunner, project: Path) -> None:
     """Renaming a FileSet-covered file to a name that DOESN'T match the
     glob is refused — would leave the manifest stale."""
     data_dir = project / "data" / "ot"
@@ -254,14 +316,19 @@ def test_fileset_rename_pattern_no_longer_matches_refused(
     src = data_dir / "part-00.parquet"
     src.write_bytes(b"x")
 
-    _write_manifest(project, "data/ot", distribution=[
-        {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-    ])
+    _write_manifest(
+        project,
+        "data/ot",
+        distribution=[
+            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+        ],
+    )
 
     dst = data_dir / "renamed.txt"
     with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
         with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
             import os
+
             os.chdir(project)
             r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code != 0

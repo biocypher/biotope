@@ -4,7 +4,9 @@ CLI for the BioCypher ecosystem. Turns Croissant-described data into a BioCypher
 
 !!! warning "Pre-alpha, developer-facing"
 
-    APIs, CLI flags, and config-file layouts will change. End-user docs come after the design stabilises.
+```
+APIs, CLI flags, and config-file layouts will change. End-user docs come after the design stabilises.
+```
 
 ## Quick start: from `init` to a knowledge graph
 
@@ -86,8 +88,8 @@ All semantic decisions (which record set, which fields, which transforms) are ma
 ## Reading order
 
 1. [Architecture](architecture.md) — modules, data flow, config files.
-2. [Git integration](git-integration.md) — how metadata version control works.
-3. [API docs](api-docs/init.md) — per-command reference, generated from docstrings.
+1. [Project context](project-context.md) — project layout and `.biotope/` files.
+1. [Commands](api-docs/init.md) — per-command reference, generated from docstrings.
 
 ## Repo
 

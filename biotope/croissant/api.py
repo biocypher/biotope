@@ -115,11 +115,7 @@ def scaffold_mapping(
     appended as a YAML comment block.
     """
     path_str = str(croissant_path)
-    dataset = (
-        load_from_url(path_str)
-        if path_str.startswith(("http://", "https://"))
-        else load_from_path(path_str)
-    )
+    dataset = load_from_url(path_str) if path_str.startswith(("http://", "https://")) else load_from_path(path_str)
     mapping = unresolved_scaffold(
         path_str,
         required_entities=required_entities or [],
@@ -169,8 +165,6 @@ def propose_mapping(
         required_relations=required_relations,
         purpose=purpose,
     )
-
-
 
 
 def propose_alignment(

@@ -104,10 +104,7 @@ def inspect_dataset(
     preview_rows: int = 3,
 ) -> DatasetInspection:
     """Inspect ``dataset`` and return a deterministic snapshot."""
-    record_sets = [
-        _inspect_record_set(dataset, rs, datasets_location, preview_rows)
-        for rs in dataset.record_set
-    ]
+    record_sets = [_inspect_record_set(dataset, rs, datasets_location, preview_rows) for rs in dataset.record_set]
     return DatasetInspection(
         name=dataset.name,
         description=dataset.description,
@@ -126,9 +123,7 @@ def _inspect_record_set(
     identifier_like = [f.name for f in fields if f.is_identifier_like]
 
     source = _resolve_source_string(dataset, rs)
-    sample_rows, sample_note = _read_sample_rows(
-        dataset, rs, datasets_location, preview_rows
-    )
+    sample_rows, sample_note = _read_sample_rows(dataset, rs, datasets_location, preview_rows)
     return RecordSetInfo(
         name=rs.name,
         description=rs.description,
@@ -181,9 +176,7 @@ def _read_sample_rows(
     if datasets_location is None:
         return [], "data not sampled (no datasets_location provided)"
     try:
-        with AcquisitionContext(
-            dataset, datasets_location=datasets_location, limit=preview_rows
-        ) as ctx:
+        with AcquisitionContext(dataset, datasets_location=datasets_location, limit=preview_rows) as ctx:
             rows = list(ctx.stream(rs.name))
     except Exception as exc:  # pragma: no cover — best-effort UX
         return [], f"data not sampled ({exc})"

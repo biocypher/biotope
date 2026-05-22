@@ -1,13 +1,11 @@
 """Log command implementation using Git under the hood."""
 
 import subprocess
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import click
 from rich.console import Console
-from rich.table import Table
 
 from biotope.utils import find_biotope_root, is_git_repo
 
@@ -37,10 +35,12 @@ from biotope.utils import find_biotope_root, is_git_repo
     is_flag=True,
     help="Show only commits affecting .biotope/ directory",
 )
-def log(oneline: bool, max_count: Optional[int], since: Optional[str], author: Optional[str], biotope_only: bool) -> None:
+def log(
+    oneline: bool, max_count: Optional[int], since: Optional[str], author: Optional[str], biotope_only: bool
+) -> None:
     """Show commit history using Git."""
     console = Console()
-    
+
     # Find biotope project root
     biotope_root = find_biotope_root()
     if not biotope_root:
@@ -54,7 +54,7 @@ def log(oneline: bool, max_count: Optional[int], since: Optional[str], author: O
 
     # Get Git log
     commits = _get_git_log(biotope_root, max_count, since, author, biotope_only)
-    
+
     if not commits:
         click.echo("No commits found.")
         return
@@ -76,75 +76,71 @@ def _show_detailed_log(commits: List[Dict], console: Console) -> None:
     for i, commit in enumerate(commits):
         if i > 0:
             console.print()
-        
+
         # Commit header
         console.print(f"[bold blue]commit {commit['hash']}[/]")
         console.print(f"[dim]Author: {commit['author']}[/]")
         console.print(f"[dim]Date: {commit['date']}[/]")
         console.print()
         console.print(f"    {commit['message']}")
-        
+
         # Files changed (if available)
         if commit.get("files"):
             console.print()
-            console.print(f"[dim]Files:[/]")
+            console.print("[dim]Files:[/]")
             for file_path in commit["files"]:
                 console.print(f"    {file_path}")
 
 
 def _get_git_log(
-    biotope_root: Path, 
-    max_count: Optional[int] = None, 
-    since: Optional[str] = None, 
+    biotope_root: Path,
+    max_count: Optional[int] = None,
+    since: Optional[str] = None,
     author: Optional[str] = None,
-    biotope_only: bool = False
+    biotope_only: bool = False,
 ) -> List[Dict]:
     """Get Git log with optional filtering."""
     try:
         # Build git log command
         cmd = ["git", "log", "--pretty=format:%H|%an|%ad|%s", "--date=short"]
-        
+
         if max_count:
             cmd.extend(["-n", str(max_count)])
-        
+
         if since:
             cmd.extend(["--since", since])
-        
+
         if author:
             cmd.extend(["--author", author])
-        
+
         if biotope_only:
             cmd.append("--")
             cmd.append(".biotope/")
-        
+
         # Execute git log
-        result = subprocess.run(
-            cmd,
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
+        result = subprocess.run(cmd, cwd=biotope_root, capture_output=True, text=True, check=True)
+
         commits = []
         for line in result.stdout.splitlines():
             if not line.strip():
                 continue
-            
+
             # Parse commit line: hash|author|date|message
             parts = line.split("|", 3)
             if len(parts) >= 4:
                 commit_hash, author_name, date, message = parts
-                commits.append({
-                    "hash": commit_hash,
-                    "author": author_name,
-                    "date": date,
-                    "message": message,
-                    "files": _get_commit_files(biotope_root, commit_hash, biotope_only)
-                })
-        
+                commits.append(
+                    {
+                        "hash": commit_hash,
+                        "author": author_name,
+                        "date": date,
+                        "message": message,
+                        "files": _get_commit_files(biotope_root, commit_hash, biotope_only),
+                    }
+                )
+
         return commits
-        
+
     except subprocess.CalledProcessError as e:
         click.echo(f"❌ Git error: {e}")
         return []
@@ -154,28 +150,19 @@ def _get_commit_files(biotope_root: Path, commit_hash: str, biotope_only: bool) 
     """Get files changed in a specific commit."""
     try:
         cmd = ["git", "show", "--name-only", "--pretty=format:", commit_hash]
-        
+
         if biotope_only:
             cmd.append("--")
             cmd.append(".biotope/")
-        
-        result = subprocess.run(
-            cmd,
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
+
+        result = subprocess.run(cmd, cwd=biotope_root, capture_output=True, text=True, check=True)
+
         files = []
         for line in result.stdout.splitlines():
             if line.strip() and not line.startswith("commit"):
                 files.append(line.strip())
-        
+
         return files
-        
+
     except subprocess.CalledProcessError:
         return []
-
-
- 

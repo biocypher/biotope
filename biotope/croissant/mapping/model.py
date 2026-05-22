@@ -171,8 +171,7 @@ class ExplodeScan(_Model):
                         )
                 return {"axes": dict(explode)}
             raise ValueError(
-                f"scan.explode must be a field name or a {{axis: field, ...}} dict; "
-                f"got {type(explode).__name__}"
+                f"scan.explode must be a field name or a {{axis: field, ...}} dict; " f"got {type(explode).__name__}"
             )
         return data
 
@@ -371,10 +370,7 @@ class Mapping(_Model):
         if selector is None or selector.use is None:
             return
         if selector.use not in self.ids:
-            msg = (
-                f"{path}: `use: {selector.use!r}` refers to an unknown id; "
-                f"known ids: {sorted(self.ids)}"
-            )
+            msg = f"{path}: `use: {selector.use!r}` refers to an unknown id; " f"known ids: {sorted(self.ids)}"
             raise ValueError(msg)
 
     def _check_item_placement(
@@ -410,10 +406,7 @@ class Mapping(_Model):
                     f"got `field: {sel.field!r}` with `scan: row`"
                 )
             if axis not in axes:
-                raise ValueError(
-                    f"{path}: `${axis}` is not an axis of this scan; "
-                    f"declared axes: {sorted(axes)}"
-                )
+                raise ValueError(f"{path}: `${axis}` is not an axis of this scan; " f"declared axes: {sorted(axes)}")
 
     # --- resolution helpers ---------------------------------------------------
 

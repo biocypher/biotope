@@ -1,8 +1,6 @@
 """Tests for the annotate interactive --staged command."""
 
 import json
-import subprocess
-from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -23,14 +21,14 @@ def biotope_project(tmp_path):
     # Create .biotope directory
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
-    
+
     git_dir = tmp_path / ".git"
     git_dir.mkdir()
-    
+
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir()
-    
+
     return tmp_path
 
 
@@ -45,21 +43,13 @@ def git_repo(biotope_project):
 
 @mock.patch("biotope.commands.annotate.find_biotope_root")
 @mock.patch("biotope.commands.annotate.get_staged_files")
-def test_interactive_staged_runs_interactive_mode(
-    mock_get_staged_files, mock_find_root, runner, git_repo
-):
+def test_interactive_staged_runs_interactive_mode(mock_get_staged_files, mock_find_root, runner, git_repo):
     """Test that interactive --staged actually runs interactive mode."""
     # Setup mocks
     mock_find_root.return_value = git_repo
 
     # Mock staged files
-    mock_get_staged_files.return_value = [
-        {
-            "file_path": "data/test.csv",
-            "sha256": "1234567890abcdef",
-            "size": 100
-        }
-    ]
+    mock_get_staged_files.return_value = [{"file_path": "data/test.csv", "sha256": "1234567890abcdef", "size": 100}]
 
     # Create the actual data file that the staged file references
     data_file = git_repo / "data" / "test.csv"
@@ -120,17 +110,15 @@ def test_interactive_staged_runs_interactive_mode(
 
 @mock.patch("biotope.commands.annotate.find_biotope_root")
 @mock.patch("biotope.commands.annotate.get_staged_files")
-def test_interactive_staged_no_staged_files(
-    mock_get_staged_files, mock_find_root, runner, git_repo
-):
+def test_interactive_staged_no_staged_files(mock_get_staged_files, mock_find_root, runner, git_repo):
     """Test that interactive --staged fails when no files are staged."""
     # Setup mocks
     mock_find_root.return_value = git_repo
     mock_get_staged_files.return_value = []
-    
+
     # Run the command
     result = runner.invoke(interactive, ["--staged"])
-    
+
     # Check that it failed with appropriate message
     assert result.exit_code != 0
     assert "No files staged" in result.output
@@ -141,10 +129,10 @@ def test_interactive_staged_no_biotope_project(mock_find_root, runner):
     """Test that interactive --staged fails when not in a biotope project."""
     # Setup mocks
     mock_find_root.return_value = None
-    
+
     # Run the command
     result = runner.invoke(interactive, ["--staged"])
-    
+
     # Check that it failed with appropriate message
     assert result.exit_code != 0
-    assert "Not in a biotope project" in result.output 
+    assert "Not in a biotope project" in result.output

@@ -32,6 +32,7 @@ from rich.console import Console
 from biotope.croissant.api import materialize
 from biotope.project_model import find_project
 
+
 console = Console()
 
 
@@ -63,9 +64,7 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
     if project_path is None:
         click.echo("❌ No project.yaml found. Run `biotope init <name>` first.")
         raise click.Abort
-    project_root = (
-        project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
-    )
+    project_root = project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
 
     mappings_dir = mappings_dir or (project_root / "mappings")
     mapping_paths = _discover_mapping_paths(mappings_dir)

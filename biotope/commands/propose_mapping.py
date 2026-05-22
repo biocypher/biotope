@@ -16,6 +16,7 @@ from rich.console import Console
 from biotope.croissant.api import scaffold_mapping
 from biotope.project_model import Project, find_project
 
+
 console = Console()
 
 
@@ -46,9 +47,7 @@ def propose_mapping(croissant_path: str, out: Path | None, to_stdout: bool, prev
 
     [deprecated] Use ``biotope map scaffold`` instead.
     """
-    console.print(
-        "[yellow]ℹ `biotope propose-mapping` is deprecated; use `biotope map scaffold` instead.[/yellow]"
-    )
+    console.print("[yellow]ℹ `biotope propose-mapping` is deprecated; use `biotope map scaffold` instead.[/yellow]")
     if out is not None and to_stdout:
         raise click.UsageError("Choose either --out or --stdout, not both.")
 

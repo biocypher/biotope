@@ -18,6 +18,7 @@ from typing import Any
 
 from biotope.croissant.acquisition.context import RecordRow
 
+
 Transform = Callable[[RecordRow], Any]
 
 

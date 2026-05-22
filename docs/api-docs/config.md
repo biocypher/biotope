@@ -2,8 +2,10 @@
 
 !!! warning "Draft stage"
 
-    Biotope is in draft stage. Functionality may be missing or incomplete.
-    The API is subject to change.
+```
+Biotope is in draft stage. Functionality may be missing or incomplete.
+The API is subject to change.
+```
 
 ## Overview
 
@@ -18,11 +20,13 @@ The `biotope config` command manages project configuration and metadata settings
 Set project-level metadata that will be used to pre-fill annotation fields.
 
 **Usage:**
+
 ```bash
 biotope config set-project-metadata
 ```
 
 **Interactive Prompts:**
+
 - **Description**: Brief description of the project and its purpose
 - **URL**: Project homepage, repository, or documentation URL
 - **Creator Name**: Name of the project maintainer
@@ -31,6 +35,7 @@ biotope config set-project-metadata
 - **Citation**: How to cite the project or dataset
 
 **Example:**
+
 ```bash
 $ biotope config set-project-metadata
 Project description: A comprehensive dataset for protein structure analysis
@@ -46,11 +51,13 @@ Citation: Smith, J. et al. (2024). Protein Structure Dataset. Nature Data.
 Display the current project-level metadata configuration.
 
 **Usage:**
+
 ```bash
 biotope config show-project-metadata
 ```
 
 **Output:**
+
 ```
 Project Metadata Configuration:
 Description: A comprehensive dataset for protein structure analysis
@@ -131,8 +138,8 @@ annotation_validation:
 ### Setting Up Project Metadata
 
 1. **During Initialization**: Set project metadata during `biotope init`
-2. **After Initialization**: Use `biotope config set-project-metadata` to add or update metadata
-3. **Team Projects**: Ensure all team members use consistent project metadata
+1. **After Initialization**: Use `biotope config set-project-metadata` to add or update metadata
+1. **Team Projects**: Ensure all team members use consistent project metadata
 
 ### Annotation Workflow Integration
 
@@ -164,9 +171,9 @@ biotope config show-validation
 ## Best Practices
 
 1. **Set Project Metadata Early**: Configure project metadata during initialization or early in the project lifecycle
-2. **Use Consistent Metadata**: Ensure all team members use the same project metadata for consistency
-3. **Regular Updates**: Update project metadata when project details change
-4. **Validation Requirements**: Set appropriate validation requirements for your use case
-5. **Remote Validation**: Use remote validation for cluster-wide policy enforcement
+1. **Use Consistent Metadata**: Ensure all team members use the same project metadata for consistency
+1. **Regular Updates**: Update project metadata when project details change
+1. **Validation Requirements**: Set appropriate validation requirements for your use case
+1. **Remote Validation**: Use remote validation for cluster-wide policy enforcement
 
-::: biotope.commands.config 
+::: biotope.commands.config

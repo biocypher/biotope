@@ -8,10 +8,10 @@ import requests
 from click.testing import CliRunner
 
 from biotope.commands.get import (
-    download_file,
     _call_biotope_add,
+    download_file,
 )
-from biotope.utils import is_git_repo, find_biotope_root
+from biotope.utils import find_biotope_root, is_git_repo
 
 
 @pytest.fixture
@@ -56,12 +56,8 @@ def biotope_project(tmp_path):
 
     # Initialize git repository
     subprocess.run(["git", "init"], cwd=project_dir, check=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"], cwd=project_dir, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=project_dir, check=True
-    )
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=project_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=project_dir, check=True)
 
     return project_dir
 
@@ -227,9 +223,7 @@ def test_get_command_success(mock_add, mock_download, runner, biotope_project):
     mock_download.return_value = downloaded_file
     mock_add.return_value = True
 
-    with mock.patch(
-        "biotope.commands.get.find_biotope_root", return_value=biotope_project
-    ):
+    with mock.patch("biotope.commands.get.find_biotope_root", return_value=biotope_project):
         with mock.patch("biotope.commands.get.is_git_repo", return_value=True):
             result = runner.invoke(get, ["https://example.com/test.txt"])
 
@@ -251,9 +245,7 @@ def test_get_command_download_failure(mock_download, runner, biotope_project):
 
     mock_download.return_value = None
 
-    with mock.patch(
-        "biotope.commands.get.find_biotope_root", return_value=biotope_project
-    ):
+    with mock.patch("biotope.commands.get.find_biotope_root", return_value=biotope_project):
         with mock.patch("biotope.commands.get.is_git_repo", return_value=True):
             result = runner.invoke(get, ["https://example.com/test.txt"])
 
@@ -273,9 +265,7 @@ def test_get_command_add_failure(mock_add, mock_download, runner, biotope_projec
     mock_download.return_value = downloaded_file
     mock_add.return_value = False
 
-    with mock.patch(
-        "biotope.commands.get.find_biotope_root", return_value=biotope_project
-    ):
+    with mock.patch("biotope.commands.get.find_biotope_root", return_value=biotope_project):
         with mock.patch("biotope.commands.get.is_git_repo", return_value=True):
             result = runner.invoke(get, ["https://example.com/test.txt"])
 
@@ -294,9 +284,7 @@ def test_get_command_no_add_flag(mock_download, runner, biotope_project):
     downloaded_file.write_text("test content")
     mock_download.return_value = downloaded_file
 
-    with mock.patch(
-        "biotope.commands.get.find_biotope_root", return_value=biotope_project
-    ):
+    with mock.patch("biotope.commands.get.find_biotope_root", return_value=biotope_project):
         with mock.patch("biotope.commands.get.is_git_repo", return_value=True):
             result = runner.invoke(get, ["https://example.com/test.txt", "--no-add"])
 
@@ -321,9 +309,7 @@ def test_get_command_not_in_git_repo(runner, biotope_project):
     """Test get command when not in a Git repository."""
     from biotope.commands.get import get
 
-    with mock.patch(
-        "biotope.commands.get.find_biotope_root", return_value=biotope_project
-    ):
+    with mock.patch("biotope.commands.get.find_biotope_root", return_value=biotope_project):
         with mock.patch("biotope.commands.get.is_git_repo", return_value=False):
             result = runner.invoke(get, ["https://example.com/test.txt"])
 
@@ -333,9 +319,7 @@ def test_get_command_not_in_git_repo(runner, biotope_project):
 
 @mock.patch("biotope.commands.get.download_file")
 @mock.patch("biotope.commands.get._call_biotope_add")
-def test_get_command_custom_output_dir(
-    mock_add, mock_download, runner, biotope_project
-):
+def test_get_command_custom_output_dir(mock_add, mock_download, runner, biotope_project):
     """Test get command with custom output directory."""
     from biotope.commands.get import get
 
@@ -344,13 +328,9 @@ def test_get_command_custom_output_dir(
     mock_download.return_value = downloaded_file
     mock_add.return_value = True
 
-    with mock.patch(
-        "biotope.commands.get.find_biotope_root", return_value=biotope_project
-    ):
+    with mock.patch("biotope.commands.get.find_biotope_root", return_value=biotope_project):
         with mock.patch("biotope.commands.get.is_git_repo", return_value=True):
-            result = runner.invoke(
-                get, ["https://example.com/test.txt", "--output-dir", str(custom_dir)]
-            )
+            result = runner.invoke(get, ["https://example.com/test.txt", "--output-dir", str(custom_dir)])
 
     assert result.exit_code == 0
     mock_download.assert_called_once()

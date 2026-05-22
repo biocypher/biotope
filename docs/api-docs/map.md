@@ -51,10 +51,10 @@ Validate a (partial) mapping and project its outputs. Tolerant of unresolved slo
 Agents bypass the wizard and instead:
 
 1. Set intent — `biotope map --entity ... --relation ...`.
-2. Generate scaffold — `biotope map scaffold <croissant>`.
-3. Inspect — `biotope map inspect <croissant> --json`.
-4. Edit `mappings/*.mapping.yaml` directly.
-5. Validate — `biotope map preview --json`.
-6. `biotope build`.
+1. Generate scaffold — `biotope map scaffold <croissant>`.
+1. Inspect — `biotope map inspect <croissant> --json`.
+1. Edit `mappings/*.mapping.yaml` directly.
+1. Validate — `biotope map preview --json`.
+1. `biotope build`.
 
 ::: biotope.commands.map

@@ -10,6 +10,7 @@ from rich.console import Console
 from biotope.croissant.api import propose_alignment as _propose
 from biotope.project_model import find_project
 
+
 console = Console()
 
 

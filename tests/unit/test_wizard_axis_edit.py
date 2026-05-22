@@ -1,4 +1,5 @@
 """Tests for axis-edit diff and selector rewriting in the wizard."""
+
 from __future__ import annotations
 
 from biotope.commands.map_wizard import (

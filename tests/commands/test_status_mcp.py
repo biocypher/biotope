@@ -1,8 +1,9 @@
 """Test MCP status functionality in status command."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 import yaml
 
 from biotope.commands.status import _get_mcp_status
@@ -14,9 +15,9 @@ def biotope_project_with_mcp(tmp_path):
     # Create .biotope directory
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
-    
+
     # Create config directory
-    
+
     # Create config with MCP registry
     config = {
         "version": "1.0",
@@ -28,9 +29,7 @@ def biotope_project_with_mcp(tmp_path):
         "commit_message_template": "Update metadata: {description}",
         "annotation_validation": {
             "enabled": True,
-            "minimum_required_fields": [
-                "name", "description", "creator", "dateCreated", "distribution"
-            ],
+            "minimum_required_fields": ["name", "description", "creator", "dateCreated", "distribution"],
             "field_validation": {
                 "name": {"type": "string", "min_length": 1},
                 "description": {"type": "string", "min_length": 10},
@@ -47,18 +46,13 @@ def biotope_project_with_mcp(tmp_path):
             "builds": [],
             "knowledge_sources": [],
         },
-        "registries": {
-            "mcp": {
-                "url": "https://biocontext.ai/registry.json",
-                "cache_duration": 3600
-            }
-        },
+        "registries": {"mcp": {"url": "https://biocontext.ai/registry.json", "cache_duration": 3600}},
     }
-    
+
     config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    
+
     return tmp_path
 
 
@@ -68,9 +62,9 @@ def biotope_project_without_mcp(tmp_path):
     # Create .biotope directory
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
-    
+
     # Create config directory
-    
+
     # Create config without MCP registry
     config = {
         "version": "1.0",
@@ -82,9 +76,7 @@ def biotope_project_without_mcp(tmp_path):
         "commit_message_template": "Update metadata: {description}",
         "annotation_validation": {
             "enabled": True,
-            "minimum_required_fields": [
-                "name", "description", "creator", "dateCreated", "distribution"
-            ],
+            "minimum_required_fields": ["name", "description", "creator", "dateCreated", "distribution"],
             "field_validation": {
                 "name": {"type": "string", "min_length": 1},
                 "description": {"type": "string", "min_length": 10},
@@ -102,11 +94,11 @@ def biotope_project_without_mcp(tmp_path):
             "knowledge_sources": [],
         },
     }
-    
+
     config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    
+
     return tmp_path
 
 
@@ -117,9 +109,9 @@ def test_get_mcp_status_with_accessible_registry(biotope_project_with_mcp):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_get.return_value = mock_response
-        
+
         result = _get_mcp_status(biotope_project_with_mcp)
-        
+
         assert result["configured"] is True
         assert "mcp" in result["registries"]
         assert result["registries"]["mcp"]["url"] == "https://biocontext.ai/registry.json"
@@ -132,9 +124,9 @@ def test_get_mcp_status_with_unreachable_registry(biotope_project_with_mcp):
     with patch("requests.get") as mock_get:
         # Mock failed response
         mock_get.side_effect = Exception("Network error")
-        
+
         result = _get_mcp_status(biotope_project_with_mcp)
-        
+
         assert result["configured"] is True
         assert "mcp" in result["registries"]
         assert result["registries"]["mcp"]["url"] == "https://biocontext.ai/registry.json"
@@ -145,7 +137,7 @@ def test_get_mcp_status_with_unreachable_registry(biotope_project_with_mcp):
 def test_get_mcp_status_without_registry(biotope_project_without_mcp):
     """Test MCP status when no registry is configured."""
     result = _get_mcp_status(biotope_project_without_mcp)
-    
+
     assert result["configured"] is False
     assert result["registries"] == {}
     assert result["suggestions"] == []
@@ -157,15 +149,12 @@ def test_get_mcp_status_with_multiple_registries(biotope_project_with_mcp):
     config_file = biotope_project_with_mcp / ".biotope" / "config.yaml"
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
-    
-    config["registries"]["kg"] = {
-        "url": "https://kg-registry.example.com/registry.json",
-        "cache_duration": 3600
-    }
-    
+
+    config["registries"]["kg"] = {"url": "https://kg-registry.example.com/registry.json", "cache_duration": 3600}
+
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    
+
     with patch("requests.get") as mock_get:
         # Mock responses - mcp accessible, kg unreachable
         def mock_get_side_effect(url, **kwargs):
@@ -175,11 +164,11 @@ def test_get_mcp_status_with_multiple_registries(biotope_project_with_mcp):
             else:
                 mock_response.status_code = 404
             return mock_response
-        
+
         mock_get.side_effect = mock_get_side_effect
-        
+
         result = _get_mcp_status(biotope_project_with_mcp)
-        
+
         assert result["configured"] is True
         assert "mcp" in result["registries"]
         assert "kg" in result["registries"]
@@ -196,25 +185,18 @@ def test_get_mcp_status_with_timeout():
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir(parents=True, exist_ok=True)
 
-    config = {
-        "registries": {
-            "mcp": {
-                "url": "https://biocontext.ai/registry.json",
-                "cache_duration": 3600
-            }
-        }
-    }
+    config = {"registries": {"mcp": {"url": "https://biocontext.ai/registry.json", "cache_duration": 3600}}}
 
     config_file = biotope_dir / "config.yaml"
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    
+
     with patch("requests.get") as mock_get:
         # Mock timeout
         mock_get.side_effect = Exception("Timeout")
-        
+
         result = _get_mcp_status(tmp_path)
-        
+
         assert result["configured"] is True
         assert result["registries"]["mcp"]["accessible"] is False
         assert "Registry is unreachable" in result["suggestions"][0]
@@ -223,9 +205,9 @@ def test_get_mcp_status_with_timeout():
 def test_get_mcp_status_with_config_error(tmp_path):
     """Test MCP status when config loading fails."""
     # Don't create any config file
-    
+
     result = _get_mcp_status(tmp_path)
-    
+
     assert result["configured"] is False
     assert result["registries"] == {}
     assert result["suggestions"] == []
@@ -237,14 +219,14 @@ def test_get_mcp_status_with_empty_registries(biotope_project_without_mcp):
     config_file = biotope_project_without_mcp / ".biotope" / "config.yaml"
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
-    
+
     config["registries"] = {}
-    
+
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    
+
     result = _get_mcp_status(biotope_project_without_mcp)
-    
+
     assert result["configured"] is False
     assert result["registries"] == {}
     assert result["suggestions"] == []
@@ -256,21 +238,21 @@ def test_get_mcp_status_with_malformed_registry_config(biotope_project_with_mcp)
     config_file = biotope_project_with_mcp / ".biotope" / "config.yaml"
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
-    
+
     config["registries"]["mcp"] = {
         "cache_duration": 3600
         # Missing URL
     }
-    
+
     with open(config_file, "w") as f:
         yaml.dump(config, f)
-    
+
     with patch("requests.get") as mock_get:
         mock_get.side_effect = Exception("Network error")
-        
+
         result = _get_mcp_status(biotope_project_with_mcp)
-        
+
         assert result["configured"] is True
         assert "mcp" in result["registries"]
         assert result["registries"]["mcp"]["url"] == ""  # Empty URL
-        assert result["registries"]["mcp"]["accessible"] is False 
+        assert result["registries"]["mcp"]["accessible"] is False

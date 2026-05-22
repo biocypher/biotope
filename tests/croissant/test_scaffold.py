@@ -1,4 +1,5 @@
 """Tests for the build/materialize path against the semantic IR."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,9 +50,7 @@ def test_materialize_minimal(tmp_path: Path, minimal_croissant: Path) -> None:
     assert (project_dir / "generated" / "minimal" / "__init__.py").is_file()
 
     schema_text = (project_dir / "config" / "schema_config.yaml").read_text()
-    schema_yaml = yaml.safe_load(
-        "\n".join(line for line in schema_text.splitlines() if not line.startswith("#"))
-    )
+    schema_yaml = yaml.safe_load("\n".join(line for line in schema_text.splitlines() if not line.startswith("#")))
     assert "gene" in schema_yaml
     gene = schema_yaml["gene"]
     assert gene["represented_as"] == "node"
@@ -141,9 +140,7 @@ def test_relation_edge_in_schema(tmp_path: Path, two_recordsets_croissant: Path)
     materialize(project_dir, [mapping_path])
 
     schema_text = (project_dir / "config" / "schema_config.yaml").read_text()
-    schema_yaml = yaml.safe_load(
-        "\n".join(line for line in schema_text.splitlines() if not line.startswith("#"))
-    )
+    schema_yaml = yaml.safe_load("\n".join(line for line in schema_text.splitlines() if not line.startswith("#")))
     assert "gene in disease" in schema_yaml
     rel = schema_yaml["gene in disease"]
     assert rel["represented_as"] == "edge"

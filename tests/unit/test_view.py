@@ -6,8 +6,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from biotope.commands.map import map_group as describe
 from biotope.commands.init import init
+from biotope.commands.map import map_group as describe
 from biotope.commands.view import view
 
 
@@ -24,10 +24,14 @@ def test_view_surfaces_project_header_without_build(tmp_path: Path, monkeypatch)
     runner.invoke(
         describe,
         [
-            "--purpose", "Drug-target-disease",
-            "--entity", "gene",
-            "--entity", "drug",
-            "--relation", "drug_targets_gene",
+            "--purpose",
+            "Drug-target-disease",
+            "--entity",
+            "gene",
+            "--entity",
+            "drug",
+            "--relation",
+            "drug_targets_gene",
         ],
     )
 

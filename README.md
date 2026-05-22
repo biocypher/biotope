@@ -1,9 +1,9 @@
 # biotope
 
-|         |                                                                                                                                                              |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Package | [![Latest PyPI Version](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/) [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/) [![Docs](https://readthedocs.org/projects/biotope/badge/?version=latest)](https://biotope.readthedocs.io/) |
-| Meta    | [![Apache 2.0](https://img.shields.io/pypi/l/biotope.svg)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
+|         |                                                                                                                                                                                                                                                                                                                                              |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Package | [![Latest PyPI Version](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/) [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/) [![Docs](https://github.com/biocypher/biotope/actions/workflows/docs_mkdocs.yaml/badge.svg)](https://biocypher.github.io/biotope/) |
+| Meta    | [![Apache 2.0](https://img.shields.io/pypi/l/biotope.svg)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)                                                                                                         |
 
 CLI for the BioCypher ecosystem: Croissant-described data → BioCypher knowledge graph, with git-like metadata version control.
 
@@ -57,10 +57,10 @@ biotope view
 
 Two layers, both in this repo:
 
-| Layer            | Module                 | Role                                                                    |
-| ---------------- | ---------------------- | ----------------------------------------------------------------------- |
-| Project & VCS    | `biotope.commands.*`   | `init`, `add`, `commit`, `status`, `log`, `push`, `pull`, `mv`, `check-data` — git-like metadata workflow |
-| KG construction  | `biotope.croissant.*`  | `spec`, `codegen`, `acquisition`, `mapping`, `alignment`, `scaffold`, `registry` — Croissant → BioCypher project |
+| Layer           | Module                | Role                                                                                                             |
+| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Project & VCS   | `biotope.commands.*`  | `init`, `add`, `commit`, `status`, `log`, `push`, `pull`, `mv`, `check-data` — git-like metadata workflow        |
+| KG construction | `biotope.croissant.*` | `spec`, `codegen`, `acquisition`, `mapping`, `alignment`, `scaffold`, `registry` — Croissant → BioCypher project |
 
 `biotope.croissant.api` exposes `scaffold_mapping`, `propose_alignment`, `materialize`, `discover_sources` as pure functions; the CLI verbs are thin wrappers. The mapping authoring surface lives under `biotope.commands.map` (Click group) and `biotope.commands.map_wizard` (Rich-based guided flow).
 

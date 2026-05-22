@@ -37,7 +37,8 @@ from biotope.croissant.mapping.render import (
     render_mapping_with_appendix,
 )
 from biotope.croissant.spec import CroissantDatasetModel, FieldKind
-from biotope.project_model import Project, find_project, resolve_project_path
+from biotope.project_model import Project, find_project
+
 
 console = Console()
 
@@ -56,9 +57,7 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
 
     dataset = _load_croissant(str(croissant_path))
     datasets_location = infer_datasets_location(croissant_path)
-    inspection = inspect_dataset(
-        dataset, datasets_location=datasets_location, preview_rows=3
-    )
+    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
 
     draft = _load_or_init_draft(mapping_path, croissant_path, project)
     _autosave(mapping_path, draft, dataset, datasets_location, project)
@@ -77,9 +76,7 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
     # Intent capture on first run if empty
     if not (project.required_entities or project.required_relations):
         try:
-            if Confirm.ask(
-                "No entities or relations declared yet. Capture intent now?", default=True
-            ):
+            if Confirm.ask("No entities or relations declared yet. Capture intent now?", default=True):
                 project = _intent_capture(project_path, project)
                 draft = _sync_slots_from_intent(draft, project)
                 _autosave(mapping_path, draft, dataset, datasets_location, project)
@@ -116,9 +113,7 @@ def _resolve_targets(
     mapping_arg: Path | None,
     project_path: Path,
 ) -> tuple[Path, Path]:
-    project_root = (
-        project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
-    )
+    project_root = project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
     mappings_dir = project_root / "mappings"
     mappings_dir.mkdir(parents=True, exist_ok=True)
 
@@ -333,9 +328,7 @@ def _autosave(
         required_relations=project.required_relations,
         purpose=project.purpose,
     )
-    mapping_path.write_text(
-        render_mapping_with_appendix(mapping, appendix=appendix, intent_comment=comment)
-    )
+    mapping_path.write_text(render_mapping_with_appendix(mapping, appendix=appendix, intent_comment=comment))
     if mapping.is_resolved():
         _flip_referenced_dataset_to_mapped(mapping)
 
@@ -385,19 +378,14 @@ def _show_status_on_exit(draft: dict[str, Any], croissant_path: Path) -> None:
     if status == STATUS_MAPPED:
         lines.append("[dim](auto-flipped on resolved save — nothing else to do)[/dim]")
     elif status == STATUS_PROCESSED:
-        lines.append(
-            f"[dim]To mark it mapped manually:[/dim] "
-            f"[bold]biotope mark {dataset_id} mapped[/bold]"
-        )
+        lines.append(f"[dim]To mark it mapped manually:[/dim] " f"[bold]biotope mark {dataset_id} mapped[/bold]")
     elif status == STATUS_RAW:
         lines.append(
             "[dim]Unusual — the dataset is still raw, yet you're authoring a mapping for it.[/dim]\n"
             f"[dim]If it has a complete record set, mark it processed:[/dim] "
             f"[bold]biotope mark {dataset_id} processed[/bold]"
         )
-    console.print(
-        Panel("\n".join(lines), title="Pipeline state", border_style=colour, expand=False)
-    )
+    console.print(Panel("\n".join(lines), title="Pipeline state", border_style=colour, expand=False))
 
 
 def _datasets_dir_from(croissant_path: Path) -> Path:
@@ -510,8 +498,11 @@ def _menu_choice(draft: dict[str, Any]) -> str:
     console.print(table)
 
     default = next(
-        (i for i, (code, _) in enumerate(items, start=1) if code.startswith(("entity:", "relation:"))
-         and not _slot_resolved(draft, code)),
+        (
+            i
+            for i, (code, _) in enumerate(items, start=1)
+            if code.startswith(("entity:", "relation:")) and not _slot_resolved(draft, code)
+        ),
         len(items),
     )
     idx = IntPrompt.ask("Selection", default=default)
@@ -566,9 +557,7 @@ def _intent_capture(project_path: Path, project: Project) -> Project:
         data["purpose"] = purpose_input.strip()
 
     # Entities: bare prompt loop; empty input ends the loop.
-    console.print(
-        "[dim]Add entities one per line. Press Enter on an empty line to stop.[/dim]"
-    )
+    console.print("[dim]Add entities one per line. Press Enter on an empty line to stop.[/dim]")
     while True:
         name = Prompt.ask("Entity name", default="", show_default=False).strip()
         if not name:
@@ -582,9 +571,7 @@ def _intent_capture(project_path: Path, project: Project) -> Project:
             console.print(f"[yellow]Removed entity:[/yellow] {removed}")
 
     # Relations: same flat loop.
-    console.print(
-        "[dim]Add relations one per line. Press Enter on an empty line to stop.[/dim]"
-    )
+    console.print("[dim]Add relations one per line. Press Enter on an empty line to stop.[/dim]")
     while True:
         name = Prompt.ask("Relation name", default="", show_default=False).strip()
         if not name:
@@ -724,13 +711,9 @@ def _pick_scan(rs, current: Any) -> Any:
     """Prompt for a scan: row, single-axis explode, or multi-axis (cross-product) explode."""
     if not rs.array_fields:
         return "row"
-    current_explode = (
-        current.get("explode") if isinstance(current, dict) and "explode" in current else None
-    )
+    current_explode = current.get("explode") if isinstance(current, dict) and "explode" in current else None
     current_is_multi = isinstance(current_explode, dict)
-    console.print(
-        f"[dim]Explode-eligible arrays:[/dim] {', '.join(rs.array_fields)}"
-    )
+    console.print(f"[dim]Explode-eligible arrays:[/dim] {', '.join(rs.array_fields)}")
 
     # When the slot already has a multi-axis explode, offer in-place editing so
     # the user can rename / drop / add axes without replaying the full prompt
@@ -967,14 +950,10 @@ def _apply_scan_change(slot: dict[str, Any], old_scan: Any, new_scan: Any) -> No
     cleared = _rewrite_axis_refs(slot, renames, removed)
     if renames:
         console.print(
-            "[yellow]Renamed axis references:[/yellow] "
-            + ", ".join(f"${o}→${n}" for o, n in renames.items())
+            "[yellow]Renamed axis references:[/yellow] " + ", ".join(f"${o}→${n}" for o, n in renames.items())
         )
     if cleared:
-        console.print(
-            "[yellow]Cleared selectors referencing removed axes:[/yellow] "
-            + ", ".join(cleared)
-        )
+        console.print("[yellow]Cleared selectors referencing removed axes:[/yellow] " + ", ".join(cleared))
 
 
 def _default_axis_name(field_name: str) -> str:
@@ -1015,10 +994,7 @@ def _pick_id_selector(
             actions.append("use")
         actions.append("hash_id")
         actions.append("promote")
-        console.print(
-            "[dim]ID selector actions:[/dim] "
-            f"{', '.join(actions)} (current: {existing or 'unset'})"
-        )
+        console.print("[dim]ID selector actions:[/dim] " f"{', '.join(actions)} (current: {existing or 'unset'})")
         if axes:
             axis_list = ", ".join(f"${k} (={v})" for k, v in axes.items())
             console.print(
@@ -1041,14 +1017,10 @@ def _pick_id_selector(
             # If the user picked an exploded array field by raw name, rewrite to `$<axis>`.
             for axis_name, array_field in axes.items():
                 if field == array_field:
-                    console.print(
-                        f"[yellow]→ rewriting `{field}` to `${axis_name}` (explode-aware).[/yellow]"
-                    )
+                    console.print(f"[yellow]→ rewriting `{field}` to `${axis_name}` (explode-aware).[/yellow]")
                     field = f"${axis_name}"
                     break
-            transform = Prompt.ask(
-                "Transform", choices=["passthrough", "as_curie"], default="passthrough"
-            )
+            transform = Prompt.ask("Transform", choices=["passthrough", "as_curie"], default="passthrough")
             selector: dict[str, Any] = {"field": field}
             if transform != "passthrough":
                 selector["transform"] = transform
@@ -1071,7 +1043,12 @@ def _pick_id_selector(
             return {"transform": "hash_id", "args": args}
         if action == "promote":
             sub = _pick_id_selector(
-                rs, ids, existing=existing, propose_promotion=False, draft=draft, scan=scan,
+                rs,
+                ids,
+                existing=existing,
+                propose_promotion=False,
+                draft=draft,
+                scan=scan,
             )
             name = Prompt.ask("Name for the new reusable id (snake_case)")
             ids_block = dict(draft.get("ids") or {})
@@ -1234,9 +1211,7 @@ def _show_preview(
     if mapping is None:
         console.print("[yellow]Cannot preview: draft is not valid YAML for a mapping.[/yellow]")
         return
-    result = preview_mapping(
-        mapping, dataset, datasets_location=datasets_location, sample_rows=3
-    )
+    result = preview_mapping(mapping, dataset, datasets_location=datasets_location, sample_rows=3)
     if result.unresolved_slots:
         console.print(
             Panel(
@@ -1248,9 +1223,7 @@ def _show_preview(
         )
     if result.findings:
         lines = [f"[{f.severity}] {f.path}: {f.message}" for f in result.findings]
-        console.print(
-            Panel("\n".join(lines), title="Validation", border_style="red", expand=False)
-        )
+        console.print(Panel("\n".join(lines), title="Validation", border_style="red", expand=False))
     if result.entities or result.relations:
         sections: list[str] = []
         for e in result.entities:
@@ -1259,12 +1232,8 @@ def _show_preview(
                 f"properties={list(e.properties)}"
             )
         for r in result.relations:
-            sections.append(
-                f"relation {r.key}: {r.source} -> {r.target}, properties={list(r.properties)}"
-            )
-        console.print(
-            Panel("\n".join(sections), title="Projected schema", border_style="cyan", expand=False)
-        )
+            sections.append(f"relation {r.key}: {r.source} -> {r.target}, properties={list(r.properties)}")
+        console.print(Panel("\n".join(sections), title="Projected schema", border_style="cyan", expand=False))
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 """Friendly-error tests for `biotope map` when the wrong file type is passed."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from click.testing import CliRunner
-
 import pytest
+from click.testing import CliRunner
 
 from biotope.commands.init import init
 from biotope.commands.map import map_group
@@ -135,9 +135,7 @@ def test_map_data_dir_without_add_suggests_add(tmp_path: Path, monkeypatch) -> N
     assert "biotope add" in r.output
 
 
-def test_map_clear_entities_warns_with_existing_intent(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_map_clear_entities_warns_with_existing_intent(tmp_path: Path, monkeypatch) -> None:
     """`--clear-entities` against a non-empty project must print a destructive
     warning panel listing what would be dropped. The flag still works."""
     runner = CliRunner()
@@ -161,9 +159,7 @@ def test_map_clear_entities_warns_with_existing_intent(
     assert "required_relations" not in r.output
 
 
-def test_map_clear_entities_silent_when_already_empty(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_map_clear_entities_silent_when_already_empty(tmp_path: Path, monkeypatch) -> None:
     """No warning when there's nothing to drop."""
     runner = CliRunner()
     project_dir = _init_project(tmp_path)
@@ -188,12 +184,9 @@ def test_map_clear_relations_warns(tmp_path: Path, monkeypatch) -> None:
     assert "drug_has_mechanism_of_action" in r.output
 
 
-def test_map_preview_iterates_all_mappings(
-    tmp_path: Path, monkeypatch, minimal_croissant_jsonld: Path
-) -> None:
+def test_map_preview_iterates_all_mappings(tmp_path: Path, monkeypatch, minimal_croissant_jsonld: Path) -> None:
     """`biotope map preview` (no args) must preview every mapping in the project,
     not abort on multi-mapping projects. Regression for B6."""
-    import yaml
     from biotope.croissant.mapping import Mapping, dump_mapping
 
     runner = CliRunner()

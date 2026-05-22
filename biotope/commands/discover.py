@@ -11,6 +11,7 @@ from rich.console import Console
 from biotope.croissant.api import discover_sources, propose_decomposition
 from biotope.project_model import find_project
 
+
 console = Console()
 
 

@@ -58,9 +58,7 @@ def test_get_derived_from_handles_all_shapes():
     assert get_derived_from({}) == []
     assert get_derived_from({"prov:wasDerivedFrom": "pdf_1"}) == ["pdf_1"]
     assert get_derived_from({"prov:wasDerivedFrom": {"@id": "pdf_1"}}) == ["pdf_1"]
-    assert get_derived_from(
-        {"prov:wasDerivedFrom": [{"@id": "pdf_1"}, {"@id": "pdf_2"}]}
-    ) == ["pdf_1", "pdf_2"]
+    assert get_derived_from({"prov:wasDerivedFrom": [{"@id": "pdf_1"}, {"@id": "pdf_2"}]}) == ["pdf_1", "pdf_2"]
 
 
 def test_add_derived_from_is_idempotent():

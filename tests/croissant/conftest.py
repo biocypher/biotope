@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "croissant"
 
 
@@ -19,9 +20,7 @@ def two_recordsets_croissant() -> Path:
 def gene_csv(tmp_path: Path) -> Path:
     p = tmp_path / "genes.csv"
     p.write_text(
-        "ensembl_id,symbol,biotype\n"
-        "ENSG00000139618,BRCA2,protein_coding\n"
-        "ENSG00000141510,TP53,protein_coding\n"
+        "ensembl_id,symbol,biotype\n" "ENSG00000139618,BRCA2,protein_coding\n" "ENSG00000141510,TP53,protein_coding\n"
     )
     return p
 

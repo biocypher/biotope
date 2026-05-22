@@ -80,6 +80,7 @@ def chat(
         interactive: Whether to run in interactive mode.
         correct: Whether to correct the output of the LLM.
         api_key: The API key for the LLM.
+        backend: Conversational backend (currently only ``biochatter``).
 
     """
     if not HAS_BIOCHATTER:

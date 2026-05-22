@@ -1,4 +1,5 @@
 """Tests for the selector resolver and value-level transforms."""
+
 from __future__ import annotations
 
 import pytest
@@ -10,9 +11,7 @@ from biotope.croissant.mapping.selectors import ResolutionContext, resolve_selec
 
 def _ctx(values: dict | None = None, *, item=None, ids=None) -> ResolutionContext:
     items = {"item": item} if item is not None else None
-    return ResolutionContext(
-        row=RecordRow(record_set="rs", values=values or {}), items=items, ids=ids
-    )
+    return ResolutionContext(row=RecordRow(record_set="rs", values=values or {}), items=items, ids=ids)
 
 
 def test_passthrough_returns_field_value() -> None:

@@ -1,4 +1,5 @@
 """Tests for the wizard's two-way slot sync against project.yaml intent."""
+
 from __future__ import annotations
 
 from biotope.commands.map_wizard import _sync_slots_from_intent

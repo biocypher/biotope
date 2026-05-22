@@ -144,18 +144,16 @@ def get(url: str, output_dir: str, no_add: bool) -> None:
 
     # Add to biotope project unless --no-add flag is used
     if not no_add:
-        click.echo(f"📁 Adding file to biotope project...")
+        click.echo("📁 Adding file to biotope project...")
         if _call_biotope_add(downloaded_file, biotope_root):
-            click.echo(f"✅ File added to biotope project")
-            click.echo(f"\n💡 Next steps:")
-            click.echo(f"  1. Run 'biotope status' to see staged files")
-            click.echo(f"  2. Run 'biotope annotate --staged' to create metadata")
-            click.echo(f"  3. Run 'biotope commit -m \"message\"' to save changes")
+            click.echo("✅ File added to biotope project")
+            click.echo("\n💡 Next steps:")
+            click.echo("  1. Run 'biotope status' to see staged files")
+            click.echo("  2. Run 'biotope annotate --staged' to create metadata")
+            click.echo("  3. Run 'biotope commit -m \"message\"' to save changes")
         else:
-            click.echo(f"⚠️  File downloaded but not added to biotope project")
-            click.echo(
-                f"   You can manually add it with: biotope add {downloaded_file}"
-            )
+            click.echo("⚠️  File downloaded but not added to biotope project")
+            click.echo(f"   You can manually add it with: biotope add {downloaded_file}")
     else:
-        click.echo(f"\n💡 File downloaded. To add to biotope project:")
+        click.echo("\n💡 File downloaded. To add to biotope project:")
         click.echo(f"  biotope add {downloaded_file}")
