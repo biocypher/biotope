@@ -132,6 +132,41 @@ def test_map_data_dir_without_add_suggests_add(tmp_path: Path, monkeypatch) -> N
     assert "biotope add" in r.output
 
 
+def test_map_preview_iterates_all_mappings(
+    tmp_path: Path, monkeypatch, minimal_croissant_jsonld: Path
+) -> None:
+    """`biotope map preview` (no args) must preview every mapping in the project,
+    not abort on multi-mapping projects. Regression for B6."""
+    import yaml
+    from biotope.croissant.mapping import Mapping, dump_mapping
+
+    runner = CliRunner()
+    project_dir = _init_project(tmp_path)
+    monkeypatch.chdir(project_dir)
+
+    croissant = project_dir / "data" / "minimal.croissant.json"
+    croissant.parent.mkdir(parents=True, exist_ok=True)
+    croissant.write_text(minimal_croissant_jsonld.read_text())
+
+    mappings_dir = project_dir / "mappings"
+    mappings_dir.mkdir(exist_ok=True)
+    for stem in ("first", "second"):
+        mapping = Mapping.model_validate(
+            {
+                "croissant": str(croissant),
+                "entities": {
+                    "gene": {"record_set": "genes", "id": "ensembl_id"},
+                },
+            }
+        )
+        dump_mapping(mapping, mappings_dir / f"{stem}.mapping.yaml")
+
+    r = runner.invoke(map_group, ["preview"])
+    assert r.exit_code == 0, r.output
+    assert "first.mapping.yaml" in r.output
+    assert "second.mapping.yaml" in r.output
+
+
 def test_map_inspect_rejects_invalid_json(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     project_dir = _init_project(tmp_path)

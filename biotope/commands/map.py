@@ -262,25 +262,45 @@ def scaffold(croissant: str, out: Path | None, to_stdout: bool, preview_rows: in
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable JSON preview.")
 @click.option("--rows", "sample_rows", type=click.IntRange(min=0), default=3, show_default=True)
 def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
-    """Validate a (partial) mapping and project its outputs."""
-    if mapping_path is None:
-        mapping_path = _discover_single_mapping()
-        if mapping_path is None:
+    """Validate a (partial) mapping and project its outputs.
+
+    With no path, previews every mapping under the project's ``mappings/`` dir
+    (multi-mapping projects are the norm); pass an explicit path to preview
+    just one.
+    """
+    if mapping_path is not None:
+        paths = [mapping_path]
+    else:
+        paths = _discover_project_mappings()
+        if not paths:
             click.echo("❌ No mapping file found. Pass a path or run `biotope map scaffold` first.")
             raise click.Abort
-    mapping = load_mapping(mapping_path)
-    dataset = _load_croissant(mapping.croissant)
-    datasets_location = infer_datasets_location(mapping.croissant)
-    result = preview_mapping(
-        mapping,
-        dataset,
-        datasets_location=datasets_location,
-        sample_rows=sample_rows,
-    )
+
+    previews: list[tuple[Path, Mapping, object]] = []
+    for path in paths:
+        mapping = load_mapping(path)
+        dataset = _load_croissant(mapping.croissant)
+        datasets_location = infer_datasets_location(mapping.croissant)
+        result = preview_mapping(
+            mapping,
+            dataset,
+            datasets_location=datasets_location,
+            sample_rows=sample_rows,
+        )
+        previews.append((path, mapping, result))
+
     if as_json:
-        click.echo(json.dumps(result.to_json(), indent=2, default=str))
+        if len(previews) == 1:
+            click.echo(json.dumps(previews[0][2].to_json(), indent=2, default=str))
+        else:
+            payload = {path.name: result.to_json() for path, _, result in previews}
+            click.echo(json.dumps(payload, indent=2, default=str))
         return
-    _render_preview_rich(mapping, result)
+
+    for path, mapping, result in previews:
+        if len(previews) > 1:
+            console.print(Panel(f"[bold]{path.name}[/bold]", border_style="cyan", expand=False))
+        _render_preview_rich(mapping, result)
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +523,19 @@ def _discover_single_mapping() -> Path | None:
         return None
     candidates = sorted(mappings_dir.glob("*.mapping.yaml")) + sorted(mappings_dir.glob("*.mapping.yml"))
     return candidates[0] if len(candidates) == 1 else None
+
+
+def _discover_project_mappings() -> list[Path]:
+    """Return every project mapping, agreeing with ``biotope build`` on identity."""
+    from biotope.commands.build import _discover_mapping_paths
+
+    project_root = _project_root_from_cwd()
+    if project_root is None:
+        return []
+    mappings_dir = project_root / "mappings"
+    if not mappings_dir.is_dir():
+        return []
+    return _discover_mapping_paths(mappings_dir)
 
 
 def _render_preview_rich(mapping: Mapping, result) -> None:
