@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import mimetypes
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -111,15 +110,8 @@ def ensure_no_legacy_file_objects(metadata: dict[str, Any]) -> None:
 
 
 def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
-    """Resolve a file, dir, csv, or jsonld path to one dataset metadata target.
-
-    Uses ``os.path.abspath`` rather than ``Path.resolve()`` so that symlinks
-    living inside the project but pointing outside still address their
-    metadata under ``.biotope/datasets/<rel>.jsonld`` (B1). Filesystem reads
-    follow the symlink naturally; only the containment math stays anchored
-    to the in-project location.
-    """
-    resolved = Path(os.path.abspath(path))
+    """Resolve a file, dir, csv, or jsonld path to one dataset metadata target."""
+    resolved = path.resolve()
     datasets_dir = biotope_root / ".biotope" / "datasets"
 
     if resolved.suffix == ".jsonld":

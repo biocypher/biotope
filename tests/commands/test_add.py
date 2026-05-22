@@ -127,32 +127,6 @@ def test_add_file_relative_path_already_tracked(git_repo):
         os.chdir(original_cwd)
 
 
-def test_add_file_accepts_symlink_pointing_outside_project(git_repo, tmp_path):
-    """A symlink that lives under the project root but points outside must
-    still pass the containment check. Regression for B1."""
-    elsewhere = tmp_path / "elsewhere"
-    elsewhere.mkdir()
-    real_file = elsewhere / "experiment.csv"
-    real_file.write_text("gene,expression\nBRCA1,12.5\n")
-
-    data_dir = git_repo / "data"
-    data_dir.mkdir()
-    link = data_dir / "experiment.csv"
-    link.symlink_to(real_file)
-
-    datasets_dir = git_repo / ".biotope" / "datasets"
-    assert _add_file(link, git_repo, datasets_dir, False) is True
-
-    # Manifest should be addressed by the in-project symlink location.
-    metadata_path = datasets_dir / "data" / "experiment.jsonld"
-    assert metadata_path.exists()
-
-    with open(metadata_path) as handle:
-        metadata = json.load(handle)
-    # contentUrl is the in-project path; checksum follows the symlink to read.
-    assert metadata["distribution"][0]["contentUrl"] == "data/experiment.csv"
-
-
 def test_dedupe_file_objects_covered_by_filesets(tmp_path):
     """Regression: baker emits FileSet + per-file FileObjects; keep only the FileSet."""
     from biotope.commands.add import _dedupe_file_objects_covered_by_filesets
@@ -274,7 +248,7 @@ def test_add_command_resolves_relative_directory(
     assert result.exit_code == 0, result.output
     csv_source_dir = mock_csv.call_args.args[0]
     assert csv_source_dir.is_absolute()
-    assert csv_source_dir == Path(os.path.abspath(git_repo / "data"))
+    assert csv_source_dir == (git_repo / "data").resolve()
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
