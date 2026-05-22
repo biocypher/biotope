@@ -18,6 +18,7 @@ from biotope.commands.map import map_group as map_cmd
 from biotope.commands.mark import mark as mark_cmd
 from biotope.commands.mv import mv as mv_cmd
 from biotope.commands.queue import queue as queue_cmd
+from biotope.commands.rm import rm as rm_cmd
 from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
 from biotope.commands.propose_mapping import propose_mapping as propose_mapping_cmd
 from biotope.commands.pull import pull as pull_cmd
@@ -63,6 +64,7 @@ cli.add_command(annotate_cmd, "annotate")
 # Git-inspired version control commands
 cli.add_command(add_cmd, "add")
 cli.add_command(mv_cmd, "mv")
+cli.add_command(rm_cmd, "rm")
 cli.add_command(status_cmd, "status")
 cli.add_command(commit_cmd, "commit")
 cli.add_command(log_cmd, "log")
