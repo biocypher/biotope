@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,7 +125,7 @@ def add(
 
         metadata_dict, n_source_files = baked
         added_entries.append(path)
-        baked_dirs.append((path.resolve(), metadata_dict))
+        baked_dirs.append((Path(os.path.abspath(path)), metadata_dict))
         n_record_sets = len(metadata_dict.get("recordSet", []))
         target = resolve_target(path, biotope_root)
         click.echo(
@@ -171,7 +172,11 @@ def _add_file(
 ) -> bool:
     """Add a single file to the biotope project."""
     overrides = overrides or _default_overrides()
-    abs_file = file_path.resolve()
+    # Use os.path.abspath (not Path.resolve) so a symlink that lives under the
+    # project root but points outside still passes the containment check.
+    # Filesystem reads follow the symlink naturally; we only need the
+    # in-project location for `.biotope/datasets/<rel>.jsonld` addressing.
+    abs_file = Path(os.path.abspath(file_path))
     try:
         relative_path = abs_file.relative_to(biotope_root)
     except ValueError:
@@ -391,7 +396,9 @@ def _bake_directory(
         )
         return None
 
-    abs_dir = directory.resolve()
+    # See `_add_file` — abspath, not resolve, so a symlinked dir under the
+    # project root is "inside" even if its target lives elsewhere.
+    abs_dir = Path(os.path.abspath(directory))
     try:
         rel_dir = abs_dir.relative_to(biotope_root)
     except ValueError:
