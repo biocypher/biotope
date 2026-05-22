@@ -57,8 +57,8 @@ fields.
 Before any technical work, elicit the user's **competence questions** in their
 own words:
 
-1. What concrete biological or clinical questions should this graph answer?
-2. What entities (genes, drugs, diseases, cohorts, …) are involved?
+1. What concrete domain questions should this graph answer?
+2. What entity types (the nouns of the user's domain) are involved?
 3. What relations between them matter?
 4. Which datasets does the user already have on disk, and which would need to
    be discovered or generated?
@@ -86,7 +86,7 @@ raw section — they've been consumed already. Don't re-process them. If you
 add a derived artifact (e.g. a JSON extracted from a PDF), record the link:
 
 ```bash
-biotope add data/extracted/kidney.json --derived-from data/raw/kidney.pdf
+biotope add data/extracted/annual_report.json --derived-from data/raw/annual_report.pdf
 ```
 
 This is how the agent says "I'm done with that raw input" without renaming
@@ -114,7 +114,7 @@ user points at a directory outside the project, copy it in first; don't try
 to make `biotope add` accept external paths.
 
 ```bash
-cp -r /elsewhere/opentargets data/opentargets
+cp -r /elsewhere/source_pull data/source_pull
 ```
 
 For files coming from URLs use `biotope get <url>` instead — it fetches them
@@ -123,20 +123,20 @@ into the project tree directly.
 **Step 2 — `biotope add` on the whole copied folder, in one call.**
 
 ```bash
-biotope add data/opentargets \
+biotope add data/source_pull \
   --license "CC-BY-4.0" \
-  --creator "Open Targets Consortium" \
+  --creator "Source Org" \
   --description "..."
 ```
 
 `biotope add` runs croissant-baker on the directory (recursing automatically)
-and writes one manifest at `.biotope/datasets/data/opentargets.jsonld`
+and writes one manifest at `.biotope/datasets/data/source_pull.jsonld`
 covering the whole subtree. It also writes `<dir>/.biotope.yaml` for bulk
 human review; apply edits with:
 
 ```bash
-biotope annotate apply data/opentargets
-biotope annotate apply data/opentargets --set creator="Open Targets Consortium"
+biotope annotate apply data/source_pull
+biotope annotate apply data/source_pull --set creator="Source Org"
 ```
 
 Pass any metadata the baker *cannot* infer (license, creator, creator email,
@@ -146,13 +146,14 @@ RAI metadata) as flags on the `add` call.
 ### Choosing what to `add`
 
 **Default: one call, on the highest folder that is the whole pull.** If the
-user copied an `opentargets/` directory containing many subdirectories
-(`target/`, `drug/`, `associations/`, …), run `biotope add data/opentargets`
-— a single manifest covers the whole tree, with FileSet globs handling the
-per-subdirectory structured files and FileObjects handling stragglers.
+user copied a directory containing many subdirectories
+(`data/source_pull/{primary/, secondary/, links/, …}`), run
+`biotope add data/source_pull` — a single manifest covers the whole tree,
+with FileSet globs handling the per-subdirectory structured files and
+FileObjects handling stragglers.
 
 ```bash
-biotope add data/opentargets        # one call, one manifest, one dataset
+biotope add data/source_pull        # one call, one manifest, one dataset
 ```
 
 **Do not** subdivide by running `add` per subdirectory unless the user
@@ -162,7 +163,7 @@ share a parent). The multi-file manifest model handles internal structure
 fine without splitting.
 
 **Anti-pattern**: pointing `biotope add` at individual files inside a
-partitioned table (`data/opentargets/target/part-0000.parquet`) — you'll
+partitioned table (`data/source_pull/primary/part-0000.parquet`) — you'll
 get one manifest per file. Stop, delete the generated manifests, and add
 the top-level folder instead.
 
@@ -184,10 +185,12 @@ YAML by hand:
 
 ```bash
 biotope map --purpose "..." \
-            --entity gene --entity disease --entity drug \
-            --relation "which drugs target which genes" \
-            --relation "which genes are associated with which diseases"
+            --entity book --entity author --entity library \
+            --relation "which books were written by which authors" \
+            --relation "which books are held by which libraries"
 ```
+
+(Generic example — replace with the user's actual domain.)
 
 When any intent flag is present, `biotope map` runs **non-interactively**: it
 writes to `.biotope/project.yaml` (or `./project.yaml` if the project was
@@ -195,10 +198,10 @@ initialised with `--visible`) and exits. With no flags, it would launch the
 interactive wizard — agents should always use flags instead.
 
 `--entity` and `--relation` accept **free text**. Use a short label if the
-schema vocabulary is already settled (`drug_targets_gene`); otherwise capture
-the user's wording verbatim (`which drugs target which proteins`) — keys are
-normalised to `snake_case` automatically. Run `biotope map --show` at any time
-to print the current intent plus mapping progress.
+schema vocabulary is already settled (`book_written_by_author`); otherwise
+capture the user's wording verbatim (`which books were written by which authors`)
+— keys are normalised to `snake_case` automatically. Run `biotope map --show`
+at any time to print the current intent plus mapping progress.
 
 Adding to the schema is always safe. **Removing** is not: see Hard rule 1 and
 Hard rule 3 — `--clear-entities` and `--clear-relations` need the user's
@@ -206,9 +209,9 @@ explicit say-so.
 
 ## Author the mapping
 
-biotope does **not** infer which record set should be a `gene` or which field
-is the `id`. You do. Author one mapping file per logical dataset; `build`
-will stream them all.
+biotope does **not** infer which record set should be a `book` (or whatever
+entity type) or which field is the `id`. You do. Author one mapping file per
+logical dataset; `build` will stream them all.
 
 ### 1. Generate an unresolved scaffold
 
@@ -241,25 +244,25 @@ selectors live under top-level `ids:` and can be referenced via `use:`.
 
 ```yaml
 entities:
-  gene:
-    record_set: targets
+  book:
+    record_set: books
     scan: row
     id:
-      field: ensembl_id
+      field: isbn
       transform: as_curie
-      args: { prefix: ensembl }
+      args: { prefix: isbn }
     properties:
-      symbol: approved_symbol
+      title: title
 ```
 
 Relation endpoints must name the referenced entity:
 
 ```yaml
 relations:
-  drug_targets_gene:
-    record_set: target_drug
-    source: { entity: drug,  field: drug_id, transform: as_curie, args: { prefix: chembl } }
-    target: { entity: gene,  use:   gene_curie }
+  book_written_by_author:
+    record_set: authorships
+    source: { entity: book,   field: isbn,       transform: as_curie, args: { prefix: isbn } }
+    target: { entity: author, use:   author_curie }
 ```
 
 ### 4. Validate before building
