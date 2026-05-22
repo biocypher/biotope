@@ -58,7 +58,15 @@ def _render_build_summary(build_dir: Path) -> None:
 
     total_nodes = 0
     total_edges = 0
-    for csv_file in sorted(output_dir.rglob("*-part*.csv")):
+    # BioCypher 0.14+ emits a single `<label>.csv` per label; older versions
+    # emit one or more `<label>-partNNN.csv` files plus a `<label>-header.csv`.
+    # Globbing both forms (and skipping header-only files) lets `view` work
+    # against any version. Header files have no data rows; counting them as
+    # "-1 lines" understated the total before — exclude them entirely.
+    csv_files = [
+        p for p in output_dir.rglob("*.csv") if not p.name.endswith("-header.csv")
+    ]
+    for csv_file in sorted(csv_files):
         try:
             with csv_file.open() as f:
                 count = sum(1 for _ in f) - 1  # subtract header
