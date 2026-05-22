@@ -356,8 +356,22 @@ def materialize_project(
 
 
 def _mapping_stem(path: Path) -> str:
+    """Filename-derived stem, sanitised to a valid Python identifier.
+
+    The stem doubles as a Python package name (``build/generated/<stem>/``)
+    and as part of an ``import`` statement in the generated entry-point
+    script, so characters like ``-`` and ``.`` would produce a SyntaxError.
+    Replace them with ``_``; prepend ``_`` if the result starts with a digit.
+    """
     name = path.name
+    raw = name
     for suffix in (".mapping.yaml", ".mapping.yml", ".yaml", ".yml"):
         if name.endswith(suffix):
-            return name[: -len(suffix)]
-    return path.stem
+            raw = name[: -len(suffix)]
+            break
+    else:
+        raw = path.stem
+    safe = "".join(c if c.isalnum() or c == "_" else "_" for c in raw)
+    if safe and safe[0].isdigit():
+        safe = "_" + safe
+    return safe

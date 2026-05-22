@@ -1,12 +1,22 @@
 # Tutorial: build your first knowledge graph
 
-A 10-minute end-to-end walk-through. We'll take three small public files —
-two CSVs and a README — and turn the structured data into a runnable
-knowledge graph of US airports and the flight routes between them. About
-8,700 nodes and edges total; ~280 KB of input.
+A 15-minute end-to-end walk-through. We'll take four small public files —
+two CSVs of US airport and flight data, one markdown file of free-text
+notes about a few airports, and a derived CSV that extracts the
+structured bits out of those notes — and turn them into a runnable
+knowledge graph. About 3,400 airports, 5,400 flight routes, 5 airlines,
+and 12 "is a hub for" relations.
 
-If you'd rather hand the wheel to an agent, jump to the [agent shortcut](#agent-shortcut)
-at the end. The same biotope commands drive both flows.
+The CSVs are the routine case: croissant-baker structures them, biotope
+maps them, BioCypher writes them. The markdown file is the interesting
+case: it has facts that belong in the graph (which airline hubs at which
+airport) but no schema for biotope to act on. We'll handle that gap two
+ways — once by a human reading the prose and hand-producing the CSV, once
+by an agent doing the same extraction automatically. Either way, the same
+file ends up in the project, and the same mapping ingests it.
+
+If you'd rather hand the wheel to an agent for the whole walk-through,
+jump to the [agent shortcut](#agent-shortcut) at the end.
 
 ## Prerequisites
 
@@ -20,7 +30,7 @@ A `git` install on `$PATH`. Nothing else.
 
 ```bash
 biotope init airports-kg \
-  --purpose "Which US airports are most connected in the flight network?" \
+  --purpose "Which US airports are most connected and who hubs there?" \
   --no-prompt
 cd airports-kg
 ```
@@ -30,12 +40,11 @@ files), `mappings/` (empty; for the semantic mapping files), `AGENTS.md`
 (the contract any coding agent will read), and a minimal `pyproject.toml`.
 A fresh `git` repo is initialised in the same directory.
 
-## 2. Bring in the data
+## 2. Bring in the structured data
 
-Three files from the
-[vega-datasets](https://github.com/vega/vega-datasets) project. We download
-the two CSVs into a single sub-folder so they end up under one composite
-manifest, then a markdown README as a separate "unstructured" file:
+Two CSVs from the [vega-datasets](https://github.com/vega/vega-datasets)
+project. We download both into a single sub-folder so they end up under
+one composite manifest:
 
 ```bash
 biotope get https://cdn.jsdelivr.net/npm/vega-datasets/data/airports.csv \
@@ -44,18 +53,25 @@ biotope get https://cdn.jsdelivr.net/npm/vega-datasets/data/flights-airport.csv 
   --output-dir data/flights --no-add
 biotope add data/flights \
   --license "BSD-3-Clause" --creator "vega-datasets"
+```
 
-biotope get https://raw.githubusercontent.com/vega/vega-datasets/main/README.md \
+The `--no-add` on the downloads lets the files land on disk without being
+tracked individually; the single `biotope add data/flights` then runs
+croissant-baker over the whole folder and writes one manifest at
+`.biotope/datasets/data/flights.jsonld` covering both record sets.
+
+## 3. Bring in the unstructured notes
+
+```bash
+biotope get https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airports-notes.md \
   --output-dir data/notes
 ```
 
-The first two downloads use `--no-add` so they land on disk without being
-tracked individually; the single `biotope add data/flights` then runs
-croissant-baker over the whole folder and writes one manifest at
-`.biotope/datasets/data/flights.jsonld` covering both record sets. The
-README, in contrast, lands as its own manifest.
+This file is short prose: a paragraph per airport mentioning which
+airlines hub there. Useful information, but no schema for baker to
+structure.
 
-## 3. Inspect the pipeline queue
+## 4. Inspect the pipeline queue
 
 ```bash
 biotope queue
@@ -63,7 +79,7 @@ biotope queue
 
 ```
 RAW (1) — needs processing
-  • data/notes/README
+  • data/notes/airports-notes
 
 PROCESSED (1) — ready to map
   • data/flights
@@ -74,63 +90,99 @@ MAPPED (0) — in the KG
 
 Two things to notice:
 
-- **`data/flights` is `processed`** — croissant-baker recognised CSVs,
-  inferred their schemas, and recorded `recordSet` + field types in the
-  manifest. Ready to be mapped into the KG.
-- **`data/notes/README` is `raw`** — baker can't structure free-form
-  markdown. The dataset is tracked (auditability, provenance) but has no
-  schema for the KG build to consume.
+- **`data/flights` is `processed`** — croissant-baker recognised the
+  CSVs, inferred their schemas, and recorded `recordSet` + field types
+  in the manifest. Ready to be mapped.
+- **`data/notes/airports-notes` is `raw`** — baker can't structure
+  free-form markdown. The file is tracked (auditability, provenance) but
+  has no schema for the build to consume.
 
-What to do with the raw entry depends on whether a human or an agent is
-driving:
+## 5. Process the raw input into the KG
+
+The notes contain real schema-shaped facts — which airlines hub at which
+airports — that belong in the graph. Getting them in requires extracting
+a structured CSV from the prose. That extraction is the boundary between
+the two paths:
 
 === "Human"
 
-    The README is a description of what's in the dataset, not data to put
-    into the KG. Leave it `raw`. The graph build will skip it; the
-    manifest stays in the project as a tracked input.
+````
+Reading prose and producing a clean CSV is fast for one human and
+impossible to automate without an agent. For this tutorial we ship
+the pre-extracted CSV so you can fetch it directly:
+
+```bash
+biotope get \
+  https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airport-hubs.csv \
+  --output-dir data/notes
+```
+
+In a real project, you'd open the markdown in an editor and write
+the same CSV yourself. (Hand the wheel to an agent — next tab — and
+you skip this step entirely.)
+````
 
 === "Agent"
 
-    Extract the structured bits worth ingesting and add them as a derived
-    artifact, then mark the README consumed:
-
-    ```bash
-    # Agent writes data/notes/sources.csv with columns: dataset, source_url.
-    biotope add data/notes/sources.csv \
-      --derived-from data/notes/README
-    ```
-
-    The `--derived-from` link records provenance via `prov:wasDerivedFrom`
-    and hides the README from the active raw queue — biotope knows it's
-    been consumed without renaming or moving the file. The derived CSV
-    bakes as `processed`. If you want it in the KG, extend the mapping
-    in step 5 to cover it; if it's a pure provenance trail, leave it
-    out of the mapping and it stays tracked but un-ingested.
-
-## 4. Declare what the graph should contain
+````
+Have your agent read `data/notes/airports-notes.md`, extract the
+`(airport_iata, airline_code, airline_name)` triples it mentions,
+and write the result to `data/notes/airport-hubs.csv`. Then record
+the provenance link:
 
 ```bash
-biotope map --entity Airport --relation has_flight
+biotope add data/notes/airport-hubs.csv \
+  --derived-from data/notes/airports-notes
 ```
 
-This writes the required entities and relations into `.biotope/project.yaml`
-(your *competence questions*: what nouns and verbs must the graph express).
-Every mapping you author from now on must resolve `Airport` and
-`has_flight` against real data — the build is strict.
+The `--derived-from` flag stamps `prov:wasDerivedFrom` into the new
+manifest and hides the original notes from the active `raw` queue —
+biotope knows they've been consumed without renaming or moving them.
+````
 
-## 5. Scaffold and resolve the mapping
+Either way, after this step the queue looks like:
+
+```
+PROCESSED (2) — ready to map
+  • data/flights
+  • data/notes/airport-hubs  (derived from: data/notes/airports-notes)
+
+Raw inputs already consumed (their derivatives are in the queue): 1
+  • data/notes/airports-notes
+```
+
+The "Raw inputs already consumed" footer (visible only on the agent path,
+because the human path doesn't link the CSV back to the markdown) is the
+provenance trail. The original notes stay in the project as a tracked
+input; the structured CSV is what gets mapped.
+
+## 6. Declare what the graph should contain
+
+```bash
+biotope map --entity Airport --entity Airline \
+            --relation has_flight --relation is_hub_for
+```
+
+This writes the required entities and relations into
+`.biotope/project.yaml` (your *competence questions*: what nouns and
+verbs must the graph express). Every mapping you author from now on must
+resolve `Airport`, `Airline`, `has_flight`, and `is_hub_for` against
+real data — the build is strict.
+
+## 7. Scaffold and resolve the mappings
 
 ```bash
 biotope map scaffold .biotope/datasets/data/flights.jsonld
+biotope map scaffold .biotope/datasets/data/notes/airport-hubs.jsonld
 ```
 
-This writes `mappings/flights.mapping.yaml` with one unresolved slot per
-declared entity/relation, plus an *inspector appendix* listing every
-record set, every field with its type, and three sample rows. Open the
-file: the appendix is what tells you (or your agent) which fields to use.
+Each scaffold writes a mapping file under `mappings/` with one slot per
+declared entity/relation, plus a comment-style *inspector appendix*
+listing every record set, every field with its type, and three sample
+rows. That appendix is what tells you (or your agent) which fields to
+use.
 
-Replace the file contents with this resolved mapping:
+Replace `mappings/flights.mapping.yaml` with:
 
 ```yaml
 croissant: .biotope/datasets/data/flights.jsonld
@@ -138,10 +190,7 @@ entities:
   airport:
     record_set: airports
     scan: row
-    id:
-      field: iata
-      transform: as_curie
-      args: {prefix: iata}
+    id: {field: iata, transform: as_curie, args: {prefix: iata}}
     properties:
       name: name
       city: city
@@ -153,53 +202,77 @@ relations:
   has_flight:
     record_set: flights-airport
     scan: row
-    source:
-      entity: airport
-      field: origin
-      transform: as_curie
-      args: {prefix: iata}
-    target:
-      entity: airport
-      field: destination
-      transform: as_curie
-      args: {prefix: iata}
+    source: {entity: airport, field: origin, transform: as_curie, args: {prefix: iata}}
+    target: {entity: airport, field: destination, transform: as_curie, args: {prefix: iata}}
     properties:
       count: count
 ```
 
-What's happening:
+And `mappings/airport-hubs.mapping.yaml` with:
 
-- `entities.airport` pulls from the `airports` record set, mints CURIEs
-  like `iata:00M`, and attaches the other columns as node properties.
-- `relations.has_flight` pulls from the `flights-airport` record set,
-  using `origin` and `destination` (themselves `iata` codes) as endpoint
-  IDs — matching the airport node IDs minted above.
+```yaml
+croissant: .biotope/datasets/data/notes/airport-hubs.jsonld
+entities:
+  airport:
+    record_set: airport-hubs
+    scan: row
+    id: {field: airport_iata, transform: as_curie, args: {prefix: iata}}
+  airline:
+    record_set: airport-hubs
+    scan: row
+    id: {field: airline_code, transform: as_curie, args: {prefix: airline}}
+    properties:
+      name: airline_name
+relations:
+  is_hub_for:
+    record_set: airport-hubs
+    scan: row
+    source: {entity: airport, field: airport_iata, transform: as_curie, args: {prefix: iata}}
+    target: {entity: airline, field: airline_code, transform: as_curie, args: {prefix: airline}}
+```
+
+What's happening across the two files:
+
+- The `flights` mapping owns the rich Airport records (full properties)
+  and the `has_flight` relation.
+- The `airport-hubs` mapping declares a *minimal* Airport (id only — it's
+  just there so the `is_hub_for` relation has something to point at on
+  the source side) and introduces the new Airline entity + `is_hub_for`
+  edges.
+- Both mappings mint Airport node IDs the same way (`iata:<code>`), so
+  BioCypher's writer dedups the two emissions into one Airport node per
+  IATA code, merging properties from the richer side.
 
 === "Human"
 
-    Edit by hand using the inspector appendix as your field catalogue.
-    Or run `biotope map` for a guided wizard that walks you through each
-    slot.
+```
+Edit the YAML files by hand, using each scaffold's inspector
+appendix as your field catalogue. Or run `biotope map` for a
+guided wizard that walks you through each slot interactively.
+```
 
 === "Agent"
 
-    The same flow, non-interactively: an agent reads the appendix (or
-    runs `biotope map inspect <croissant> --json` to get it as
-    structured JSON), produces the YAML, and verifies it with
-    `biotope map preview --json` before committing.
-
-Verify the mapping is sane:
-
-```bash
-biotope map preview
+```
+Same flow, non-interactively: an agent reads the appendix (or runs
+`biotope map inspect <croissant> --json` to get it as structured
+JSON), produces the YAML, and verifies with
+`biotope map preview <mapping_path> --json` before committing.
 ```
 
-You should see a schema panel with `airport -> Airport` and
-`has_flight -> has flight`, plus sample tuples like
-`('iata:00M', 'airport', {...})` and
-`(None, 'iata:ABE', 'iata:ATL', 'has_flight', {'count': 853})`.
+Verify each mapping in turn:
 
-## 6. Build
+```bash
+biotope map preview mappings/flights.mapping.yaml
+biotope map preview mappings/airport-hubs.mapping.yaml
+```
+
+You should see resolved slots and sample tuples like
+`('iata:00M', 'airport', {...})`,
+`(None, 'iata:ABE', 'iata:ATL', 'has_flight', {'count': 853})`, and
+`('airline:DL', 'airline', {'name': 'Delta Air Lines'})`.
+
+## 8. Build
 
 ```bash
 biotope build
@@ -210,16 +283,18 @@ This generates a self-contained BioCypher project under `build/` —
 `create_knowledge_graph.py`. Strict: any unresolved slot would have
 errored out here.
 
-## 7. Run the graph build
+## 9. Run the graph build
 
 ```bash
 python build/create_knowledge_graph.py
 ```
 
-BioCypher writes node and edge CSVs to `build/biocypher-out/`. With
-~3 400 airports and ~5 400 flight routes, this takes a second or two.
+BioCypher writes node and edge CSVs to `build/biocypher-out/`. You may
+see `WARNING -- Duplicate node type airport found` — that's expected:
+two mappings emit Airport nodes (the rich ones from `flights` and the
+ID-only ones from `airport-hubs`), and the writer merges them.
 
-## 8. Look at the result
+## 10. Look at the result
 
 ```bash
 biotope view
@@ -231,17 +306,23 @@ biotope view
 ┏━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━┓
 ┃ file           ┃ lines ┃ kind ┃
 ┡━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━┩
+│ airline.csv    │     5 │ node │
 │ airport.csv    │  3376 │ node │
 │ has_flight.csv │  5366 │ edge │
+│ is_hub_for.csv │    12 │ edge │
 └────────────────┴───────┴──────┘
 
-Total nodes: 3376  edges: 5366
+Total nodes: 3381  edges: 5378
 ```
 
-That's your knowledge graph. The CSVs in `build/biocypher-out/` are ready
-to be imported into Neo4j (`neo4j-admin database import`), DuckDB, or any
-graph store BioCypher targets — see the BioCypher docs for the import
-side.
+That's your knowledge graph. The structured CSVs gave you 3,376 airports
+and 5,366 flight routes. The unstructured notes — only because they were
+extracted into a structured CSV first — gave you 5 airlines and 12
+"is a hub for" edges that wouldn't otherwise be in the KG.
+
+The CSVs in `build/biocypher-out/` are ready to be imported into Neo4j
+(`neo4j-admin database import`), DuckDB, or any graph store BioCypher
+targets — see the BioCypher docs for the import side.
 
 ## Agent shortcut
 
@@ -259,11 +340,11 @@ The contract is the CLI; no agent needs to import any biotope Python.
 
 The clear division of labour:
 
-- **Human-only work**: unstructured raw inputs (PDFs, notes, free-form
-  documents) typically *stay* raw — there's no automation that reliably
-  extracts the right structured artifact from them. Skip them or hand
-  them to an agent.
-- **Agent territory**: anything baker already structured is mechanical
+- **Pure-human work, with no automation possible**: extracting structured
+  facts from unstructured inputs like markdown, PDFs, or natural-language
+  notes. Without an agent, this stays manual — or stays out of the KG
+  entirely.
+- **Agent territory**: the extraction above, plus everything mechanical
   from there. Slot resolution against the inspector appendix, multi-axis
   mappings, cross-mapping alignment proposals — all suit non-interactive
   drivers better than a human clicking through a wizard.
