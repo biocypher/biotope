@@ -15,6 +15,8 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
 
 theme:
   features:
@@ -40,6 +42,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Tutorial: tutorial.md
   - Architecture: architecture.md
   - Project Context: project-context.md
   - Cluster Compliance: cluster-compliance.md

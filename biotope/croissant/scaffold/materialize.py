@@ -173,15 +173,22 @@ from biotope.croissant.acquisition import AcquisitionContext, infer_datasets_loc
 from biotope.croissant.mapping import compile_mapping, load_mapping
 from biotope.croissant.spec import load_from_path
 
-_MAPPING_FILE = Path(__file__).parent.parent.parent / "mappings" / "{mapping_filename}"
+# build/generated/<stem>/adapter.py -> build/ is three parents up,
+# the biotope project root is four parents up.
+_BUILD_DIR = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = _BUILD_DIR.parent
+_MAPPING_FILE = _BUILD_DIR / "mappings" / "{mapping_filename}"
 
 
 def build_adapter():
     """Load `{stem}`'s mapping and return a compiled BioCypher-compatible adapter."""
     mapping = load_mapping(_MAPPING_FILE)
-    dataset = load_from_path(mapping.croissant)
+    croissant_path = Path(mapping.croissant)
+    if not croissant_path.is_absolute():
+        croissant_path = (_PROJECT_ROOT / croissant_path).resolve()
+    dataset = load_from_path(croissant_path)
     context = AcquisitionContext(
-        dataset, datasets_location=infer_datasets_location(mapping.croissant)
+        dataset, datasets_location=infer_datasets_location(croissant_path)
     )
     return compile_mapping(mapping, context)
 '''
@@ -229,6 +236,7 @@ def _emit_build_script(project_name: str, stems: list[str], aligned: bool) -> st
         )
     return f'''"""Generated entry point for the {project_name} graph build."""
 
+import os
 from pathlib import Path
 import sys
 {itertools_import}
@@ -237,6 +245,12 @@ from biocypher import BioCypher
 HERE = Path(__file__).parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+
+# Run from build/ so BioCypher's relative `output_directory: biocypher-out`
+# (configured in config/biocypher_config.yaml) lands inside this build,
+# where `biotope view` looks for it. Adapters resolve their own paths via
+# __file__ so this chdir does not affect mapping/croissant lookup.
+os.chdir(HERE)
 
 {imports}
 {alignment_import}

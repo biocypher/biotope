@@ -6,6 +6,7 @@ site_name: Biotope
 
 nav:
   - Home: index.md
+  - Tutorial: tutorial.md
   - Architecture: architecture.md
   - Project Context: project-context.md
   - Cluster Compliance: cluster-compliance.md

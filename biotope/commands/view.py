@@ -45,6 +45,31 @@ def _render_project_header(project_path: Path) -> None:
     )
 
 
+def _load_edge_labels(schema_config_path: Path) -> set[str] | None:
+    """Return the set of ``input_label`` values that BioCypher treats as edges.
+
+    Returns ``None`` if the schema config can't be read — callers should fall
+    back to a filename heuristic.
+    """
+    if not schema_config_path.is_file():
+        return None
+    try:
+        import yaml
+
+        config = yaml.safe_load(schema_config_path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    edges: set[str] = set()
+    for entry in config.values():
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("represented_as") == "edge":
+            label = entry.get("input_label")
+            if isinstance(label, str):
+                edges.add(label)
+    return edges
+
+
 def _render_build_summary(build_dir: Path) -> None:
     output_dir = build_dir / "biocypher-out"
     if not output_dir.is_dir():
@@ -59,6 +84,11 @@ def _render_build_summary(build_dir: Path) -> None:
 
     total_nodes = 0
     total_edges = 0
+    # Consult the build's schema_config.yaml to know which output CSVs are
+    # nodes vs edges. BioCypher names files by `input_label`, so we index the
+    # schema by that key. Fall back to a filename heuristic if the config is
+    # missing.
+    edge_labels = _load_edge_labels(build_dir / "config" / "schema_config.yaml")
     # BioCypher 0.14+ emits a single `<label>.csv` per label; older versions
     # emit one or more `<label>-partNNN.csv` files plus a `<label>-header.csv`.
     # Globbing both forms (and skipping header-only files) lets `view` work
@@ -71,7 +101,11 @@ def _render_build_summary(build_dir: Path) -> None:
                 count = sum(1 for _ in f) - 1  # subtract header
         except OSError:
             count = -1
-        kind = "edge" if "edge" in csv_file.name.lower() else "node"
+        stem = csv_file.stem.split("-part")[0]
+        if edge_labels is not None:
+            kind = "edge" if stem in edge_labels else "node"
+        else:
+            kind = "edge" if "edge" in csv_file.name.lower() else "node"
         table.add_row(csv_file.name, str(count), kind)
         if kind == "node":
             total_nodes += max(0, count)
