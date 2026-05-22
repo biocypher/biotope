@@ -67,6 +67,45 @@ You may already find some of these answers in `.biotope/project.yaml`. If so,
 confirm them with the user before assuming they're current. **Never silently
 overwrite or `--clear-*` what's already there** (see Hard rule 1).
 
+Then check the pipeline queue:
+
+```bash
+biotope queue          # human-readable; raw / processed / mapped sections
+biotope queue --json   # same shape, machine-readable
+```
+
+The queue is what every dataset currently is in the pipeline:
+
+- **raw**: croissant-baker couldn't fully describe the file (PDFs, URLs,
+  documents). The agent's job is to process these into a derived artifact.
+- **processed**: schema is concrete; ready to be mapped into the KG.
+- **mapped**: a resolved mapping exists; ingestable AND configured.
+
+Datasets that something else `prov:wasDerivedFrom` are hidden from the active
+raw section — they've been consumed already. Don't re-process them. If you
+add a derived artifact (e.g. a JSON extracted from a PDF), record the link:
+
+```bash
+biotope add data/extracted/kidney.json --derived-from data/raw/kidney.pdf
+```
+
+This is how the agent says "I'm done with that raw input" without renaming
+or moving anything. Status auto-transitions in the happy path:
+
+- `biotope add` classifies new manifests as `raw` or `processed` from the
+  baked Croissant (record set with fields → processed, else raw).
+- `biotope map` flips a dataset to `mapped` when a save produces a fully
+  resolved mapping.
+
+Manual override exists for corrections:
+
+```bash
+biotope mark <dataset> processed --derived-from <other_dataset>
+```
+
+But the auto-transitions cover the common path — reach for `mark` only when
+the heuristic is wrong or a rare correction is needed.
+
 ## Bring data in
 
 For each dataset the user has on disk:

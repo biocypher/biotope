@@ -15,7 +15,9 @@ from biotope.commands.get import get as get_cmd
 from biotope.commands.init import init as init_cmd
 from biotope.commands.log import log as log_cmd
 from biotope.commands.map import map_group as map_cmd
+from biotope.commands.mark import mark as mark_cmd
 from biotope.commands.mv import mv as mv_cmd
+from biotope.commands.queue import queue as queue_cmd
 from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
 from biotope.commands.propose_mapping import propose_mapping as propose_mapping_cmd
 from biotope.commands.pull import pull as pull_cmd
@@ -48,6 +50,8 @@ cli.add_command(propose_alignment_cmd, "propose-alignment")
 cli.add_command(build_cmd, "build")
 cli.add_command(view_cmd, "view")
 cli.add_command(benchmark_cmd, "benchmark")
+cli.add_command(queue_cmd, "queue")
+cli.add_command(mark_cmd, "mark")
 
 # Ingestion + NLP
 cli.add_command(read_cmd, "read")
