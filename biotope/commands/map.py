@@ -137,6 +137,12 @@ def _apply_intent_flags(
         return
 
     data = project.model_dump()
+    _warn_destructive_clears(
+        project,
+        clear_entities=clear_entities,
+        clear_relations=clear_relations,
+        clear_sources=clear_sources,
+    )
     if purpose is not None:
         data["purpose"] = purpose
     if notes is not None:
@@ -158,6 +164,53 @@ def _apply_intent_flags(
     updated.dump(project_path)
     console.print(f"✅ Updated [cyan]{project_path}[/cyan]")
     _render_intent(project_path, updated)
+
+
+def _warn_destructive_clears(
+    project: Project,
+    *,
+    clear_entities: bool,
+    clear_relations: bool,
+    clear_sources: bool,
+) -> None:
+    """Print a Rich warning panel when a `--clear-*` flag drops user content.
+
+    The flag still works — the friction is purely informational so that an
+    agent (or human) running the command sees that they are about to erase
+    the project's declared intent. AGENTS.md hard rule 1 forbids doing this
+    without the user's explicit instruction.
+    """
+    sections: list[str] = []
+    if clear_entities and project.required_entities:
+        joined = "\n".join(f"  • {e}" for e in project.required_entities)
+        sections.append(
+            f"[bold]required_entities[/bold] ({len(project.required_entities)} item(s)):\n{joined}"
+        )
+    if clear_relations and project.required_relations:
+        joined = "\n".join(f"  • {r}" for r in project.required_relations)
+        sections.append(
+            f"[bold]required_relations[/bold] ({len(project.required_relations)} item(s)):\n{joined}"
+        )
+    if clear_sources and project.data_sources:
+        joined = "\n".join(f"  • {s}" for s in project.data_sources)
+        sections.append(
+            f"[bold]data_sources[/bold] ({len(project.data_sources)} item(s)):\n{joined}"
+        )
+    if not sections:
+        return
+    body = (
+        "About to erase the following from the project's declared intent.\n"
+        "If the user did not explicitly ask for this, stop and confirm first.\n\n"
+        + "\n\n".join(sections)
+    )
+    console.print(
+        Panel(
+            body,
+            title="⚠  Destructive: --clear-* will drop user-declared intent",
+            border_style="red",
+            expand=False,
+        )
+    )
 
 
 def _render_intent(project_path: Path, project: Project) -> None:

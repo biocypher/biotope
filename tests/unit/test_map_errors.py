@@ -135,6 +135,59 @@ def test_map_data_dir_without_add_suggests_add(tmp_path: Path, monkeypatch) -> N
     assert "biotope add" in r.output
 
 
+def test_map_clear_entities_warns_with_existing_intent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """`--clear-entities` against a non-empty project must print a destructive
+    warning panel listing what would be dropped. The flag still works."""
+    runner = CliRunner()
+    project_dir = _init_project(tmp_path)
+    monkeypatch.chdir(project_dir)
+
+    # Seed required_entities.
+    seed = runner.invoke(
+        map_group,
+        ["--entity", "gene", "--entity", "drug_target", "--relation", "drug_targets_gene"],
+    )
+    assert seed.exit_code == 0, seed.output
+
+    # Clear entities only — relations should not be listed.
+    r = runner.invoke(map_group, ["--clear-entities", "--entity", "compound"])
+    assert r.exit_code == 0, r.output
+    assert "Destructive" in r.output
+    assert "required_entities" in r.output
+    assert "gene" in r.output
+    assert "drug_target" in r.output
+    assert "required_relations" not in r.output
+
+
+def test_map_clear_entities_silent_when_already_empty(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """No warning when there's nothing to drop."""
+    runner = CliRunner()
+    project_dir = _init_project(tmp_path)
+    monkeypatch.chdir(project_dir)
+
+    r = runner.invoke(map_group, ["--clear-entities", "--entity", "gene"])
+    assert r.exit_code == 0, r.output
+    assert "Destructive" not in r.output
+
+
+def test_map_clear_relations_warns(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+    project_dir = _init_project(tmp_path)
+    monkeypatch.chdir(project_dir)
+
+    runner.invoke(map_group, ["--relation", "drug_has_mechanism_of_action"])
+
+    r = runner.invoke(map_group, ["--clear-relations"])
+    assert r.exit_code == 0, r.output
+    assert "Destructive" in r.output
+    assert "required_relations" in r.output
+    assert "drug_has_mechanism_of_action" in r.output
+
+
 def test_map_preview_iterates_all_mappings(
     tmp_path: Path, monkeypatch, minimal_croissant_jsonld: Path
 ) -> None:
