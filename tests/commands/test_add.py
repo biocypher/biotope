@@ -127,6 +127,101 @@ def test_add_file_relative_path_already_tracked(git_repo):
         os.chdir(original_cwd)
 
 
+def test_add_file_stamps_status_raw_by_default(git_repo):
+    """A plain file `biotope add` without a baked record set lands as raw."""
+    from biotope.metadata import STATUS_RAW, get_status
+
+    target = git_repo / "doc.txt"
+    target.write_text("a free-text doc")
+    datasets_dir = git_repo / ".biotope" / "datasets"
+    assert _add_file(target, git_repo, datasets_dir, False) is True
+
+    manifest = datasets_dir / "doc.jsonld"
+    with open(manifest) as f:
+        metadata = json.load(f)
+    assert get_status(metadata) == STATUS_RAW
+
+
+def test_add_file_status_override(git_repo):
+    """`--status processed` overrides the heuristic."""
+    from biotope.metadata import STATUS_PROCESSED, get_status
+
+    target = git_repo / "doc.txt"
+    target.write_text("ignore me")
+    datasets_dir = git_repo / ".biotope" / "datasets"
+    _add_file(
+        target, git_repo, datasets_dir, False,
+        overrides={**_default_overrides_for_test(), "status_override": "processed"},
+    )
+
+    manifest = datasets_dir / "doc.jsonld"
+    with open(manifest) as f:
+        metadata = json.load(f)
+    assert get_status(metadata) == STATUS_PROCESSED
+
+
+def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
+    """Canonical id, data-path, and manifest-path all resolve to the rel id."""
+    from biotope.commands.add import _resolve_dataset_ref
+
+    project = tmp_path / "proj"
+    datasets_dir = project / ".biotope" / "datasets" / "data" / "raw"
+    datasets_dir.mkdir(parents=True)
+
+    data_file = project / "data" / "raw" / "kidney.pdf"
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    data_file.write_text("pdf")
+
+    manifest = datasets_dir / "kidney.jsonld"
+    manifest.write_text("{}")
+
+    canonical = "data/raw/kidney"
+    assert _resolve_dataset_ref(canonical, project) == canonical
+    assert _resolve_dataset_ref(str(data_file), project) == canonical
+    assert _resolve_dataset_ref(str(manifest), project) == canonical
+
+
+def test_resolve_dataset_ref_rejects_missing(tmp_path):
+    from biotope.commands.add import _resolve_dataset_ref
+
+    project = tmp_path / "proj"
+    (project / ".biotope" / "datasets").mkdir(parents=True)
+    with pytest.raises(ValueError, match="no manifest found"):
+        _resolve_dataset_ref("missing/dataset", project)
+
+
+def test_add_file_derived_from_writes_provenance(git_repo):
+    """`--derived-from <ref>` records `prov:wasDerivedFrom` on the new dataset."""
+    from biotope.metadata import get_derived_from
+
+    # Seed an existing manifest to derive from.
+    src_manifest = git_repo / ".biotope" / "datasets" / "raw_pdf.jsonld"
+    src_manifest.parent.mkdir(parents=True, exist_ok=True)
+    src_manifest.write_text(json.dumps({
+        "@type": "sc:Dataset",
+        "name": "raw_pdf",
+        "distribution": [],
+        "biotope:status": "raw",
+    }))
+
+    target = git_repo / "extracted.json"
+    target.write_text("{}")
+    datasets_dir = git_repo / ".biotope" / "datasets"
+    _add_file(
+        target, git_repo, datasets_dir, False,
+        overrides={**_default_overrides_for_test(), "derived_from": ["raw_pdf"]},
+    )
+
+    with open(datasets_dir / "extracted.jsonld") as f:
+        metadata = json.load(f)
+    assert get_derived_from(metadata) == ["raw_pdf"]
+
+
+def _default_overrides_for_test():
+    from biotope.commands.add import _default_overrides
+    return _default_overrides()
+
+
 def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
     """A file covered only by a `cr:FileSet` glob in a multi-file manifest is
     still tracked. Regression: the old `is_file_tracked` matched only

@@ -14,11 +14,14 @@ import yaml
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     SCAFFOLD_FILENAME,
+    add_derived_from,
+    classify_status_from_baker,
     make_file_object,
     merge_metadata,
     normalize_metadata_shape,
     parse_key_value_pairs,
     resolve_target,
+    set_status,
 )
 from biotope.utils import (
     find_biotope_root,
@@ -45,6 +48,21 @@ from biotope.utils import (
 @click.option("--legal-obligations", help="Dataset legal obligations")
 @click.option("--collaboration-partner", help="Dataset collaboration partner")
 @click.option("--rai", "rai_pairs", multiple=True, help="Croissant RAI field as KEY=VALUE")
+@click.option(
+    "--status",
+    "status_override",
+    type=click.Choice(["raw", "processed"]),
+    default=None,
+    help="Override pipeline state. Default: 'processed' if baker produced a "
+    "complete record set, 'raw' otherwise.",
+)
+@click.option(
+    "--derived-from",
+    "derived_from",
+    multiple=True,
+    help="Record this dataset as derived from another (repeatable). Pass a "
+    "dataset reference — data path, manifest path, or dataset name.",
+)
 def add(
     paths: tuple[Path, ...],
     force: bool,
@@ -61,6 +79,8 @@ def add(
     legal_obligations: str | None,
     collaboration_partner: str | None,
     rai_pairs: tuple[str, ...],
+    status_override: str | None,
+    derived_from: tuple[str, ...],
 ) -> None:
     """Add data files or rooted directories to a biotope project."""
     if not paths:
@@ -85,6 +105,11 @@ def add(
     except ValueError as exc:
         raise click.BadParameter(str(exc)) from exc
 
+    try:
+        resolved_provenance = [_resolve_dataset_ref(ref, biotope_root) for ref in derived_from]
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
+
     overrides = {
         "name": name,
         "description": description,
@@ -99,6 +124,8 @@ def add(
         "legal_obligations": legal_obligations,
         "collaboration_partner": collaboration_partner,
         "rai_fields": rai_fields,
+        "status_override": status_override,
+        "derived_from": resolved_provenance,
     }
 
     datasets_dir = biotope_root / ".biotope" / "datasets"
@@ -201,6 +228,7 @@ def _add_file(
 
     _enrich_with_baker(metadata, abs_file)
     _apply_dataset_metadata(metadata, defaults, overrides, biotope_root)
+    _apply_pipeline_state(metadata, overrides)
 
     target = resolve_target(abs_file, biotope_root)
     target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -436,6 +464,7 @@ def _bake_directory(
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
     _dedupe_file_objects_covered_by_filesets(metadata_dict, abs_dir, biotope_root)
     _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root)
+    _apply_pipeline_state(metadata_dict, overrides)
 
     target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
     with open(target.metadata_path, "w", encoding="utf-8") as handle:
@@ -603,7 +632,82 @@ def _default_overrides() -> dict[str, Any]:
         "legal_obligations": None,
         "collaboration_partner": None,
         "rai_fields": {},
+        "status_override": None,
+        "derived_from": [],
     }
+
+
+def _apply_pipeline_state(
+    metadata: dict[str, Any], overrides: dict[str, Any]
+) -> None:
+    """Stamp ``biotope:status`` + ``prov:wasDerivedFrom`` on a fresh manifest.
+
+    Status: explicit ``--status`` override wins; otherwise classify from the
+    baked Croissant (record set with field listing → processed, else raw).
+    Provenance: each ``--derived-from`` ref is added idempotently.
+    """
+    status = overrides.get("status_override") or classify_status_from_baker(metadata)
+    set_status(metadata, status)
+    for source_id in overrides.get("derived_from") or []:
+        add_derived_from(metadata, source_id)
+
+
+def _resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
+    """Normalise a user-supplied dataset reference to its canonical id.
+
+    A dataset's canonical id is its relative path under ``.biotope/datasets/``
+    sans the ``.jsonld`` suffix — the same key biotope already uses to mirror
+    manifests onto the data tree. Accepts:
+
+    * the canonical id itself (``"data/raw/kidney_pdf"``),
+    * a path to the data file/dir,
+    * a path to the ``.jsonld`` manifest.
+
+    Raises ``ValueError`` when nothing resolves.
+    """
+    datasets_dir = biotope_root / ".biotope" / "datasets"
+
+    # Bare canonical id (no suffix); accept as-is if a manifest exists.
+    candidate_manifest = datasets_dir / f"{ref}.jsonld"
+    if candidate_manifest.is_file():
+        return ref
+
+    p = Path(ref)
+    if not p.is_absolute():
+        p = (biotope_root / p).resolve()
+    else:
+        p = p.resolve()
+
+    # Path to a manifest under .biotope/datasets/.
+    try:
+        rel_manifest = p.relative_to(datasets_dir)
+        if rel_manifest.suffix == ".jsonld" and p.is_file():
+            return str(rel_manifest.with_suffix(""))
+    except ValueError:
+        pass
+
+    # Path to a data file/dir inside the project — derive the canonical id.
+    try:
+        rel = p.relative_to(biotope_root)
+    except ValueError as exc:
+        msg = f"--derived-from {ref!r}: path is outside the biotope project"
+        raise ValueError(msg) from exc
+
+    file_manifest = (datasets_dir / rel).with_suffix(".jsonld")
+    if file_manifest.is_file():
+        return str(rel.with_suffix("") if rel.suffix else rel)
+
+    # If it's a data dir we just baked, the canonical id is the dir rel path.
+    dir_manifest = (datasets_dir / rel).with_suffix(".jsonld")
+    if dir_manifest.is_file():
+        return str(rel)
+
+    msg = (
+        f"--derived-from {ref!r}: no manifest found under .biotope/datasets/. "
+        "Pass a dataset name (e.g. 'data/raw/kidney_pdf'), a data path, or a "
+        ".jsonld path of an existing dataset."
+    )
+    raise ValueError(msg)
 
 
 def _generate_biotope_scaffold_from_baked(

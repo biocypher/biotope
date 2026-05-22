@@ -187,6 +187,29 @@ def add_derived_from(metadata: dict[str, Any], source_id: str) -> None:
     metadata["prov:wasDerivedFrom"] = [{"@id": ref} for ref in refs]
 
 
+def update_manifest_status(manifest_path: Path, status: str) -> bool:
+    """Read ``manifest_path``, set ``biotope:status``, write back. Idempotent.
+
+    Returns ``True`` if the manifest was modified, ``False`` if the status was
+    already correct or the file could not be read.
+    """
+    import json
+
+    if not manifest_path.is_file():
+        return False
+    try:
+        with open(manifest_path) as handle:
+            metadata = json.load(handle)
+    except (OSError, ValueError):
+        return False
+    if get_status(metadata) == status:
+        return False
+    set_status(metadata, status)
+    with open(manifest_path, "w") as handle:
+        json.dump(metadata, handle, indent=2)
+    return True
+
+
 def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
     """The data directory mirrored by a manifest under the project root.
 

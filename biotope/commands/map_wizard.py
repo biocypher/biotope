@@ -336,6 +336,21 @@ def _autosave(
     mapping_path.write_text(
         render_mapping_with_appendix(mapping, appendix=appendix, intent_comment=comment)
     )
+    if mapping.is_resolved():
+        _flip_referenced_dataset_to_mapped(mapping)
+
+
+def _flip_referenced_dataset_to_mapped(mapping: Mapping) -> None:
+    """Once a wizard save produces a fully resolved mapping, the dataset it
+    references becomes ``mapped`` — configured AND ingestable. Up-edge only:
+    if the user later de-resolves, the status stays where it is; explicit
+    ``biotope mark`` rolls it back."""
+    from biotope.metadata import STATUS_MAPPED, update_manifest_status
+
+    croissant_path = Path(mapping.croissant)
+    if not croissant_path.is_absolute():
+        croissant_path = (Path.cwd() / croissant_path).resolve()
+    update_manifest_status(croissant_path, STATUS_MAPPED)
 
 
 # ---------------------------------------------------------------------------
