@@ -340,6 +340,74 @@ def _autosave(
         _flip_referenced_dataset_to_mapped(mapping)
 
 
+def _show_status_on_exit(draft: dict[str, Any], croissant_path: Path) -> None:
+    """At wizard save/exit, show the dataset's current biotope:status and,
+    when relevant, the explicit CLI command the user would run to mark it.
+
+    The autosave path already flips a resolved mapping's dataset to
+    ``mapped``; this panel makes that transition visible (or shows the
+    manual form when it didn't fire). Same primitive an agent would use,
+    surfaced at the natural exit point for the human."""
+    import json
+
+    from biotope.metadata import (
+        STATUS_MAPPED,
+        STATUS_PROCESSED,
+        STATUS_RAW,
+        get_status,
+    )
+
+    if not croissant_path.is_file():
+        return
+    try:
+        with open(croissant_path) as handle:
+            metadata = json.load(handle)
+    except (OSError, ValueError):
+        return
+    status = get_status(metadata)
+
+    # Use the manifest's rel id relative to the project's .biotope/datasets/
+    # for the CLI hint when we can derive it; fall back to the croissant
+    # filename otherwise.
+    try:
+        datasets_dir = _datasets_dir_from(croissant_path)
+        dataset_id = str(croissant_path.relative_to(datasets_dir).with_suffix(""))
+    except (ValueError, AttributeError):
+        dataset_id = croissant_path.stem
+
+    colour = {
+        STATUS_RAW: "yellow",
+        STATUS_PROCESSED: "cyan",
+        STATUS_MAPPED: "green",
+    }.get(status, "white")
+
+    lines = [f"[bold]biotope:status[/bold] is [{colour}]{status}[/{colour}]"]
+    if status == STATUS_MAPPED:
+        lines.append("[dim](auto-flipped on resolved save — nothing else to do)[/dim]")
+    elif status == STATUS_PROCESSED:
+        lines.append(
+            f"[dim]To mark it mapped manually:[/dim] "
+            f"[bold]biotope mark {dataset_id} mapped[/bold]"
+        )
+    elif status == STATUS_RAW:
+        lines.append(
+            "[dim]Unusual — the dataset is still raw, yet you're authoring a mapping for it.[/dim]\n"
+            f"[dim]If it has a complete record set, mark it processed:[/dim] "
+            f"[bold]biotope mark {dataset_id} processed[/bold]"
+        )
+    console.print(
+        Panel("\n".join(lines), title="Pipeline state", border_style=colour, expand=False)
+    )
+
+
+def _datasets_dir_from(croissant_path: Path) -> Path:
+    """Walk upward to find the ``.biotope/datasets/`` ancestor of a manifest."""
+    for parent in croissant_path.parents:
+        if parent.name == "datasets" and parent.parent.name == ".biotope":
+            return parent
+    raise ValueError(f"{croissant_path} is not under .biotope/datasets/")
+
+
 def _flip_referenced_dataset_to_mapped(mapping: Mapping) -> None:
     """Once a wizard save produces a fully resolved mapping, the dataset it
     references becomes ``mapped`` — configured AND ingestable. Up-edge only:
@@ -375,9 +443,11 @@ def _main_loop(
             choice = _menu_choice(draft)
         except KeyboardInterrupt:
             console.print(f"\n💾 Saved to [cyan]{mapping_path}[/cyan]")
+            _show_status_on_exit(draft, croissant_path)
             return
         if choice == "quit":
             console.print(f"💾 Saved to [cyan]{mapping_path}[/cyan]")
+            _show_status_on_exit(draft, croissant_path)
             return
         try:
             if choice == "intent":

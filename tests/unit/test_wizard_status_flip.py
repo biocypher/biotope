@@ -48,6 +48,49 @@ def test_resolved_mapping_save_flips_manifest_to_mapped(tmp_path: Path) -> None:
     assert get_status(json.loads(croissant.read_text())) == STATUS_MAPPED
 
 
+def test_show_status_on_exit_surfaces_mapped(tmp_path: Path, capsys) -> None:
+    """When status is `mapped`, the exit panel confirms the auto-flip."""
+    from biotope.commands.map_wizard import _show_status_on_exit
+
+    datasets_dir = tmp_path / "proj" / ".biotope" / "datasets"
+    datasets_dir.mkdir(parents=True)
+    croissant = datasets_dir / "data" / "ot" / "target.jsonld"
+    croissant.parent.mkdir(parents=True)
+    croissant.write_text(json.dumps({
+        "@type": "sc:Dataset",
+        "name": "data/ot/target",
+        "biotope:status": "mapped",
+    }))
+
+    _show_status_on_exit({"croissant": str(croissant)}, croissant)
+    captured = capsys.readouterr()
+    assert "mapped" in captured.out
+    assert "auto-flipped" in captured.out
+
+
+def test_show_status_on_exit_shows_mark_cli_when_processed(
+    tmp_path: Path, capsys
+) -> None:
+    """When status is still `processed` at exit, the panel surfaces the
+    explicit CLI form the user would run to mark it mapped."""
+    from biotope.commands.map_wizard import _show_status_on_exit
+
+    datasets_dir = tmp_path / "proj" / ".biotope" / "datasets"
+    datasets_dir.mkdir(parents=True)
+    croissant = datasets_dir / "data" / "ot" / "target.jsonld"
+    croissant.parent.mkdir(parents=True)
+    croissant.write_text(json.dumps({
+        "@type": "sc:Dataset",
+        "name": "data/ot/target",
+        "biotope:status": "processed",
+    }))
+
+    _show_status_on_exit({"croissant": str(croissant)}, croissant)
+    captured = capsys.readouterr()
+    assert "processed" in captured.out
+    assert "biotope mark data/ot/target mapped" in captured.out
+
+
 def test_unresolved_mapping_does_not_flip(tmp_path: Path) -> None:
     """The flip is up-edge only — partial mappings keep the status as
     processed so the queue still sees them as work-in-progress."""
