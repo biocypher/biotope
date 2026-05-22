@@ -108,50 +108,63 @@ the heuristic is wrong or a rare correction is needed.
 
 ## Bring data in
 
-For each dataset the user has on disk:
+**Step 1 — copy the source folder into the project.** Data must live under the
+project root before `biotope add` can address it (see Hard rule 2). If the
+user points at a directory outside the project, copy it in first; don't try
+to make `biotope add` accept external paths.
 
 ```bash
-biotope add <path> \
+cp -r /elsewhere/opentargets data/opentargets
+```
+
+For files coming from URLs use `biotope get <url>` instead — it fetches them
+into the project tree directly.
+
+**Step 2 — `biotope add` on the whole copied folder, in one call.**
+
+```bash
+biotope add data/opentargets \
   --license "CC-BY-4.0" \
-  --creator "User Name" \
+  --creator "Open Targets Consortium" \
   --description "..."
 ```
 
-`biotope add` runs croissant-baker on the file(s) to autogenerate the Croissant
-JSON-LD in `.biotope/datasets/`. Pass the metadata that the baker *cannot*
-infer (license, creator, creator email, description, access restrictions,
-legal obligations, collaboration details, and any RAI metadata) as flags.
-
-If the dataset is a directory, `biotope add <dir>` recurses automatically and
-also writes `<dir>/.biotope.yaml` for bulk human review. After editing that
-scaffold, apply it with:
+`biotope add` runs croissant-baker on the directory (recursing automatically)
+and writes one manifest at `.biotope/datasets/data/opentargets.jsonld`
+covering the whole subtree. It also writes `<dir>/.biotope.yaml` for bulk
+human review; apply edits with:
 
 ```bash
-biotope annotate apply <dir>
+biotope annotate apply data/opentargets
+biotope annotate apply data/opentargets --set creator="Open Targets Consortium"
 ```
 
-You can override one field across the whole apply step with:
-
-```bash
-biotope annotate apply <dir> --set creator="Open Targets Consortium"
-```
+Pass any metadata the baker *cannot* infer (license, creator, creator email,
+description, access restrictions, legal obligations, collaboration details,
+RAI metadata) as flags on the `add` call.
 
 ### Choosing what to `add`
 
-`biotope add` treats the path you give it as **one logical dataset**. Pick the
-granularity carefully:
+**Default: one call, on the highest folder that is the whole pull.** If the
+user copied an `opentargets/` directory containing many subdirectories
+(`target/`, `drug/`, `associations/`, …), run `biotope add data/opentargets`
+— a single manifest covers the whole tree, with FileSet globs handling the
+per-subdirectory structured files and FileObjects handling stragglers.
 
-- **A directory that holds one logical table** (even if split across many
-  partitioned files): `biotope add data/opentargets/target`. That dataset
-  becomes one record set you can map.
-- **A directory that holds several logical tables** (e.g. a multi-table
-  data-pull like `data/opentargets/{target,drug_moa,associations,...}`):
-  run `biotope add` *once per subdirectory*, not on the parent.
+```bash
+biotope add data/opentargets        # one call, one manifest, one dataset
+```
 
-**Anti-pattern**: if `biotope add` produces N near-identical record sets that
-all share the same schema, you almost certainly pointed it at partition files
-instead of the dataset directory above them. Stop, delete the generated
-`.biotope/datasets/<rel>.jsonld`, and add the parent directory instead.
+**Do not** subdivide by running `add` per subdirectory unless the user
+explicitly wants each subdirectory tracked as its own dataset (rare; only
+makes sense when subdirectories are unrelated data sources that happen to
+share a parent). The multi-file manifest model handles internal structure
+fine without splitting.
+
+**Anti-pattern**: pointing `biotope add` at individual files inside a
+partitioned table (`data/opentargets/target/part-0000.parquet`) — you'll
+get one manifest per file. Stop, delete the generated manifests, and add
+the top-level folder instead.
 
 ### Finding more data
 
