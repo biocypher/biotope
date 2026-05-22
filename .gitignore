@@ -1,5 +1,7 @@
 .vscode
 *.json
+!release-please-config.json
+!.release-please-manifest.json
 .biotope/
 
 ### Linux template
