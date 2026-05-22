@@ -5,6 +5,51 @@ workspace. Always reach for the CLI; never edit configs by hand and never
 import biotope's Python modules directly. Every action a user could take is
 exposed as a flag on a biotope command.
 
+## Hard rules — read first
+
+1. **Never modify `required_entities` or `required_relations` without the
+   user's explicit instruction.** The user's stated schema is the contract.
+   Resolve mapping *slots* against that schema; do not restructure the schema
+   to fit a convenient mapping. Any concept named in `purpose:` that you are
+   about to encode as anything *other* than a first-class entity/relation is a
+   stop sign — ask first.
+2. **Data lives inside the project.** A biotope project owns its data. The
+   manifest at `.biotope/datasets/<rel>.jsonld` addresses `<project>/<rel>/`,
+   so files outside the project tree are not ingestible. Acceptable shapes:
+   copy into the project; symlink under the project root; or fetch via
+   `biotope get <url>`.
+3. **`--clear-entities` / `--clear-relations` are destructive.** They erase
+   the user's declared schema. Use only when the user has explicitly asked you
+   to drop and rewrite intent — never as a tidy-up before re-encoding.
+
+## The canonical workflow
+
+```
+biotope init  →  biotope add  →  biotope map  →  biotope build
+```
+
+- `init` creates the project skeleton and `.biotope/project.yaml`.
+- `add` brings each dataset under the project and writes its Croissant
+  metadata. **Do this before mapping**, so you can map against fields and
+  record sets that actually exist.
+- `map` does two things: captures intent (`--purpose`, `--entity`,
+  `--relation`) into `project.yaml`, *and* authors per-dataset mappings under
+  `mappings/` that resolve those entities/relations against real data.
+- `build` materialises a runnable BioCypher project from every mapping.
+
+**Multi-mapping projects are the norm.** A real biotope holds N
+`mappings/*.mapping.yaml` files — one per logical dataset — and `build`
+streams nodes/edges from all of them.
+
+### Alternative: intent first, then data
+
+If the user wants to capture intent before any data is available (e.g. as a
+shopping list for `biotope discover` or manual data sourcing), it's fine to
+run `biotope map --purpose ... --entity ... --relation ...` first. But
+**author the per-dataset mappings only after `biotope add`** — mapping
+without knowing the data leads to slot resolutions that don't match real
+fields.
+
 ## Start every session by orienting
 
 Before any technical work, elicit the user's **competence questions** in their
@@ -17,30 +62,8 @@ own words:
    be discovered or generated?
 
 You may already find some of these answers in `.biotope/project.yaml`. If so,
-confirm them with the user before assuming they're current.
-
-## Record what you learn
-
-Populate the project document via `biotope map` intent flags — never edit
-YAML by hand:
-
-```bash
-biotope map --purpose "..." \
-            --entity gene --entity disease --entity drug \
-            --relation "which drugs target which genes" \
-            --relation "which genes are associated with which diseases"
-```
-
-When any intent flag is present, `biotope map` runs **non-interactively**: it
-writes to `.biotope/project.yaml` (or `./project.yaml` if the project was
-initialised with `--visible`) and exits. With no flags, it would launch the
-interactive wizard — agents should always use flags instead.
-
-`--entity` and `--relation` accept **free text**. Use a short label if the
-schema vocabulary is already settled (`drug_targets_gene`); otherwise capture
-the user's wording verbatim (`which drugs target which proteins`) — keys are
-normalised to `snake_case` automatically. Run `biotope map --show` at any time
-to print the current intent plus mapping progress.
+confirm them with the user before assuming they're current. **Never silently
+overwrite or `--clear-*` what's already there** (see Hard rule 1).
 
 ## Bring data in
 
@@ -72,19 +95,66 @@ You can override one field across the whole apply step with:
 biotope annotate apply <dir> --set creator="Open Targets Consortium"
 ```
 
+### Choosing what to `add`
+
+`biotope add` treats the path you give it as **one logical dataset**. Pick the
+granularity carefully:
+
+- **A directory that holds one logical table** (even if split across many
+  partitioned files): `biotope add data/opentargets/target`. That dataset
+  becomes one record set you can map.
+- **A directory that holds several logical tables** (e.g. a multi-table
+  data-pull like `data/opentargets/{target,drug_moa,associations,...}`):
+  run `biotope add` *once per subdirectory*, not on the parent.
+
+**Anti-pattern**: if `biotope add` produces N near-identical record sets that
+all share the same schema, you almost certainly pointed it at partition files
+instead of the dataset directory above them. Stop, delete the generated
+`.biotope/datasets/<rel>.jsonld`, and add the parent directory instead.
+
+### Finding more data
+
 To find datasets the user does *not* yet have:
 
 ```bash
 biotope discover
 ```
 
-This consults the BioCypher-adapter registry against the
-`required_entities` you wrote into `project.yaml` and ranks candidates.
+This consults the BioCypher-adapter registry against the `required_entities`
+in `project.yaml` and ranks candidates.
+
+## Record what you learn
+
+Populate the project document via `biotope map` intent flags — never edit
+YAML by hand:
+
+```bash
+biotope map --purpose "..." \
+            --entity gene --entity disease --entity drug \
+            --relation "which drugs target which genes" \
+            --relation "which genes are associated with which diseases"
+```
+
+When any intent flag is present, `biotope map` runs **non-interactively**: it
+writes to `.biotope/project.yaml` (or `./project.yaml` if the project was
+initialised with `--visible`) and exits. With no flags, it would launch the
+interactive wizard — agents should always use flags instead.
+
+`--entity` and `--relation` accept **free text**. Use a short label if the
+schema vocabulary is already settled (`drug_targets_gene`); otherwise capture
+the user's wording verbatim (`which drugs target which proteins`) — keys are
+normalised to `snake_case` automatically. Run `biotope map --show` at any time
+to print the current intent plus mapping progress.
+
+Adding to the schema is always safe. **Removing** is not: see Hard rule 1 and
+Hard rule 3 — `--clear-entities` and `--clear-relations` need the user's
+explicit say-so.
 
 ## Author the mapping
 
 biotope does **not** infer which record set should be a `gene` or which field
-is the `id`. You do.
+is the `id`. You do. Author one mapping file per logical dataset; `build`
+will stream them all.
 
 ### 1. Generate an unresolved scaffold
 
@@ -144,10 +214,11 @@ relations:
 biotope map preview --json
 ```
 
-Lists unresolved slots, validation findings, the projected BioCypher schema,
-and sample emitted tuples. Iterate until `unresolved_slots` is empty and
-`findings` contain no errors. Cross-mapping equivalences are still proposed
-with:
+With no path, `preview` walks **every** mapping under `mappings/` — that's
+the expected shape of a project. Lists unresolved slots, validation findings,
+the projected BioCypher schema, and sample emitted tuples. Iterate until
+`unresolved_slots` is empty and `findings` contain no errors. Cross-mapping
+equivalences are still proposed with:
 
 ```bash
 biotope propose-alignment mappings/*.mapping.yaml
@@ -162,8 +233,9 @@ said, or leave the slot for them to fill.
 biotope build
 ```
 
-This invokes the deterministic backend: read mappings + optional alignment,
-stream rows via DuckDB, write a runnable BioCypher project. `build` is
+This invokes the deterministic backend: read every mapping + optional
+alignment, stream rows via DuckDB, write a runnable BioCypher project that
+emits nodes and edges from **all** mappings (not just the first). `build` is
 **strict** — it refuses to compile any mapping with unresolved slots or the
 legacy `nodes`/`edges` schema. The output is `build/config/schema_config.yaml`
 (generated with `namespace` and autogenerated `input_label`), one

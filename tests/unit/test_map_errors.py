@@ -106,8 +106,9 @@ def test_map_accepts_data_dir_and_resolves_canonical_croissant(
     assert "No Croissant for this directory" not in r.output
 
 
-def test_map_empty_state_shows_two_paths(tmp_path: Path, monkeypatch) -> None:
-    """Bare `biotope map` in a fresh project shows the data-first / intent-first help."""
+def test_map_empty_state_recommends_add_first(tmp_path: Path, monkeypatch) -> None:
+    """Bare `biotope map` in a fresh project recommends `biotope add` first;
+    intent-first remains a secondary path."""
     runner = CliRunner()
     project_dir = _init_project(tmp_path)
     monkeypatch.chdir(project_dir)
@@ -115,6 +116,8 @@ def test_map_empty_state_shows_two_paths(tmp_path: Path, monkeypatch) -> None:
     r = runner.invoke(map_group, [])
     assert r.exit_code != 0
     assert "biotope add" in r.output
+    assert "Add data first" in r.output
+    # Intent-first path is still mentioned (secondary).
     assert "--entity" in r.output
 
 

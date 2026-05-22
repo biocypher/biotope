@@ -188,18 +188,16 @@ def _show_empty_state(project_root: Path) -> None:
     console.print(
         Panel(
             "No datasets have been ingested and no mapping exists yet.\n\n"
-            "[bold]Two ways forward:[/bold]\n\n"
-            "[bold cyan]1. Add data first (recommended):[/bold cyan]\n"
+            "[bold cyan]Add data first:[/bold cyan]\n"
             "   biotope add <data_path> --license ... --creator ...\n"
             "   biotope map                # re-run; pick the dataset to map\n\n"
-            "[bold cyan]2. Declare intent up-front (still need data later):[/bold cyan]\n"
-            "   biotope map --entity gene --entity disease \\\n"
-            "               --relation gene_in_disease\n"
-            "   biotope add <data_path>\n"
-            "   biotope map\n\n"
-            "[dim]Once data is added, the per-directory Croissant JSON-LD lands at\n"
-            ".biotope/datasets/<same-rel-path>.jsonld. You can also pass the\n"
-            "data directory directly: [bold]biotope map -c <data_dir>[/bold].[/dim]",
+            "Once data is added, the per-directory Croissant JSON-LD lands at\n"
+            "[cyan].biotope/datasets/<same-rel-path>.jsonld[/cyan]. You can also pass the\n"
+            "data directory directly: [bold]biotope map -c <data_dir>[/bold].\n\n"
+            "[dim]Capturing intent before data is supported but secondary:\n"
+            "  biotope map --entity gene --entity disease --relation gene_in_disease\n"
+            "Authoring per-dataset mappings without the data on hand tends to\n"
+            "produce slot resolutions that don't match real fields.[/dim]",
             title=f"biotope map — empty project ({project_root.name})",
             border_style="yellow",
         )

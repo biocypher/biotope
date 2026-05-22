@@ -250,14 +250,11 @@ def init(
             "   Next: [bold]cd "
             f"{project_dir.name}[/bold] and install deps:\n"
             "         [bold]uv sync[/bold]   (or: pip install -e .)\n"
-            "         then [bold]biotope map[/bold] to capture intent."
-        )
-    elif purpose:
-        console.print(
-            "   Next: add entities and relations with "
-            "[bold]biotope map --entity ... --relation ...[/bold].",
+            "         then [bold]biotope add <data>[/bold] (or [bold]biotope get <url>[/bold])"
+            " to bring data in."
         )
     else:
         console.print(
-            "   Next: set purpose with [bold]biotope map --purpose \"...\"[/bold].",
+            "   Next: bring data in with [bold]biotope add <data>[/bold] "
+            "(or [bold]biotope get <url>[/bold]), then [bold]biotope map[/bold].",
         )
