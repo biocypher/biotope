@@ -1,7 +1,6 @@
 """Shared utility functions for biotope commands."""
 
 import hashlib
-import json
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -122,28 +121,18 @@ def calculate_file_checksum(file_path: Path) -> str:
 
 
 def is_file_tracked(file_path: Path, biotope_root: Path) -> bool:
-    """Check if a file is already tracked in biotope."""
-    # Resolve the file path to absolute path if it's relative
+    """Check if a file is tracked in biotope.
+
+    A file counts as tracked if any manifest under ``.biotope/datasets/`` has
+    either an explicit ``cr:FileObject`` for it or a ``cr:FileSet`` glob that
+    covers it. The latter is the common case after ``biotope add <dir>`` on a
+    directory of structured files.
+    """
+    from biotope.metadata import find_owning_manifest
+
     if not file_path.is_absolute():
         file_path = file_path.resolve()
-
-    # Check datasets directory recursively
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-    for dataset_file in datasets_dir.rglob("*.jsonld"):
-        try:
-            with open(dataset_file) as f:
-                metadata = json.load(f)
-                for distribution in metadata.get("distribution", []):
-                    if (
-                        distribution.get("@type") == "cr:FileObject"
-                        and distribution.get("contentUrl")
-                        == str(file_path.relative_to(biotope_root))
-                    ):
-                        return True
-        except (json.JSONDecodeError, KeyError):
-            continue
-
-    return False
+    return find_owning_manifest(file_path, biotope_root) is not None
 
 
 def stage_git_changes(biotope_root: Path) -> None:

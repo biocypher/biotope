@@ -127,6 +127,48 @@ def test_add_file_relative_path_already_tracked(git_repo):
         os.chdir(original_cwd)
 
 
+def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
+    """A file covered only by a `cr:FileSet` glob in a multi-file manifest is
+    still tracked. Regression: the old `is_file_tracked` matched only
+    explicit `cr:FileObject.contentUrl` and missed the common
+    `biotope add <dir>` shape where structured files are covered by a glob."""
+    from biotope.utils import is_file_tracked
+
+    project_root = tmp_path / "proj"
+    data_dir = project_root / "data" / "ot" / "target"
+    data_dir.mkdir(parents=True)
+    (project_root / ".biotope" / "datasets" / "data" / "ot").mkdir(parents=True)
+
+    (data_dir / "part-00.parquet").write_bytes(b"x")
+    (data_dir / "part-01.parquet").write_bytes(b"y")
+    (data_dir / "README.md").write_text("notes")
+
+    manifest = project_root / ".biotope" / "datasets" / "data" / "ot" / "target.jsonld"
+    manifest.write_text(json.dumps({
+        "@type": "sc:Dataset",
+        "name": "data/ot/target",
+        "distribution": [
+            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
+            {
+                "@type": "cr:FileObject",
+                "@id": "fo_readme",
+                "contentUrl": "data/ot/target/README.md",
+                "sha256": "deadbeef",
+                "contentSize": "5",
+            },
+        ],
+    }))
+
+    # FileSet-covered: previously missed; now tracked.
+    assert is_file_tracked(data_dir / "part-00.parquet", project_root)
+    assert is_file_tracked(data_dir / "part-01.parquet", project_root)
+    # Explicit FileObject: still tracked.
+    assert is_file_tracked(data_dir / "README.md", project_root)
+    # Not under the dataset: still not tracked.
+    (project_root / "elsewhere.txt").write_text("x")
+    assert not is_file_tracked(project_root / "elsewhere.txt", project_root)
+
+
 def test_dedupe_file_objects_covered_by_filesets(tmp_path):
     """Regression: baker emits FileSet + per-file FileObjects; keep only the FileSet."""
     from biotope.commands.add import _dedupe_file_objects_covered_by_filesets
