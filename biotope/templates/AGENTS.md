@@ -242,6 +242,13 @@ and an `id` selector. Selectors take `field`, optional `transform`
 (`passthrough`, `as_curie`, `hash_id`), and optional `args`. Reusable ID
 selectors live under top-level `ids:` and can be referenced via `use:`.
 
+**Explode selectors.** With `scan: {explode: <field>}`, the exploded element
+is referenced as `field: "$item"` — **not** the field name. The field name
+identifies the array to explode; `$item` names the per-element value inside
+the scan. Multi-axis form `scan: {explode: {<axis>: <field>, ...}}` exposes
+each element as `field: "$<axis>"` (e.g. `field: "$author"` for axis
+`author`). Sibling row columns are still addressed by their plain field name.
+
 ```yaml
 entities:
   book:

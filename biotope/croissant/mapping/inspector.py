@@ -232,6 +232,10 @@ def render_inspection_text(inspection: DatasetInspection) -> str:
             lines.append(f"  identifier-like candidates: {', '.join(rs.identifier_like_fields)}")
         if rs.array_fields:
             lines.append(f"  explode-eligible arrays: {', '.join(rs.array_fields)}")
+            lines.append(
+                '    (selector for scan: {explode: <field>} is field: "$item"; '
+                'multi-axis scan: {explode: {<axis>: <field>, ...}} uses field: "$<axis>")'
+            )
         lines.append("  fields:")
         for f in rs.fields:
             sub = f" sub_fields=[{', '.join(f.sub_fields)}]" if f.sub_fields else ""
