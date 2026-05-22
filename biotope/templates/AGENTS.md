@@ -16,8 +16,10 @@ exposed as a flag on a biotope command.
 2. **Data lives inside the project.** A biotope project owns its data. The
    manifest at `.biotope/datasets/<rel>.jsonld` addresses `<project>/<rel>/`,
    so files outside the project tree are not ingestible. Acceptable shapes:
-   copy into the project; symlink under the project root; or fetch via
-   `biotope get <url>`.
+   copy into the project, or fetch via `biotope get <url>`. Symlinks that
+   point outside the project root are rejected — they break self-containment
+   (collaborators get a broken link) and let the target's contents drift
+   without changing the tracked manifest.
 3. **`--clear-entities` / `--clear-relations` are destructive.** They erase
    the user's declared schema. Use only when the user has explicitly asked you
    to drop and rewrite intent — never as a tidy-up before re-encoding.
