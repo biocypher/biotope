@@ -376,6 +376,79 @@ def test_multi_axis_explode_cartesian_product(tmp_path: Path) -> None:
     assert all(e[3] == "drug_has_target" and e[0] is None for e in edges)
 
 
+def test_relation_use_selector_projects_underlying_field(tmp_path: Path) -> None:
+    """`source: { entity: X, use: <named_id> }` must project the named id's
+    underlying field into the DuckDB scan, even when that field is not
+    referenced anywhere else in the mapping. Regression for B3."""
+    from biotope.croissant.acquisition.context import RecordRow
+    from biotope.croissant.mapping.compile import _relation_fields, iter_relation_tuples
+    from biotope.croissant.spec import load_from_path
+
+    croissant_path = tmp_path / "ot.jsonld"
+    croissant_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"ot",
+         "recordSet":[
+           {"@id":"drug","name":"drug","field":[{"name":"chembl","dataType":"sc:Text"}]},
+           {"@id":"gene","name":"gene","field":[{"name":"ens","dataType":"sc:Text"}]},
+           {"@id":"moa","name":"moa","field":[
+              {"name":"drug_curie_field","dataType":"sc:Text"},
+              {"name":"target_ens","dataType":"sc:Text"}
+           ]}
+         ]}
+        """
+    )
+    load_from_path(croissant_path)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(croissant_path),
+            "ids": {
+                "drug_curie": {
+                    "field": "drug_curie_field",
+                    "transform": "as_curie",
+                    "args": {"prefix": "chembl"},
+                },
+            },
+            "entities": {
+                "drug": {"record_set": "drug", "id": "chembl"},
+                "gene": {"record_set": "gene", "id": "ens"},
+            },
+            "relations": {
+                "drug_has_target": {
+                    "record_set": "moa",
+                    "source": {"entity": "drug", "use": "drug_curie"},
+                    "target": {
+                        "entity": "gene",
+                        "field": "target_ens",
+                        "transform": "as_curie",
+                        "args": {"prefix": "ensembl"},
+                    },
+                }
+            },
+        }
+    )
+
+    # The DuckDB projection must include the field that `drug_curie` reads.
+    projected = _relation_fields(mapping.relations["drug_has_target"], mapping.ids) or []
+    assert "drug_curie_field" in projected
+    assert "target_ens" in projected
+
+    # Now exercise end-to-end: the endpoint must resolve to a real value, not None.
+    class _StubCtx:
+        def stream(self, record_set, fields=None, where=None):
+            # Only the projected fields should reach the resolver — mimic that.
+            row = {"drug_curie_field": "CHEMBL999", "target_ens": "ENSG1"}
+            yield RecordRow(
+                record_set="moa",
+                values={k: row[k] for k in (fields or row)},
+            )
+
+    edges = list(iter_relation_tuples(mapping, _StubCtx()))
+    assert len(edges) == 1
+    assert edges[0][1] == "chembl:CHEMBL999"
+    assert edges[0][2] == "ensembl:ENSG1"
+
+
 def test_multi_axis_explode_excludes_axis_refs_from_projection(tmp_path: Path) -> None:
     """`$<axis>` selectors must NOT end up in the DuckDB column projection.
 

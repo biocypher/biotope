@@ -65,7 +65,7 @@ def iter_entity_tuples(
         scan_op = build_scan_operation(
             entity.scan,
             record_set=entity.record_set,  # type: ignore[arg-type]
-            fields=_entity_fields(entity),
+            fields=_entity_fields(entity, mapping.ids),
             where=entity.where,
         )
         for ctx in scan_op.iter_contexts(context, ids=mapping.ids):
@@ -99,7 +99,7 @@ def iter_relation_tuples(
         scan_op = build_scan_operation(
             relation.scan,
             record_set=relation.record_set,  # type: ignore[arg-type]
-            fields=_relation_fields(relation),
+            fields=_relation_fields(relation, mapping.ids),
             where=relation.where,
         )
         for ctx in scan_op.iter_contexts(context, ids=mapping.ids):
@@ -121,34 +121,57 @@ def _is_scalar_id(value: Any) -> bool:
     return isinstance(value, str | int | float | bool)
 
 
-def _entity_fields(entity: EntityMapping) -> list[str] | None:
+def _entity_fields(
+    entity: EntityMapping, ids: dict[str, Selector] | None = None
+) -> list[str] | None:
     """Compute the union of base fields referenced by ``entity``."""
+    ids = ids or {}
     fields: set[str] = set()
-    _add_selector_fields(entity.id, fields)
+    _add_selector_fields(entity.id, fields, ids)
     for prop in entity.properties.values():
-        _add_selector_fields(prop, fields)
+        _add_selector_fields(prop, fields, ids)
     if isinstance(entity.scan, ExplodeScan):
         fields.update(entity.scan.axes.values())
     return _materialise_field_set(fields, entity.scan)
 
 
-def _relation_fields(relation: RelationMapping) -> list[str] | None:
+def _relation_fields(
+    relation: RelationMapping, ids: dict[str, Selector] | None = None
+) -> list[str] | None:
+    ids = ids or {}
     fields: set[str] = set()
     if relation.source is not None:
-        _add_selector_fields(relation.source.as_selector(), fields)
+        _add_selector_fields(relation.source.as_selector(), fields, ids)
     if relation.target is not None:
-        _add_selector_fields(relation.target.as_selector(), fields)
+        _add_selector_fields(relation.target.as_selector(), fields, ids)
     for prop in relation.properties.values():
-        _add_selector_fields(prop, fields)
+        _add_selector_fields(prop, fields, ids)
     if isinstance(relation.scan, ExplodeScan):
         fields.update(relation.scan.axes.values())
     return _materialise_field_set(fields, relation.scan)
 
 
-def _add_selector_fields(selector: Selector | None, out: set[str]) -> None:
-    """Collect base-row fields referenced by ``selector`` (skip explode-axis refs)."""
+def _add_selector_fields(
+    selector: Selector | None,
+    out: set[str],
+    ids: dict[str, Selector],
+    seen: set[str] | None = None,
+) -> None:
+    """Collect base-row fields referenced by ``selector`` (skip explode-axis refs).
+
+    Follows ``use:`` references against ``ids`` so a relation endpoint declared
+    as ``use: <named_id>`` projects the underlying field into the DuckDB scan.
+    A cycle guard keyed by id name keeps malformed mappings from looping.
+    """
     if selector is None:
         return
+    if selector.use is not None:
+        seen = seen if seen is not None else set()
+        if selector.use in seen or selector.use not in ids:
+            return
+        seen.add(selector.use)
+        _add_selector_fields(ids[selector.use], out, ids, seen)
+        return  # `use:` precludes `field:` on the same selector (model validation).
     if selector.transform == "hash_id":
         for f in selector.args.get("fields", []):
             if isinstance(f, str) and not f.startswith("$"):
