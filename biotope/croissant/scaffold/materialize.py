@@ -212,22 +212,27 @@ def _emit_build_script(project_name: str, stems: list[str], aligned: bool) -> st
     """Build the ``create_knowledge_graph.py`` entry script."""
     imports = "\n".join(f"from generated.{stem}.adapter import build_adapter as _build_{stem}" for stem in stems)
     adapter_inits = ",\n        ".join(f'"{stem}": _build_{stem}()' for stem in stems)
-    alignment_import = (
-        "from biotope.croissant.alignment import load_alignment, merge_adapters\n"
-        if aligned
-        else ""
-    )
-    alignment_block = (
-        "    alignment = load_alignment(HERE / 'alignment.yaml')\n"
-        "    merged = merge_adapters(adapters, alignment)\n"
-        if aligned
-        else "    merged = next(iter(adapters.values()))\n"
-    )
+    if aligned:
+        alignment_import = "from biotope.croissant.alignment import load_alignment, merge_adapters\n"
+        write_block = (
+            "    alignment = load_alignment(HERE / 'alignment.yaml')\n"
+            "    merged = merge_adapters(adapters, alignment)\n"
+            "    bc.write_nodes(merged.get_nodes())\n"
+            "    bc.write_edges(merged.get_edges())\n"
+        )
+        itertools_import = ""
+    else:
+        alignment_import = ""
+        itertools_import = "from itertools import chain\n"
+        write_block = (
+            "    bc.write_nodes(chain.from_iterable(a.get_nodes() for a in adapters.values()))\n"
+            "    bc.write_edges(chain.from_iterable(a.get_edges() for a in adapters.values()))\n"
+        )
     return f'''"""Generated entry point for the {project_name} graph build."""
 
 from pathlib import Path
 import sys
-
+{itertools_import}
 from biocypher import BioCypher
 
 HERE = Path(__file__).parent
@@ -247,10 +252,7 @@ def build() -> None:
         {adapter_inits}
     }}
 
-{alignment_block}
-    bc.write_nodes(merged.get_nodes())
-    bc.write_edges(merged.get_edges())
-    bc.write_import_call()
+{write_block}    bc.write_import_call()
 
 
 if __name__ == "__main__":

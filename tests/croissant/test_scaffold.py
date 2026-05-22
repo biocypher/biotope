@@ -78,6 +78,44 @@ def test_strict_build_rejects_unresolved(tmp_path: Path, minimal_croissant: Path
         materialize(project_dir, [mapping_path])
 
 
+def test_multi_mapping_build_script_chains_adapters(
+    tmp_path: Path, minimal_croissant: Path, two_recordsets_croissant: Path
+) -> None:
+    """The generated build script must emit nodes/edges from *all* adapters,
+    not only the first one. Regression test for B4."""
+    first = tmp_path / "first.mapping.yaml"
+    _write_minimal_mapping(first, minimal_croissant)
+
+    second = tmp_path / "second.mapping.yaml"
+    second_mapping = Mapping.model_validate(
+        {
+            "croissant": str(two_recordsets_croissant),
+            "entities": {
+                "gene": {"record_set": "genes", "id": "gene_id"},
+                "disease": {"record_set": "gene_disease", "id": "disease_id"},
+            },
+            "relations": {
+                "gene_in_disease": {
+                    "record_set": "gene_disease",
+                    "source": {"entity": "gene", "field": "gene_id"},
+                    "target": {"entity": "disease", "field": "disease_id"},
+                }
+            },
+        }
+    )
+    dump_mapping(second_mapping, second)
+
+    project_dir = tmp_path / "project"
+    materialize(project_dir, [first, second])
+
+    script_text = (project_dir / "create_knowledge_graph.py").read_text()
+    assert "_build_first" in script_text
+    assert "_build_second" in script_text
+    assert "chain.from_iterable" in script_text
+    # Sanity: the old broken form must not survive.
+    assert "next(iter(adapters.values()))" not in script_text
+
+
 def test_relation_edge_in_schema(tmp_path: Path, two_recordsets_croissant: Path) -> None:
     mapping_path = tmp_path / "two.mapping.yaml"
     mapping = Mapping.model_validate(
