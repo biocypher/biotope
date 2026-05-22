@@ -18,6 +18,13 @@ LEGACY_FILE_OBJECT_TYPE = "sc:FileObject"
 SCAFFOLD_FILENAME = ".biotope.yaml"
 
 
+# biotope:status values — see docs/agent flow.
+STATUS_RAW = "raw"
+STATUS_PROCESSED = "processed"
+STATUS_MAPPED = "mapped"
+STATUS_VALUES = (STATUS_RAW, STATUS_PROCESSED, STATUS_MAPPED)
+
+
 @dataclass(frozen=True)
 class DatasetTarget:
     """Resolved dataset metadata target inside a biotope project."""
@@ -67,6 +74,12 @@ def get_standard_context() -> dict[str, str]:
         "dataType": "https://mlcommons.org/croissant/dataType/",
         "includes": "https://mlcommons.org/croissant/includes/",
         "excludes": "https://mlcommons.org/croissant/excludes/",
+        # biotope pipeline state (raw / processed / mapped). Placeholder URL —
+        # rename when biotope picks a canonical namespace.
+        "biotope": "https://biotope.org/ns/",
+        # PROV-O for derivation provenance (e.g. an agent-produced JSON that
+        # was derived from a raw PDF).
+        "prov": "http://www.w3.org/ns/prov#",
     }
 
 
@@ -107,6 +120,71 @@ def ensure_no_legacy_file_objects(metadata: dict[str, Any]) -> None:
                 "Legacy sc:FileObject is no longer supported. "
                 "Please regenerate the metadata with `biotope add`."
             )
+
+
+def get_status(metadata: dict[str, Any]) -> str:
+    """Return the biotope pipeline state of a manifest.
+
+    Legacy manifests (no ``biotope:status`` field) are treated as ``raw`` —
+    the conservative default since nothing has explicitly declared otherwise.
+    """
+    value = metadata.get("biotope:status")
+    if value in STATUS_VALUES:
+        return value
+    return STATUS_RAW
+
+
+def set_status(metadata: dict[str, Any], status: str) -> None:
+    """Set ``biotope:status`` on a manifest. Raises ``ValueError`` on a bad value."""
+    if status not in STATUS_VALUES:
+        msg = f"invalid status {status!r}; expected one of {STATUS_VALUES}"
+        raise ValueError(msg)
+    metadata["biotope:status"] = status
+
+
+def classify_status_from_baker(metadata: dict[str, Any]) -> str:
+    """Decide raw vs. processed based on what croissant-baker produced.
+
+    A manifest is *processed* when it has at least one ``recordSet`` entry
+    with a non-empty ``field`` list — i.e. the dataset's schema is concrete
+    enough for downstream mapping. Anything else (PDF, opaque blob, URL)
+    stays *raw*.
+    """
+    for record_set in metadata.get("recordSet", []) or []:
+        fields = record_set.get("field") or []
+        if fields:
+            return STATUS_PROCESSED
+    return STATUS_RAW
+
+
+def get_derived_from(metadata: dict[str, Any]) -> list[str]:
+    """Return the list of ``prov:wasDerivedFrom`` source ids, if any.
+
+    Accepts both the single-value form (``"X"`` or ``{"@id": "X"}``) and the
+    list form. Returns ``[]`` when absent.
+    """
+    raw = metadata.get("prov:wasDerivedFrom")
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    ids: list[str] = []
+    for item in items:
+        if isinstance(item, str):
+            ids.append(item)
+        elif isinstance(item, dict):
+            value = item.get("@id")
+            if isinstance(value, str):
+                ids.append(value)
+    return ids
+
+
+def add_derived_from(metadata: dict[str, Any], source_id: str) -> None:
+    """Add a ``prov:wasDerivedFrom`` pointer to ``source_id`` (idempotent)."""
+    existing = get_derived_from(metadata)
+    if source_id in existing:
+        return
+    refs = existing + [source_id]
+    metadata["prov:wasDerivedFrom"] = [{"@id": ref} for ref in refs]
 
 
 def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
