@@ -37,12 +37,12 @@ package management workflow.
 
 First run `biotope init` and choose a project name and purpose. For this
 tutorial, our name will be `airports` and our purpose is to "`Find which US
-airports are most connected and which airlines use them as their hubs?`".
+airports are most connected and which airlines use them as their hubs.`".
 Or, fully CLI-based:
 
 ```bash
 uvx biotope init airports \
-  --purpose "Find which US airports are most connected and which airlines use them as their hubs?" \
+  --purpose "Find which US airports are most connected and which airlines use them as their hubs." \
   --no-prompt
 cd airports
 ```
@@ -57,6 +57,8 @@ Finally, we have to install the venv for our new project:
 ```bash
 uv sync
 ```
+
+You can check project status at any time using `uv run biotope status`.
 
 ## 2. Bring in the structured data
 
@@ -93,7 +95,7 @@ structure.
 ## 4. Inspect the pipeline queue
 
 ```bash
-biotope queue
+uv run biotope queue
 ```
 
 ```
@@ -123,43 +125,56 @@ airports — that belong in the graph. Getting them in requires extracting
 a structured CSV from the prose. That extraction is the boundary between
 the two paths:
 
-=== "Human"
+!!! Processing
 
-````
-Reading prose and producing a clean CSV is fast for one human and
-impossible to automate without an agent. For this tutorial we ship
-the pre-extracted CSV so you can fetch it directly:
+    === "Human"
 
-```bash
-biotope get \
-  https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airport-hubs.csv \
-  --output-dir data/notes
-```
+        Before LLM agents, the most reliable way to process simple unstructured
+        text into the structured form required for our pipeline is manual
+        curation into a structured form (such as a CSV of triples). You can
+        imagine doing this here, but for this tutorial we ship the pre-extracted
+        CSV so you can fetch it directly, to save time:
 
-In a real project, you'd open the markdown in an editor and write
-the same CSV yourself. (Hand the wheel to an agent — next tab — and
-you skip this step entirely.)
-````
+        ```bash
+        uv run biotope get \
+          https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airport-hubs.csv \
+          --output-dir data/notes --no-add
+        ```
 
-=== "Agent"
+        Note the `--no-add` flag; we are acting like we'd create the file by
+        hand to then add as a derivative of the unstructured markdown note.
+        Running the biotope pipeline with an agent (see "Agent" tab) will allow
+        us to automate the task. After we have created (or downloaded) the file,
+        we need to indicate that the new file was derived from the unstructured
+        version (to remove it from the queue):
 
-````
-Have your agent read `data/notes/airports-notes.md`, extract the
-`(airport_iata, airline_code, airline_name)` triples it mentions,
-and write the result to `data/notes/airport-hubs.csv`. Then record
-the provenance link:
+        ```bash
+        uv run biotope add data/notes/airport-hubs.csv \
+          --derived-from data/notes/airports-notes
+        ```
 
-```bash
-biotope add data/notes/airport-hubs.csv \
-  --derived-from data/notes/airports-notes
-```
+    === "Agent"
 
-The `--derived-from` flag stamps `prov:wasDerivedFrom` into the new
-manifest and hides the original notes from the active `raw` queue —
-biotope knows they've been consumed without renaming or moving them.
-````
+        If you use an agent to run the biotope pipeline, it will be instructed
+        and figure out to read `data/notes/airports-notes.md`, extract the
+        `(airport_iata, airline_code, airline_name)` triples it mentions, and
+        write the result to `data/notes/airport-hubs.csv`. Different agents
+        might choose to do this differently; through the biotope scaffolding,
+        the results should be equivalent. This will result in the same state as
+        the first command in the human example.
+        
+        Then, the agent should also record the provenance link by calling the
+        same command as in the human example:
 
-Either way, after this step the queue looks like:
+        ```bash
+        uv run biotope add data/notes/airport-hubs.csv \
+          --derived-from data/notes/airports-notes
+        ```
+
+The `--derived-from` flag stamps `prov:wasDerivedFrom` into the new manifest and
+hides the original notes from the active `raw` queue — biotope knows they've
+been consumed without renaming or moving them.  Either way, after this step the
+queue looks like:
 
 ```
 PROCESSED (2) — ready to map
@@ -170,22 +185,21 @@ Raw inputs already consumed (their derivatives are in the queue): 1
   • data/notes/airports-notes
 ```
 
-The "Raw inputs already consumed" footer (visible only on the agent path,
-because the human path doesn't link the CSV back to the markdown) is the
-provenance trail. The original notes stay in the project as a tracked
-input; the structured CSV is what gets mapped.
+The "Raw inputs already consumed" footer is the provenance trail. The original
+notes stay in the project as a tracked input; the structured CSV is what gets
+mapped.
 
 ## 6. Declare what the graph should contain
 
 ```bash
-biotope map --entity Airport --entity Airline \
-            --relation has_flight --relation is_hub_for
+uv run biotope map --entity airport --entity airline \
+            --relation number_of_flights --relation is_hub_for
 ```
 
 This writes the required entities and relations into
 `.biotope/project.yaml` (your *competence questions*: what nouns and
 verbs must the graph express). Every mapping you author from now on must
-resolve `Airport`, `Airline`, `has_flight`, and `is_hub_for` against
+resolve `airport`, `airline`, `number_of_flights`, and `is_hub_for` against
 real data — the build is strict.
 
 ## 7. Scaffold and resolve the mappings

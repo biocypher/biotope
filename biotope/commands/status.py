@@ -143,7 +143,7 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
             if file_path in tracked_annotation_status:
                 is_annotated, errors = tracked_annotation_status[file_path]
                 annotation_status = "✅" if is_annotated else "⚠️"
-                status_text = "Complete" if is_annotated else f"Incomplete ({len(errors)} issues)"
+                status_text = "Valid" if is_annotated else f"Incomplete ({len(errors)} issues)"
             else:
                 annotation_status = "❌"
                 status_text = "Error reading metadata"

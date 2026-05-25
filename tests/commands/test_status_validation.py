@@ -167,7 +167,7 @@ def test_status_shows_annotation_status_for_complete_metadata(runner, git_repo):
             # Should show the file as annotated (✅)
             assert result.exit_code == 0
             assert "experiment3" in result.output
-            assert "✅" in result.output or "Complete" in result.output
+            assert "✅" in result.output or "Valid" in result.output
 
 
 def test_status_suggests_annotate_for_incomplete_staged_metadata(runner, git_repo):
@@ -611,7 +611,7 @@ def test_status_detailed_shows_no_errors_when_validation_disabled(runner, git_re
             result = runner.invoke(status, ["--detailed"])
             assert result.exit_code == 0
             assert "Validation Issues" not in result.output
-            assert "Complete" in result.output
+            assert "Valid" in result.output
             assert "Incomplete" not in result.output
 
 
