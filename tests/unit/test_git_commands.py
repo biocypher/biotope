@@ -46,6 +46,9 @@ class TestGitCommands:
 
         # Initialize Git repository
         subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmp_path, check=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=tmp_path, check=True)
         subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
         subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=tmp_path, check=True)
 
