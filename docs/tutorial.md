@@ -21,24 +21,42 @@ jump to the [agent shortcut](#agent-shortcut) at the end.
 ## Prerequisites
 
 ```bash
-uv pip install biotope
+uv add biotope        # if in uv-managed venv
+# OR
+pipx install biotope  # global installation
 ```
 
-A `git` install on `$PATH`. Nothing else.
+Or any other way to get biotope onto your `$PATH`. You can also use
+`uvx biotope init` to use a temporary venv, requiring no prior install.
+Below, we will use `uvx` for the initialisation (as it is performed in a
+parent directory), and uv for venv management and running code in the
+tutorial project itself. You are free to substitute your favourite
+package management workflow.
 
-## 1. Scaffold a project
+## 1. Initialise a project
+
+First run `biotope init` and choose a project name and purpose. For this
+tutorial, our name will be `airports` and our purpose is to "`Find which US
+airports are most connected and which airlines use them as their hubs?`".
+Or, fully CLI-based:
 
 ```bash
-biotope init airports-kg \
-  --purpose "Which US airports are most connected and who hubs there?" \
+uvx biotope init airports \
+  --purpose "Find which US airports are most connected and which airlines use them as their hubs?" \
   --no-prompt
-cd airports-kg
+cd airports
 ```
 
 This creates `.biotope/` (manifests + config), `data/` (empty; for your
 files), `mappings/` (empty; for the semantic mapping files), `AGENTS.md`
 (the contract any coding agent will read), and a minimal `pyproject.toml`.
 A fresh `git` repo is initialised in the same directory.
+
+Finally, we have to install the venv for our new project:
+
+```bash
+uv sync
+```
 
 ## 2. Bring in the structured data
 
@@ -47,23 +65,24 @@ project. We download both into a single sub-folder so they end up under
 one composite manifest:
 
 ```bash
-biotope get https://cdn.jsdelivr.net/npm/vega-datasets/data/airports.csv \
+uv run biotope get https://cdn.jsdelivr.net/npm/vega-datasets/data/airports.csv \
   --output-dir data/flights --no-add
-biotope get https://cdn.jsdelivr.net/npm/vega-datasets/data/flights-airport.csv \
+uv run biotope get https://cdn.jsdelivr.net/npm/vega-datasets/data/flights-airport.csv \
   --output-dir data/flights --no-add
-biotope add data/flights \
+uv run biotope add data/flights \
   --license "BSD-3-Clause" --creator "vega-datasets"
 ```
 
 The `--no-add` on the downloads lets the files land on disk without being
 tracked individually; the single `biotope add data/flights` then runs
-croissant-baker over the whole folder and writes one manifest at
-`.biotope/datasets/data/flights.jsonld` covering both record sets.
+[croissant-baker](https://github.com/MIT-LCP/croissant-baker) over the whole
+folder and writes one manifest at `.biotope/datasets/data/flights.jsonld`
+covering both record sets.
 
 ## 3. Bring in the unstructured notes
 
 ```bash
-biotope get https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airports-notes.md \
+uv run biotope get https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airports-notes.md \
   --output-dir data/notes
 ```
 
@@ -302,7 +321,7 @@ biotope view
 
 ```
         BioCypher build:
-/.../airports-kg/build
+/.../airports/build
 ┏━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━┓
 ┃ file           ┃ lines ┃ kind ┃
 ┡━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━┩
