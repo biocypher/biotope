@@ -30,18 +30,18 @@ script reports green".
 
 The minimal cluster-only flow for a data maintainer is:
 
-| Step | Command | What it does |
-| --- | --- | --- |
-| 1 | `biotope init` | Scaffold `.biotope/`, emit `pyproject.toml`, drop `AGENTS.md` into the project |
-| 2 | `biotope config set-validation-pattern --pattern cluster-strict` | Declare the cluster pattern locally |
-| 3 | `biotope config set-remote-validation --url …` | Pin to the cluster validation server (cached, with local fallback) |
-| 4 | `biotope add <path>` | Run croissant-baker recursively; supported files land as `processed`, unsupported files as `raw` stubs |
-| 5 | `biotope annotate apply <path> --set k=v …` | Apply scoped YAML edits to fill missing fields |
-| 5b | `biotope annotate edit …` | Interactive prompts when scripting isn't enough |
-| 6 | `biotope annotate validate` | Validate a single JSON-LD against the merged (remote + local) schema |
-| 7 | `biotope queue` *(or `--json`)* | Worklist of raw / processed / mapped datasets |
-| 8 | `biotope mark <dataset> processed` | Manual status override when needed |
-| 9 | `biotope status --detailed` | Per-file annotation completeness against the active pattern |
+| Step | Command                                                          | What it does                                                                                           |
+| ---- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1    | `biotope init`                                                   | Scaffold `.biotope/`, emit `pyproject.toml`, drop `AGENTS.md` into the project                         |
+| 2    | `biotope config set-validation-pattern --pattern cluster-strict` | Declare the cluster pattern locally                                                                    |
+| 3    | `biotope config set-remote-validation --url …`                   | Pin to the cluster validation server (cached, with local fallback)                                     |
+| 4    | `biotope add <path>`                                             | Run croissant-baker recursively; supported files land as `processed`, unsupported files as `raw` stubs |
+| 5    | `biotope annotate apply <path> --set k=v …`                      | Apply scoped YAML edits to fill missing fields                                                         |
+| 5b   | `biotope annotate edit …`                                        | Interactive prompts when scripting isn't enough                                                        |
+| 6    | `biotope annotate validate`                                      | Validate a single JSON-LD against the merged (remote + local) schema                                   |
+| 7    | `biotope queue` *(or `--json`)*                                  | Worklist of raw / processed / mapped datasets                                                          |
+| 8    | `biotope mark <dataset> processed`                               | Manual status override when needed                                                                     |
+| 9    | `biotope status --detailed`                                      | Per-file annotation completeness against the active pattern                                            |
 
 The KG verbs (`biotope map`, `biotope build`, `biotope view`,
 `biotope discover`, `biotope propose-alignment`) remain optional. A cluster
@@ -197,14 +197,14 @@ annotation_validation:
       min_length: 1
 ```
 
-| Path | Type | Meaning |
-| --- | --- | --- |
-| `annotation_validation.enabled` | bool | Master switch. `false` short-circuits validation. |
-| `annotation_validation.minimum_required_fields` | list[str] | Croissant fields that must exist on the dataset JSON-LD. |
-| `annotation_validation.field_validation.<field>.type` | str | `string`, `object`, or `array`. Mismatches produce an error. |
-| `annotation_validation.field_validation.<field>.min_length` | int | For `string`, trimmed character count; for `array`, item count. |
-| `annotation_validation.field_validation.<field>.required_keys` | list[str] | For `object` types, dict keys that must be present. |
-| `annotation_validation.field_validation.<field>.format` | str | Currently only `"date"` is recognised (ISO 8601). |
+| Path                                                           | Type        | Meaning                                                         |
+| -------------------------------------------------------------- | ----------- | --------------------------------------------------------------- |
+| `annotation_validation.enabled`                                | bool        | Master switch. `false` short-circuits validation.               |
+| `annotation_validation.minimum_required_fields`                | list\[str\] | Croissant fields that must exist on the dataset JSON-LD.        |
+| `annotation_validation.field_validation.<field>.type`          | str         | `string`, `object`, or `array`. Mismatches produce an error.    |
+| `annotation_validation.field_validation.<field>.min_length`    | int         | For `string`, trimmed character count; for `array`, item count. |
+| `annotation_validation.field_validation.<field>.required_keys` | list\[str\] | For `object` types, dict keys that must be present.             |
+| `annotation_validation.field_validation.<field>.format`        | str         | Currently only `"date"` is recognised (ISO 8601).               |
 
 **Merge rules** (see `biotope/validation.py:160` — `_merge_validation_configs`):
 
