@@ -191,124 +191,271 @@ mapped.
 
 ## 6. Declare what the graph should contain
 
-```bash
-uv run biotope map --entity airport --entity airline \
-            --relation number_of_flights --relation is_hub_for
-```
+To represent the data according to our purpose, the graph should express a
+small, fixed vocabulary: this could be, for instance, two nouns (`airport`,
+`airline`) and two verbs (`number of flights`, `is hub for`).
 
-This writes the required entities and relations into
-`.biotope/project.yaml` (your *competence questions*: what nouns and
-verbs must the graph express). Every mapping you author from now on must
-resolve `airport`, `airline`, `number_of_flights`, and `is_hub_for` against
-real data — the build is strict.
+!!! Declaring intent
 
-## 7. Scaffold and resolve the mappings
+    === "Human"
 
-```bash
-biotope map scaffold .biotope/datasets/data/flights.jsonld
-biotope map scaffold .biotope/datasets/data/notes/airport-hubs.jsonld
-```
+        Launch the wizard with no arguments:
 
-Each scaffold writes a mapping file under `mappings/` with one slot per
-declared entity/relation, plus a comment-style *inspector appendix*
-listing every record set, every field with its type, and three sample
-rows. That appendix is what tells you (or your agent) which fields to
-use.
+        ```bash
+        uv run biotope map
+        ```
 
-Replace `mappings/flights.mapping.yaml` with:
+        The project has data and purpose but no fully declared intent yet, so
+        the wizard opens with an intent-capture prompt:
 
-```yaml
-croissant: .biotope/datasets/data/flights.jsonld
-entities:
-  airport:
-    record_set: airports
-    scan: row
-    id: {field: iata, transform: as_curie, args: {prefix: iata}}
-    properties:
-      name: name
-      city: city
-      state: state
-      country: country
-      latitude: latitude
-      longitude: longitude
-relations:
-  has_flight:
-    record_set: flights-airport
-    scan: row
-    source: {entity: airport, field: origin, transform: as_curie, args: {prefix: iata}}
-    target: {entity: airport, field: destination, transform: as_curie, args: {prefix: iata}}
-    properties:
-      count: count
-```
+        ```
+        ╭───────────────── Current intent ─────────────────╮
+        │ purpose: Find which US airports are most         │
+        │          connected and which airlines use them   │
+        │          as their hubs.                          │
+        │ entities: (none)                                 │
+        │ relations: (none)                                │
+        ╰──────────────────────────────────────────────────╯
 
-And `mappings/airport-hubs.mapping.yaml` with:
+        Enter a new purpose, or press Enter to keep the current one.
+        Purpose: ⏎
 
-```yaml
-croissant: .biotope/datasets/data/notes/airport-hubs.jsonld
-entities:
-  airport:
-    record_set: airport-hubs
-    scan: row
-    id: {field: airport_iata, transform: as_curie, args: {prefix: iata}}
-  airline:
-    record_set: airport-hubs
-    scan: row
-    id: {field: airline_code, transform: as_curie, args: {prefix: airline}}
-    properties:
-      name: airline_name
-relations:
-  is_hub_for:
-    record_set: airport-hubs
-    scan: row
-    source: {entity: airport, field: airport_iata, transform: as_curie, args: {prefix: iata}}
-    target: {entity: airline, field: airline_code, transform: as_curie, args: {prefix: airline}}
-```
+        Add entities one per line. Press Enter on an empty line to stop.
+        Entity name: airport
+        Entity name: airline
+        Entity name: ⏎
 
-What's happening across the two files:
+        Add relations one per line. Press Enter on an empty line to stop.
+        Relation name: number of flights
+        Relation name: is hub for
+        Relation name: ⏎
 
-- The `flights` mapping owns the rich Airport records (full properties)
-  and the `has_flight` relation.
-- The `airport-hubs` mapping declares a *minimal* Airport (id only — it's
-  just there so the `is_hub_for` relation has something to point at on
-  the source side) and introduces the new Airline entity + `is_hub_for`
-  edges.
-- Both mappings mint Airport node IDs the same way (`iata:<code>`), so
-  BioCypher's writer dedups the two emissions into one Airport node per
-  IATA code, merging properties from the richer side.
+        💾 Saved intent to .biotope/project.yaml
+        ```
 
-=== "Human"
+        Names are normalised to snake_case behind the scenes
+        (`number of flights` → `number_of_flights`).
 
-```
-Edit the YAML files by hand, using each scaffold's inspector
-appendix as your field catalogue. Or run `biotope map` for a
-guided wizard that walks you through each slot interactively.
-```
+        If you're unsure what data you have to bind these to, pick
+        `[v] view data` from the slot menu the wizard drops you into
+        next — it prints each croissant's record sets, field types, and
+        a few sample rows so you can decide which dataset feeds which
+        slot. The same view is available non-interactively as
+        `uv run biotope map inspect <croissant>`.
 
-=== "Agent"
+    === "Agent"
 
-```
-Same flow, non-interactively: an agent reads the appendix (or runs
-`biotope map inspect <croissant> --json` to get it as structured
-JSON), produces the YAML, and verifies with
-`biotope map preview <mapping_path> --json` before committing.
-```
+        Same effect, non-interactively — in auto-mode, the agent will decide on
+        an adequate representation and initialise accordingly. In ambiguous
+        cases, it is instructed to check with the user.
 
-Verify each mapping in turn:
+        ```bash
+        uv run biotope map \
+          --entity airport --entity airline \
+          --relation number_of_flights --relation is_hub_for
+        ```
+
+        This appends to `required_entities` / `required_relations` in
+        `.biotope/project.yaml` and exits without entering the wizard.
+
+After this step, `.biotope/project.yaml` declares four slots that the
+rest of the walkthrough must resolve.
+
+## 7. Bind each slot to real data
+
+With the four slots declared, the wizard's main view is the slot table.
+Re-enter it (or stay in it, if you came straight from step 6):
 
 ```bash
-biotope map preview mappings/flights.mapping.yaml
-biotope map preview mappings/airport-hubs.mapping.yaml
+uv run biotope map
+```
+
+```
+        Declared slots — 0/4 resolved (project-wide)
+┏━━━┳━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ # ┃   ┃ Kind     ┃ Name              ┃ Bound in   ┃
+┡━━━╇━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ 1 │ ○ │ entity   │ airport           │ —          │
+│ 2 │ ○ │ entity   │ airline           │ —          │
+│ 3 │ ○ │ relation │ number_of_flights │ —          │
+│ 4 │ ○ │ relation │ is_hub_for        │ —          │
+└───┴───┴──────────┴───────────────────┴────────────┘
+Enter a slot number to bind it, or one of:
+  [v] view data    [i] edit intent    [q] save and quit
+Selection (1):
+```
+
+Each slot is bound the same way: pick the slot number → pick the
+croissant that has the right fields → answer a handful of prompts about
+record set, scan, id, and properties. The wizard validates and autosaves
+after every step. Below are two representative bindings (one entity,
+one relation); the other two follow the same pattern.
+
+### Binding the `airport` entity → flights croissant
+
+!!! Binding an entity
+
+    === "Human"
+
+        ```
+        Selection (1): 1
+
+        Pick a croissant to bind entity `airport`
+        # │ Croissant                                  │ Match
+        1 │ .biotope/datasets/data/flights.jsonld      │   2
+        2 │ .biotope/datasets/data/notes/airport-hubs… │   1
+        Croissant: 1
+
+        Record sets
+        # │ Name             │ Fields
+        1 │ airports          │ iata, name, city, state, country, latitude, longitude
+        2 │ flights-airport   │ origin, destination, count
+        Pick record set (1): 1
+
+        Scan kind — (r)ow, (e)xplode one, (m)ulti-axis (r): r
+
+        Namespace (optional): ⏎
+
+        Choose action (field): field
+        ID field: iata
+        Transform [passthrough]: as_curie
+        CURIE prefix: iata
+
+        Property fields (comma-separated): name, city, state, country, latitude, longitude
+
+        💾 Saved mappings/flights.mapping.yaml
+        ```
+
+    === "Agent"
+
+        An agent skips the wizard and writes the binding straight into
+        the mapping file (scaffolding it first with
+        `uv run biotope map scaffold .biotope/datasets/data/flights.jsonld`
+        if it doesn't exist yet):
+
+        ```yaml
+        # mappings/flights.mapping.yaml
+        croissant: .biotope/datasets/data/flights.jsonld
+        entities:
+          airport:
+            record_set: airports
+            scan: row
+            id: {field: iata, transform: as_curie, args: {prefix: iata}}
+            properties:
+              name: name
+              city: city
+              state: state
+              country: country
+              latitude: latitude
+              longitude: longitude
+        ```
+
+        The scaffold's inspector appendix — or
+        `uv run biotope map inspect <croissant> --json` — gives the agent
+        the field catalogue to ground these picks.
+
+### Binding the `is_hub_for` relation → airport-hubs croissant
+
+!!! Binding a relation
+
+    === "Human"
+
+        ```
+        Selection (4): 4
+
+        Pick a croissant to bind relation `is_hub_for`
+        # │ Croissant                                  │ Match
+        1 │ .biotope/datasets/data/notes/airport-hubs… │   2
+        2 │ .biotope/datasets/data/flights.jsonld      │   0
+        Croissant: 1
+
+        Pick record set (1): 1            # airport-hubs
+        Scan kind (r/e/m) (r): r
+
+        ── Source endpoint ──
+        Entity: airport
+        ID field: airport_iata
+        Transform: as_curie
+        CURIE prefix: iata
+
+        ── Target endpoint ──
+        Entity: airline
+        ID field: airline_code
+        Transform: as_curie
+        CURIE prefix: airline
+
+        Property fields (comma-separated, blank for none): ⏎
+
+        💾 Saved mappings/airport-hubs.mapping.yaml
+        ```
+
+        The `airport` endpoint reuses the entity already bound in the
+        flights mapping — both sides mint `iata:<code>` IDs, so
+        BioCypher dedups them at build. The `airline` endpoint is the
+        first reference to that entity; bind its full properties when
+        you do slot 2.
+
+    === "Agent"
+
+        ```yaml
+        # mappings/airport-hubs.mapping.yaml
+        croissant: .biotope/datasets/data/notes/airport-hubs.jsonld
+        entities:
+          airport:
+            record_set: airport-hubs
+            scan: row
+            id: {field: airport_iata, transform: as_curie, args: {prefix: iata}}
+          airline:
+            record_set: airport-hubs
+            scan: row
+            id: {field: airline_code, transform: as_curie, args: {prefix: airline}}
+            properties:
+              name: airline_name
+        relations:
+          is_hub_for:
+            record_set: airport-hubs
+            scan: row
+            source: {entity: airport, field: airport_iata, transform: as_curie, args: {prefix: iata}}
+            target: {entity: airline, field: airline_code, transform: as_curie, args: {prefix: airline}}
+        ```
+
+### Bind the remaining two slots
+
+`airline` (slot 2) and `number_of_flights` (slot 3) follow the same
+pattern — pick the slot, pick the croissant (airport-hubs for `airline`,
+flights for `number_of_flights`), and answer the prompts. The
+`number_of_flights` relation binds against the `flights-airport` record
+set with `origin` → `destination` as the endpoints and `count` as a
+property. When all four slots show ✓, the wizard prints:
+
+```
+All slots resolved. Run `biotope build` to generate the BioCypher project.
+```
+
+### A note on the two `airport` bindings
+
+The flights mapping owns the rich Airport records (full properties); the
+airport-hubs mapping declares a *minimal* Airport (id only) so its
+`is_hub_for` relation has something to point at on the source side. Both
+mint Airport IDs the same way (`iata:<code>`), so BioCypher's writer
+dedups the two emissions into one Airport node per IATA code, merging
+properties from the richer side.
+
+### Verify
+
+```bash
+uv run biotope map preview
 ```
 
 You should see resolved slots and sample tuples like
 `('iata:00M', 'airport', {...})`,
-`(None, 'iata:ABE', 'iata:ATL', 'has_flight', {'count': 853})`, and
-`('airline:DL', 'airline', {'name': 'Delta Air Lines'})`.
+`(None, 'iata:ABE', 'iata:ATL', 'number_of_flights', {'count': 853})`,
+and `('airline:DL', 'airline', {'name': 'Delta Air Lines'})`.
 
 ## 8. Build
 
 ```bash
-biotope build
+uv run biotope build
 ```
 
 This generates a self-contained BioCypher project under `build/` —
@@ -319,7 +466,7 @@ errored out here.
 ## 9. Run the graph build
 
 ```bash
-python build/create_knowledge_graph.py
+uv run python build/create_knowledge_graph.py
 ```
 
 BioCypher writes node and edge CSVs to `build/biocypher-out/`. You may
@@ -330,20 +477,20 @@ ID-only ones from `airport-hubs`), and the writer merges them.
 ## 10. Look at the result
 
 ```bash
-biotope view
+uv run biotope view
 ```
 
 ```
-        BioCypher build:
+                BioCypher build:
 /.../airports/build
-┏━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━┓
-┃ file           ┃ lines ┃ kind ┃
-┡━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━┩
-│ airline.csv    │     5 │ node │
-│ airport.csv    │  3376 │ node │
-│ has_flight.csv │  5366 │ edge │
-│ is_hub_for.csv │    12 │ edge │
-└────────────────┴───────┴──────┘
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━┓
+┃ file                 ┃ lines ┃ kind ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━┩
+│ airline.csv          │     5 │ node │
+│ airport.csv          │  3376 │ node │
+│ is_hub_for.csv       │    12 │ edge │
+│ number_of_flights.csv│  5366 │ edge │
+└──────────────────────┴───────┴──────┘
 
 Total nodes: 3381  edges: 5378
 ```
