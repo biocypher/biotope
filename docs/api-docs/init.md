@@ -2,8 +2,10 @@
 
 !!! warning "Draft stage"
 
-    Biotope is in draft stage. Functionality may be missing or incomplete.
-    The API is subject to change.
+```
+Biotope is in draft stage. Functionality may be missing or incomplete.
+The API is subject to change.
+```
 
 ## Overview
 
@@ -16,10 +18,10 @@ The `biotope init` command initializes a new biotope project with interactive co
 The init process guides you through several configuration options:
 
 1. **Project Name**: Set a name for your biotope project
-2. **Git Integration**: Choose whether to initialize Git version control
-3. **Knowledge Graph**: Optionally install a knowledge graph for enhanced data management
-4. **Output Format**: Select output format (only shown if knowledge graph is enabled)
-5. **Project Metadata**: Collect project-level metadata for annotation pre-filling
+1. **Git Integration**: Choose whether to initialize Git version control
+1. **Knowledge Graph**: Optionally install a knowledge graph for enhanced data management
+1. **Output Format**: Select output format (only shown if knowledge graph is enabled)
+1. **Project Metadata**: Collect project-level metadata for annotation pre-filling
 
 ### Project-Level Metadata Collection
 
@@ -31,7 +33,7 @@ During initialization, you can optionally collect project-level metadata that wi
 - **License**: Data usage license (e.g., MIT, CC-BY, etc.)
 - **Citation**: How to cite the project or dataset
 
-This metadata is stored in `.biotope/config/biotope.yaml` and automatically loaded when using `biotope annotate interactive`.
+This metadata is stored in `.biotope/config/biotope.yaml` and automatically loaded when using `biotope annotate edit`.
 
 ### Conditional Output Format Selection
 

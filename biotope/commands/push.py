@@ -30,10 +30,10 @@ from biotope.utils import find_biotope_root, is_git_repo
 def push(remote: str, branch: Optional[str], force: bool) -> None:
     """
     Push metadata changes to remote repository using Git.
-    
+
     Pushes committed changes in .biotope/ directory to the remote repository.
     Similar to git push but focused on metadata.
-    
+
     Args:
         remote: Remote repository name
         branch: Branch name to push
@@ -73,11 +73,7 @@ def _remote_exists(biotope_root: Path, remote: str) -> bool:
     """Check if remote exists."""
     try:
         result = subprocess.run(
-            ["git", "remote", "get-url", remote],
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "remote", "get-url", remote], cwd=biotope_root, capture_output=True, text=True, check=True
         )
         return bool(result.stdout.strip())
     except subprocess.CalledProcessError:
@@ -88,11 +84,7 @@ def _get_current_branch(biotope_root: Path) -> Optional[str]:
     """Get current branch name."""
     try:
         result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "branch", "--show-current"], cwd=biotope_root, capture_output=True, text=True, check=True
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError:
@@ -104,28 +96,19 @@ def _push_changes(biotope_root: Path, remote: str, branch: str, force: bool) -> 
     try:
         # Build push command
         cmd = ["git", "push"]
-        
+
         if force:
             cmd.append("--force")
-        
+
         cmd.extend([remote, branch])
-        
+
         # Execute push
-        result = subprocess.run(
-            cmd,
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
+        subprocess.run(cmd, cwd=biotope_root, capture_output=True, text=True, check=True)
+
         return True
-        
+
     except subprocess.CalledProcessError as e:
         click.echo(f"❌ Git push failed: {e}")
         if e.stderr:
             click.echo(f"Error details: {e.stderr}")
         return False
-
-
- 

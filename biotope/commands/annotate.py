@@ -2,276 +2,112 @@
 
 from __future__ import annotations
 
-import csv
+import copy
 import getpass
-import hashlib
 import json
 import subprocess
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import click
+import yaml
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from biotope.metadata import (
+    FILE_OBJECT_TYPE,
+    SCAFFOLD_FILENAME,
+    ensure_no_legacy_file_objects,
+    normalize_metadata_shape,
+    parse_key_value_pairs,
+    resolve_target,
+)
+from biotope.metadata import (
+    get_standard_context as shared_get_standard_context,
+)
+from biotope.metadata import (
+    merge_metadata as shared_merge_metadata,
+)
 from biotope.utils import find_biotope_root
 
 
 def get_standard_context() -> dict:
     """Get the standard Croissant context."""
-    return {
-        "@vocab": "https://schema.org/",
-        "cr": "https://mlcommons.org/croissant/",
-        "ml": "http://ml-schema.org/",
-        "sc": "https://schema.org/",
-        "dct": "http://purl.org/dc/terms/",
-        "data": "https://mlcommons.org/croissant/data/",
-        "rai": "https://mlcommons.org/croissant/rai/",
-        "format": "https://mlcommons.org/croissant/format/",
-        "citeAs": "https://mlcommons.org/croissant/citeAs/",
-        "conformsTo": "https://mlcommons.org/croissant/conformsTo/",
-        "@language": "en",
-        "repeated": "https://mlcommons.org/croissant/repeated/",
-        "field": "https://mlcommons.org/croissant/field/",
-        "examples": "https://mlcommons.org/croissant/examples/",
-        "recordSet": "https://mlcommons.org/croissant/recordSet/",
-        "fileObject": "https://mlcommons.org/croissant/fileObject/",
-        "fileSet": "https://mlcommons.org/croissant/fileSet/",
-        "source": "https://mlcommons.org/croissant/source/",
-        "references": "https://mlcommons.org/croissant/references/",
-        "key": "https://mlcommons.org/croissant/key/",
-        "parentField": "https://mlcommons.org/croissant/parentField/",
-        "isLiveDataset": "https://mlcommons.org/croissant/isLiveDataset/",
-        "separator": "https://mlcommons.org/croissant/separator/",
-        "extract": "https://mlcommons.org/croissant/extract/",
-        "subField": "https://mlcommons.org/croissant/subField/",
-        "regex": "https://mlcommons.org/croissant/regex/",
-        "column": "https://mlcommons.org/croissant/column/",
-        "path": "https://mlcommons.org/croissant/path/",
-        "fileProperty": "https://mlcommons.org/croissant/fileProperty/",
-        "md5": "https://mlcommons.org/croissant/md5/",
-        "jsonPath": "https://mlcommons.org/croissant/jsonPath/",
-        "transform": "https://mlcommons.org/croissant/transform/",
-        "replace": "https://mlcommons.org/croissant/replace/",
-        "dataType": "https://mlcommons.org/croissant/dataType/",
-        "includes": "https://mlcommons.org/croissant/includes/",
-        "excludes": "https://mlcommons.org/croissant/excludes/",
-    }
+    return shared_get_standard_context()
 
 
 def merge_metadata(dynamic_metadata: dict) -> dict:
     """Merge dynamic metadata with standard context and structure."""
-    # Start with standard context
-    metadata = {
-        "@context": get_standard_context(),
-        "@type": "Dataset",
-    }
-
-    # Update with dynamic content
-    metadata.update(dynamic_metadata)
-
-    return metadata
+    return shared_merge_metadata(dynamic_metadata)
 
 
 @click.group(invoke_without_command=True)
-@click.option(
-    "-r",
-    "--recursive",
-    is_flag=True,
-    help="Shorthand for 'annotate batch' when used with --to-csv/--from-csv.",
-)
-@click.option(
-    "--to-csv",
-    is_flag=True,
-    hidden=True,
-    help="Generate a project .biotope.csv (use with -r).",
-)
-@click.option(
-    "--from-csv",
-    is_flag=True,
-    hidden=True,
-    help="Apply updates from project .biotope.csv (use with -r).",
-)
 @click.pass_context
-def annotate(
-    ctx: click.Context,
-    recursive: bool = False,
-    to_csv: bool = False,
-    from_csv: bool = False,
-) -> None:
-    """Create dataset metadata in Croissant format.
-
-    Tip: use 'biotope annotate batch --to-csv' to export or '--from-csv' to import.
-    The '-r' flag is a shorthand for these batch CSV operations.
-    """
-    # Handle short-hand alias only when no subcommand is provided
+def annotate(ctx: click.Context) -> None:
+    """Create dataset metadata in Croissant format."""
     if ctx.invoked_subcommand is None:
-        # If user passed legacy flags without -r, guide them to new usage
-        if (to_csv or from_csv) and not recursive:
-            click.echo("❌ Direct --to-csv/--from-csv are deprecated. Use 'biotope annotate batch --to-csv' or 'biotope annotate batch --from-csv' (or prefix with -r).")
-            raise click.Abort
-
-        if recursive and (to_csv or from_csv):
-            biotope_root = find_biotope_root()
-            if not biotope_root:
-                click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-                raise click.Abort
-
-            if to_csv and from_csv:
-                click.echo("❌ Please specify only one of --to-csv or --from-csv")
-                raise click.Abort
-
-            if to_csv:
-                _generate_project_biotope_csv(biotope_root)
-                ctx.exit(0)
-
-            if from_csv:
-                console = Console()
-                csv_path = biotope_root / ".biotope.csv"
-                if not csv_path.exists():
-                    click.echo("❌ No .biotope.csv found at project root. Run 'biotope annotate batch --to-csv' first.")
-                    raise click.Abort
-                _process_csv_annotation(console, str(csv_path), None, biotope_root)
-                try:
-                    csv_path.unlink()
-                    click.echo("🗑️  Removed .biotope.csv after applying updates")
-                except Exception:
-                    click.echo("⚠️  Warning: Could not delete .biotope.csv; please remove it manually if desired")
-                ctx.exit(0)
-
-        # No subcommand and no alias flags → show help and signal usage error (exit code 2)
-        # Mimic Click's default behavior when a subcommand is required
         click.echo(ctx.get_help())
-        # Use Click's fail to set exit code 2
         ctx.fail("Missing command.")
 
 
 @annotate.command()
+@click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "--output",
-    "-o",
-    type=click.Path(),
-    default="metadata.json",
-    help="Output file path for the metadata JSON-LD.",
+    "--set",
+    "set_pairs",
+    multiple=True,
+    help="Apply KEY=VALUE overrides. Use dataset.<field>=... or record_set.<field>=... for explicit scope.",
 )
-@click.option(
-    "--name",
-    "-n",
-    required=True,
-    help="Name of the dataset.",
-)
-@click.option(
-    "--description",
-    "-d",
-    default="",
-    help="Description of the dataset.",
-)
-@click.option(
-    "--data-source",
-    "-s",
-    required=True,
-    help="URL or path to the data source.",
-)
-@click.option(
-    "--contact",
-    "-c",
-    default=getpass.getuser(),
-    help="Responsible contact person for the dataset.",
-)
-@click.option(
-    "--date",
-    default=datetime.now(tz=timezone.utc).isoformat(),
-    help="Date of creation (ISO format: YYYY-MM-DD).",
-)
-@click.option(
-    "--access-restrictions",
-    "-a",
-    required=True,
-    help="Note on access restrictions (e.g., public, restricted, private).",
-)
-@click.option(
-    "--format",
-    "-f",
-    help="Description of file format.",
-)
-@click.option(
-    "--legal-obligations",
-    "-l",
-    help="Note on legal obligations.",
-)
-@click.option(
-    "--collaboration-partner",
-    "-p",
-    help="Collaboration partner and institute.",
-)
-def create(
-    output,
-    name,
-    description,
-    data_source,
-    contact,
-    date,
-    access_restrictions,
-    format,
-    legal_obligations,
-    collaboration_partner,
-):
-    """Create a new Croissant metadata file with required scientific metadata fields."""
-    # Create a basic metadata structure with proper Croissant context
-    metadata = {
-        "@context": get_standard_context(),
-        "@type": "Dataset",
-        "name": name,
-        "description": description,
-        "url": data_source,  # Changed from dataSource to url for schema.org compatibility
-        "creator": {
-            "@type": "Person",
-            "name": contact,
-        },
-        "dateCreated": date,
-        # Add recommended properties
-        "datePublished": date,  # Use creation date as publication date by default
-        "version": "1.0",  # Default version
-        "license": "https://creativecommons.org/licenses/by/4.0/",  # Default license
-        "citation": f"Please cite this dataset as: {name} ({date.split('-')[0]})",  # Simple citation
-    }
+def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
+    """Apply a scoped YAML scaffold to one dataset JSON-LD."""
+    console = Console()
+    biotope_root = find_biotope_root()
+    if not biotope_root:
+        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
+        raise click.Abort
 
-    # Add custom fields with proper namespacing
-    metadata["cr:accessRestrictions"] = access_restrictions
-
-    # Add optional fields if provided
-    if format:
-        metadata["encodingFormat"] = format  # Using schema.org standard property
-    if legal_obligations:
-        metadata["cr:legalObligations"] = legal_obligations
-    if collaboration_partner:
-        metadata["cr:collaborationPartner"] = collaboration_partner
-
-    # Add distribution property with empty array for FileObjects/FileSets
-    metadata["distribution"] = []
-
-    # Write to file
-    with open(output, "w") as f:
-        json.dump(metadata, f, indent=2)
-
-    # Stage the changes in Git if we're in a biotope project
     try:
-        biotope_root = find_biotope_root()
-        if biotope_root:
-            import subprocess
-            subprocess.run(
-                ["git", "add", ".biotope/"],
-                cwd=biotope_root,
-                check=True
-            )
-            click.echo(f"✅ Staged changes in Git")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass  # Not in a biotope project or Git not available
+        overrides = parse_key_value_pairs(set_pairs, "--set")
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
 
-    click.echo(f"Created Croissant metadata file at {output}")
+    resolved = path.resolve()
+    if resolved.is_dir():
+        try:
+            target = resolve_target(resolved, biotope_root)
+        except ValueError as exc:
+            click.echo(f"❌ {exc}")
+            raise click.Abort from exc
+        scaffold_path = target.scaffold_path
+        if not scaffold_path.exists():
+            click.echo(f"❌ No {SCAFFOLD_FILENAME} in {resolved}. Run `biotope add {path}` first.")
+            raise click.Abort
+    else:
+        scaffold_path = resolved
+        if scaffold_path.suffix not in {".yaml", ".yml"}:
+            click.echo("❌ annotate apply expects a directory or a YAML scaffold.")
+            raise click.Abort
+        try:
+            target = resolve_target(scaffold_path.parent, biotope_root)
+        except ValueError as exc:
+            click.echo(f"❌ {exc}")
+            raise click.Abort from exc
+
+    if not target.metadata_path.exists():
+        click.echo(f"❌ Target metadata file not found: {target.metadata_path}")
+        raise click.Abort
+
+    updated = _apply_scaffold(console, scaffold_path, target, overrides, biotope_root)
+    if updated:
+        try:
+            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
+            console.print("\n✅ Staged metadata changes in Git")
+        except subprocess.CalledProcessError as exc:
+            console.print(f"⚠️  Warning: Could not stage changes in Git: {exc}")
 
 
 @annotate.command()
@@ -369,73 +205,7 @@ def load(jsonld, record_set, num_records):
         exit(1)
 
 
-@annotate.command(help="Batch operations for CSV-based annotations. Export with --to-csv or import with --from-csv.")
-@click.option(
-    "--to-csv",
-    is_flag=True,
-    help="Export: write .biotope.csv at project root",
-)
-@click.option(
-    "--from-csv",
-    "apply_from_csv",
-    is_flag=True,
-    help="Apply updates from a CSV (defaults to project .biotope.csv)",
-)
-@click.option(
-    "--column-mapping",
-    "-m",
-    type=str,
-    help="JSON mapping CSV column names to expected fields (e.g., '{\"data_file\": \"filepath\"}')",
-)
-def batch(
-    to_csv: bool = False,
-    apply_from_csv: bool = False,
-    column_mapping: str | None = None,
-) -> None:
-    """Export or import annotations via CSV.
-
-    Examples:
-      biotope annotate batch --to-csv
-      biotope annotate batch --from-csv
-    """
-    console = Console()
-
-    biotope_root = find_biotope_root()
-    if not biotope_root:
-        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
-
-    if to_csv and apply_from_csv:
-        console.print("❌ Please specify only one of --to-csv or --from-csv")
-        raise click.Abort
-
-    if not to_csv and not apply_from_csv:
-        console.print("❌ Specify one mode: --to-csv or --from-csv")
-        raise click.Abort
-
-    if to_csv:
-        _generate_project_biotope_csv(biotope_root)
-        return
-
-    resolved_csv_path: Path
-    resolved_csv_path = biotope_root / ".biotope.csv"
-
-    if not resolved_csv_path.exists():
-        console.print(f"❌ CSV file not found: {resolved_csv_path}")
-        raise click.Abort
-
-    _process_csv_annotation(console, str(resolved_csv_path), column_mapping, biotope_root)
-
-    # Delete project CSV only if we used the default location (mirrors -r behavior)
-    if resolved_csv_path.name == ".biotope.csv":
-        try:
-            resolved_csv_path.unlink()
-            click.echo("🗑️  Removed .biotope.csv after applying updates")
-        except Exception:
-            click.echo("⚠️  Warning: Could not delete .biotope.csv; please remove it manually if desired")
-
-
-@annotate.command()
+@annotate.command(name="edit")
 @click.option(
     "--file-path",
     "-f",
@@ -460,25 +230,31 @@ def batch(
     is_flag=True,
     help="Annotate all tracked files with incomplete metadata",
 )
-def interactive(
-    file_path: str | None = None, 
-    prefill_metadata: str | None = None, 
-    staged: bool = False, 
+def edit(
+    file_path: str | None = None,
+    prefill_metadata: str | None = None,
+    staged: bool = False,
     incomplete: bool = False,
 ) -> None:
     """Interactive annotation process for files.
-    
+
     This command supports multiple modes:
     1. Single file annotation: --file-path
     2. Staged files annotation: --staged
     3. Incomplete files annotation: --incomplete
-    
-    For batch annotation from CSV files, use: biotope annotate batch --from-csv
-    
+
+    For bulk annotation from CSV files, use: biotope annotate apply <dir-or-csv>
+
     Examples:
-        biotope annotate interactive --file-path data.csv
-        biotope annotate interactive --staged
-        biotope annotate interactive --incomplete
+        biotope annotate edit --file-path data.csv
+        biotope annotate edit --staged
+        biotope annotate edit --incomplete
+
+    Args:
+        file_path: Path to a single file to annotate.
+        prefill_metadata: JSON string of metadata to pre-fill the prompts with.
+        staged: Annotate all staged files.
+        incomplete: Annotate all tracked files with incomplete metadata.
     """
     console = Console()
 
@@ -489,8 +265,9 @@ def interactive(
     biotope_root = find_biotope_root()
     if biotope_root:
         from biotope.utils import load_project_metadata
+
         project_metadata = load_project_metadata(biotope_root)
-        
+
         # Merge project metadata with any provided prefill metadata
         # Project metadata takes precedence for common fields
         for key, value in project_metadata.items():
@@ -505,47 +282,48 @@ def interactive(
         if not biotope_root:
             click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
             raise click.Abort
-        
+
         staged_files = get_staged_files(biotope_root)
         if not staged_files:
             click.echo("❌ No files staged. Use 'biotope add <file>' first.")
             raise click.Abort
-        
+
         console.print(f"[bold blue]Annotating {len(staged_files)} staged file(s)[/]")
-        
+
         for i, file_info in enumerate(staged_files):
             file_path = biotope_root / file_info["file_path"]
             console.print(f"\n[bold green]File {i+1}/{len(staged_files)}: {file_path.name}[/]")
-            
+
             # Find the existing metadata file for this data file
             datasets_dir = biotope_root / ".biotope" / "datasets"
             relative_path = file_path.relative_to(biotope_root)
-            metadata_file = datasets_dir / relative_path.with_suffix('.jsonld')
-            
+            metadata_file = datasets_dir / relative_path.with_suffix(".jsonld")
+
             # Check if metadata file exists
             if metadata_file.exists():
                 # Load existing metadata to pre-fill
                 try:
                     with open(metadata_file) as f:
-                        existing_metadata = json.load(f)
+                        existing_metadata = normalize_metadata_shape(json.load(f))
                 except (json.JSONDecodeError, IOError):
                     existing_metadata = {}
-                
+
                 # Extract file information from existing metadata
                 file_metadata = {
                     "name": existing_metadata.get("name", file_path.stem),
                     "description": existing_metadata.get("description", f"Dataset for {file_path.name}"),
-                    "distribution": existing_metadata.get("distribution", [])
+                    "distribution": existing_metadata.get("distribution", []),
                 }
-                
+
                 # Merge with project metadata
                 if biotope_root:
                     from biotope.utils import load_project_metadata
+
                     project_metadata = load_project_metadata(biotope_root)
                     for key, value in project_metadata.items():
                         if key not in file_metadata and key not in existing_metadata:
                             file_metadata[key] = value
-                
+
                 # Run interactive annotation for this file (updating existing)
                 _run_interactive_annotation(console, metadata_file, file_metadata, biotope_root, update_existing=True)
             else:
@@ -555,27 +333,28 @@ def interactive(
                     "description": f"Dataset for {file_path.name}",
                     "distribution": [
                         {
-                            "@type": "sc:FileObject",
+                            "@type": FILE_OBJECT_TYPE,
                             "@id": f"file_{file_info['sha256'][:8]}",
                             "name": file_path.name,
                             "contentUrl": str(file_path.relative_to(biotope_root)),
                             "sha256": file_info["sha256"],
-                            "contentSize": file_info["size"]
+                            "contentSize": file_info["size"],
                         }
-                    ]
+                    ],
                 }
-                
+
                 # Merge with project metadata
                 if biotope_root:
                     from biotope.utils import load_project_metadata
+
                     project_metadata = load_project_metadata(biotope_root)
                     for key, value in project_metadata.items():
                         if key not in file_metadata:
                             file_metadata[key] = value
-                
+
                 # Run interactive annotation for this file (creating new)
                 _run_interactive_annotation(console, file_path, file_metadata, biotope_root)
-        
+
         return
 
     # Handle incomplete files
@@ -583,56 +362,54 @@ def interactive(
         if not biotope_root:
             click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
             raise click.Abort
-        
+
         # Get all tracked files and check their annotation status
         from biotope.validation import get_all_tracked_files, get_annotation_status_for_files
-        
+
         tracked_files = get_all_tracked_files(biotope_root)
         if not tracked_files:
             click.echo("❌ No tracked files found. Use 'biotope add <file>' first.")
             raise click.Abort
-        
+
         annotation_status = get_annotation_status_for_files(biotope_root, tracked_files)
-        incomplete_files = [
-            file_path for file_path, (is_annotated, _) in annotation_status.items() 
-            if not is_annotated
-        ]
-        
+        incomplete_files = [file_path for file_path, (is_annotated, _) in annotation_status.items() if not is_annotated]
+
         if not incomplete_files:
             click.echo("✅ All tracked files are properly annotated!")
             return
-        
+
         console.print(f"[bold blue]Found {len(incomplete_files)} file(s) with incomplete annotation[/]")
-        
+
         for i, file_path in enumerate(incomplete_files):
             metadata_file = biotope_root / file_path
             console.print(f"\n[bold green]File {i+1}/{len(incomplete_files)}: {metadata_file.stem}[/]")
-            
+
             # Load existing metadata to pre-fill
             try:
                 with open(metadata_file) as f:
-                    existing_metadata = json.load(f)
+                    existing_metadata = normalize_metadata_shape(json.load(f))
             except (json.JSONDecodeError, IOError):
                 existing_metadata = {}
-            
+
             # Extract file information from existing metadata
             file_info = {
                 "name": existing_metadata.get("name", metadata_file.stem),
                 "description": existing_metadata.get("description", f"Dataset for {metadata_file.stem}"),
-                "distribution": existing_metadata.get("distribution", [])
+                "distribution": existing_metadata.get("distribution", []),
             }
-            
+
             # Merge with project metadata for missing fields
             if biotope_root:
                 from biotope.utils import load_project_metadata
+
                 project_metadata = load_project_metadata(biotope_root)
                 for key, value in project_metadata.items():
                     if key not in file_info and key not in existing_metadata:
                         file_info[key] = value
-            
+
             # Run interactive annotation for this file (updating existing)
             _run_interactive_annotation(console, metadata_file, file_info, biotope_root, update_existing=True)
-        
+
         return
 
     # If file path is provided, use it
@@ -653,23 +430,24 @@ def interactive(
     # Show project metadata info if available
     if biotope_root:
         from biotope.utils import load_project_metadata
+
         project_metadata = load_project_metadata(biotope_root)
         if project_metadata:
             console.print("[bold green]Project Metadata Available[/]")
             console.print("─" * 50)
             console.print("The following project-level metadata will be used as defaults:")
-            
+
             table = Table(show_header=False)
             table.add_column("Field", style="cyan")
             table.add_column("Value", style="green")
-            
+
             for key, value in project_metadata.items():
                 if key == "creator" and isinstance(value, dict):
                     display_value = value.get("name", str(value))
                 else:
                     display_value = str(value)
                 table.add_row(key, display_value)
-            
+
             console.print(table)
             console.print()
 
@@ -758,12 +536,10 @@ def interactive(
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
         default_format = distribution[0].get("encodingFormat", "")
-    
+
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
-        default=metadata.get("encodingFormat")
-        or metadata.get("format")
-        or default_format,
+        default=metadata.get("encodingFormat") or metadata.get("format") or default_format,
     )
 
     legal_obligations = click.prompt(
@@ -804,7 +580,7 @@ def interactive(
     # Update metadata with new values while preserving any existing fields
     new_metadata = {
         "@context": get_standard_context(),  # Use the standard context
-        "@type": "Dataset",
+        "@type": "sc:Dataset",
         "name": dataset_name,
         "description": description,
         "url": data_source,
@@ -884,11 +660,12 @@ def interactive(
                 file_name = click.prompt("File name (including extension)")
                 content_url = click.prompt("Content URL (where the file can be accessed)")
                 encoding_format = click.prompt(
-                    "Encoding format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
+                    "Encoding format (MIME type, e.g., text/csv, application/json, "
+                    "application/x-hdf5, application/fastq)",
                 )
 
                 file_object = {
-                    "@type": "sc:FileObject",
+                    "@type": FILE_OBJECT_TYPE,
                     "@id": file_id,
                     "name": file_name,
                     "contentUrl": content_url,
@@ -922,7 +699,8 @@ def interactive(
 
                 # File pattern information
                 encoding_format = click.prompt(
-                    "Encoding format of files in this set (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
+                    "Encoding format of files in this set (MIME type, e.g., text/csv, "
+                    "application/json, application/x-hdf5, application/fastq)",
                     default="",
                 )
                 if encoding_format:
@@ -958,7 +736,7 @@ def interactive(
     console.print("Record sets describe the structure of your data.")
 
     if click.confirm("Would you like to add a record set to describe your data structure?", default=True):
-        metadata["cr:recordSet"] = []
+        metadata["recordSet"] = []
 
         while True:
             record_set_name = click.prompt("Record set name (e.g., 'patients', 'samples')")
@@ -985,7 +763,7 @@ def interactive(
             console.print("Fields describe the data columns or attributes in this record set.")
 
             if click.confirm(f"Would you like to add fields to the '{record_set_name}' record set?", default=True):
-                record_set["cr:field"] = []
+                record_set["field"] = []
 
                 while True:
                     field_name = click.prompt("Field name (column or attribute name)")
@@ -1062,7 +840,7 @@ def interactive(
                         field["references"] = {"@id": f"#{ref_record_set}/{ref_field}"}
 
                     # Add field to record set
-                    record_set["cr:field"].append(field)
+                    record_set["field"].append(field)
 
                     if not click.confirm("Add another field?", default=True):
                         break
@@ -1081,7 +859,7 @@ def interactive(
                         break
 
             # Add record set to metadata
-            metadata["cr:recordSet"].append(record_set)
+            metadata["recordSet"].append(record_set)
 
             if not click.confirm("Add another record set?", default=False):
                 break
@@ -1090,6 +868,7 @@ def interactive(
     default_filename = f"{dataset_name.lower().replace(' ', '_')}_metadata.json"
     output_path = click.prompt("Output file path", default=default_filename)
 
+    metadata = normalize_metadata_shape(metadata)
     with open(output_path, "w") as f:
         json.dump(metadata, f, indent=2)
 
@@ -1098,12 +877,9 @@ def interactive(
         biotope_root = find_biotope_root()
         if biotope_root:
             import subprocess
-            subprocess.run(
-                ["git", "add", ".biotope/"],
-                cwd=biotope_root,
-                check=True
-            )
-            console.print(f"✅ Staged changes in Git")
+
+            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
+            console.print("✅ Staged changes in Git")
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass  # Not in a biotope project or Git not available
 
@@ -1121,11 +897,53 @@ def interactive(
     console.print(f"[bold yellow]biotope annotate validate --jsonld {output_path}[/]")
 
 
-def _run_interactive_annotation(console: Console, file_path: Path, prefill_metadata: dict, biotope_root: Path, update_existing: bool = False) -> None:
+@annotate.command(name="interactive", hidden=True)
+@click.option(
+    "--file-path",
+    "-f",
+    type=click.Path(exists=True),
+    help="Path to the file to annotate",
+)
+@click.option(
+    "--prefill-metadata",
+    "-p",
+    type=str,
+    help="JSON string containing pre-filled metadata",
+)
+@click.option(
+    "--staged",
+    "-s",
+    is_flag=True,
+    help="Annotate all staged files",
+)
+@click.option(
+    "--incomplete",
+    "-i",
+    is_flag=True,
+    help="Annotate all tracked files with incomplete metadata",
+)
+def interactive(
+    file_path: str | None = None,
+    prefill_metadata: str | None = None,
+    staged: bool = False,
+    incomplete: bool = False,
+) -> None:
+    """Hidden alias for `annotate edit`."""
+    edit.callback(
+        file_path=file_path,
+        prefill_metadata=prefill_metadata,
+        staged=staged,
+        incomplete=incomplete,
+    )
+
+
+def _run_interactive_annotation(
+    console: Console, file_path: Path, prefill_metadata: dict, biotope_root: Path, update_existing: bool = False
+) -> None:
     """Run interactive annotation for a specific file."""
     # Start with pre-filled metadata
     metadata = merge_metadata(prefill_metadata)
-    
+
     # Create a nice header for this file
     console.print(
         Panel(
@@ -1133,14 +951,14 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
             subtitle="Interactive metadata creation",
         ),
     )
-    
+
     console.print(Markdown("This wizard will help you document your scientific dataset with standardized metadata."))
     console.print()
-    
+
     # Section: Basic Information
     console.print("[bold green]Basic Dataset Information[/]")
     console.print("─" * 50)
-    
+
     # Use pre-filled name if available, otherwise prompt
     dataset_name = metadata.get("name", "")
     if not dataset_name:
@@ -1153,41 +971,41 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
             "Dataset name (a short, descriptive title; no spaces allowed)",
             default=dataset_name,
         )
-    
+
     description = click.prompt(
         "Dataset description (what does this dataset contain and what is it used for?)",
         default=metadata.get("description", ""),
     )
-    
+
     # Section: Source Information
     console.print("\n[bold green]Data Source Information[/]")
     console.print("─" * 50)
     console.print("Where did this data come from? (e.g., a URL, database name, or experiment)")
     data_source = click.prompt("Data source", default=metadata.get("url", ""))
-    
+
     # Section: Ownership and Dates
     console.print("\n[bold green]Ownership and Dates[/]")
     console.print("─" * 50)
-    
+
     project_name = click.prompt(
         "Project name",
         default=metadata.get("cr:projectName", Path.cwd().name),
     )
-    
+
     contact = click.prompt(
         "Contact person (email preferred)",
         default=metadata.get("creator", {}).get("name", getpass.getuser()),
     )
-    
+
     date = click.prompt(
         "Creation date (YYYY-MM-DD)",
         default=metadata.get("dateCreated", datetime.now(tz=timezone.utc).isoformat()),
     )
-    
+
     # Section: Access Information
     console.print("\n[bold green]Access Information[/]")
     console.print("─" * 50)
-    
+
     # Create a table for examples
     table = Table(title="Access Restriction Examples")
     table.add_column("Type", style="cyan")
@@ -1197,12 +1015,12 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     table.add_row("Approval", "Requires explicit approval from data owner")
     table.add_row("Embargo", "Will become public after a specific date")
     console.print(table)
-    
+
     has_access_restrictions = Confirm.ask(
         "Does this dataset have access restrictions?",
         default=bool(metadata.get("cr:accessRestrictions")),
     )
-    
+
     access_restrictions = None
     if has_access_restrictions:
         access_restrictions = Prompt.ask(
@@ -1211,64 +1029,62 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
         )
         if not access_restrictions.strip():
             access_restrictions = None
-    
+
     # Section: Additional Information
     console.print("\n[bold green]Additional Information[/]")
     console.print("─" * 50)
     console.print("[italic]The following fields are optional but recommended for scientific datasets[/]")
-    
+
     # Get default format from distribution if available
     default_format = ""
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
         default_format = distribution[0].get("encodingFormat", "")
-    
+
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
-        default=metadata.get("encodingFormat")
-        or metadata.get("format")
-        or default_format,
+        default=metadata.get("encodingFormat") or metadata.get("format") or default_format,
     )
-    
+
     legal_obligations = click.prompt(
         "Legal obligations (e.g., citation requirements, licenses)",
         default=metadata.get("cr:legalObligations", ""),
     )
-    
+
     collaboration_partner = click.prompt(
         "Collaboration partner and institute",
         default=metadata.get("cr:collaborationPartner", ""),
     )
-    
+
     # Section: Publication Information
     console.print("\n[bold green]Publication Information[/]")
     console.print("─" * 50)
     console.print("[italic]The following fields are recommended for proper dataset citation[/]")
-    
+
     publication_date = click.prompt(
         "Publication date (YYYY-MM-DD)",
         default=metadata.get("datePublished", date),  # Use creation date as default
     )
-    
+
     version = click.prompt(
         "Dataset version",
         default=metadata.get("version", "1.0"),
     )
-    
+
     license_url = click.prompt(
         "License URL",
         default=metadata.get("license", "https://creativecommons.org/licenses/by/4.0/"),
     )
-    
+
     citation = click.prompt(
         "Citation text",
         default=metadata.get("citation", f"Please cite this dataset as: {dataset_name} ({date.split('-')[0]})"),
     )
-    
+
     # Update metadata with new values while preserving any existing fields
     new_metadata = {
         "@context": get_standard_context(),  # Use the standard context
-        "@type": "Dataset",
+        "@type": "sc:Dataset",
         "name": dataset_name,
         "description": description,
         "url": data_source,
@@ -1283,11 +1099,11 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
         "license": license_url,
         "citation": citation,
     }
-    
+
     # Only add access restrictions if they exist
     if access_restrictions:
         new_metadata["cr:accessRestrictions"] = access_restrictions
-    
+
     # Add optional fields if provided
     if format:
         new_metadata["encodingFormat"] = format
@@ -1295,26 +1111,26 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
         new_metadata["cr:legalObligations"] = legal_obligations
     if collaboration_partner:
         new_metadata["cr:collaborationPartner"] = collaboration_partner
-    
+
     # Update metadata while preserving pre-filled values (especially distribution)
     for key, value in new_metadata.items():
         if key not in ["distribution"]:  # Don't overwrite distribution
             metadata[key] = value
-    
+
     # Initialize distribution array for FileObjects/FileSets if it doesn't exist
     if "distribution" not in metadata:
         metadata["distribution"] = []
-    
+
     # Update the distribution with the new format if provided
     if format and metadata["distribution"]:
         for distribution in metadata["distribution"]:
-            if distribution.get("@type") == "sc:FileObject":
+            if distribution.get("@type") == FILE_OBJECT_TYPE:
                 distribution["encodingFormat"] = format
-    
+
     # Save to datasets directory
     datasets_dir = biotope_root / ".biotope" / "datasets"
     datasets_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Determine output path
     if update_existing:
         # Keep the existing filename when updating
@@ -1322,474 +1138,229 @@ def _run_interactive_annotation(console: Console, file_path: Path, prefill_metad
     else:
         # Use the dataset name for the filename, not the original file name
         output_path = datasets_dir / f"{dataset_name}.jsonld"
-    
+
+    metadata = normalize_metadata_shape(metadata)
     with open(output_path, "w") as f:
         json.dump(metadata, f, indent=2)
-    
+
     # Stage the changes in Git
     try:
         import subprocess
-        subprocess.run(
-            ["git", "add", ".biotope/"],
-            cwd=biotope_root,
-            check=True
-        )
+
+        subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
         console.print(f"✅ Created metadata: {output_path}")
-        console.print(f"✅ Staged changes in Git")
+        console.print("✅ Staged changes in Git")
     except subprocess.CalledProcessError as e:
         console.print(f"✅ Created metadata: {output_path}")
         console.print(f"⚠️  Warning: Could not stage changes in Git: {e}")
 
 
-def _process_csv_annotation(
+DATASET_ROW_FIELDS = {
+    "name": "name",
+    "description": "description",
+    "license": "license",
+    "url": "url",
+    "citation": "citation",
+    "version": "version",
+    "access_restrictions": "cr:accessRestrictions",
+    "legal_obligations": "cr:legalObligations",
+    "collaboration_partner": "cr:collaborationPartner",
+}
+RECORD_SET_ROW_FIELDS = {"name", "description"}
+DATASET_ONLY_SET_FIELDS = {
+    "creator",
+    "creator_email",
+    "keywords",
+    "license",
+    "url",
+    "citation",
+    "version",
+    "access_restrictions",
+    "legal_obligations",
+    "collaboration_partner",
+}
+RECORD_SET_ONLY_SET_FIELDS = {"encoding_format"}
+
+
+def _apply_scaffold(
     console: Console,
-    csv_file: str,
-    column_mapping: str | None = None,
-    biotope_root: Path | None = None
-) -> None:
-    """Process CSV file for batch annotation."""
-    
-    biotope_root = find_biotope_root()
-    if not biotope_root:
-        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
-    
-    console.print(f"[bold blue]Processing CSV file: {csv_file}[/]")
-    console.print("─" * 50)
-    
-    column_map = {}
-    if column_mapping:
-        try:
-            column_map = json.loads(column_mapping)
-        except json.JSONDecodeError:
-            console.print("❌ Invalid JSON in column mapping")
-            raise click.Abort
-    
-    # Define expected columns and their mappings
-    expected_columns = {
-        "filepath": "filepath",
-        "name": "name",
-        "description": "description",
-        "data_url": "url",
-        "creator": "creator.name",
-        "project_name": "cr:projectName",
-        "date_created": "dateCreated",
-        "access_restrictions": "cr:accessRestrictions",
-        "encoding_format": "encodingFormat",
-        "legal_obligations": "cr:legalObligations",
-        "collaboration_partner": "cr:collaborationPartner",
-        "publication_date": "datePublished",
-        "version": "version",
-        "license": "license",
-        "license_url": "license",
-        "citation": "citation"
-    }
-    
-    # Apply user's column mapping
-    if column_map:
-        for user_col, expected_col in column_map.items():
-            if expected_col in expected_columns:
-                expected_columns[user_col] = expected_columns[expected_col]
-                # Remove the original mapping if we're replacing it
-                if user_col != expected_col:
-                    expected_columns.pop(expected_col, None)
-    
-    try:
-        csv_path = Path(csv_file)
-        if not csv_path.exists():
-            console.print(f"❌ CSV file not found: {csv_file}")
-            raise click.Abort
-            
-        with open(csv_path, 'r', newline='', encoding='utf-8') as f:
-            # Try to detect the CSV dialect; fall back to standard comma CSV if detection fails
-            sample = f.read(1024)
-            f.seek(0)
-            sniffer = csv.Sniffer()
-            try:
-                dialect = sniffer.sniff(sample)
-            except Exception:
-                dialect = csv.excel  # default to comma-delimited
-            
-            reader = csv.DictReader(f, dialect=dialect)
-            rows = list(reader)
-            
-        if not rows:
-            console.print("❌ CSV file is empty")
-            raise click.Abort
-            
-        console.print(f"Found {len(rows)} entries in CSV file")
-        
-        # Validate that required columns exist
-        required_cols = ["filepath", "description"]
-        csv_columns = set(rows[0].keys())
-        
-        # Check if required columns exist (either directly or through mapping)
-        missing_required = []
-        for req_col in required_cols:
-            # Check if the column exists directly or through mapping
-            mapped_col = None
-            for csv_col, expected_col in expected_columns.items():
-                if expected_col == req_col and csv_col in csv_columns:
-                    mapped_col = csv_col
-                    break
-            
-            if mapped_col is None and req_col not in csv_columns:
-                missing_required.append(req_col)
-        
-        if missing_required:
-            console.print(f"❌ Missing required columns: {', '.join(missing_required)}")
-            console.print("Available columns:", ', '.join(csv_columns))
-            raise click.Abort
-        
-        # Get staged files to validate that CSV files are staged
-        staged_files = get_staged_files(biotope_root)
-        staged_file_paths = {info["file_path"] for info in staged_files}
-        
-        console.print(f"Found {len(staged_files)} staged files in project")
-        if staged_files:
-            console.print("Staged files:")
-            for info in staged_files:
-                console.print(f"   • {info['file_path']}")
-        
-        # Extract filenames from CSV and check if they're staged
-        csv_file_dir = Path(csv_file).parent
-        unstaged_files = []
-        csv_files_to_process = []
-        
-        for row in rows:
-            # Get filepath from row
-            filepath = None
-            for csv_col, expected_col in expected_columns.items():
-                if expected_col == "filepath" and csv_col in row:
-                    filepath = row[csv_col]
-                    break
-            
-            if not filepath:
-                filepath = row.get("filepath", "")
-            
-            if filepath:
-                # Check if file exists and has existing metadata (i.e., is staged)
-                existing_metadata_file = _find_existing_metadata_file(filepath, biotope_root, csv_file)
-                
-                if not existing_metadata_file:
-                    unstaged_files.append(filepath)
-                else:
-                    csv_files_to_process.append((filepath, row))
-        
-        if unstaged_files:
-            console.print(f"❌ The following files from CSV are not staged in biotope:")
-            for f in unstaged_files:
-                console.print(f"   • {f}")
-            console.print("\n💡 First add these files using:")
-            for f in unstaged_files:
-                console.print(f"   biotope add {f}")
-            console.print("\nThen try the annotation again.")
-            raise click.Abort
-        
-        # Process each validated file
-        successful_annotations = 0
-        updated_count = 0
-        unchanged_count = 0
-        for i, (filepath, row) in enumerate(csv_files_to_process, 1):
-            console.print(f"\n[bold green]Processing entry {i}/{len(csv_files_to_process)}[/]")
-            
-            try:
-                console.print(f"📁 File: {filepath}")
-                
-                # Build metadata from CSV row - pass filepath for default name generation
-                metadata = _build_metadata_from_csv_row(row, expected_columns, biotope_root, filepath)
-                
-                # Update existing annotation
-                result = _create_annotation_from_metadata(console, filepath, metadata, biotope_root, csv_file)
-                if result is True:
-                    updated_count += 1
-                elif result is False:
-                    unchanged_count += 1
-                successful_annotations += 1
-                
-            except Exception as e:
-                console.print(f"❌ Error processing {filepath}: {e}")
-                continue
-        
-        console.print(f"\n✅ Successfully processed {successful_annotations}/{len(csv_files_to_process)} annotations")
-        console.print(f"✅ Updated: {updated_count}")
-        console.print(f"ℹ️  Unchanged: {unchanged_count}")
-        
-        if successful_annotations > 0:
-            # Stage the changes in Git
-            try:
-                import subprocess
-                subprocess.run(
-                    ["git", "add", ".biotope/"],
-                    cwd=biotope_root,
-                    check=True
-                )
-                console.print("\n✅ Staged all changes in Git")
-            except subprocess.CalledProcessError as e:
-                console.print(f"⚠️  Warning: Could not stage changes in Git: {e}")
-        
-    except FileNotFoundError as e:
-        console.print(f"❌ File not found: {e}")
-        raise click.Abort
-    except Exception as e:
-        console.print(f"❌ Error processing CSV file: {e}")
-        raise click.Abort
-
-
-def _generate_project_biotope_csv(biotope_root: Path) -> None:
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-    csv_path = biotope_root / ".biotope.csv"
-
-    if not datasets_dir.exists():
-        click.echo("❌ No datasets found (.biotope/datasets missing). Add files first with 'biotope add'.")
-        raise click.Abort
-
-    # Column order
-    csv_columns = [
-        "filepath",
-        "name",
-        "description",
-        "data_url",
-        "creator",
-        "creator_email",
-        "project_name",
-        "date_created",
-        "access_restrictions",
-        "encoding_format",
-        "legal_obligations",
-        "collaboration_partner",
-        "publication_date",
-        "version",
-        "license",
-        "citation",
-    ]
-
-    # Simple 1:1 mapping for top-level keys
-    CSV_MAP = {
-        "data_url": "url",
-        "project_name": "cr:projectName",
-        "date_created": "dateCreated",
-        "access_restrictions": "cr:accessRestrictions",
-        "encoding_format": "encodingFormat",
-        "legal_obligations": "cr:legalObligations",
-        "collaboration_partner": "cr:collaborationPartner",
-        "publication_date": "datePublished",
-        "version": "version",
-    }
-
-    rows = []
-
-    for metadata_file in datasets_dir.rglob("*.jsonld"):
-        # Skip .biotope.jsonld files - these are metadata for biotope's own annotation files
-        if metadata_file.name == ".biotope.jsonld":
-            continue
-            
-        try:
-            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-
-        # filepath: prefer distribution[0].contentUrl, else derive from path
-        data_rel_path = ""
-        dist = metadata.get("distribution") or []
-        if isinstance(dist, list) and dist and isinstance(dist[0], dict):
-            data_rel_path = str(dist[0].get("contentUrl") or "")
-        if not data_rel_path:
-            try:
-                data_rel_path = str(metadata_file.relative_to(datasets_dir).with_suffix(""))
-            except Exception:
-                continue
-        
-        # Skip .biotope.csv files - these are biotope's own annotation files
-        if Path(data_rel_path).name == ".biotope.csv":
-            continue
-
-        row = {c: "" for c in csv_columns}
-        row["filepath"] = data_rel_path
-
-        # name/description with simple fallbacks
-        row["name"] = metadata.get("name", Path(data_rel_path).stem)
-        row["description"] = metadata.get("description", f"Dataset for {Path(data_rel_path).name}")
-
-        # creator object (if present)
-        creator = metadata.get("creator") or {}
-        if isinstance(creator, dict):
-            row["creator"] = str(creator.get("name", ""))
-            row["creator_email"] = str(creator.get("email", ""))
-
-        # license with alias fallback
-        row["license"] = str(metadata.get("license") or metadata.get("license_url") or "")
-
-        # fill the rest from the flat map
-        for col, key in CSV_MAP.items():
-            row[col] = row[col] or str(metadata.get(key, "") or "")
-
-        rows.append(row)
-
-    if not rows:
-        click.echo("ℹ️  No metadata files found to export.")
-        return
-
-    try:
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=csv_columns)
-            writer.writeheader()
-            writer.writerows(rows)
-        click.echo(f"📝 Generated annotation CSV: {csv_path}")
-        click.echo("💡 Edit this file, then run 'biotope annotate batch --from-csv' to apply updates")
-    except Exception as e:
-        click.echo(f"⚠️  Warning: Could not generate .biotope.csv: {e}")
-
-
-def _build_metadata_from_csv_row(row: dict, expected_columns: dict, biotope_root: Path, filepath: str) -> dict:
-    """Build metadata dictionary from CSV row."""
-    metadata = {}
-    
-    # Generate default name from filepath if name is not provided
-    default_name = Path(filepath).stem
-    
-    # Load project metadata for defaults
-    try:
-        from biotope.utils import load_project_metadata
-        project_metadata = load_project_metadata(biotope_root)
-    except Exception:
-        project_metadata = {}
-    
-    # Map CSV columns to metadata fields
-    for csv_col, metadata_field in expected_columns.items():
-        if csv_col in row and row[csv_col].strip():
-            value = row[csv_col].strip()
-            
-            # Skip filepath field as it's not metadata
-            if metadata_field == "filepath":
-                continue
-            
-            # Handle nested fields (e.g., "creator.name")
-            if "." in metadata_field:
-                field_parts = metadata_field.split(".")
-                if field_parts[0] == "creator":
-                    if "creator" not in metadata:
-                        metadata["creator"] = {"@type": "Person"}
-                    metadata["creator"][field_parts[1]] = value
-            else:
-                metadata[metadata_field] = value
-
-    # Ensure creator name is captured even if mapping was altered or missing
-    try:
-        creator_val = row.get("creator", "").strip()
-        if creator_val:
-            if "creator" not in metadata or not isinstance(metadata.get("creator"), dict):
-                metadata["creator"] = {"@type": "Person", "name": creator_val}
-            else:
-                metadata["creator"]["name"] = creator_val
-                if "@type" not in metadata["creator"]:
-                    metadata["creator"]["@type"] = "Person"
-    except Exception:
-        pass
-    
-    # Use default name if name not provided
-    if "name" not in metadata or not metadata["name"]:
-        metadata["name"] = default_name
-    
-    # Note: For CSV updates, we only include fields explicitly provided in the CSV.
-    # Default values (dateCreated, creator) are NOT added here since this would
-    # modify existing metadata that didn't have these fields. Defaults should
-    # only be applied during initial file annotation, not CSV-based updates.
-
-    return metadata
-
-
-def _create_annotation_from_metadata(
-    console: Console,
-    filepath: str,
-    metadata: dict,
+    scaffold_path: Path,
+    target,
+    overrides: dict[str, str],
     biotope_root: Path,
-    csv_file_path: str | None = None
-) -> bool | None:
-    """Update existing metadata file for a staged file."""
-    # Find the existing metadata file for this staged file
-    existing_metadata_file = _find_existing_metadata_file(filepath, biotope_root, csv_file_path)
-    
-    if not existing_metadata_file:
-        console.print(f"❌ No existing metadata file found for '{filepath}'. File must be staged first with 'biotope add'.")
-        return None
-    
-    # Load existing metadata
+) -> bool:
+    """Apply one scoped YAML scaffold to one resolved dataset target."""
+    console.print(f"[bold blue]Applying annotations from {scaffold_path}[/]")
+    console.print("─" * 50)
+
     try:
-        with open(existing_metadata_file) as f:
-            existing_metadata = json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        console.print(f"❌ Error reading existing metadata file {existing_metadata_file}: {e}")
-        return None
-    
-    # Update existing metadata with new values from CSV, preserving distribution and other existing data
-    updated_metadata = existing_metadata.copy()
-    
-    # Update fields from CSV metadata, but preserve existing distribution
-    for key, value in metadata.items():
-        if key == "creator":
-            # Build a fresh creator object to avoid in-place mutation of nested dicts
-            if isinstance(value, dict):
-                existing_creator = (
-                    updated_metadata.get("creator")
-                    if isinstance(updated_metadata.get("creator"), dict)
-                    else {}
-                )
-                merged_creator = {"@type": "Person"}
-                # Preserve existing email if new one not provided
-                if isinstance(existing_creator, dict) and existing_creator.get("email"):
-                    merged_creator["email"] = existing_creator.get("email")
-                # Overlay incoming fields (name/email, etc.)
-                for k, v in value.items():
-                    merged_creator[k] = v
-                if "@type" not in merged_creator:
-                    merged_creator["@type"] = "Person"
-                updated_metadata["creator"] = merged_creator
-            elif isinstance(value, str) and value.strip():
-                updated_metadata["creator"] = {"@type": "Person", "name": value.strip()}
-        elif key != "distribution":  # Don't overwrite distribution from existing file
-            updated_metadata[key] = value
-    
-    # Update encoding format in distribution if provided
-    if "encodingFormat" in metadata and "distribution" in updated_metadata:
-        for distribution in updated_metadata["distribution"]:
-            if distribution.get("@type") == "sc:FileObject":
-                distribution["encodingFormat"] = metadata["encodingFormat"]
-    
-    # If nothing changed, skip writing
-    if updated_metadata == existing_metadata:
-        console.print(f"ℹ️ Metadata unchanged")
+        with open(scaffold_path, encoding="utf-8") as handle:
+            scaffold = yaml.safe_load(handle) or {}
+    except yaml.YAMLError as exc:
+        console.print(f"❌ Invalid YAML in {scaffold_path}: {exc}")
+        raise click.Abort from exc
+
+    if not isinstance(scaffold, dict):
+        console.print(f"❌ {SCAFFOLD_FILENAME} must be a mapping with `dataset` and `record_sets`")
+        raise click.Abort
+
+    dataset_block = scaffold.get("dataset")
+    if not isinstance(dataset_block, dict):
+        console.print(f"❌ {SCAFFOLD_FILENAME} must contain a `dataset` block")
+        raise click.Abort
+
+    record_set_blocks = scaffold.get("record_sets") or []
+    if not isinstance(record_set_blocks, list):
+        console.print("❌ `record_sets` must be a list")
+        raise click.Abort
+
+    try:
+        with open(target.metadata_path, encoding="utf-8") as handle:
+            metadata = normalize_metadata_shape(json.load(handle))
+    except ValueError as exc:
+        console.print(f"❌ {exc}")
+        raise click.Abort from exc
+
+    ensure_no_legacy_file_objects(metadata)
+
+    updated_metadata = copy.deepcopy(metadata)
+    dataset_overrides, record_set_overrides = _split_set_overrides(overrides)
+
+    dataset_row = _scaffold_block_to_row(dataset_block)
+    _apply_row_overrides(dataset_row, dataset_overrides)
+    _merge_dataset_row(updated_metadata, dataset_row)
+
+    record_sets_by_id = {
+        record_set.get("@id", ""): record_set
+        for record_set in updated_metadata.get("recordSet", []) or []
+        if record_set.get("@id")
+    }
+
+    for entry in record_set_blocks:
+        if not isinstance(entry, dict):
+            console.print("❌ each `record_sets` entry must be a mapping")
+            raise click.Abort
+        record_set_id = str(entry.get("id") or "").strip()
+        if not record_set_id:
+            console.print("❌ record_set entries must include `id`")
+            raise click.Abort
+        if record_set_id not in record_sets_by_id:
+            console.print(f"❌ Unknown record_set id in scaffold: {record_set_id}")
+            raise click.Abort
+
+        record_row = _scaffold_block_to_row(entry)
+        _apply_row_overrides(record_row, record_set_overrides)
+        _merge_record_set_row(updated_metadata, record_sets_by_id[record_set_id], record_row)
+
+    if updated_metadata == metadata:
+        console.print("ℹ️ Metadata unchanged")
         return False
-    
-    # Write updated metadata back to the same file
-    with open(existing_metadata_file, "w") as f:
-        json.dump(updated_metadata, f, indent=2)
-    
-    console.print(f"✅ Metadata updated")
+
+    with open(target.metadata_path, "w", encoding="utf-8") as handle:
+        json.dump(updated_metadata, handle, indent=2)
+
+    console.print(f"✅ Updated {target.metadata_path.relative_to(biotope_root)}")
     return True
 
 
-def _find_existing_metadata_file(filepath: str, biotope_root: Path, csv_file_path: str | None = None) -> Path | None:
-    """Find the existing metadata file for a given data file path."""
-    # Normalize the filepath from CSV to match what we're looking for
-    target_filepath = filepath.strip()
-    
-    # Search through all metadata files to find one that references this file in its distribution
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-    if datasets_dir.exists():
-        for metadata_file in datasets_dir.rglob("*.jsonld"):
-            try:
-                with open(metadata_file) as f:
-                    metadata = json.load(f)
-                    for distribution in metadata.get("distribution", []):
-                        if distribution.get("@type") == "sc:FileObject":
-                            content_url = distribution.get("contentUrl", "")
-                            # Check if the contentUrl matches the filepath from CSV
-                            if content_url == target_filepath:
-                                return metadata_file
-            except (json.JSONDecodeError, IOError):
-                continue
-    
+def _scaffold_block_to_row(block: dict[str, Any]) -> dict[str, str]:
+    """Convert a YAML scaffold mapping to the flat row dict the mergers expect."""
+    row: dict[str, str] = {}
+    for key, value in block.items():
+        if value is None:
+            row[str(key)] = ""
+        elif isinstance(value, list):
+            row[str(key)] = ";".join(str(v) for v in value)
+        else:
+            row[str(key)] = str(value)
+    return row
+
+
+def _split_set_overrides(overrides: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Split --set overrides by scope."""
+    dataset_overrides: dict[str, str] = {}
+    record_set_overrides: dict[str, str] = {}
+
+    for key, value in overrides.items():
+        if key.startswith("dataset."):
+            dataset_overrides[key.split(".", 1)[1]] = value
+            continue
+        if key.startswith("record_set."):
+            record_set_overrides[key.split(".", 1)[1]] = value
+            continue
+        if key in RECORD_SET_ONLY_SET_FIELDS:
+            record_set_overrides[key] = value
+            continue
+        if key in DATASET_ONLY_SET_FIELDS or key in RECORD_SET_ROW_FIELDS:
+            dataset_overrides[key] = value
+            continue
+        raise click.BadParameter(
+            f"Unknown --set key '{key}'. Use dataset.<field>=... or record_set.<field>=... for explicit scope."
+        )
+
+    return dataset_overrides, record_set_overrides
+
+
+def _apply_row_overrides(row: dict[str, str], overrides: dict[str, str]) -> None:
+    """Apply one set of overrides to a parsed CSV row."""
+    for key, value in overrides.items():
+        row[key] = value
+
+
+def _merge_dataset_row(metadata: dict[str, Any], row: dict[str, str]) -> None:
+    """Merge one scope=dataset CSV row into metadata."""
+    for row_key, metadata_key in DATASET_ROW_FIELDS.items():
+        value = (row.get(row_key) or "").strip()
+        if value:
+            metadata[metadata_key] = value
+
+    creator_name = (row.get("creator") or "").strip()
+    creator_email = (row.get("creator_email") or "").strip()
+    if creator_name or creator_email:
+        creator = metadata.get("creator") if isinstance(metadata.get("creator"), dict) else {"@type": "Person"}
+        creator["@type"] = "Person"
+        if creator_name:
+            creator["name"] = creator_name
+        if creator_email:
+            creator["email"] = creator_email
+        metadata["creator"] = creator
+
+    keywords = (row.get("keywords") or "").strip()
+    if keywords:
+        metadata["keywords"] = [part.strip() for part in keywords.split(";") if part.strip()]
+
+
+def _merge_record_set_row(
+    metadata: dict[str, Any],
+    record_set: dict[str, Any],
+    row: dict[str, str],
+) -> None:
+    """Merge one scope=record_set CSV row into a matching record set."""
+    for field_name in RECORD_SET_ROW_FIELDS:
+        value = (row.get(field_name) or "").strip()
+        if value:
+            record_set[field_name] = value
+
+    encoding_format = (row.get("encoding_format") or "").strip()
+    if encoding_format:
+        source_id = _record_set_source_id(record_set)
+        if source_id:
+            for distribution in metadata.get("distribution", []) or []:
+                if distribution.get("@id") == source_id:
+                    distribution["encodingFormat"] = encoding_format
+                    break
+
+
+def _record_set_source_id(record_set: dict[str, Any]) -> str | None:
+    """Return the backing distribution id for a record set, when present."""
+    for field in record_set.get("field", []) or []:
+        source = field.get("source") or {}
+        for key in ("fileSet", "fileObject"):
+            value = source.get(key)
+            if isinstance(value, dict) and value.get("@id"):
+                return value["@id"]
+            if isinstance(value, str) and value:
+                return value
     return None
 
 
@@ -1797,31 +1368,24 @@ def get_staged_files(biotope_root: Path) -> list:
     """Get list of staged files from Git."""
     import json
     import subprocess
+
     staged_files = []
-    
+
     try:
         # Get the git root directory to understand relative paths
         git_root_result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "rev-parse", "--show-toplevel"], cwd=biotope_root, capture_output=True, text=True, check=True
         )
         git_root = Path(git_root_result.stdout.strip())
-        
+
         # Calculate the relative path from git root to biotope root
         biotope_relative_to_git = biotope_root.relative_to(git_root)
-        
+
         # Get staged files from Git
         result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "diff", "--cached", "--name-only"], cwd=biotope_root, capture_output=True, text=True, check=True
         )
-        
+
         for file_path in result.stdout.splitlines():
             # Handle both cases: biotope project at git root and in subdirectory
             if biotope_relative_to_git == Path("."):
@@ -1833,27 +1397,29 @@ def get_staged_files(biotope_root: Path) -> list:
                 expected_prefix = f"{biotope_relative_to_git}/.biotope/datasets/"
                 if file_path.startswith(str(biotope_relative_to_git) + "/"):
                     # Strip the biotope relative path to get the path relative to biotope root
-                    metadata_file_path = file_path[len(str(biotope_relative_to_git)) + 1:]
+                    metadata_file_path = file_path[len(str(biotope_relative_to_git)) + 1 :]
                 else:
                     continue
-            
+
             if file_path.startswith(expected_prefix) and file_path.endswith(".jsonld"):
                 # Read the metadata file to get file information
                 metadata_file = biotope_root / metadata_file_path
                 try:
                     with open(metadata_file) as f:
-                        metadata = json.load(f)
+                        metadata = normalize_metadata_shape(json.load(f))
                         for distribution in metadata.get("distribution", []):
-                            if distribution.get("@type") == "sc:FileObject":
-                                staged_files.append({
-                                    "file_path": distribution.get("contentUrl"),
-                                    "sha256": distribution.get("sha256"),
-                                    "size": distribution.get("contentSize")
-                                })
+                            if distribution.get("@type") == FILE_OBJECT_TYPE:
+                                staged_files.append(
+                                    {
+                                        "file_path": distribution.get("contentUrl"),
+                                        "sha256": distribution.get("sha256"),
+                                        "size": distribution.get("contentSize"),
+                                    }
+                                )
                 except (json.JSONDecodeError, KeyError):
                     continue
-                    
+
     except subprocess.CalledProcessError:
         pass
-    
+
     return staged_files

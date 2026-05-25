@@ -1,0 +1,1674 @@
+"""Guided wizard backing ``biotope map``.
+
+Rich-based, deterministic, manual-first. The wizard never auto-picks a record
+set or fields; it enumerates options, validates, and previews after every
+confirmed edit. Autosaves to the mapping file so sessions are interruptible.
+
+Intent capture is folded directly into the wizard so users can also
+add/remove ``required_entities`` / ``required_relations`` from the same flow.
+Missing entity references encountered during relation editing trigger inline
+entity creation so the session needs only one pass.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import click
+import yaml
+from pydantic import ValidationError
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Confirm, IntPrompt, Prompt
+from rich.table import Table
+
+from biotope.croissant.acquisition import infer_datasets_location
+from biotope.croissant.mapping import (
+    DatasetInspection,
+    Mapping,
+    inspect_dataset,
+    preview_mapping,
+    render_inspection_text,
+    to_snake_case,
+)
+from biotope.croissant.mapping.defaults import intent_comment, unresolved_scaffold
+from biotope.croissant.mapping.render import (
+    build_inspector_appendix,
+    render_mapping_with_appendix,
+)
+from biotope.croissant.spec import CroissantDatasetModel, FieldKind
+from biotope.metadata import STATUS_RAW, get_status
+from biotope.project_model import Project, find_project
+
+
+console = Console()
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> None:
+    """Dispatch to slot-first or per-mapping flow based on args.
+
+    With no ``croissant_arg`` or ``mapping_arg``, the wizard runs the
+    project-wide slot-first loop: intent is the entry point, slots are the
+    primary navigation, datasets are picked per-slot. Passing a croissant or
+    mapping path drops directly into the per-mapping editor (today's flow).
+    """
+    project_path, project = _resolve_project()
+
+    if croissant_arg is not None or mapping_arg is not None:
+        croissant_path, mapping_path = _resolve_targets(croissant_arg, mapping_arg, project_path)
+        _run_per_mapping(project_path, project, croissant_path, mapping_path)
+        return
+
+    project_root = _project_root_from(project_path)
+    has_intent = bool(project.required_entities or project.required_relations)
+    has_croissants = bool(_all_croissants(project_root))
+    has_mappings = bool(sorted((project_root / "mappings").glob("*.mapping.yaml")))
+
+    # Truly empty project — show guidance and bail, same as before the refactor.
+    if not has_intent and not has_croissants and not has_mappings:
+        _show_empty_state(project_root)
+        raise click.Abort
+
+    # Have data but no intent — offer to capture it so slot-first has anchors.
+    if not has_intent:
+        try:
+            if Confirm.ask("No entities or relations declared yet. Capture intent now?", default=True):
+                project = _intent_capture(project_path, project)
+                has_intent = bool(project.required_entities or project.required_relations)
+        except (KeyboardInterrupt, click.Abort):
+            console.print("\n[yellow]↩ Skipped intent capture.[/yellow]")
+
+    if not has_intent:
+        # Still no intent (declined or aborted) — fall back to the per-mapping
+        # picker so the user can resume / start a single mapping directly.
+        try:
+            croissant_arg = _pick_existing_resource(project_root)
+        except click.Abort:
+            return
+        croissant_path, mapping_path = _resolve_targets(croissant_arg, None, project_path)
+        _run_per_mapping(project_path, project, croissant_path, mapping_path)
+        return
+
+    _slot_first_loop(project_path, project_root)
+
+
+def _run_per_mapping(
+    project_path: Path,
+    project: Project,
+    croissant_path: Path,
+    mapping_path: Path,
+) -> None:
+    """Set up state for one croissant and run the per-mapping editor loop."""
+    from biotope.commands.map import _load_croissant  # avoid circular import at module load
+
+    dataset = _load_croissant(str(croissant_path))
+    datasets_location = infer_datasets_location(croissant_path)
+    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+
+    draft = _load_or_init_draft(mapping_path, croissant_path, project)
+    _autosave(mapping_path, draft, dataset, datasets_location, project)
+
+    console.print(
+        Panel(
+            f"[bold]Project:[/bold] {project.name}\n"
+            f"[bold]Croissant:[/bold] {croissant_path}\n"
+            f"[bold]Mapping:[/bold] {mapping_path}\n"
+            "[dim]Tip: Ctrl+C cancels the current step (or quits at the main menu).[/dim]",
+            title="biotope map",
+            border_style="cyan",
+        )
+    )
+
+    if not (project.required_entities or project.required_relations):
+        try:
+            if Confirm.ask("No entities or relations declared yet. Capture intent now?", default=True):
+                project = _intent_capture(project_path, project)
+                draft = _sync_slots_from_intent(draft, project)
+                _autosave(mapping_path, draft, dataset, datasets_location, project)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]↩ Skipped intent capture.[/yellow]")
+
+    _main_loop(
+        project_path=project_path,
+        project=project,
+        mapping_path=mapping_path,
+        croissant_path=croissant_path,
+        dataset=dataset,
+        datasets_location=datasets_location,
+        inspection=inspection,
+        draft=draft,
+    )
+
+
+def _project_root_from(project_path: Path) -> Path:
+    """Return the project root directory for a ``project.yaml`` path."""
+    return project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
+
+
+# ---------------------------------------------------------------------------
+# Setup helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_project() -> tuple[Path, Project]:
+    project_path = find_project()
+    if project_path is None:
+        console.print("❌ No project.yaml found. Run `biotope init <name>` first.")
+        raise click.Abort
+    return project_path, Project.load(project_path)
+
+
+def _resolve_targets(
+    croissant_arg: str | None,
+    mapping_arg: Path | None,
+    project_path: Path,
+) -> tuple[Path, Path]:
+    """Resolve (croissant_path, mapping_path) for the per-mapping editor.
+
+    Callers always provide at least one of ``croissant_arg`` / ``mapping_arg``;
+    the slot-first flow is entered when both are absent, so this never picks a
+    croissant on its own.
+    """
+    project_root = _project_root_from(project_path)
+    mappings_dir = project_root / "mappings"
+    mappings_dir.mkdir(parents=True, exist_ok=True)
+
+    if mapping_arg is not None:
+        mapping_path = mapping_arg
+        if not mapping_path.exists() and croissant_arg is None:
+            console.print(f"❌ Mapping file not found: {mapping_path}")
+            raise click.Abort
+        if mapping_path.exists():
+            data = yaml.safe_load(mapping_path.read_text()) or {}
+            croissant_str = croissant_arg or data.get("croissant")
+            if croissant_str is None:
+                console.print("❌ Mapping file is missing the `croissant:` key.")
+                raise click.Abort
+            return Path(croissant_str), mapping_path
+
+    assert croissant_arg is not None, "_resolve_targets requires croissant or mapping arg"
+    croissant_path = Path(croissant_arg).resolve()
+    mapping_path = mapping_arg or (mappings_dir / f"{_mapping_stem(croissant_path)}.mapping.yaml")
+    return croissant_path, mapping_path
+
+
+def _pick_existing_resource(project_root: Path) -> str:
+    """Per-mapping picker: pick a mapping file to resume or a mappable croissant
+    to start a new mapping. Raw datasets are listed as a hidden-count footer,
+    not as actionable choices — they have no schema biotope can bind against.
+    """
+    mappable = _mappable_croissants(project_root)
+    raw = _raw_croissants(project_root)
+    mappings = sorted((project_root / "mappings").glob("*.mapping.yaml"))
+
+    if not mappable and not mappings:
+        console.print(
+            "[yellow]No mappable datasets or existing mappings in this project.[/yellow]\n"
+            "[dim]Raw datasets need a structured derivative (CSV, etc.) before a mapping can bind to them.[/dim]"
+        )
+        raise click.Abort
+    if len(mappable) == 1 and not mappings:
+        return str(mappable[0])
+
+    items: list[tuple[str, str, str]] = []
+    for p in mappings:
+        items.append(("mapping", str(p), "resume mapping"))
+    for p in mappable:
+        try:
+            rel = p.relative_to(project_root)
+        except ValueError:
+            rel = p
+        items.append(("croissant", str(p), f"new mapping for {rel}"))
+
+    table = Table(title="What do you want to do?", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Action")
+    table.add_column("Path", style="dim")
+    for i, (_, path, label) in enumerate(items, start=1):
+        table.add_row(str(i), label, path)
+    console.print(table)
+
+    if raw:
+        rel_raw = []
+        for p in raw:
+            try:
+                rel_raw.append(str(p.relative_to(project_root)))
+            except ValueError:
+                rel_raw.append(str(p))
+        console.print(f"[dim]{len(raw)} raw dataset(s) hidden (no schema to map yet): " f"{', '.join(rel_raw)}[/dim]")
+
+    idx = IntPrompt.ask("Selection", default=1)
+    kind, path, _ = items[max(1, min(idx, len(items))) - 1]
+    if kind == "mapping":
+        data = yaml.safe_load(Path(path).read_text()) or {}
+        return data.get("croissant", path)
+    return path
+
+
+def _all_croissants(project_root: Path) -> list[Path]:
+    from biotope.commands.map import discover_croissants  # avoid circular import
+
+    croissants = discover_croissants(project_root)
+    croissants += sorted(project_root.glob("*.croissant.json"))
+    return croissants
+
+
+def _croissant_status(croissant_path: Path) -> str:
+    """Read ``biotope:status`` from a croissant manifest; return ``STATUS_RAW``
+    on any read failure so unreadable manifests don't masquerade as mappable.
+    """
+    try:
+        data = json.loads(croissant_path.read_text())
+    except (OSError, ValueError):
+        return STATUS_RAW
+    return get_status(data)
+
+
+def _mappable_croissants(project_root: Path) -> list[Path]:
+    """Croissants that have a schema biotope can map (status ≠ raw)."""
+    return [p for p in _all_croissants(project_root) if _croissant_status(p) != STATUS_RAW]
+
+
+def _raw_croissants(project_root: Path) -> list[Path]:
+    return [p for p in _all_croissants(project_root) if _croissant_status(p) == STATUS_RAW]
+
+
+def _show_empty_state(project_root: Path) -> None:
+    """Help text when neither data nor a mapping exists yet."""
+    console.print(
+        Panel(
+            "No datasets have been ingested and no mapping exists yet.\n\n"
+            "[bold cyan]Add data first:[/bold cyan]\n"
+            "   biotope add <data_path> --license ... --creator ...\n"
+            "   biotope map                # re-run; pick the dataset to map\n\n"
+            "Once data is added, the per-directory Croissant JSON-LD lands at\n"
+            "[cyan].biotope/datasets/<same-rel-path>.jsonld[/cyan]. You can also pass the\n"
+            "data directory directly: [bold]biotope map -c <data_dir>[/bold].\n\n"
+            "[dim]Capturing intent before data is supported but secondary:\n"
+            "  biotope map --entity gene --entity disease --relation gene_in_disease\n"
+            "Authoring per-dataset mappings without the data on hand tends to\n"
+            "produce slot resolutions that don't match real fields.[/dim]",
+            title=f"biotope map — empty project ({project_root.name})",
+            border_style="yellow",
+        )
+    )
+
+
+def _mapping_stem(path: Path) -> str:
+    name = path.name
+    for suffix in (".croissant.json", ".jsonld", ".json", ".yaml", ".yml"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+# ---------------------------------------------------------------------------
+# Slot-first loop: project-wide navigation anchored on declared intent
+# ---------------------------------------------------------------------------
+
+
+def _slot_first_loop(project_path: Path, project_root: Path) -> None:
+    """Project-wide menu: slots are the primary axis, datasets are per-slot.
+
+    Each iteration re-reads ``project.yaml`` and all ``mappings/*.mapping.yaml``
+    so inline edits (intent capture, new bindings created from a sub-flow) are
+    reflected immediately.
+    """
+    while True:
+        project = Project.load(project_path)
+        slot_state = _collect_slot_state(project_root, project)
+        _render_slot_table(slot_state, project)
+        try:
+            choice = _slot_menu_choice(slot_state)
+        except KeyboardInterrupt:
+            console.print("\n💾 [cyan]biotope map[/cyan] exited.")
+            return
+        if choice == "quit":
+            console.print("💾 [cyan]biotope map[/cyan] exited.")
+            return
+        try:
+            if choice == "intent":
+                _intent_capture(project_path, project)
+            elif choice == "view":
+                _view_data_browser(project_root)
+            elif choice.startswith("slot:"):
+                _, kind, key = choice.split(":", 2)
+                _resolve_slot(project_path, project_root, kind, key, slot_state)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]↩ Cancelled — back to the slot menu.[/yellow]")
+            continue
+
+
+def _collect_slot_state(
+    project_root: Path,
+    project: Project,
+) -> dict[str, dict[str, list[Path]]]:
+    """Aggregate per-slot bindings across all mapping files in the project.
+
+    Returns ``{slot_code: {"resolved": [paths], "partial": [paths]}}``.
+    ``slot_code`` is ``entity:<snake>`` or ``relation:<snake>``. A slot is
+    "partial" when it exists in a mapping file but ``_entity_is_resolved`` /
+    ``_relation_is_resolved`` is False.
+    """
+    state: dict[str, dict[str, list[Path]]] = {}
+    for raw in project.required_entities:
+        state[f"entity:{to_snake_case(raw)}"] = {"resolved": [], "partial": []}
+    for raw in project.required_relations:
+        state[f"relation:{to_snake_case(raw)}"] = {"resolved": [], "partial": []}
+
+    mappings_dir = project_root / "mappings"
+    if not mappings_dir.is_dir():
+        return state
+
+    for mapping_path in sorted(mappings_dir.glob("*.mapping.yaml")):
+        try:
+            data = yaml.safe_load(mapping_path.read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        for key, val in (data.get("entities") or {}).items():
+            code = f"entity:{key}"
+            if code not in state:
+                continue
+            bucket = "resolved" if _entity_is_resolved(val or {}) else "partial"
+            state[code][bucket].append(mapping_path)
+        for key, val in (data.get("relations") or {}).items():
+            code = f"relation:{key}"
+            if code not in state:
+                continue
+            bucket = "resolved" if _relation_is_resolved(val or {}) else "partial"
+            state[code][bucket].append(mapping_path)
+    return state
+
+
+def _render_slot_table(
+    slot_state: dict[str, dict[str, list[Path]]],
+    project: Project,
+) -> None:
+    resolved_count = sum(1 for buckets in slot_state.values() if buckets["resolved"])
+    total = len(slot_state)
+    title = f"Declared slots — {resolved_count}/{total} resolved (project-wide)"
+    table = Table(title=title, show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("", width=2)
+    table.add_column("Kind", style="dim", width=8)
+    table.add_column("Name")
+    table.add_column("Bound in", style="dim")
+    for i, (code, buckets) in enumerate(slot_state.items(), start=1):
+        kind, key = code.split(":", 1)
+        resolved = buckets["resolved"]
+        partial = buckets["partial"]
+        if resolved:
+            icon = "[green]✓[/green]"
+        elif partial:
+            icon = "[yellow]◐[/yellow]"
+        else:
+            icon = "○"
+        bindings: list[str] = []
+        for p in resolved:
+            bindings.append(p.stem.replace(".mapping", ""))
+        for p in partial:
+            bindings.append(f"{p.stem.replace('.mapping', '')} [yellow](partial)[/yellow]")
+        table.add_row(str(i), icon, kind, key, ", ".join(bindings) or "—")
+    console.print(table)
+    console.print(f"[dim]Purpose:[/dim] {project.purpose or '[dim](not set)[/dim]'}")
+    if resolved_count == total and total > 0:
+        console.print("[green]All slots resolved. Run `biotope build` to generate the BioCypher project.[/green]")
+
+
+def _slot_menu_choice(slot_state: dict[str, dict[str, list[Path]]]) -> str:
+    """Render the slot-first menu and return a choice code."""
+    slot_codes = list(slot_state.keys())
+    actions = [
+        ("view", r"\[v] view data — browse croissant record sets and sample rows"),
+        ("intent", r"\[i] edit intent (entities / relations / purpose)"),
+        ("quit", r"\[q] save and quit"),
+    ]
+    console.print("[dim]Enter a slot number to bind it, or one of:[/dim]")
+    for _, label in actions:
+        console.print(f"  {label}")
+
+    default = next(
+        (str(i) for i, code in enumerate(slot_codes, start=1) if not slot_state[code]["resolved"]),
+        "q",
+    )
+    while True:
+        raw = Prompt.ask("Selection", default=default).strip().lower()
+        for code, _ in actions:
+            if raw == code or raw == code[0]:
+                return code
+        try:
+            idx = int(raw)
+        except ValueError:
+            console.print("[yellow]Enter a slot number or one of v/i/q.[/yellow]")
+            continue
+        if 1 <= idx <= len(slot_codes):
+            return f"slot:{slot_codes[idx - 1]}"
+        console.print(f"[yellow]No slot #{idx}.[/yellow]")
+
+
+def _resolve_slot(
+    project_path: Path,
+    project_root: Path,
+    kind: str,
+    key: str,
+    slot_state: dict[str, dict[str, list[Path]]],
+) -> None:
+    """Bind one declared slot to a croissant by dropping into the slot editor.
+
+    Lists non-raw croissants ranked by field-name overlap with the slot key,
+    annotates each with its existing binding status for this slot, then loads
+    the chosen croissant's mapping draft and invokes the per-slot editor.
+    """
+    slot_code = f"{kind}:{key}"
+    existing_resolved = slot_state.get(slot_code, {}).get("resolved", [])
+    existing_partial = slot_state.get(slot_code, {}).get("partial", [])
+
+    candidates = _mappable_croissants(project_root)
+    if not candidates:
+        console.print(
+            "[yellow]No mappable croissants in this project yet.[/yellow]\n"
+            "[dim]Add data with `biotope add` and re-run.[/dim]"
+        )
+        return
+
+    from biotope.commands.map import _load_croissant  # avoid circular import
+
+    rows: list[tuple[Path, int, str, str]] = []
+    tokens = _slot_tokens(key)
+    for croissant_path in candidates:
+        try:
+            dataset = _load_croissant(str(croissant_path))
+        except Exception:  # noqa: BLE001
+            continue
+        inspection = inspect_dataset(dataset, datasets_location=None, preview_rows=0)
+        score = _score_inspection_for_tokens(inspection, tokens)
+        hint = _inspection_hint(inspection)
+        try:
+            rel = str(croissant_path.relative_to(project_root))
+        except ValueError:
+            rel = str(croissant_path)
+        rows.append((croissant_path, score, rel, hint))
+
+    rows.sort(key=lambda r: (-r[1], r[2]))
+
+    table = Table(title=f"Pick a croissant to bind {kind} `{key}`", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Croissant", style="cyan")
+    table.add_column("Record sets / fields", style="dim")
+    table.add_column("Match", style="dim", width=8)
+    table.add_column("Binding", style="dim")
+    for i, (path, score, rel, hint) in enumerate(rows, start=1):
+        mapping_stem = _mapping_stem(path)
+        binding = ""
+        if any(p.stem.replace(".mapping", "") == mapping_stem for p in existing_resolved):
+            binding = "[green]resolved[/green]"
+        elif any(p.stem.replace(".mapping", "") == mapping_stem for p in existing_partial):
+            binding = "[yellow]partial[/yellow]"
+        match = f"{score}" if score else ""
+        table.add_row(str(i), rel, hint, match, binding)
+    console.print(table)
+    console.print("[dim]Enter a number, or press Enter to cancel.[/dim]")
+
+    raw = Prompt.ask("Croissant", default="")
+    if not raw.strip():
+        return
+    try:
+        idx = int(raw)
+    except ValueError:
+        return
+    if not 1 <= idx <= len(rows):
+        return
+
+    croissant_path, _, _, _ = rows[idx - 1]
+    project = Project.load(project_path)
+    mappings_dir = project_root / "mappings"
+    mappings_dir.mkdir(parents=True, exist_ok=True)
+    mapping_path = mappings_dir / f"{_mapping_stem(croissant_path)}.mapping.yaml"
+
+    dataset = _load_croissant(str(croissant_path))
+    datasets_location = infer_datasets_location(croissant_path)
+    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    draft = _load_or_init_draft(mapping_path, croissant_path, project)
+    draft = _sync_slots_from_intent(draft, project)
+
+    if kind == "entity":
+        _edit_entity_slot(draft, key, inspection)
+    elif kind == "relation":
+        _edit_relation_slot(draft, key, inspection, project_path, project)
+    _autosave(mapping_path, draft, dataset, datasets_location, Project.load(project_path))
+    console.print(f"💾 Saved [cyan]{mapping_path}[/cyan]")
+
+
+def _slot_tokens(slot_key: str) -> list[str]:
+    """Tokens for matching a slot key against field names (lowercased, ≥2 chars)."""
+    return [t for t in slot_key.split("_") if len(t) >= 2]
+
+
+def _score_inspection_for_tokens(inspection: DatasetInspection, tokens: list[str]) -> int:
+    """Count token occurrences as substrings in record-set + field names."""
+    if not tokens:
+        return 0
+    score = 0
+    for rs in inspection.record_sets:
+        haystack = rs.name.lower() + " " + " ".join(f.name.lower() for f in rs.fields)
+        for tok in tokens:
+            if tok in haystack:
+                score += 1
+    return score
+
+
+def _inspection_hint(inspection: DatasetInspection, max_fields: int = 4) -> str:
+    parts: list[str] = []
+    for rs in inspection.record_sets:
+        field_names = [f.name for f in rs.fields[:max_fields]]
+        suffix = " …" if len(rs.fields) > max_fields else ""
+        parts.append(f"{rs.name} ({', '.join(field_names)}{suffix})")
+    return "; ".join(parts) or "[no record sets]"
+
+
+def _view_data_browser(project_root: Path) -> None:
+    """Browse non-raw croissants: list them, then dump the inspector view for one."""
+    candidates = _mappable_croissants(project_root)
+    if not candidates:
+        console.print(
+            "[yellow]No mappable croissants to inspect.[/yellow]\n"
+            "[dim]Raw datasets (markdown, opaque blobs) have no schema yet.[/dim]"
+        )
+        return
+
+    table = Table(title="Mappable datasets", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Croissant", style="cyan")
+    for i, p in enumerate(candidates, start=1):
+        try:
+            rel = str(p.relative_to(project_root))
+        except ValueError:
+            rel = str(p)
+        table.add_row(str(i), rel)
+    console.print(table)
+    console.print("[dim]Enter a number to inspect, or press Enter to return.[/dim]")
+
+    raw = Prompt.ask("Dataset", default="")
+    if not raw.strip():
+        return
+    try:
+        idx = int(raw)
+    except ValueError:
+        return
+    if not 1 <= idx <= len(candidates):
+        return
+
+    from biotope.commands.map import _load_croissant  # avoid circular import
+
+    croissant_path = candidates[idx - 1]
+    dataset = _load_croissant(str(croissant_path))
+    datasets_location = infer_datasets_location(croissant_path)
+    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    console.print(Panel(render_inspection_text(inspection), title=str(croissant_path), border_style="cyan"))
+    Prompt.ask("[dim]Press Enter to return to the slot menu[/dim]", default="")
+
+
+# ---------------------------------------------------------------------------
+# Draft state — partial mapping as a mutable dict
+# ---------------------------------------------------------------------------
+
+
+def _load_or_init_draft(
+    mapping_path: Path,
+    croissant_path: Path,
+    project: Project,
+) -> dict[str, Any]:
+    """Load an existing draft mapping or initialise a fresh unresolved scaffold."""
+    if mapping_path.exists():
+        data = yaml.safe_load(mapping_path.read_text()) or {}
+        if "nodes" in data or "edges" in data:
+            console.print(
+                Panel(
+                    "[red]Legacy `nodes`/`edges` mapping detected.[/red]\n"
+                    "This wizard does not migrate legacy mappings. "
+                    "Delete the file and re-run `biotope map` to start fresh.",
+                    title=str(mapping_path),
+                    border_style="red",
+                )
+            )
+            raise click.Abort
+        data.setdefault("croissant", str(croissant_path))
+        return data
+
+    scaffold = unresolved_scaffold(
+        str(croissant_path),
+        required_entities=project.required_entities,
+        required_relations=project.required_relations,
+    )
+    return _mapping_to_dict(scaffold)
+
+
+def _sync_slots_from_intent(draft: dict[str, Any], project: Project) -> dict[str, Any]:
+    """Two-way sync the draft against ``project.yaml``'s required lists.
+
+    * Add a slot for any entity/relation newly declared in intent.
+    * Drop slots whose intent has been removed.
+    * Cascade: when an entity is removed, *clear* (but don't delete) any
+      relation endpoints that referenced it — the relation slot stays
+      because intent still wants it, just marked unresolved so the user
+      sees it needs re-pointing.
+    """
+    target_entity_keys = {to_snake_case(raw) for raw in project.required_entities}
+    target_relation_keys = {to_snake_case(raw) for raw in project.required_relations}
+
+    entities = dict(draft.get("entities") or {})
+    relations = dict(draft.get("relations") or {})
+
+    removed_entities = [k for k in entities if k not in target_entity_keys]
+    for key in removed_entities:
+        del entities[key]
+        console.print(f"[yellow]Removed entity slot:[/yellow] {key}")
+
+    for key in [k for k in relations if k not in target_relation_keys]:
+        del relations[key]
+        console.print(f"[yellow]Removed relation slot:[/yellow] {key}")
+
+    # Cascade: clear endpoints of *surviving* relations that pointed at a removed entity.
+    for rel_key, rel in relations.items():
+        cleared: list[str] = []
+        for side in ("source", "target"):
+            side_data = rel.get(side) or {}
+            if side_data.get("entity") in removed_entities:
+                rel.pop(side, None)
+                cleared.append(side)
+        if cleared:
+            console.print(
+                f"[yellow]Cleared {', '.join(cleared)} of relation[/yellow] {rel_key} — "
+                "referenced a removed entity; re-point it from the menu."
+            )
+
+    for key in target_entity_keys:
+        entities.setdefault(key, {"scan": "row"})
+    for key in target_relation_keys:
+        relations.setdefault(key, {"scan": "row"})
+
+    draft["entities"] = entities
+    draft["relations"] = relations
+    return draft
+
+
+def _mapping_to_dict(mapping: Mapping) -> dict[str, Any]:
+    """Serialise a Mapping to a plain dict matching the YAML shape."""
+    from biotope.croissant.mapping.render import _mapping_payload  # noqa: PLC0415
+
+    return _mapping_payload(mapping)
+
+
+def _validate_draft(draft: dict[str, Any]) -> Mapping | None:
+    try:
+        return Mapping.model_validate(draft)
+    except ValidationError as exc:
+        console.print(f"[yellow]ℹ partial state ({exc.error_count()} issue(s))[/yellow]")
+        return None
+
+
+def _autosave(
+    mapping_path: Path,
+    draft: dict[str, Any],
+    dataset: CroissantDatasetModel,
+    datasets_location: Path | None,
+    project: Project,
+) -> None:
+    mapping = _validate_draft(draft)
+    if mapping is None:
+        # Save raw YAML even if validation fails so the user can fix manually.
+        mapping_path.write_text(yaml.safe_dump(draft, sort_keys=False))
+        return
+    appendix = build_inspector_appendix(
+        dataset,
+        datasets_location=datasets_location,
+        preview_rows=3,
+    )
+    comment = intent_comment(
+        required_entities=project.required_entities,
+        required_relations=project.required_relations,
+        purpose=project.purpose,
+    )
+    mapping_path.write_text(render_mapping_with_appendix(mapping, appendix=appendix, intent_comment=comment))
+    if mapping.is_resolved():
+        _flip_referenced_dataset_to_mapped(mapping)
+
+
+def _show_status_on_exit(draft: dict[str, Any], croissant_path: Path) -> None:
+    """At wizard save/exit, show the dataset's current biotope:status and,
+    when relevant, the explicit CLI command the user would run to mark it.
+
+    The autosave path already flips a resolved mapping's dataset to
+    ``mapped``; this panel makes that transition visible (or shows the
+    manual form when it didn't fire). Same primitive an agent would use,
+    surfaced at the natural exit point for the human."""
+    import json
+
+    from biotope.metadata import (
+        STATUS_MAPPED,
+        STATUS_PROCESSED,
+        STATUS_RAW,
+        get_status,
+    )
+
+    if not croissant_path.is_file():
+        return
+    try:
+        with open(croissant_path) as handle:
+            metadata = json.load(handle)
+    except (OSError, ValueError):
+        return
+    status = get_status(metadata)
+
+    # Use the manifest's rel id relative to the project's .biotope/datasets/
+    # for the CLI hint when we can derive it; fall back to the croissant
+    # filename otherwise.
+    try:
+        datasets_dir = _datasets_dir_from(croissant_path)
+        dataset_id = str(croissant_path.relative_to(datasets_dir).with_suffix(""))
+    except (ValueError, AttributeError):
+        dataset_id = croissant_path.stem
+
+    colour = {
+        STATUS_RAW: "yellow",
+        STATUS_PROCESSED: "cyan",
+        STATUS_MAPPED: "green",
+    }.get(status, "white")
+
+    lines = [f"[bold]biotope:status[/bold] is [{colour}]{status}[/{colour}]"]
+    if status == STATUS_MAPPED:
+        lines.append("[dim](auto-flipped on resolved save — nothing else to do)[/dim]")
+    elif status == STATUS_PROCESSED:
+        lines.append(f"[dim]To mark it mapped manually:[/dim] " f"[bold]biotope mark {dataset_id} mapped[/bold]")
+    elif status == STATUS_RAW:
+        lines.append(
+            "[dim]Unusual — the dataset is still raw, yet you're authoring a mapping for it.[/dim]\n"
+            f"[dim]If it has a complete record set, mark it processed:[/dim] "
+            f"[bold]biotope mark {dataset_id} processed[/bold]"
+        )
+    console.print(Panel("\n".join(lines), title="Pipeline state", border_style=colour, expand=False))
+
+
+def _datasets_dir_from(croissant_path: Path) -> Path:
+    """Walk upward to find the ``.biotope/datasets/`` ancestor of a manifest."""
+    for parent in croissant_path.parents:
+        if parent.name == "datasets" and parent.parent.name == ".biotope":
+            return parent
+    raise ValueError(f"{croissant_path} is not under .biotope/datasets/")
+
+
+def _flip_referenced_dataset_to_mapped(mapping: Mapping) -> None:
+    """Once a wizard save produces a fully resolved mapping, the dataset it
+    references becomes ``mapped`` — configured AND ingestable. Up-edge only:
+    if the user later de-resolves, the status stays where it is; explicit
+    ``biotope mark`` rolls it back."""
+    from biotope.metadata import STATUS_MAPPED, update_manifest_status
+
+    croissant_path = Path(mapping.croissant)
+    if not croissant_path.is_absolute():
+        croissant_path = (Path.cwd() / croissant_path).resolve()
+    update_manifest_status(croissant_path, STATUS_MAPPED)
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+
+def _main_loop(
+    *,
+    project_path: Path,
+    project: Project,
+    mapping_path: Path,
+    croissant_path: Path,
+    dataset: CroissantDatasetModel,
+    datasets_location: Path | None,
+    inspection: DatasetInspection,
+    draft: dict[str, Any],
+) -> None:
+    project_root = _project_root_from(project_path)
+    while True:
+        _render_progress(project_path, project_root, project)
+        try:
+            choice = _menu_choice(draft)
+        except KeyboardInterrupt:
+            console.print(f"\n💾 Saved to [cyan]{mapping_path}[/cyan]")
+            _show_status_on_exit(draft, croissant_path)
+            return
+        if choice == "quit":
+            console.print(f"💾 Saved to [cyan]{mapping_path}[/cyan]")
+            _show_status_on_exit(draft, croissant_path)
+            return
+        try:
+            if choice == "intent":
+                project = _intent_capture(project_path, project)
+                draft = _sync_slots_from_intent(draft, project)
+            elif choice == "preview":
+                _show_preview(draft, dataset, datasets_location)
+                continue
+            elif choice.startswith("entity:"):
+                key = choice.split(":", 1)[1]
+                _edit_entity_slot(draft, key, inspection)
+            elif choice.startswith("relation:"):
+                key = choice.split(":", 1)[1]
+                _edit_relation_slot(draft, key, inspection, project_path, project)
+                # Relation editing may have added new entities; re-sync from project.
+                project = Project.load(project_path)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]↩ Cancelled — back to menu (no changes saved for this step).[/yellow]")
+            continue
+        _autosave(mapping_path, draft, dataset, datasets_location, project)
+
+
+def _render_progress(project_path: Path, project_root: Path, project: Project) -> None:
+    """Render progress against project-wide slot state.
+
+    A slot is satisfied if *any* mapping file in the project resolves it —
+    BioCypher dedups across emissions at build time, so a slot bound in one
+    croissant counts even when editing another. This mirrors what the
+    slot-first menu shows.
+    """
+    state = _collect_slot_state(project_root, project)
+    entity_codes = [c for c in state if c.startswith("entity:")]
+    relation_codes = [c for c in state if c.startswith("relation:")]
+    resolved_e = sum(1 for c in entity_codes if state[c]["resolved"])
+    resolved_r = sum(1 for c in relation_codes if state[c]["resolved"])
+    console.print(
+        Panel(
+            f"[bold]Entities:[/bold] {resolved_e}/{len(entity_codes)} resolved (project-wide)\n"
+            f"[bold]Relations:[/bold] {resolved_r}/{len(relation_codes)} resolved (project-wide)\n"
+            f"[bold]Purpose:[/bold] {project.purpose or '[dim](not set)[/dim]'}",
+            title="Mapping progress",
+            border_style="blue",
+            expand=False,
+        )
+    )
+
+
+def _menu_choice(draft: dict[str, Any]) -> str:
+    entities = draft.get("entities") or {}
+    relations = draft.get("relations") or {}
+
+    items: list[tuple[str, str]] = []
+    for key, val in entities.items():
+        status = "✓" if _entity_is_resolved(val) else "○"
+        items.append((f"entity:{key}", f"{status} entity   {key}"))
+    for key, val in relations.items():
+        status = "✓" if _relation_is_resolved(val) else "○"
+        items.append((f"relation:{key}", f"{status} relation {key}"))
+    items.append(("intent", "↳ open intent capture (add/remove entities and relations)"))
+    items.append(("preview", "↳ show preview"))
+    items.append(("quit", "↳ save and quit"))
+
+    table = Table(title="Choose a slot", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Action")
+    for i, (_, label) in enumerate(items, start=1):
+        table.add_row(str(i), label)
+    console.print(table)
+
+    default = next(
+        (
+            i
+            for i, (code, _) in enumerate(items, start=1)
+            if code.startswith(("entity:", "relation:")) and not _slot_resolved(draft, code)
+        ),
+        len(items),
+    )
+    idx = IntPrompt.ask("Selection", default=default)
+    return items[max(1, min(idx, len(items))) - 1][0]
+
+
+def _slot_resolved(draft: dict[str, Any], code: str) -> bool:
+    kind, key = code.split(":", 1)
+    if kind == "entity":
+        return _entity_is_resolved((draft.get("entities") or {}).get(key, {}))
+    if kind == "relation":
+        return _relation_is_resolved((draft.get("relations") or {}).get(key, {}))
+    return True
+
+
+def _entity_is_resolved(entity: dict[str, Any]) -> bool:
+    return bool(entity.get("record_set")) and bool(entity.get("id"))
+
+
+def _relation_is_resolved(relation: dict[str, Any]) -> bool:
+    return (
+        bool(relation.get("record_set"))
+        and bool(relation.get("source"))
+        and bool((relation.get("source") or {}).get("entity"))
+        and bool(relation.get("target"))
+        and bool((relation.get("target") or {}).get("entity"))
+    )
+
+
+# ---------------------------------------------------------------------------
+# Intent capture
+# ---------------------------------------------------------------------------
+
+
+def _intent_capture(project_path: Path, project: Project) -> Project:
+    console.print(
+        Panel(
+            f"purpose: {project.purpose or '(empty)'}\n"
+            f"entities: {', '.join(project.required_entities) or '(none)'}\n"
+            f"relations: {', '.join(project.required_relations) or '(none)'}",
+            title="Current intent",
+            border_style="cyan",
+            expand=False,
+        )
+    )
+    data = project.model_dump()
+
+    # Purpose: bare prompt; empty input keeps the current value.
+    console.print("[dim]Enter a new purpose, or press Enter to keep the current one.[/dim]")
+    purpose_input = Prompt.ask("Purpose", default="", show_default=False)
+    if purpose_input.strip():
+        data["purpose"] = purpose_input.strip()
+
+    # Entities: bare prompt loop; empty input ends the loop.
+    console.print("[dim]Add entities one per line. Press Enter on an empty line to stop.[/dim]")
+    while True:
+        name = Prompt.ask("Entity name", default="", show_default=False).strip()
+        if not name:
+            break
+        data["required_entities"].append(name)
+
+    if data["required_entities"] and Confirm.ask("Remove an entity?", default=False):
+        idx = _pick_index("Entity to remove", data["required_entities"])
+        if idx is not None:
+            removed = data["required_entities"].pop(idx)
+            console.print(f"[yellow]Removed entity:[/yellow] {removed}")
+
+    # Relations: same flat loop.
+    console.print("[dim]Add relations one per line. Press Enter on an empty line to stop.[/dim]")
+    while True:
+        name = Prompt.ask("Relation name", default="", show_default=False).strip()
+        if not name:
+            break
+        data["required_relations"].append(name)
+
+    if data["required_relations"] and Confirm.ask("Remove a relation?", default=False):
+        idx = _pick_index("Relation to remove", data["required_relations"])
+        if idx is not None:
+            removed = data["required_relations"].pop(idx)
+            console.print(f"[yellow]Removed relation:[/yellow] {removed}")
+
+    updated = Project.model_validate(data)
+    updated.dump(project_path)
+    console.print(f"💾 Saved intent to [cyan]{project_path}[/cyan]")
+    return updated
+
+
+def _pick_index(prompt: str, items: list[str]) -> int | None:
+    if not items:
+        return None
+    for i, item in enumerate(items, start=1):
+        console.print(f"  {i}. {item}")
+    raw = Prompt.ask(prompt, default="")
+    if not raw.strip():
+        return None
+    try:
+        idx = int(raw) - 1
+    except ValueError:
+        return None
+    if 0 <= idx < len(items):
+        return idx
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Entity slot editor
+# ---------------------------------------------------------------------------
+
+
+def _edit_entity_slot(
+    draft: dict[str, Any],
+    key: str,
+    inspection: DatasetInspection,
+) -> None:
+    entities = dict(draft.get("entities") or {})
+    entity = dict(entities.get(key) or {})
+    console.print(Panel(f"Editing entity: [bold]{key}[/bold]", border_style="cyan", expand=False))
+
+    rs_name = _pick_record_set(inspection, entity.get("record_set"))
+    if rs_name is None:
+        return
+    entity["record_set"] = rs_name
+    rs = inspection.by_name(rs_name)
+    assert rs is not None
+
+    old_scan = entity.get("scan")
+    entity["scan"] = _pick_scan(rs, old_scan)
+    _apply_scan_change(entity, old_scan, entity["scan"])
+
+    namespace = entity.get("namespace")
+    new_namespace = Prompt.ask(
+        "Namespace (optional, e.g. 'ensembl', 'mondo'; blank to derive)",
+        default=namespace or "",
+    )
+    if new_namespace.strip():
+        entity["namespace"] = new_namespace.strip()
+    elif "namespace" in entity:
+        del entity["namespace"]
+
+    entity["id"] = _pick_id_selector(
+        rs,
+        draft.get("ids") or {},
+        existing=entity.get("id"),
+        propose_promotion=True,
+        draft=draft,
+        scan=entity.get("scan"),
+    )
+
+    entity["properties"] = _pick_properties(rs, entity.get("properties") or {})
+
+    entities[key] = entity
+    draft["entities"] = entities
+
+
+def _axes_from_scan(scan: Any) -> dict[str, str]:
+    """Return ``{axis_name: array_field}`` for any scan shape (or empty for row scans)."""
+    if not isinstance(scan, dict):
+        return {}
+    explode = scan.get("explode")
+    if isinstance(explode, str):
+        return {"item": explode}
+    if isinstance(explode, dict):
+        return dict(explode)
+    return {}
+
+
+def _id_field_options(rs, axes: dict[str, str]) -> list[str]:
+    """Field options for an id picker. Prepends `$<axis>` / `$<axis>.<sub>` per axis."""
+    options: list[str] = []
+    for axis_name, array_field in axes.items():
+        axis_info = next((f for f in rs.fields if f.name == array_field), None)
+        options.append(f"${axis_name}")
+        if axis_info and axis_info.sub_fields:
+            options.extend(f"${axis_name}.{sub}" for sub in axis_info.sub_fields)
+    options.extend(f.name for f in rs.fields)
+    return options
+
+
+def _pick_record_set(inspection: DatasetInspection, current: str | None) -> str | None:
+    if not inspection.record_sets:
+        console.print("[red]No record sets in this Croissant file.[/red]")
+        return None
+    table = Table(title="Record sets", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Name", style="cyan")
+    table.add_column("Description")
+    table.add_column("Fields", style="dim")
+    for i, rs in enumerate(inspection.record_sets, start=1):
+        marker = " *" if rs.name == current else ""
+        table.add_row(
+            f"{i}{marker}",
+            rs.name,
+            (rs.description or "")[:60],
+            ", ".join(f.name for f in rs.fields[:6]) + (" …" if len(rs.fields) > 6 else ""),
+        )
+    console.print(table)
+    default_idx = next(
+        (i for i, rs in enumerate(inspection.record_sets, start=1) if rs.name == current),
+        1,
+    )
+    idx = IntPrompt.ask("Pick record set", default=default_idx)
+    return inspection.record_sets[max(1, min(idx, len(inspection.record_sets))) - 1].name
+
+
+def _pick_scan(rs, current: Any) -> Any:
+    """Prompt for a scan: row, single-axis explode, or multi-axis (cross-product) explode."""
+    if not rs.array_fields:
+        return "row"
+    current_explode = current.get("explode") if isinstance(current, dict) and "explode" in current else None
+    current_is_multi = isinstance(current_explode, dict)
+    console.print(f"[dim]Explode-eligible arrays:[/dim] {', '.join(rs.array_fields)}")
+
+    # When the slot already has a multi-axis explode, offer in-place editing so
+    # the user can rename / drop / add axes without replaying the full prompt
+    # flow (which would also clobber the rename detection downstream).
+    if current_is_multi:
+        action = Prompt.ask(
+            "Scan kind — (k)eep current, edit a(x)es, (r)ow, (e)xplode one, (m)ulti-axis replace",
+            choices=["k", "x", "r", "e", "m"],
+            default="k",
+        )
+        if action == "k":
+            return current
+        if action == "x":
+            return {"explode": _edit_axes(rs, dict(current_explode))}
+        choice = action  # fall through to the standard handlers below
+    else:
+        choice = Prompt.ask(
+            "Scan kind — (r)ow, (e)xplode one array, or (m)ulti-axis cross-product",
+            choices=["r", "e", "m"],
+            default="e" if current_explode else "r",
+        )
+
+    if choice == "r":
+        return "row"
+    if choice == "e":
+        field = _pick_from(
+            rs.array_fields,
+            prompt="Explode field",
+            default=current_explode if isinstance(current_explode, str) else rs.array_fields[0],
+        )
+        return {"explode": field}
+    # Multi-axis (replace): collect axis_name → field pairs from scratch.
+    console.print(
+        "[dim]Multi-axis explode: each row is expanded to the Cartesian product "
+        "of the listed arrays. Selectors reference each axis as `$<axis>` "
+        "(e.g. `$drug`, `$target`).[/dim]"
+    )
+    axes: dict[str, str] = {}
+    used_fields: set[str] = set()
+    remaining = [f for f in rs.array_fields if f not in used_fields]
+    seed_axes = [(_default_axis_name(remaining[0]), remaining[0])]
+    for axis_name, field in seed_axes:
+        axes[axis_name] = field
+        used_fields.add(field)
+    # Allow editing the seeded list.
+    while True:
+        console.print("Current axes: " + (", ".join(f"${k}={v}" for k, v in axes.items()) or "(none)"))
+        if not Confirm.ask("Add another axis?", default=False):
+            break
+        remaining = [f for f in rs.array_fields if f not in used_fields]
+        if not remaining:
+            console.print("[yellow]All array fields already in use.[/yellow]")
+            break
+        field = _pick_from(remaining, prompt="Axis field", default=remaining[0])
+        axis_name = _prompt_axis_name(field, axes)
+        axes[axis_name] = field
+        used_fields.add(field)
+    if len(axes) == 1:
+        only_field = next(iter(axes.values()))
+        return {"explode": only_field}
+    return {"explode": axes}
+
+
+def _prompt_axis_name(field: str, existing_axes: dict[str, str]) -> str:
+    """Ask for an axis name, suggesting one derived from the field and avoiding collisions."""
+    suggested = _default_axis_name(field)
+    i = 2
+    candidate = suggested
+    while candidate in existing_axes:
+        candidate = f"{suggested}_{i}"
+        i += 1
+    return Prompt.ask("Axis name (used as `$<name>` in selectors)", default=candidate)
+
+
+def _edit_axes(rs, axes: dict[str, str]) -> dict[str, str] | str:
+    """Rename / drop / add axes in place. Returns the new explode value.
+
+    Collapses to a single-field string explode when only one axis remains, so
+    the output shape mirrors what ``_pick_scan`` produces.
+    """
+    while True:
+        console.print("Axes:")
+        for i, (name, field) in enumerate(axes.items(), start=1):
+            console.print(f"  {i}. ${name} = {field}")
+        actions = []
+        if axes:
+            actions.extend(["rename", "drop"])
+        actions.extend(["add", "done"])
+        action = Prompt.ask("Axis action", choices=actions, default="done")
+        if action == "done":
+            if not axes:
+                console.print("[red]Need at least one axis. Add one or pick a different scan kind.[/red]")
+                continue
+            break
+        if action == "rename":
+            idx = IntPrompt.ask("Axis # to rename", default=1)
+            names = list(axes)
+            if not 1 <= idx <= len(names):
+                continue
+            old_name = names[idx - 1]
+            new_name = Prompt.ask(f"New name for ${old_name}", default=old_name).strip()
+            if not new_name or new_name == old_name:
+                continue
+            if new_name in axes:
+                console.print(f"[yellow]Axis ${new_name} already exists.[/yellow]")
+                continue
+            # Preserve insertion order while renaming the key.
+            axes = {(new_name if k == old_name else k): v for k, v in axes.items()}
+        elif action == "drop":
+            idx = IntPrompt.ask("Axis # to drop", default=1)
+            names = list(axes)
+            if not 1 <= idx <= len(names):
+                continue
+            dropped = names[idx - 1]
+            del axes[dropped]
+            console.print(f"[yellow]Dropped axis[/yellow] ${dropped}")
+        elif action == "add":
+            used_fields = set(axes.values())
+            remaining = [f for f in rs.array_fields if f not in used_fields]
+            if not remaining:
+                console.print("[yellow]All array fields already in use.[/yellow]")
+                continue
+            field = _pick_from(remaining, prompt="Axis field", default=remaining[0])
+            new_name = _prompt_axis_name(field, axes)
+            axes[new_name] = field
+    if len(axes) == 1:
+        return next(iter(axes.values()))
+    return axes
+
+
+def _diff_axes(old_scan: Any, new_scan: Any) -> tuple[dict[str, str], list[str]]:
+    """Compare two scans' axes; return ``(renames, removed)``.
+
+    Renames are detected by pairing axis names that disappeared with names
+    that appeared and share the same field. Anything left unmatched is treated
+    as removed so callers can clear stale ``$<axis>`` selectors.
+    """
+    old = _axes_from_scan(old_scan)
+    new = _axes_from_scan(new_scan)
+    common = set(old) & set(new)
+    disappeared = [n for n in old if n not in common]
+    appeared = [n for n in new if n not in common]
+    renames: dict[str, str] = {}
+    matched: set[str] = set()
+    for new_name in appeared:
+        for old_name in disappeared:
+            if old_name in matched:
+                continue
+            if old[old_name] == new[new_name]:
+                renames[old_name] = new_name
+                matched.add(old_name)
+                break
+    removed = [n for n in disappeared if n not in matched]
+    return renames, removed
+
+
+def _rewrite_selector(
+    sel: Any,
+    renames: dict[str, str],
+    removed: list[str],
+) -> tuple[Any, bool]:
+    """Apply axis renames to a selector value; return ``(new_value, has_removed_ref)``.
+
+    Walks dicts, lists, and string leaves. A single pass over the original
+    strings means swaps (e.g. drug↔target) are atomic.
+    """
+    has_removed = False
+
+    def walk(v: Any) -> Any:
+        nonlocal has_removed
+        if isinstance(v, str) and v.startswith("$"):
+            rest = v[1:]
+            if "." in rest:
+                axis, sub = rest.split(".", 1)
+                suffix = "." + sub
+            else:
+                axis, suffix = rest, ""
+            if axis in removed:
+                has_removed = True
+                return v
+            if axis in renames:
+                return f"${renames[axis]}{suffix}"
+            return v
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        return v
+
+    return walk(sel), has_removed
+
+
+def _rewrite_axis_refs(
+    slot: dict[str, Any],
+    renames: dict[str, str],
+    removed: list[str],
+) -> list[str]:
+    """Mutate a slot so its selectors track the renamed / removed axes.
+
+    Selectors that reference a removed axis are dropped entirely (mirroring
+    the entity-removal cascade in ``_sync_slots_from_intent``) so the user
+    is forced to re-point them. Returns the list of cleared selector labels
+    for user-facing messaging.
+    """
+    if not renames and not removed:
+        return []
+    cleared: list[str] = []
+    for key in ("id", "source", "target"):
+        if key in slot:
+            new_val, dropped = _rewrite_selector(slot[key], renames, removed)
+            if dropped:
+                del slot[key]
+                cleared.append(key)
+            else:
+                slot[key] = new_val
+    props = slot.get("properties") or {}
+    kept: dict[str, Any] = {}
+    for name, val in props.items():
+        new_val, dropped = _rewrite_selector(val, renames, removed)
+        if dropped:
+            cleared.append(f"properties.{name}")
+        else:
+            kept[name] = new_val
+    if props:
+        slot["properties"] = kept
+    return cleared
+
+
+def _apply_scan_change(slot: dict[str, Any], old_scan: Any, new_scan: Any) -> None:
+    """Diff axes between ``old_scan`` and ``new_scan`` and rewrite selectors in ``slot``."""
+    renames, removed = _diff_axes(old_scan, new_scan)
+    if not renames and not removed:
+        return
+    cleared = _rewrite_axis_refs(slot, renames, removed)
+    if renames:
+        console.print(
+            "[yellow]Renamed axis references:[/yellow] " + ", ".join(f"${o}→${n}" for o, n in renames.items())
+        )
+    if cleared:
+        console.print("[yellow]Cleared selectors referencing removed axes:[/yellow] " + ", ".join(cleared))
+
+
+def _default_axis_name(field_name: str) -> str:
+    """Derive a default axis name from a field name (drop common suffixes like 'Ids')."""
+    name = field_name
+    for suffix in ("Ids", "_ids", "Names", "_names", "List", "_list"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    # Coerce to snake_case
+    out = ""
+    for i, ch in enumerate(name):
+        if ch.isupper() and i > 0 and out and out[-1] != "_":
+            out += "_"
+        out += ch.lower()
+    return out or field_name.lower()
+
+
+def _pick_id_selector(
+    rs,
+    ids: dict[str, Any],
+    *,
+    existing: Any,
+    propose_promotion: bool,
+    draft: dict[str, Any],
+    scan: Any = None,
+) -> dict[str, Any]:
+    """Prompt for an id selector.
+
+    When ``scan`` is ``{explode: <field>}``, this offers ``$item`` /
+    ``$item.<sub_field>`` choices instead of raw field names. If the user
+    picks the exploded field by name, it is auto-rewritten to ``$item``.
+    """
+    axes = _axes_from_scan(scan)
+    while True:
+        actions = ["field"]
+        if ids:
+            actions.append("use")
+        actions.append("hash_id")
+        actions.append("promote")
+        console.print("[dim]ID selector actions:[/dim] " f"{', '.join(actions)} (current: {existing or 'unset'})")
+        if axes:
+            axis_list = ", ".join(f"${k} (={v})" for k, v in axes.items())
+            console.print(
+                f"[dim]This slot uses explode axes: {axis_list}. "
+                "The id should resolve to one of these elements or a subfield, "
+                "not the raw array.[/dim]"
+            )
+        action = Prompt.ask(
+            "Choose action",
+            choices=actions,
+            default="use" if isinstance(existing, dict) and existing.get("use") else "field",
+        )
+        if action == "field":
+            options = _id_field_options(rs, axes)
+            field = _pick_from(
+                options,
+                prompt="ID field",
+                default=(existing or {}).get("field"),
+            )
+            # If the user picked an exploded array field by raw name, rewrite to `$<axis>`.
+            for axis_name, array_field in axes.items():
+                if field == array_field:
+                    console.print(f"[yellow]→ rewriting `{field}` to `${axis_name}` (explode-aware).[/yellow]")
+                    field = f"${axis_name}"
+                    break
+            transform = Prompt.ask("Transform", choices=["passthrough", "as_curie"], default="passthrough")
+            selector: dict[str, Any] = {"field": field}
+            if transform != "passthrough":
+                selector["transform"] = transform
+                prefix = Prompt.ask("CURIE prefix (e.g. 'ensembl')")
+                selector["args"] = {"prefix": prefix}
+            return selector
+        if action == "use":
+            name = _pick_from(list(ids), prompt="Named id to reuse")
+            return {"use": name}
+        if action == "hash_id":
+            fields_str = Prompt.ask(
+                "Fields to hash (comma-separated)",
+                default=",".join((existing or {}).get("args", {}).get("fields", [rs.fields[0].name])),
+            )
+            fields = [f.strip() for f in fields_str.split(",") if f.strip()]
+            prefix = Prompt.ask("Hash prefix (optional)", default="")
+            args: dict[str, Any] = {"fields": fields}
+            if prefix.strip():
+                args["prefix"] = prefix.strip()
+            return {"transform": "hash_id", "args": args}
+        if action == "promote":
+            sub = _pick_id_selector(
+                rs,
+                ids,
+                existing=existing,
+                propose_promotion=False,
+                draft=draft,
+                scan=scan,
+            )
+            name = Prompt.ask("Name for the new reusable id (snake_case)")
+            ids_block = dict(draft.get("ids") or {})
+            ids_block[to_snake_case(name)] = sub
+            draft["ids"] = ids_block
+            return {"use": to_snake_case(name)}
+
+
+def _pick_properties(rs, current: dict[str, Any]) -> dict[str, Any]:
+    field_names = [f.name for f in rs.fields if f.kind != FieldKind.STRUCT.value]
+    if not field_names:
+        return current
+    selected_names = list(current.keys())
+    console.print(f"[dim]Available fields:[/dim] {', '.join(field_names)}")
+    raw = Prompt.ask(
+        "Property fields (comma-separated; blank to keep current)",
+        default=",".join(selected_names),
+    )
+    chosen = [n.strip() for n in raw.split(",") if n.strip()]
+    out: dict[str, Any] = {}
+    for name in chosen:
+        if name in current:
+            out[name] = current[name]
+        else:
+            out[name] = name  # string shorthand: field name
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Relation slot editor
+# ---------------------------------------------------------------------------
+
+
+def _edit_relation_slot(
+    draft: dict[str, Any],
+    key: str,
+    inspection: DatasetInspection,
+    project_path: Path,
+    project: Project,
+) -> None:
+    relations = dict(draft.get("relations") or {})
+    relation = dict(relations.get(key) or {})
+    console.print(Panel(f"Editing relation: [bold]{key}[/bold]", border_style="cyan", expand=False))
+
+    rs_name = _pick_record_set(inspection, relation.get("record_set"))
+    if rs_name is None:
+        return
+    relation["record_set"] = rs_name
+    rs = inspection.by_name(rs_name)
+    assert rs is not None
+
+    old_scan = relation.get("scan")
+    relation["scan"] = _pick_scan(rs, old_scan)
+    _apply_scan_change(relation, old_scan, relation["scan"])
+
+    for side in ("source", "target"):
+        relation[side] = _pick_endpoint(
+            rs,
+            draft,
+            project_path,
+            project,
+            existing=relation.get(side),
+            label=side,
+            inspection=inspection,
+            scan=relation.get("scan"),
+        )
+        # Re-read project after potential inline entity creation
+        project = Project.load(project_path)
+
+    relation["properties"] = _pick_properties(rs, relation.get("properties") or {})
+
+    relations[key] = relation
+    draft["relations"] = relations
+
+
+def _pick_endpoint(
+    rs,
+    draft: dict[str, Any],
+    project_path: Path,
+    project: Project,
+    *,
+    existing: Any,
+    label: str,
+    inspection: DatasetInspection,
+    scan: Any = None,
+) -> dict[str, Any]:
+    entities = list((draft.get("entities") or {}).keys())
+    console.print(f"[dim]Endpoint `{label}` — pick referenced entity[/dim]")
+    if entities:
+        for i, key in enumerate(entities, start=1):
+            console.print(f"  {i}. {key}")
+        console.print(f"  {len(entities) + 1}. + create a new entity inline")
+    else:
+        console.print("  (no entities defined yet — you'll create one now)")
+        entities = []
+    pick = IntPrompt.ask(
+        "Selection",
+        default=(
+            entities.index((existing or {}).get("entity")) + 1
+            if (existing or {}).get("entity") in entities
+            else len(entities) + 1
+        ),
+    )
+    if pick == len(entities) + 1 or not entities:
+        new_key = _create_entity_inline(draft, inspection, project_path, project)
+        entity_ref = new_key
+    else:
+        entity_ref = entities[max(1, min(pick, len(entities))) - 1]
+
+    # Now pick the selector for the value on this row.
+    selector = _pick_id_selector(
+        rs,
+        draft.get("ids") or {},
+        existing=existing,
+        propose_promotion=True,
+        draft=draft,
+        scan=scan,
+    )
+    selector["entity"] = entity_ref
+    # Reorder so `entity` comes first in the YAML.
+    return {"entity": entity_ref, **{k: v for k, v in selector.items() if k != "entity"}}
+
+
+def _create_entity_inline(
+    draft: dict[str, Any],
+    inspection: DatasetInspection,
+    project_path: Path,
+    project: Project,
+) -> str:
+    raw_name = Prompt.ask("New entity name (free text)")
+    key = to_snake_case(raw_name)
+    console.print(f"[green]Creating entity[/green] [bold]{key}[/bold]")
+
+    # Append to project.yaml:required_entities (preserving original phrasing)
+    if raw_name not in project.required_entities:
+        data = project.model_dump()
+        data["required_entities"] = list(data["required_entities"]) + [raw_name]
+        Project.model_validate(data).dump(project_path)
+
+    entities = dict(draft.get("entities") or {})
+    entities.setdefault(key, {"scan": "row"})
+    draft["entities"] = entities
+
+    # Drop into the entity editor for the new key
+    _edit_entity_slot(draft, key, inspection)
+    return key
+
+
+# ---------------------------------------------------------------------------
+# Preview
+# ---------------------------------------------------------------------------
+
+
+def _show_preview(
+    draft: dict[str, Any],
+    dataset: CroissantDatasetModel,
+    datasets_location: Path | None,
+) -> None:
+    mapping = _validate_draft(draft)
+    if mapping is None:
+        console.print("[yellow]Cannot preview: draft is not valid YAML for a mapping.[/yellow]")
+        return
+    result = preview_mapping(mapping, dataset, datasets_location=datasets_location, sample_rows=3)
+    if result.unresolved_slots:
+        console.print(
+            Panel(
+                "\n".join(f"○ {s}" for s in result.unresolved_slots),
+                title="Unresolved",
+                border_style="yellow",
+                expand=False,
+            )
+        )
+    if result.findings:
+        lines = [f"[{f.severity}] {f.path}: {f.message}" for f in result.findings]
+        console.print(Panel("\n".join(lines), title="Validation", border_style="red", expand=False))
+    if result.entities or result.relations:
+        sections: list[str] = []
+        for e in result.entities:
+            sections.append(
+                f"entity {e.key}: schema_term={e.schema_term}, namespace={e.namespace}, "
+                f"properties={list(e.properties)}"
+            )
+        for r in result.relations:
+            sections.append(f"relation {r.key}: {r.source} -> {r.target}, properties={list(r.properties)}")
+        console.print(Panel("\n".join(sections), title="Projected schema", border_style="cyan", expand=False))
+
+
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
+
+
+def _pick_from(
+    options: list[str],
+    *,
+    prompt: str,
+    default: str | None = None,
+) -> str:
+    if not options:
+        return Prompt.ask(prompt, default=default or "")
+    for i, name in enumerate(options, start=1):
+        marker = " *" if name == default else ""
+        console.print(f"  {i}{marker}. {name}")
+    default_idx = options.index(default) + 1 if default in options else 1
+    idx = IntPrompt.ask(prompt, default=default_idx)
+    return options[max(1, min(idx, len(options))) - 1]

@@ -5,12 +5,13 @@ from click.testing import CliRunner
 from biotope.cli import cli
 
 
-def test_cli_build():
-    """Test build command."""
+def test_cli_build_requires_project():
+    """`biotope build` fails cleanly when run outside a project."""
     runner = CliRunner()
-    result = runner.invoke(cli, ["build"])
-    assert result.exit_code == 0
-    assert "Building knowledge representation..." in result.output
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ["build"])
+    assert result.exit_code != 0
+    assert "No project.yaml" in result.output
 
 
 def test_cli_version():

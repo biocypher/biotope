@@ -1,20 +1,22 @@
 site_name: Biotope
 
+# Mirror of the `nav:` block in mkdocs.yml. Consumed by the monorepo
+# documentation aggregator, which composes the org-wide nav from each
+# submodule's local nav. Keep this file in sync with mkdocs.yml.
+
 nav:
   - Home: index.md
-  - Git Integration: git-integration.md
-  - Git Integration for Developers: git-integration-dev.md
+  - Tutorial: tutorial.md
+  - Architecture: architecture.md
+  - Project Context: project-context.md
   - Cluster Compliance: cluster-compliance.md
-  - API Docs:
-      - Add: api-docs/add.md
-      - Annotate: api-docs/annotate.md
-      - Build: api-docs/build.md
-      - Chat: api-docs/chat.md
+  - Commands:
       - Init: api-docs/init.md
-      - Read: api-docs/read.md
-      - View: api-docs/view.md
-  - Learn:
-      - Tutorials: learn/tutorials/index.md
-      - Add Files: learn/tutorials/add-files.md
-      - Get Files: learn/tutorials/get-files.md
-      - Annotate Omics: learn/tutorials/annotate-omics.md
+      - Add: api-docs/add.md
+      - Map: api-docs/map.md
+      - Build: api-docs/build.md
+      - Propose Alignment: api-docs/propose-alignment.md
+      - Propose Mapping (deprecated): api-docs/propose-mapping.md
+      - Annotate: api-docs/annotate.md
+      - Search: api-docs/search.md
+      - Config: api-docs/config.md

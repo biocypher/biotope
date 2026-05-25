@@ -2,8 +2,10 @@
 
 !!! warning "Draft stage"
 
-    Biotope is in draft stage. Functionality may be missing or incomplete.
-    The API is subject to change.
+```
+Biotope is in draft stage. Functionality may be missing or incomplete.
+The API is subject to change.
+```
 
 Search for resources across configured registries.
 
@@ -96,7 +98,7 @@ The command displays results in a formatted table with the following columns:
 - **Identifier**: Unique identifier (GitHub repository for MCP servers, biotoolsID for tools)
 - **Description**: Resource description (truncated if > 100 characters)
 - **Keywords**: Associated keywords/tags
-- **Impact Metrics**: 
+- **Impact Metrics**:
   - **Stars**: GitHub star count (MCP-only searches)
   - **Citations**: Citation count (bio.tools-only searches)
   - **Impact**: GitHub stars for MCP servers, citation counts for bioinformatics tools (combined searches)
@@ -148,16 +150,19 @@ biotope add genomoncology/biomcp
 ## Implementation Details
 
 ### MCP Registry (BioContext)
+
 - Uses BioContext registry (https://biocontext.ai/registry.json)
 - Fetches GitHub star counts for popularity ranking
 - Implements caching with configurable duration (1 hour default)
 
 ### Bioinformatics Tools Registry (bio.tools)
+
 - Uses bio.tools REST API (https://bio.tools/api)
 - Searches across tool names, descriptions, topics, and functions
 - No star counts (bio.tools doesn't provide popularity metrics)
 
 ### Common Features
+
 - Case-insensitive search across name, description, and keywords
 - Rich table formatting for clear output
 - Graceful error handling for network issues
@@ -183,11 +188,12 @@ Results are sorted by score (highest first), then alphabetically by name.
 Star counts are fetched from GitHub's API. Due to rate limiting, you may need to:
 
 1. **Set GitHub Token**: Add `GITHUB_TOKEN` environment variable
-2. **Configure in Project**: Add `github_token` to your `biotope.yaml` config
-3. **Accept Limitations**: Without authentication, star counts may show "—" when rate limited
+1. **Configure in Project**: Add `github_token` to your `biotope.yaml` config
+1. **Accept Limitations**: Without authentication, star counts may show "—" when rate limited
 
 Example configuration:
+
 ```yaml
 # In biotope.yaml
 github_token: "ghp_your_token_here"
-``` 
+```

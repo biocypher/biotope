@@ -12,6 +12,9 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-yaml
+        # mkdocs.yml uses pymdownx `!!python/name:` tags that the safe loader
+        # cannot parse. mkdocs itself validates the file on build.
+        exclude: ^mkdocs\.yml$
       - id: debug-statements
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -32,7 +35,6 @@ repos:
     rev: 0.29.1
     hooks:
       - id: check-github-workflows
-      - id: check-readthedocs
   - repo: https://github.com/executablebooks/mdformat
     rev: 0.7.17
     hooks:

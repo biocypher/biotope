@@ -1,7 +1,6 @@
 """Shared utility functions for biotope commands."""
 
 import hashlib
-import json
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -9,18 +8,21 @@ from typing import Optional
 import click
 
 
-def find_biotope_root() -> Optional[Path]:
+def find_biotope_root(start: Path | None = None) -> Optional[Path]:
     """
     Find the biotope project root directory.
 
-    Searches upward from the current working directory to find a directory
-    containing a .biotope/ subdirectory. Enforces that .git and .biotope 
-    must be in the same directory.
+    Searches upward from ``start`` (default: current working directory) to find
+    a directory containing a .biotope/ subdirectory. Enforces that .git and
+    .biotope must be in the same directory.
+
+    Args:
+        start: Directory to begin the upward search from. Defaults to ``Path.cwd()``.
 
     Returns:
         Path to the biotope project root, or None if not found
     """
-    current = Path.cwd()
+    current = (start if start is not None else Path.cwd()).resolve()
     while current != current.parent:
         if (current / ".biotope").exists():
             if not (current / ".git").exists():
@@ -41,7 +43,7 @@ def is_git_repo(directory: Path) -> bool:
         True if the directory is a Git repository, False otherwise
     """
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["git", "rev-parse", "--git-dir"],
             cwd=directory,
             capture_output=True,
@@ -55,7 +57,7 @@ def is_git_repo(directory: Path) -> bool:
 
 def load_project_metadata(biotope_root: Path) -> dict:
     """Load project-level metadata from biotope configuration for pre-filling annotations."""
-    config_path = biotope_root / ".biotope" / "config" / "biotope.yaml"
+    config_path = biotope_root / ".biotope" / "config.yaml"
     if not config_path.exists():
         return {}
 
@@ -95,19 +97,13 @@ def load_project_metadata(biotope_root: Path) -> dict:
         croissant_metadata["cr:projectName"] = project_metadata["project_name"]
 
     if project_metadata.get("access_restrictions"):
-        croissant_metadata["cr:accessRestrictions"] = project_metadata[
-            "access_restrictions"
-        ]
+        croissant_metadata["cr:accessRestrictions"] = project_metadata["access_restrictions"]
 
     if project_metadata.get("legal_obligations"):
-        croissant_metadata["cr:legalObligations"] = project_metadata[
-            "legal_obligations"
-        ]
+        croissant_metadata["cr:legalObligations"] = project_metadata["legal_obligations"]
 
     if project_metadata.get("collaboration_partner"):
-        croissant_metadata["cr:collaborationPartner"] = project_metadata[
-            "collaboration_partner"
-        ]
+        croissant_metadata["cr:collaborationPartner"] = project_metadata["collaboration_partner"]
 
     return croissant_metadata
 
@@ -122,26 +118,18 @@ def calculate_file_checksum(file_path: Path) -> str:
 
 
 def is_file_tracked(file_path: Path, biotope_root: Path) -> bool:
-    """Check if a file is already tracked in biotope."""
-    # Resolve the file path to absolute path if it's relative
+    """Check if a file is tracked in biotope.
+
+    A file counts as tracked if any manifest under ``.biotope/datasets/`` has
+    either an explicit ``cr:FileObject`` for it or a ``cr:FileSet`` glob that
+    covers it. The latter is the common case after ``biotope add <dir>`` on a
+    directory of structured files.
+    """
+    from biotope.metadata import find_owning_manifest
+
     if not file_path.is_absolute():
         file_path = file_path.resolve()
-
-    # Check datasets directory recursively
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-    for dataset_file in datasets_dir.rglob("*.jsonld"):
-        try:
-            with open(dataset_file) as f:
-                metadata = json.load(f)
-                for distribution in metadata.get("distribution", []):
-                    if distribution.get("contentUrl") == str(
-                        file_path.relative_to(biotope_root)
-                    ):
-                        return True
-        except (json.JSONDecodeError, KeyError):
-            continue
-
-    return False
+    return find_owning_manifest(file_path, biotope_root) is not None
 
 
 def stage_git_changes(biotope_root: Path) -> None:

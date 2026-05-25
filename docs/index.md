@@ -1,178 +1,108 @@
-# Biotope
+# biotope
 
-*CLI integration for BioCypher ecosystem packages*
+CLI for the BioCypher ecosystem. Turns Croissant-described data into a BioCypher knowledge graph; tracks the metadata in a git-like workflow.
 
-!!! info "Biotope is still under development"
+!!! warning "Pre-alpha, developer-facing"
 
-    Biotope is still under development and the API is subject to change.
-    The package is currently only meant for developer use and prototyping.
+```
+APIs, CLI flags, and config-file layouts will change. End-user docs come after the design stabilises.
+```
 
-The *Biotope* CLI integration is our attempt to integrate our open source ecosystem
-packages into an accessible suite for scientific knowledge management. We are
-first approaching the project from a CLI perspective, as this is the most basic
-technology for prototyping automated workflows. We aim to extend this towards
-other user-interfaces, such as web apps, in the future.
+## Quick start: from `init` to a knowledge graph
 
-*Biotope* contains various modules for different tasks, some of which are
-straightfoward applications of existing ecosystem packages, while others
-are prototypes for new features. See more information in the API documentation.
+1. Run `uvx biotope init` or use any other way to make the package available (e.g., `pip install`).
 
-- `biotope init`: Initialize a new project
-- `biotope status/add/commit/log/push/pull`: Manage metadata in a git-like fashion
-- `biotope get`: Download files from a URL and stage them for annotation and version control
-- `biotope search`: Search for MCP servers and other resources across registries
-- `biotope annotate`: Annotate your data with consistent metadata in Croissant ML
-- `biotope check-data`: Perform consistency checks for file integrity
-- `biotope mv`: Move tracked files and update metadata automatically
-- `biotope config`: Manage project configuration and metadata settings
-- `biotope build`: Build a [BioCypher](https://biocypher.org) knowledge representation
-- `biotope chat`: Chat with a project using [BioChatter](https://biochatter.org)
-- `biotope agent`: Plan agentic workflows using [BioChatter](https://biochatter.org)
-- `biotope read`: Extract information from unstructured modalities (BioGather)
-- `biotope view`: Use visual analysis tools to interpret your data and metadata
+1. Enter desired project name (e.g., `my-kg`) and the overall purpose of the KG (e.g.,
+   `Which approved drugs target proteins with relevance in type 2 diabetes?`).
 
-## Git Integration for Metadata Version Control
+1. Enter directory (`cd my-kg`).
 
-Biotope uses a **Git-on-Top** strategy for metadata version control, providing:
+1. Start your coding agent. The `AGENTS.md` file in the directory will onboard it.
+   For more information on the process, read on.
 
-- **Version control** for all metadata changes using Git
-- **Collaboration** through standard Git workflows
-- **Data integrity** through checksum verification
-- **Familiar tooling** - all Git tools work seamlessly
-
-### Core Git-Integrated Commands
-
-- `biotope add`: Stage data files for metadata creation
-- `biotope mv`: Move tracked data files and update metadata
-- `biotope get`: Download remote files and stage them for metadata creation
-- `biotope status`: Show current project status
-- `biotope commit`: Commit metadata changes using Git
-- `biotope log`: View commit history
-- `biotope push/pull`: Share metadata with remote repositories
-- `biotope check-data`: Verify data integrity against checksums
-
-### Basic Workflow
+## Quick start: without coding agent
 
 ```bash
-# Initialize project (with Git, .gitignore, and optional project metadata)
-biotope init
+uv pip install biotope
 
-# Add local data files (creates metadata, ignored by Git by default)
-biotope add data/raw/experiment.csv
+# 1. Scaffold a project.
+biotope init my-kg --purpose "Find approved drugs that target proteins relevant in T2D."
+cd my-kg
 
-# Or add new files at once, recursively
-biotope add -r data
+# 2. Declare what the graph must contain (agent-friendly flags).
+biotope map --entity gene --entity disease --entity drug \
+            --relation gene_associated_with_disease
 
-# Or download and stage remote files (calls `add` once finished)
-biotope get https://example.com/data/experiment.csv
+# 3. Bring in data + its Croissant metadata.
+biotope add data/ot.parquet --license CC-BY-4.0
 
-# Check status (shows metadata changes, not data files)
-biotope status
+# 4. Generate an unresolved mapping scaffold for that Croissant file.
+#    The scaffold has one slot per declared entity/relation plus an inspector
+#    appendix listing record sets, field kinds, and sample rows.
+biotope map scaffold .biotope/datasets/ot.jsonld
 
-# Create metadata for staged files (with project metadata pre-fill)
-biotope annotate interactive --staged
+# 5. Resolve the slots — pick a record set, fields, transforms for each entity
+#    and relation. Two equivalent paths:
+biotope map                   # interactive guided wizard (humans)
+# …or edit mappings/*.mapping.yaml directly and consult:
+biotope map inspect .biotope/datasets/ot.jsonld --json
+biotope map preview --json    # status + projected schema + sample tuples
 
-# Or complete incomplete annotations
-biotope annotate interactive --incomplete
-
-# Commit changes (metadata only, data files excluded via .gitignore)
-biotope commit -m "Add experiment dataset"
-
-# View history
-biotope log --oneline
+# 6. Build a runnable BioCypher project. Strict: rejects unresolved slots.
+biotope build
+biotope view
 ```
 
-**Note**: Data files are automatically excluded from Git tracking via `.gitignore`. Only metadata is version controlled, keeping repositories small and focused.
+All semantic decisions (which record set, which fields, which transforms) are made by the human or copilot agent. biotope only enumerates options, validates, and previews — it never auto-picks a "best" record set.
 
-### Registry Integration
+## Commands
 
-Biotope supports searching and integrating external resources through registry systems:
+### Project lifecycle
 
-- **MCP Servers**: Search and add Model Context Protocol servers from the BioContext registry
-- **Knowledge Graph Components**: Future support for BioCypher ecosystem components
-- **Caching**: Efficient caching of registry data with configurable duration
-- **Configuration**: Registry settings managed through project configuration
+- `biotope init` — scaffold a project (`.biotope/`, `AGENTS.md`, `project.yaml`, `git init`).
 
-#### Basic Registry Workflow
+### Semantic mapping
 
-```bash
-# Search for MCP servers
-biotope search PubMed
+- `biotope map` — bare command. If any intent flag (`--purpose`, `--entity`, `--relation`, `--source`, `--notes`, `--clear-*`, `--show`) is passed, it updates `project.yaml` non-interactively. Otherwise it launches the guided wizard.
+- `biotope map inspect <croissant>` — deterministic field catalogue + sample rows. `--json` for agents.
+- `biotope map scaffold <croissant>` — emit an unresolved mapping scaffold with an inspector comment appendix.
+- `biotope map preview [<mapping>]` — validate a (partial) mapping; show projected BioCypher schema + sample tuples. `--json` for agents.
 
-# Add a specific server to your project
-biotope add genomoncology/biomcp
-```
+### Git-like metadata VCS
 
-### Project-Level Metadata
+- `biotope add` — stage data files; baker enriches the Croissant entry under `.biotope/datasets/`.
+- `biotope mv` — move tracked files; updates metadata paths.
+- `biotope status` — show staged/modified files and validation state.
+- `biotope commit` — commit metadata changes.
+- `biotope log` — show metadata commit history.
+- `biotope push` / `biotope pull` — sync metadata with a remote.
+- `biotope check-data` — verify data files against recorded checksums.
 
-Biotope supports project-level metadata collection during initialization that can be used to pre-fill annotation fields:
+### Knowledge-graph construction
 
-- **Description**: Project description and purpose
-- **URL**: Project homepage or repository
-- **Creator**: Project maintainer information
-- **License**: Data usage license
-- **Citation**: How to cite the project
+- `biotope discover` — rank registered adapters and local Croissant files against `required_entities`.
+- `biotope propose-alignment` — propose cross-mapping `same_node` equivalences.
+- `biotope build` — materialise a runnable BioCypher project from mappings + alignment. Emits `config/schema_config.yaml` (with `namespace` and autogenerated `input_label`) and per-mapping generated Python under `build/generated/<stem>/`.
+- `biotope view` — node/edge counts for the most recent build.
+- `biotope benchmark` — quality/coverage metrics (skeleton in v1).
 
-This metadata is stored in `.biotope/config/biotope.yaml` and automatically pre-fills fields when using `biotope annotate interactive`.
+### Deprecated
 
-### Documentation
+- `biotope describe` — removed; folded into `biotope map` intent flags.
+- `biotope propose-mapping` — deprecated alias for `biotope map scaffold`. The old heuristic ("one RecordSet per node type, FK fields as edges") is gone; the alias now produces an unresolved scaffold for human/agent completion.
 
-- **[Git Integration for Users](git-integration.md)**: Learn how to use biotope's Git integration, leveraging your existing Git knowledge
-- **[Git Integration for Developers](git-integration-dev.md)**: Understand the technical implementation and architecture
-- **[Cluster Compliance](cluster-compliance.md)**: How to enforce and check metadata validation policies across clusters
+### Promises (not feature-complete)
 
-## Metadata annotation using Croissant, short guide
+- `biotope read` — NLP ingestion + health-check entry.
+- `biotope chat` — provider-agnostic conversational interface (biochatter backend ships first).
+- `biotope search` / `biotope get` / `biotope annotate` / `biotope config` — auxiliary surfaces.
 
-The `biotope` package features a metadata annotation assistant using the
-recently introduced
-[Croissant](https://research.google/blog/croissant-a-metadata-format-for-ml-ready-datasets/)
-schema. It is available as the `biotope annotate` module. Usage:
+## Reading order
 
-```
-pip install biotope
-biotope init
-biotope add data  # assuming your data is in data/
-biotope annotate interactive --staged
-biotope commit -m "added datasets"
-```
+1. [Architecture](architecture.md) — modules, data flow, config files.
+1. [Project context](project-context.md) — project layout and `.biotope/` files.
+1. [Commands](api-docs/init.md) — per-command reference, generated from docstrings.
 
-You can also use the `biotope get` command to download files and stage them for annotation and version control:
+## Repo
 
-```
-biotope get https://example.com/data/file.txt
-biotope status
-biotope annotate interactive --staged
-biotope commit -m "Add new dataset from URL"
-```
-
-This will download the file, stage it for annotation, and fit into the same workflow as local files.
-
-**Project Metadata Pre-fill**: If you've set up project-level metadata during `biotope init`, the annotation form will be pre-filled with this information, making the annotation process faster and more consistent.
-
-After creation, `biotope` can also be used to validate the JSON-LD (CAVE: being
-a prototype, biotope does not yet implement all croissant fields):
-
-```
-biotope annotate validate –jsonld <file_name.json>
-```
-
-`biotope` also has the method `biotope annotate create` to create metadata files
-from CLI parameters (no interactive mode) and `biotope annotate load` to load an
-existing record (the use of this is not well-defined yet). Further improvements
-would be the integration of LLMs for the automation of metadata annotations from
-file contents (using the `biochatter` module of `biotope`).
-
-Unit tests to inform about further functions and details can be found at
-https://github.com/biocypher/biotope/blob/main/tests/commands/test_annotate.py
-and https://github.com/biocypher/biotope/blob/main/tests/commands/test_get.py
-
-## Further Reading
-
-- [Annotation Validation and Status Reporting](git-integration.md#annotation-validation-and-status-reporting): How to ensure your datasets are properly annotated and how to configure requirements (user guide).
-- [Developer & Admin Guide: Annotation Validation](git-integration-dev.md#developer--admin-guide-annotation-validation): How to customize, extend, and manage annotation validation (admin/dev guide).
-- [Cluster Compliance](cluster-compliance.md): Cluster-wide enforcement, compliance checking, and best practices.
-
-## Copyright
-
-- Copyright © 2025 BioCypher Team.
-- Free software distributed under the MIT License.
+[github.com/biocypher/biotope](https://github.com/biocypher/biotope) · [discussions](https://github.com/orgs/biocypher/discussions/9)

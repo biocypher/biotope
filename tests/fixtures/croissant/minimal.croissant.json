@@ -1,0 +1,27 @@
+{
+  "@context": {"@vocab": "https://schema.org/"},
+  "@type": "sc:Dataset",
+  "name": "minimal",
+  "description": "Minimal fixture for unit tests.",
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "genes",
+      "name": "genes",
+      "contentUrl": "genes.csv",
+      "encodingFormat": "text/csv"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "genes",
+      "name": "genes",
+      "description": "One gene per row.",
+      "field": [
+        {"name": "ensembl_id", "dataType": "sc:Text"},
+        {"name": "symbol", "dataType": "sc:Text"},
+        {"name": "biotype", "dataType": "sc:Text"}
+      ]
+    }
+  ]
+}

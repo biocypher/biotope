@@ -1,385 +1,149 @@
-"""Test the init command functionality."""
+"""Tests for the scaffold-only `biotope init`."""
 
+from __future__ import annotations
+
+import shutil
+import subprocess
 from pathlib import Path
 
-import click
+import pytest
 import yaml
 from click.testing import CliRunner
 
 from biotope.commands.init import init
+from biotope.project_model import Project
 
 
-@click.group()
-def cli_test():
-    """Test CLI group."""
+def _invoke(runner: CliRunner, *args: str) -> object:
+    return runner.invoke(init, list(args))
 
 
-def test_init_basic():
-    """Test basic initialization with default values."""
+def test_init_default_layout(tmp_path: Path) -> None:
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(
-            init,
-            input="test-project\nn\nn\nn\ny\n",
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-        assert "Biotope established successfully!" in result.output
+    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git")
+    assert result.exit_code == 0, result.output
 
-        # Check directory structure
-        assert Path("config").exists()
-        assert Path("data/raw").exists()
-        assert Path("data/processed").exists()
-        assert Path("schemas").exists()
-        assert Path("outputs").exists()
-        assert Path(".biotope").exists()
-
-        # Check config file
-        with open("config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            assert config["project"]["name"] == "test-project"
-            assert config["project"]["output_format"] == "neo4j"
-            assert config["knowledge_sources"] == []
+    root = tmp_path / "myproj"
+    assert (root / ".biotope" / "datasets").is_dir()
+    assert (root / ".biotope" / "workflows").is_dir()
+    assert (root / "data").is_dir()
+    assert (root / "mappings").is_dir()
+    assert (root / ".biotope" / "config.yaml").is_file()
+    assert (root / ".biotope" / "project.yaml").is_file()
+    assert (root / "AGENTS.md").is_file()
+    assert (root / ".gitignore").is_file()
+    assert (root / "pyproject.toml").is_file()
 
 
-def test_init_with_project_metadata():
-    """Test initialization with project metadata collection."""
+def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None:
+    """The generated pyproject must pin biotope (floor) and biocypher>=0.14."""
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Input: project name, no knowledge graph, no LLM, yes to project metadata
-        # Then provide some metadata values
-        input_data = (
-            "test-project\n"  # project name
-            "n\n"  # no knowledge graph
-            "n\n"  # no LLM
-            "y\n"  # yes to project metadata
-            "Test project description\n"  # description
-            "https://example.com\n"  # URL
-            "test@example.com\n"  # creator
-            "\n"  # accept default license
-            "\n"  # accept default citation
-            "n\n"  # no access restrictions
-            "n\n"  # no legal obligations
-            "n\n"  # no collaboration partner
-            "y\n"  # yes to Git
-        )
+    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
+    assert result.exit_code == 0, result.output
 
-        result = runner.invoke(
-            init,
-            input=input_data,
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-        assert "Biotope established successfully!" in result.output
-
-        # Check that project metadata was stored
-        with open(".biotope/config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            assert "project_metadata" in config
-            project_metadata = config["project_metadata"]
-            assert project_metadata["description"] == "Test project description"
-            assert project_metadata["url"] == "https://example.com"
-            assert project_metadata["creator"] == "test@example.com"
-            assert "license" in project_metadata
-            assert "citation" in project_metadata
+    pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
+    assert 'name = "myproj"' in pyproject
+    assert "biotope>=" in pyproject
+    assert "biocypher>=0.14.0" in pyproject
+    assert "requires-python" in pyproject
 
 
-def test_init_without_project_metadata():
-    """Test initialization without project metadata collection."""
+def test_emitted_pyproject_uses_hatchling_and_skips_package_discovery(
+    tmp_path: Path,
+) -> None:
+    """Hatchling is the build backend (no setuptools flat-layout footgun on
+    `data/`/`mappings/`) and the wheel target ships nothing — biotope projects
+    are workspaces that declare deps, not Python distributions."""
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Input: project name, no knowledge graph, no LLM, no to project metadata
-        input_data = (
-            "test-project\n"  # project name
-            "n\n"  # no knowledge graph
-            "n\n"  # no LLM
-            "n\n"  # no to project metadata
-            "y\n"  # yes to Git
-        )
+    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
+    assert result.exit_code == 0, result.output
 
-        result = runner.invoke(
-            init,
-            input=input_data,
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-        assert "Biotope established successfully!" in result.output
-
-        # Check that no project metadata was stored
-        with open(".biotope/config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            assert "project_metadata" not in config
+    pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
+    assert 'build-backend = "hatchling.build"' in pyproject
+    assert "[tool.hatch.build.targets.wheel]" in pyproject
+    assert "bypass-selection = true" in pyproject
 
 
-def test_init_with_knowledge_graph():
-    """Test initialization with knowledge graph (should show output format)."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Input: project name, yes to knowledge graph, add one source, neo4j output, no LLM, no project metadata
-        input_data = (
-            "test-project\n"  # project name
-            "y\n"  # yes to knowledge graph
-            "test-db\n"  # knowledge source name
-            "database\n"  # source type
-            "\n"  # finish sources
-            "neo4j\n"  # output format
-            "n\n"  # no LLM
-            "n\n"  # no to project metadata
-            "y\n"  # yes to Git
-        )
-
-        result = runner.invoke(
-            init,
-            input=input_data,
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-        assert "Biotope established successfully!" in result.output
-
-        # Check that knowledge sources were stored
-        with open("config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            assert len(config["knowledge_sources"]) == 1
-            assert config["knowledge_sources"][0]["name"] == "test-db"
-            assert config["knowledge_sources"][0]["type"] == "database"
-
-
-def test_init_with_llm():
-    """Test initialization with LLM configuration."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Configure with OpenAI
-        result = runner.invoke(
-            init,
-            input="test-project\ny\n\nneo4j\ny\nopenai\nsk-test123\nn\ny\n",
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-
-        with open("config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            assert "llm" in config
-            assert config["llm"]["provider"] == "openai"
-            assert config["llm"]["api_key"] == "sk-test123"
-
-
-def test_init_existing_biotope():
-    """Test initialization fails when .biotope directory exists."""
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Create .biotope directory
-        Path(".biotope").mkdir()
-
-        result = runner.invoke(init, obj={"version": "0.1.0"})
-        assert result.exit_code != 0
-        assert "already exists" in result.output
-
-
-def test_init_in_regular_git_repo():
-    """Test initialization works in a regular git repository."""
-    import subprocess
+def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
+    """If the user already has a pyproject (init inside an existing project), keep it."""
+    target = tmp_path / "myproj"
+    target.mkdir()
+    user_pyproject = '[project]\nname = "user-owned"\nversion = "9.9.9"\n'
+    (target / "pyproject.toml").write_text(user_pyproject)
 
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Create a proper git repository in current directory
-        subprocess.run(["git", "init"], check=True, capture_output=True)
+    result = _invoke(runner, ".", "--dir", str(target), "--no-git", "--no-prompt")
+    assert result.exit_code == 0, result.output
 
-        # Try to init biotope in the same directory (should work)
-        result = runner.invoke(
-            init,
-            input="test-project\nn\nn\nn\n",  # project name, no KG, no LLM, no project metadata, no git
-            obj={"version": "0.1.0"},
-        )
-
-        assert result.exit_code == 0
-        assert "Biotope established successfully!" in result.output
-
-        # Check that biotope project was created
-        assert Path(".biotope").exists()
-        assert Path("config/biotope.yaml").exists()
+    assert (target / "pyproject.toml").read_text() == user_pyproject
 
 
-def test_init_in_git_submodule():
-    """Test initialization works in git submodule (both current and parent have .git)."""
-    import subprocess
-
+def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        main_repo = Path("main_repo")
-        main_repo.mkdir()
+    result = _invoke(
+        runner,
+        "p",
+        "--dir",
+        str(tmp_path),
+        "--no-git",
+        "--purpose",
+        "Map drug-target-disease links for type-2 diabetes",
+    )
+    assert result.exit_code == 0, result.output
 
-        # Create a proper git repository in the main repo
-        subprocess.run(["git", "init"], cwd=main_repo, check=True, capture_output=True)
-
-        # Create a subdirectory with its own git repository (simulating a submodule)
-        submodule = main_repo / "submodule"
-        submodule.mkdir()
-        subprocess.run(["git", "init"], cwd=submodule, check=True, capture_output=True)
-
-        result = runner.invoke(
-            init,
-            ["--dir", str(submodule)],
-            input="test-project\nn\nn\nn\n",  # project name, no KG, no LLM, no project metadata, no git
-            obj={"version": "0.1.0"},
-        )
-
-        assert result.exit_code == 0
-        assert "Biotope established successfully!" in result.output
-
-        # Check that biotope project was created in the submodule
-        assert (submodule / ".biotope").exists()
-        assert (submodule / "config/biotope.yaml").exists()
+    project = Project.load(tmp_path / "p" / ".biotope" / "project.yaml")
+    assert "type-2 diabetes" in project.purpose
 
 
-def test_init_fails_in_subdirectory_without_git_when_declined():
-    """Test initialization fails when user declines to init git in subdirectory."""
-    import subprocess
-    from unittest.mock import patch
-
+def test_init_visible_promotes_project_yaml(tmp_path: Path) -> None:
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Create a git repository in current directory
-        subprocess.run(["git", "init"], check=True, capture_output=True)
+    result = _invoke(runner, "v", "--dir", str(tmp_path), "--no-git", "--visible")
+    assert result.exit_code == 0, result.output
 
-        # Create a subdirectory WITHOUT its own .git
-        subdir = Path("subproject")
-        subdir.mkdir()
-
-        with patch("click.confirm", return_value=False):
-            result = runner.invoke(
-                init, ["--dir", str(subdir)], obj={"version": "0.1.0"}
-            )
-            assert result.exit_code != 0
-            assert "Found a Git repository in a parent directory" in result.output
-            assert (
-                "Biotope requires .git and .biotope to be in the same directory"
-                in result.output
-            )
-            assert (
-                "Or initialize a Git repository in the current directory to create a Git submodule"
-                in result.output
-            )
+    root = tmp_path / "v"
+    assert (root / "project.yaml").is_file()
+    assert not (root / ".biotope" / "project.yaml").exists()
 
 
-def test_init_succeeds_in_subdirectory_when_git_init_accepted():
-    """Test initialization succeeds when user accepts to init git in subdirectory."""
-    import subprocess
-    from unittest.mock import patch, Mock
-
+def test_init_refuses_existing_biotope(tmp_path: Path) -> None:
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Create a git repository in current directory
-        subprocess.run(["git", "init"], check=True, capture_output=True)
-
-        # Create a subdirectory WITHOUT its own .git
-        subdir = Path("subproject")
-        subdir.mkdir()
-
-        # Mock subprocess.run to simulate successful git operations
-        def mock_subprocess_run(args, **kwargs):
-            mock_result = Mock()
-            mock_result.returncode = 0
-            mock_result.stdout = ""
-            if args[:2] == ["git", "init"]:
-                # Create .git directory to simulate successful init
-                (subdir / ".git").mkdir()
-            elif args[:3] == ["git", "rev-parse", "--git-dir"]:
-                # After git init, this should succeed
-                if (subdir / ".git").exists():
-                    mock_result.stdout = ".git"
-                else:
-                    mock_result.returncode = 1
-            elif args[:2] == ["git", "add"]:
-                pass  # Successful git add
-            elif args[:2] == ["git", "commit"]:
-                mock_result.stdout = "[main abc1234] Initial biotope project setup"
-            return mock_result
-
-        # Mock click.confirm to handle different prompts appropriately
-        def mock_confirm(prompt, default=None):
-            if "initialize a Git repository in the current directory" in prompt:
-                return True  # Accept git initialization
-            else:
-                return False  # Decline other prompts (knowledge graph, LLM, etc.)
-
-        with patch("click.confirm", side_effect=mock_confirm), patch(
-            "subprocess.run", side_effect=mock_subprocess_run
-        ):
-            result = runner.invoke(
-                init,
-                ["--dir", str(subdir)],
-                input="test-project\n",  # just project name, mocks handle the rest
-                obj={"version": "0.1.0"},
-            )
-
-            assert result.exit_code == 0
-            assert "Git repository initialized in current directory" in result.output
-            assert "Biotope established successfully!" in result.output
-
-            # Check that biotope project was created
-            assert (subdir / ".biotope").exists()
-            assert (subdir / "config/biotope.yaml").exists()
+    first = _invoke(runner, "twice", "--dir", str(tmp_path), "--no-git")
+    assert first.exit_code == 0
+    second = _invoke(runner, "twice", "--dir", str(tmp_path), "--no-git")
+    assert second.exit_code != 0
+    assert "already contains" in second.output
 
 
-def test_init_custom_directory():
-    """Test initialization in a custom directory."""
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
+def test_init_creates_initial_commit_and_leaves_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """After init, the scaffold should be committed so `git status` is clean —
+    otherwise init artefacts (config.yaml, AGENTS.md, ...) leak into the user's
+    first `biotope status` and look like changes they made."""
+    for var, val in (
+        ("GIT_AUTHOR_NAME", "t"),
+        ("GIT_AUTHOR_EMAIL", "t@t"),
+        ("GIT_COMMITTER_NAME", "t"),
+        ("GIT_COMMITTER_EMAIL", "t@t"),
+    ):
+        monkeypatch.setenv(var, val)
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(
-            init,
-            ["--dir", "custom_dir"],
-            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-        assert Path("custom_dir/config").exists()
-        assert Path("custom_dir/.biotope").exists()
+    result = _invoke(runner, "g", "--dir", str(tmp_path), "--no-prompt")
+    assert result.exit_code == 0, result.output
+
+    root = tmp_path / "g"
+    porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True)
+    assert porcelain.stdout.strip() == "", f"expected clean tree, got:\n{porcelain.stdout}"
+
+    log = subprocess.run(["git", "log", "--oneline"], cwd=root, capture_output=True, text=True, check=True)
+    assert "initialize biotope project" in log.stdout
 
 
-def test_init_metadata():
-    """Test metadata file creation and content."""
+def test_init_creates_default_biotope_config(tmp_path: Path) -> None:
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(
-            init,
-            input="test-project\ny\n\nneo4j\nn\nn\ny\n",
-            obj={"version": "0.1.0"},
-        )
-        assert result.exit_code == 0
-
-        # Check consolidated biotope config instead of separate metadata file
-        with open(".biotope/config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            project_info = config.get("project_info", {})
-            assert project_info["name"] == "test-project"
-            assert "created_at" in project_info
-            assert "biotope_version" in project_info
-            assert "last_modified" in project_info
-            assert isinstance(project_info["builds"], list)
-            assert isinstance(project_info["knowledge_sources"], list)
-
-
-def test_init_non_interactive():
-    """Test initialization with --non-interactive flag uses git user.name and skips prompts."""
-    import subprocess
-
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        # Initialize a git repo and set a user.name so non-interactive can derive project name
-        subprocess.run(["git", "init"], check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "ci-user"], check=True, capture_output=True)
-
-        result = runner.invoke(
-            init,
-            ["--non-interactive"],
-            obj={"version": "0.1.0"},
-        )
-
-        assert result.exit_code == 0
-        # Should announce automatic initialization with derived project name
-        assert "Initializing biotope automatically with project name" in result.output
-
-        # Check that config was created with the derived project name
-        with open("config/biotope.yaml") as f:
-            config = yaml.safe_load(f)
-            assert config["project"]["name"] == "ci-user_project"
+    _invoke(runner, "c", "--dir", str(tmp_path), "--no-git")
+    config = yaml.safe_load((tmp_path / "c" / ".biotope" / "config.yaml").read_text())
+    assert config["croissant_schema_version"] == "1.1"
+    assert config["annotation_validation"]["enabled"] is True
+    assert "creator" in config["annotation_validation"]["minimum_required_fields"]
+    assert "distribution" in config["annotation_validation"]["minimum_required_fields"]
+    assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10

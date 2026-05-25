@@ -3,19 +3,29 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import click
 from rich.console import Console
 from rich.table import Table
 
+from biotope.metadata import DatasetStats, summarize_metadata
+from biotope.utils import find_biotope_root, is_git_repo
 from biotope.validation import (
-    get_annotation_status_for_files,
     get_all_tracked_files,
+    get_annotation_status_for_files,
     get_staged_metadata_files,
     load_biotope_config,
 )
-from biotope.utils import find_biotope_root, is_git_repo
+
+
+def _load_dataset_stats(biotope_root: Path, metadata_file: str) -> Optional[DatasetStats]:
+    """Load a tracked metadata JSON-LD and return its structural stats."""
+    try:
+        with open(biotope_root / metadata_file, encoding="utf-8") as handle:
+            return summarize_metadata(json.load(handle))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 @click.command()
@@ -36,12 +46,12 @@ from biotope.utils import find_biotope_root, is_git_repo
 )
 def status(porcelain: bool, biotope_only: bool, detailed: bool) -> None:
     """Show the current status of the biotope project using Git.
-    
+
     Displays Git status for .biotope/ directory changes.
     Similar to git status but focused on metadata.
     """
     console = Console()
-    
+
     # Find biotope project root
     biotope_root = find_biotope_root()
     if not biotope_root:
@@ -61,27 +71,27 @@ def status(porcelain: bool, biotope_only: bool, detailed: bool) -> None:
 
 def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, detailed: bool) -> None:
     """Show status with rich formatting."""
-    
+
     # Get Git status
     git_status = _get_git_status(biotope_root, biotope_only)
-    
-    console.print(f"\n[bold blue]Biotope Project Status[/]")
+
+    console.print("\n[bold blue]Biotope Project Status[/]")
     console.print(f"Project: {biotope_root.name}")
     console.print(f"Location: {biotope_root}")
     console.print(f"Git Repository: {'✅' if is_git_repo(biotope_root) else '❌'}")
-    
+
     # Get annotation status for staged files
     staged_metadata_files = get_staged_metadata_files(biotope_root)
     staged_annotation_status = get_annotation_status_for_files(biotope_root, staged_metadata_files)
-    
+
     # Show changes with annotation status
     if git_status["staged"]:
-        console.print(f"\n[bold green]Changes to be committed:[/]")
+        console.print("\n[bold green]Changes to be committed:[/]")
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Status", style="cyan")
         table.add_column("File", style="green")
         table.add_column("Annotated", style="yellow")
-        
+
         for status, file_path in git_status["staged"]:
             # Check if this is a metadata file and get annotation status
             if file_path in staged_annotation_status:
@@ -89,145 +99,184 @@ def _show_rich_status(biotope_root: Path, console: Console, biotope_only: bool, 
                 annotation_status = "✅" if is_annotated else "⚠️"
             else:
                 annotation_status = "—"  # Not a metadata file
-            
+
             table.add_row(status, file_path, annotation_status)
         console.print(table)
-    
+
     if git_status["modified"]:
-        console.print(f"\n[bold yellow]Changes not staged for commit:[/]")
+        console.print("\n[bold yellow]Changes not staged for commit:[/]")
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Status", style="cyan")
         table.add_column("File", style="green")
-        
+
         for status, file_path in git_status["modified"]:
             table.add_row(status, file_path)
         console.print(table)
-    
+
     if git_status["untracked"]:
-        console.print(f"\n[bold red]Untracked files:[/]")
+        console.print("\n[bold red]Untracked files:[/]")
         for file_path in git_status["untracked"]:
             console.print(f"  ? {file_path}")
-    
+
     # Show tracked files with annotation status
     tracked_metadata_files = get_all_tracked_files(biotope_root)
     tracked_annotation_status = {}
     has_incomplete_tracked = False
+    dataset_stats: Dict[str, Optional[DatasetStats]] = {}
     if tracked_metadata_files:
         tracked_annotation_status = get_annotation_status_for_files(biotope_root, tracked_metadata_files)
-        
-        console.print(f"\n[bold blue]Tracked Datasets:[/]")
+
+        console.print("\n[bold blue]Tracked Datasets:[/]")
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Dataset", style="green")
+        table.add_column("RecordSets", style="cyan", justify="right")
+        table.add_column("FileSets", style="cyan", justify="right")
+        table.add_column("FileObjects", style="cyan", justify="right")
         table.add_column("Annotated", style="yellow")
         table.add_column("Status", style="cyan")
-        
+
         for file_path in tracked_metadata_files:
             dataset_name = Path(file_path).stem
+            stats = _load_dataset_stats(biotope_root, file_path)
+            dataset_stats[file_path] = stats
+
             if file_path in tracked_annotation_status:
                 is_annotated, errors = tracked_annotation_status[file_path]
                 annotation_status = "✅" if is_annotated else "⚠️"
-                status_text = "Complete" if is_annotated else f"Incomplete ({len(errors)} issues)"
+                status_text = "Valid" if is_annotated else f"Incomplete ({len(errors)} issues)"
             else:
                 annotation_status = "❌"
                 status_text = "Error reading metadata"
-            
-            table.add_row(dataset_name, annotation_status, status_text)
+
+            if stats is None:
+                record_sets = file_sets = file_objects = "—"
+            else:
+                record_sets = str(stats.record_sets)
+                file_sets = str(stats.file_sets)
+                file_objects = str(stats.file_objects)
+
+            table.add_row(dataset_name, record_sets, file_sets, file_objects, annotation_status, status_text)
         console.print(table)
-        
+
         has_incomplete_tracked = any(not is_annotated for is_annotated, _ in tracked_annotation_status.values())
-        
+
         if detailed:
+            for file_path in tracked_metadata_files:
+                stats = dataset_stats.get(file_path)
+                if stats is None or not stats.record_set_details:
+                    continue
+                dataset_name = Path(file_path).stem
+                console.print(f"\n[bold blue]{dataset_name} — RecordSets:[/]")
+                rs_table = Table(show_header=True, header_style="bold magenta")
+                rs_table.add_column("Name", style="green")
+                rs_table.add_column("Fields", style="cyan", justify="right")
+                for rs_name, field_count in stats.record_set_details:
+                    rs_table.add_row(rs_name, str(field_count))
+                console.print(rs_table)
+
             files_with_errors = []
             for file_path, (is_annotated, errors) in tracked_annotation_status.items():
                 if not is_annotated and errors:
                     files_with_errors.append((Path(file_path).stem, errors))
 
             if files_with_errors:
-                console.print(f"\n[bold red]Validation Issues:[/]")
+                console.print("\n[bold red]Validation Issues:[/]")
                 for dataset_name, errors in files_with_errors:
                     console.print(f"  [bold yellow]{dataset_name}:[/]")
                     for error in errors:
                         console.print(f"    - {error}")
         elif has_incomplete_tracked:
-            console.print(f"\n💡 Run 'biotope status --detailed' to see validation issues.")
+            console.print("\n💡 Run 'biotope status --detailed' to see validation issues.")
 
     # Get MCP status
     mcp_status = _get_mcp_status(biotope_root)
-    
+
     # Show MCP status if configured
     if mcp_status["configured"]:
-        console.print(f"\n[bold blue]MCP Registry:[/]")
+        console.print("\n[bold blue]MCP Registry:[/]")
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Registry", style="cyan")
         table.add_column("Status", style="yellow")
         table.add_column("URL", style="green")
-        
+
         for registry_name, registry_info in mcp_status["registries"].items():
             status_icon = "✅" if registry_info["accessible"] else "❌"
             status_text = "Accessible" if registry_info["accessible"] else "Unreachable"
             table.add_row(registry_name, f"{status_icon} {status_text}", registry_info["url"])
         console.print(table)
-        
+
         if mcp_status["suggestions"]:
-            console.print(f"\n💡 MCP Suggestions:")
+            console.print("\n💡 MCP Suggestions:")
             for suggestion in mcp_status["suggestions"]:
                 console.print(f"  • {suggestion}")
-    
+
     # Summary
     total_staged = len(git_status["staged"])
     total_modified = len(git_status["modified"])
     total_untracked = len(git_status["untracked"])
-    
+
     # Count annotation status
     staged_annotated = sum(1 for is_annotated, _ in staged_annotation_status.values() if is_annotated)
     staged_unannotated = len(staged_annotation_status) - staged_annotated
-    
+
     tracked_annotated = sum(1 for is_annotated, _ in tracked_annotation_status.values() if is_annotated)
     tracked_unannotated = len(tracked_annotation_status) - tracked_annotated
-    
-    console.print(f"\n[bold]Summary:[/]")
+
+    total_record_sets = sum(s.record_sets for s in dataset_stats.values() if s is not None)
+    total_file_sets = sum(s.file_sets for s in dataset_stats.values() if s is not None)
+    total_file_objects = sum(s.file_objects for s in dataset_stats.values() if s is not None)
+
+    console.print("\n[bold]Summary:[/]")
     console.print(f"  Staged: {total_staged} file(s) ({staged_annotated} annotated, {staged_unannotated} unannotated)")
     console.print(f"  Modified: {total_modified} file(s)")
     console.print(f"  Untracked: {total_untracked} file(s)")
-    console.print(f"  Tracked datasets: {len(tracked_metadata_files)} ({tracked_annotated} annotated, {tracked_unannotated} unannotated)")
-    
+    console.print(
+        f"  Tracked datasets: {len(tracked_metadata_files)} "
+        f"({tracked_annotated} annotated, {tracked_unannotated} unannotated)"
+    )
+    if tracked_metadata_files:
+        console.print(
+            f"  Structure: {total_record_sets} record set(s), "
+            f"{total_file_sets} file set(s), {total_file_objects} file object(s)"
+        )
+
     # Check if there are staged metadata files that need annotation
     has_incomplete_annotations = any(not is_annotated for is_annotated, _ in staged_annotation_status.values())
-    
+
     # Check if there are tracked metadata files that need annotation
     has_incomplete_tracked = any(not is_annotated for is_annotated, _ in tracked_annotation_status.values())
 
-    show_next_steps = False
     if total_staged > 0 or total_modified > 0 or total_untracked > 0 or has_incomplete_tracked:
-        console.print(f"\n💡 Next steps:")
-        show_next_steps = True
+        console.print("\n💡 Next steps:")
 
     # Suggest annotate for staged files if needed
     if has_incomplete_annotations:
-        console.print(f"  • Run 'biotope annotate interactive --staged' to complete metadata annotations for staged files")
+        console.print("  • Run 'biotope annotate edit --staged' to complete metadata annotations for staged files")
     # Suggest annotate for incomplete tracked files if needed
     if has_incomplete_tracked:
-        console.print(f"  • Run 'biotope annotate interactive --incomplete' to complete metadata annotations for all tracked files")
+        console.print(
+            "  • Run 'biotope annotate edit --incomplete' to complete metadata annotations for all tracked files"
+        )
     # Suggest commit if there are staged files
     if total_staged > 0:
-        console.print(f"  • Run 'biotope commit -m \"message\"' to commit changes")
+        console.print("  • Run 'biotope commit -m \"message\"' to commit changes")
     # Suggest add/annotate/commit if there are only modified or untracked files
     elif total_modified > 0 or total_untracked > 0:
-        console.print(f"  • Run 'biotope add <data_file>' to add data files")
-        console.print(f"  • Run 'biotope annotate interactive --staged' to create metadata")
-        console.print(f"  • Run 'biotope commit -m \"message\"' to commit changes")
+        console.print("  • Run 'biotope add <data_file>' to add data files")
+        console.print("  • Run 'biotope annotate edit --staged' to create metadata")
+        console.print("  • Run 'biotope commit -m \"message\"' to commit changes")
 
 
 def _show_porcelain_status(biotope_root: Path, biotope_only: bool) -> None:
     """Show status in machine-readable format."""
     git_status = _get_git_status(biotope_root, biotope_only)
-    
+
     for status, file_path in git_status["staged"]:
         click.echo(f"{status} {file_path}")
-    
+
     for status, file_path in git_status["modified"]:
         click.echo(f"{status} {file_path}")
-    
+
     for file_path in git_status["untracked"]:
         click.echo(f"?? {file_path}")
 
@@ -239,40 +288,30 @@ def _get_git_status(biotope_root: Path, biotope_only: bool) -> Dict[str, List]:
         cmd = ["git", "status", "--porcelain"]
         if biotope_only:
             cmd.append(".biotope/")
-        
-        result = subprocess.run(
-            cmd,
-            cwd=biotope_root,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
+
+        result = subprocess.run(cmd, cwd=biotope_root, capture_output=True, text=True, check=True)
+
         staged = []
         modified = []
         untracked = []
-        
+
         for line in result.stdout.splitlines():
             if not line.strip():
                 continue
-            
+
             # Parse Git status line (e.g., "M  .biotope/datasets/file.jsonld")
             status = line[:2]
             file_path = line[3:]
-            
+
             if status == "??":
                 untracked.append(file_path)
             elif status in ["A ", "M ", "D ", "R "]:
                 staged.append((status.strip(), file_path))
             elif status in [" M", " D", " R"]:
                 modified.append((status.strip(), file_path))
-        
-        return {
-            "staged": staged,
-            "modified": modified,
-            "untracked": untracked
-        }
-        
+
+        return {"staged": staged, "modified": modified, "untracked": untracked}
+
     except subprocess.CalledProcessError as e:
         click.echo(f"❌ Git error: {e}")
         return {"staged": [], "modified": [], "untracked": []}
@@ -283,38 +322,28 @@ def _get_mcp_status(biotope_root: Path) -> Dict:
     try:
         config = load_biotope_config(biotope_root)
         registries = config.get("registries", {})
-        
+
         if not registries:
-            return {
-                "configured": False,
-                "registries": {},
-                "suggestions": []
-            }
-        
-        mcp_status = {
-            "configured": True,
-            "registries": {},
-            "suggestions": []
-        }
-        
+            return {"configured": False, "registries": {}, "suggestions": []}
+
+        mcp_status = {"configured": True, "registries": {}, "suggestions": []}
+
         # Check each configured registry
         for registry_name, registry_config in registries.items():
             url = registry_config.get("url", "")
             accessible = False
-            
+
             # Test registry accessibility (with timeout to avoid hanging)
             try:
                 import requests
+
                 response = requests.get(url, timeout=5)
                 accessible = response.status_code == 200
             except Exception:
                 accessible = False
-            
-            mcp_status["registries"][registry_name] = {
-                "url": url,
-                "accessible": accessible
-            }
-        
+
+            mcp_status["registries"][registry_name] = {"url": url, "accessible": accessible}
+
         # Add suggestions based on status
         if mcp_status["registries"]:
             accessible_registries = [name for name, info in mcp_status["registries"].items() if info["accessible"]]
@@ -322,12 +351,8 @@ def _get_mcp_status(biotope_root: Path) -> Dict:
                 mcp_status["suggestions"].append("Run 'biotope search <query>' to find MCP servers")
             else:
                 mcp_status["suggestions"].append("Registry is unreachable - check network connection")
-        
+
         return mcp_status
-        
+
     except Exception:
-        return {
-            "configured": False,
-            "registries": {},
-            "suggestions": []
-        }
+        return {"configured": False, "registries": {}, "suggestions": []}

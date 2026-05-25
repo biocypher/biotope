@@ -2,10 +2,19 @@
 
 !!! warning "Draft stage"
 
-    Biotope is in draft stage. Functionality may be missing or incomplete.
-    The API is subject to change.
+```
+Biotope is in draft stage. Functionality may be missing or incomplete.
+The API is subject to change.
+```
 
-The `biotope add` command adds data files to your biotope project and prepares them for metadata creation. It calculates checksums for data integrity and creates basic Croissant ML metadata files.
+`biotope add` is the structural entrypoint for tracking data in a biotope
+project.
+
+- `biotope add <file>` creates one JSON-LD for that file.
+- `biotope add <dir>` recurses by default and creates one JSON-LD for the
+  rooted tree.
+- Parseable files get croissant-baker structure.
+- Unhandled files are still tracked as `cr:FileObject` pointers.
 
 ## Command Signature
 
@@ -13,176 +22,74 @@ The `biotope add` command adds data files to your biotope project and prepares t
 biotope add [OPTIONS] [PATHS]...
 ```
 
-## Arguments
-
-- `PATHS`: One or more file or directory paths to add. Can be absolute or relative paths.
-
 ## Options
 
-- `--recursive, -r`: Add directories recursively (default: False)
-- `--force, -f`: Force add even if file already tracked (default: False)
+- `--force, -f`: force add even if a file is already tracked
+- `--name`: dataset name override
+- `--description`: dataset description override
+- `--license`: dataset license
+- `--creator`: dataset creator name
+- `--creator-email`: dataset creator email
+- `--url`: dataset URL
+- `--citation`: dataset citation text
+- `--version`: dataset version
+- `--keyword`: dataset keyword, repeatable
+- `--access-restrictions`: dataset access restrictions
+- `--legal-obligations`: dataset legal obligations
+- `--collaboration-partner`: dataset collaboration partner
+- `--rai KEY=VALUE`: Croissant RAI field, repeatable
 
 ## Examples
 
 ### Add a single file
+
 ```bash
-biotope add data/raw/experiment.csv
+biotope add data/experiment.csv --license CC-BY-4.0
 ```
 
-### Add multiple files
+### Add a directory
+
 ```bash
-biotope add data/raw/experiment1.csv data/raw/experiment2.csv
+biotope add data/opentargets \
+  --license CC-BY-4.0 \
+  --creator "Open Targets" \
+  --description "Open Targets release"
 ```
 
-### Add directory recursively
-```bash
-biotope add data/raw/ --recursive
-```
+### Force re-add a tracked file
 
-### Force add already tracked file
 ```bash
-biotope add data/raw/experiment.csv --force
-```
-
-### Add files with absolute paths
-```bash
-biotope add /absolute/path/to/experiment.csv
+biotope add data/experiment.csv --force
 ```
 
 ## What It Does
 
-1. **Validates Environment**: Checks that you're in a biotope project and Git repository
-2. **Calculates Checksums**: Computes SHA256 checksums for data integrity
-3. **Creates Metadata**: Generates basic Croissant ML metadata files in `.biotope/datasets/`
-4. **Stages Changes**: Automatically stages metadata changes in Git
-5. **Reports Results**: Shows which files were added and which were skipped
+1. Validates that you are inside a biotope project and Git repository.
+1. Creates or refreshes metadata in `.biotope/datasets/`.
+1. Uses croissant-baker for parseable files.
+1. Appends `cr:FileObject` pointers for unparseable files in directory adds.
+1. Stages `.biotope/` changes in Git.
 
-## Output
+When you add a directory, biotope also writes `<dir>/.biotope.yaml` so the
+dataset can be refined collaboratively with `biotope annotate apply`.
 
-The command provides detailed feedback:
-
-```
-📁 Added data/raw/experiment.csv (SHA256: e471e5fc...)
-
-✅ Added 1 file(s) to biotope project:
-  + data/raw/experiment.csv
-
-💡 Next steps:
-  1. Run 'biotope status' to see staged files
-  2. Run 'biotope annotate interactive --staged' to create metadata
-  3. Run 'biotope commit -m "message"' to save changes
-
-💡 For incomplete annotations:
-  1. Run 'biotope status' to see which files need annotation
-  2. Run 'biotope annotate interactive --incomplete' to complete them
-```
-
-## Metadata Structure
-
-Creates JSON-LD files in `.biotope/datasets/` with this structure:
-
-```json
-{
-  "@context": {"@vocab": "https://schema.org/"},
-  "@type": "Dataset",
-  "name": "experiment",
-  "description": "Dataset for experiment.csv",
-  "distribution": [
-    {
-      "@type": "sc:FileObject",
-      "@id": "file_e471e5fc",
-      "name": "experiment.csv",
-      "contentUrl": "data/raw/experiment.csv",
-      "sha256": "e471e5fc1234567890abcdef...",
-      "contentSize": 1024,
-      "dateCreated": "2024-01-15T10:30:00Z"
-    }
-  ]
-}
-```
-
-## Error Handling
-
-### Common Errors
-
-- **"Not in a biotope project"**: Run `biotope init` first
-- **"Not in a Git repository"**: Initialize Git with `git init`
-- **"File already tracked"**: Use `--force` to override
-- **"Path does not exist"**: Check the file path
-
-### Error Messages
-
-```
-❌ Not in a biotope project. Run 'biotope init' first.
-❌ Not in a Git repository. Initialize Git first with 'git init'.
-⚠️  File 'data/raw/experiment.csv' already tracked (use --force to override)
-⚠️  Skipping directory 'data/raw/' (use --recursive to add contents)
-```
-
-## Integration
-
-### With Other Commands
-
-- **`biotope status`**: See what files are staged
-- **`biotope annotate`**: Create detailed metadata
-- **`biotope commit`**: Save metadata changes
-- **`biotope check-data`**: Verify data integrity
-
-### Workflow Integration
+## Follow-on workflow
 
 ```bash
-# 1. Add files
-biotope add data/raw/experiment.csv
-
-# 2. Create metadata
-biotope annotate interactive --staged
-
-# 3. Commit changes
-biotope commit -m "Add experiment dataset"
+biotope add data/opentargets --license CC-BY-4.0 --creator "Open Targets"
+biotope annotate apply data/opentargets
+biotope status
+biotope commit -m "Track Open Targets dataset"
 ```
 
-## Technical Details
+## Output shape
 
-### File Tracking
+Single-file adds always emit a `cr:FileObject`. When baker can infer structure,
+the same JSON-LD may also contain `recordSet` entries.
 
-Files are tracked by their relative path from the biotope project root. The command handles both absolute and relative paths correctly.
+Directory adds emit one aggregate JSON-LD:
 
-### Checksum Calculation
+- `cr:FileSet` and `recordSet` entries for handled formats
+- `cr:FileObject` entries for uncovered files
 
-Uses SHA256 algorithm for data integrity verification:
-
-```python
-def calculate_file_checksum(file_path: Path) -> str:
-    """Calculate SHA256 checksum of a file."""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(chunk)
-    return sha256_hash.hexdigest()
-```
-
-### Git Integration
-
-Automatically stages metadata changes:
-
-```python
-def _stage_git_changes(biotope_root: Path) -> None:
-    """Stage .biotope/ changes in Git."""
-    subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-```
-
-## Best Practices
-
-1. **Use Relative Paths**: Prefer relative paths for better portability
-2. **Organize Data**: Keep data files in structured directories
-3. **Check Status**: Use `biotope status` to verify what was added
-4. **Review Metadata**: Always review generated metadata before committing
-
-## Limitations
-
-- Only supports local files (not URLs)
-- Requires Git repository
-- Metadata is basic and should be enhanced with `biotope annotate`
-- No support for symbolic links
-
-::: biotope.commands.add 
+::: biotope.commands.add

@@ -4,7 +4,7 @@
   "required_pattern": "cluster-strict",
   "required_fields": [
     "name",
-    "description", 
+    "description",
     "creator",
     "dateCreated",
     "distribution",
@@ -35,4 +35,4 @@
     "Data retention policies must be specified",
     "Remote validation must be configured"
   ]
-} 
+}

@@ -1,7 +1,5 @@
 """Tests for the improved status command workflow."""
 
-import subprocess
-from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -22,11 +20,11 @@ def biotope_project(tmp_path):
     # Create .biotope directory
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
-    
+
     # Create datasets directory
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir()
-    
+
     return tmp_path
 
 
@@ -42,26 +40,20 @@ def git_repo(biotope_project):
 @mock.patch("biotope.commands.status.find_biotope_root")
 @mock.patch("biotope.utils.is_git_repo")
 @mock.patch("biotope.commands.status._get_git_status")
-def test_status_suggests_biotope_commands_not_git(
-    mock_get_status, mock_is_git, mock_find_root, runner, git_repo
-):
+def test_status_suggests_biotope_commands_not_git(mock_get_status, mock_is_git, mock_find_root, runner, git_repo):
     """Test that status suggests biotope commands instead of Git commands."""
     # Setup mocks
     mock_find_root.return_value = git_repo
     mock_is_git.return_value = True
-    
+
     # Mock Git status to show unstaged changes
-    mock_get_status.return_value = {
-        "staged": [],
-        "modified": [("M", ".biotope/datasets/test.jsonld")],
-        "untracked": []
-    }
-    
+    mock_get_status.return_value = {"staged": [], "modified": [("M", ".biotope/datasets/test.jsonld")], "untracked": []}
+
     # Run status command
     result = runner.invoke(status)
-    
+
     assert result.exit_code == 0
-    
+
     # Check that it suggests biotope commands, not Git commands
     assert "git add .biotope/" not in result.output
     assert "biotope add" in result.output
@@ -72,28 +64,22 @@ def test_status_suggests_biotope_commands_not_git(
 @mock.patch("biotope.commands.status.find_biotope_root")
 @mock.patch("biotope.utils.is_git_repo")
 @mock.patch("biotope.commands.status._get_git_status")
-def test_status_suggests_commit_when_staged(
-    mock_get_status, mock_is_git, mock_find_root, runner, git_repo
-):
+def test_status_suggests_commit_when_staged(mock_get_status, mock_is_git, mock_find_root, runner, git_repo):
     """Test that status suggests commit when changes are staged."""
     # Setup mocks
     mock_find_root.return_value = git_repo
     mock_is_git.return_value = True
-    
+
     # Mock Git status to show staged changes
-    mock_get_status.return_value = {
-        "staged": [("A", ".biotope/datasets/test.jsonld")],
-        "modified": [],
-        "untracked": []
-    }
-    
+    mock_get_status.return_value = {"staged": [("A", ".biotope/datasets/test.jsonld")], "modified": [], "untracked": []}
+
     # Run status command
     result = runner.invoke(status)
-    
+
     assert result.exit_code == 0
-    
+
     # Check that it suggests commit
     assert "biotope commit" in result.output
     # Should not suggest add or annotate when already staged
     assert "biotope add" not in result.output
-    assert "biotope annotate" not in result.output 
+    assert "biotope annotate" not in result.output

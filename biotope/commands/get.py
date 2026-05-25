@@ -62,7 +62,27 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
         datasets_dir.mkdir(parents=True, exist_ok=True)
 
         # Add the file using the same logic as the add command
-        success = _add_file(file_path, biotope_root, datasets_dir, force=False)
+        success = _add_file(
+            file_path,
+            biotope_root,
+            datasets_dir,
+            force=False,
+            overrides={
+                "name": None,
+                "description": None,
+                "license": None,
+                "creator": None,
+                "creator_email": None,
+                "url": None,
+                "citation": None,
+                "version": None,
+                "keywords": [],
+                "access_restrictions": None,
+                "legal_obligations": None,
+                "collaboration_partner": None,
+                "rai_fields": {},
+            },
+        )
 
         if success:
             # Stage changes in Git
@@ -87,7 +107,7 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
     "--output-dir",
     "-o",
     type=click.Path(file_okay=False),
-    default="data/raw",
+    default="data",
     help="Directory to save downloaded files",
 )
 @click.option(
@@ -95,13 +115,28 @@ def _call_biotope_add(file_path: Path, biotope_root: Path) -> bool:
     is_flag=True,
     help="Download file without adding to biotope project",
 )
-def get(url: str, output_dir: str, no_add: bool) -> None:
-    """Download a file and integrate with biotope workflow."""
-    # Find biotope project root
+@click.pass_context
+def get(ctx: click.Context, url: str, output_dir: str, no_add: bool) -> None:
+    """Download a file and integrate with biotope workflow.
+
+    If run outside a biotope project, scaffolds one in ``output_dir`` first so
+    the download has a home. This mirrors the behaviour proposed in PR #11.
+    """
+    output_path = Path(output_dir)
+
     biotope_root = find_biotope_root()
     if not biotope_root:
-        click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
+        # No surrounding project — scaffold one in-place at output_dir so the
+        # download can be tracked. Uses init's non-interactive path.
+        from biotope.commands.init import init as init_cmd
+
+        output_path.mkdir(parents=True, exist_ok=True)
+        click.echo(f"📦 No biotope project found; initialising one at {output_path}")
+        ctx.invoke(init_cmd, name=".", dir=output_path, no_prompt=True)
+        biotope_root = find_biotope_root(start=output_path)
+        if not biotope_root:
+            click.echo("❌ Failed to initialise biotope project.")
+            raise click.Abort
 
     # Check if we're in a Git repository
     if not is_git_repo(biotope_root):
@@ -109,7 +144,6 @@ def get(url: str, output_dir: str, no_add: bool) -> None:
         raise click.Abort
 
     # Create output directory if it doesn't exist
-    output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Download the file
@@ -124,18 +158,16 @@ def get(url: str, output_dir: str, no_add: bool) -> None:
 
     # Add to biotope project unless --no-add flag is used
     if not no_add:
-        click.echo(f"📁 Adding file to biotope project...")
+        click.echo("📁 Adding file to biotope project...")
         if _call_biotope_add(downloaded_file, biotope_root):
-            click.echo(f"✅ File added to biotope project")
-            click.echo(f"\n💡 Next steps:")
-            click.echo(f"  1. Run 'biotope status' to see staged files")
-            click.echo(f"  2. Run 'biotope annotate --staged' to create metadata")
-            click.echo(f"  3. Run 'biotope commit -m \"message\"' to save changes")
+            click.echo("✅ File added to biotope project")
+            click.echo("\n💡 Next steps:")
+            click.echo("  1. Run 'biotope status' to see staged files")
+            click.echo("  2. Run 'biotope annotate --staged' to create metadata")
+            click.echo("  3. Run 'biotope commit -m \"message\"' to save changes")
         else:
-            click.echo(f"⚠️  File downloaded but not added to biotope project")
-            click.echo(
-                f"   You can manually add it with: biotope add {downloaded_file}"
-            )
+            click.echo("⚠️  File downloaded but not added to biotope project")
+            click.echo(f"   You can manually add it with: biotope add {downloaded_file}")
     else:
-        click.echo(f"\n💡 File downloaded. To add to biotope project:")
+        click.echo("\n💡 File downloaded. To add to biotope project:")
         click.echo(f"  biotope add {downloaded_file}")
