@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/biocypher/biotope/compare/biotope-v0.6.0...biotope-v0.6.1) (2026-05-25)
+
+
+### Documentation
+
+* **examples:** add airports-notes.md and airport-hubs.csv ([#24](https://github.com/biocypher/biotope/issues/24)) ([29b1487](https://github.com/biocypher/biotope/commit/29b14878f177a408b03d2cffacc53b4a69f29ed6))
+
 ## [0.6.0](https://github.com/biocypher/biotope/compare/biotope-v0.5.0...biotope-v0.6.0) (2026-05-19)
 
 

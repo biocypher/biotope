@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "biotope"
-version = "0.6.0"
+version = "0.6.1"
 description = "CLI integration for BioCypher ecosystem packages"
 authors = ["Sebastian Lobentanzer <sebastian.lobentanzer@gmail.com>"]
 license = "MIT"
