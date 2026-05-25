@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/biocypher/biotope/compare/biotope-v0.6.1...biotope-v0.7.0) (2026-05-25)
+
+
+### Features
+
+* **API:** Croissant-driven KG workflow + agent-supported knowledge ingestion ([#23](https://github.com/biocypher/biotope/issues/23)) ([57f1872](https://github.com/biocypher/biotope/commit/57f18728b71383712f9415c99f7d07cdeb81dd5e))
+
 ## [0.6.1](https://github.com/biocypher/biotope/compare/biotope-v0.6.0...biotope-v0.6.1) (2026-05-25)
 
 
