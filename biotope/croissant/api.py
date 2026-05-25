@@ -139,10 +139,19 @@ def scaffold_mapping(
     )
     if write_to is not None:
         Path(write_to).write_text(scaffold)
+    # "unresolved" here means "slots that still need binding" — including
+    # empty stubs the scaffold just laid down. ``Mapping.unresolved_slots``
+    # excludes empty stubs (they're inactive, not broken), so for the
+    # scaffold's user-facing TODO we compute the full not-resolved list.
+    todo = [
+        f"entities.{name}" for name, entity in mapping.entities.items() if not entity.is_resolved()
+    ] + [
+        f"relations.{name}" for name, relation in mapping.relations.items() if not relation.is_resolved()
+    ]
     return {
         "yaml": scaffold,
         "wrote": str(write_to) if write_to else None,
-        "unresolved": mapping.unresolved_slots(),
+        "unresolved": todo,
     }
 
 
@@ -212,12 +221,22 @@ def materialize(
     project_dir: str | Path,
     mapping_paths: list[str | Path],
     alignment_path: str | Path | None = None,
+    *,
+    required_entities: list[str] | None = None,
+    required_relations: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Write a runnable BioCypher project to ``project_dir``."""
+    """Write a runnable BioCypher project to ``project_dir``.
+
+    Pass ``required_entities`` / ``required_relations`` (typically from
+    ``project.yaml``) to enable the project-wide coverage check: every
+    declared slot must be resolved in at least one mapping.
+    """
     from biotope.croissant.scaffold.materialize import materialize_project
 
     return materialize_project(
         project_dir=Path(project_dir),
         mapping_paths=[Path(p) for p in mapping_paths],
         alignment_path=Path(alignment_path) if alignment_path is not None else None,
+        required_entities=required_entities,
+        required_relations=required_relations,
     )

@@ -58,6 +58,8 @@ def _emit_schema_config(mappings: list[Mapping]) -> str:
 
     for index, mapping in enumerate(mappings):
         for name, entity in mapping.entities.items():
+            if entity.is_empty():
+                continue
             schema_term = derive_schema_term(name, entity.schema_term)
             entity_terms[(index, name)] = schema_term
             if schema_term in seen_terms:
@@ -72,6 +74,8 @@ def _emit_schema_config(mappings: list[Mapping]) -> str:
 
     for index, mapping in enumerate(mappings):
         for name, relation in mapping.relations.items():
+            if relation.is_empty():
+                continue
             schema_term = derive_schema_term(name, relation.schema_term)
             if schema_term in seen_terms:
                 continue
@@ -277,10 +281,21 @@ def materialize_project(
     project_dir: Path,
     mapping_paths: list[Path],
     alignment_path: Path | None = None,
+    *,
+    required_entities: list[str] | None = None,
+    required_relations: list[str] | None = None,
 ) -> dict[str, str]:
     """Write a runnable BioCypher project to ``project_dir``.
 
-    Strict: unresolved or legacy mappings raise ``ValueError``.
+    Strict on two axes:
+
+    * Per-mapping — any *partial* slot (started but not finished) aborts.
+      Empty stubs (intent-seeded, never bound) are tolerated: the slot may
+      well be bound in a different mapping.
+    * Project-wide — when ``required_entities`` / ``required_relations`` are
+      supplied, every declared slot must be resolved in at least one mapping.
+      Used by ``biotope build`` to surface "you forgot to bind X" before the
+      KG is generated with silent gaps.
     """
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "config").mkdir(exist_ok=True)
@@ -297,6 +312,8 @@ def materialize_project(
         except ValueError as exc:
             msg = f"Mapping {path} is not fully resolved: {exc}"
             raise ValueError(msg) from exc
+
+    _assert_project_wide_coverage(mappings, required_entities, required_relations)
 
     schema_config_path = project_dir / "config" / "schema_config.yaml"
     schema_config_path.write_text(_emit_schema_config(mappings))
@@ -353,6 +370,49 @@ def materialize_project(
         "alignment": str(written_alignment) if written_alignment else "",
         "generated_packages": ",".join(stems),
     }
+
+
+def _assert_project_wide_coverage(
+    mappings: list[Mapping],
+    required_entities: list[str] | None,
+    required_relations: list[str] | None,
+) -> None:
+    """Fail if any declared entity/relation isn't resolved in *some* mapping.
+
+    Skipped when the caller didn't pass declarations (older or library
+    integrations using ``materialize`` without intent context).
+    """
+    from biotope.croissant.mapping.model import to_snake_case
+
+    if not required_entities and not required_relations:
+        return
+
+    resolved_entities: set[str] = set()
+    resolved_relations: set[str] = set()
+    for mapping in mappings:
+        for name, entity in mapping.entities.items():
+            if entity.is_resolved():
+                resolved_entities.add(name)
+        for name, relation in mapping.relations.items():
+            if relation.is_resolved():
+                resolved_relations.add(name)
+
+    missing_entities = [raw for raw in (required_entities or []) if to_snake_case(raw) not in resolved_entities]
+    missing_relations = [raw for raw in (required_relations or []) if to_snake_case(raw) not in resolved_relations]
+    if not missing_entities and not missing_relations:
+        return
+
+    parts: list[str] = []
+    if missing_entities:
+        parts.append("entities: " + ", ".join(missing_entities))
+    if missing_relations:
+        parts.append("relations: " + ", ".join(missing_relations))
+    msg = (
+        "Declared slot(s) not bound in any mapping — "
+        + "; ".join(parts)
+        + ". Open `biotope map` and bind them, or remove from intent if no longer needed."
+    )
+    raise ValueError(msg)
 
 
 def _mapping_stem(path: Path) -> str:

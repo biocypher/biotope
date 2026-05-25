@@ -130,18 +130,49 @@ def test_item_rejected_when_scan_is_row() -> None:
 
 
 def test_unresolved_slots_reported() -> None:
+    """Partial slots (started but not finished) are unresolved; empty stubs are not.
+
+    Intent capture seeds empty stubs into every mapping in the project — they
+    mark "declared somewhere, not bound here" and don't block the build.
+    Anything past that initial state (e.g. ``record_set`` set but no ``id``)
+    is a real authoring gap and gets flagged.
+    """
     mapping = Mapping.model_validate(
         {
             "croissant": "x.json",
-            "entities": {"target": {}, "ready": {"record_set": "rs", "id": "id"}},
-            "relations": {"r": {}},
+            "entities": {
+                "empty_stub": {},  # untouched; intent-seeded
+                "started": {"record_set": "rs"},  # partial — record_set without id
+                "ready": {"record_set": "rs", "id": "id"},
+            },
+            "relations": {
+                "empty_rel": {},
+                "started_rel": {"record_set": "rs"},
+            },
         }
     )
-    assert sorted(mapping.unresolved_slots()) == ["entities.target", "relations.r"]
+    assert sorted(mapping.unresolved_slots()) == [
+        "entities.started",
+        "relations.started_rel",
+    ]
     assert not mapping.is_resolved()
-    mapping.entities  # ensure model accessible
     with pytest.raises(ValueError, match="unresolved"):
         mapping.assert_resolved()
+
+
+def test_empty_stubs_pass_resolution() -> None:
+    """A mapping containing only empty stubs alongside resolved slots is resolved."""
+    mapping = Mapping.model_validate(
+        {
+            "croissant": "x.json",
+            "entities": {
+                "stub": {},
+                "ready": {"record_set": "rs", "id": "id"},
+            },
+        }
+    )
+    assert mapping.is_resolved()
+    assert mapping.unresolved_slots() == []
 
 
 def test_to_snake_case_normalises_phrasing() -> None:
@@ -655,8 +686,12 @@ def test_unresolved_scaffold_keys_from_intent() -> None:
     )
     assert set(mapping.entities) == {"gene", "disease"}
     assert "which_genes_are_in_which_diseases" in mapping.relations
-    # All slots unresolved
-    assert not mapping.is_resolved()
+    # Scaffolded slots are empty stubs — declared, not yet bound. They don't
+    # count as "unresolved" (a state reserved for slots the user started
+    # binding without finishing). Slot-first navigation surfaces them as
+    # "available to bind" via the project's intent table, not via this method.
+    assert mapping.unresolved_slots() == []
+    assert mapping.is_resolved()
 
 
 def test_scaffold_mapping_writes_appendix(minimal_croissant: Path, gene_csv: Path, tmp_path: Path) -> None:

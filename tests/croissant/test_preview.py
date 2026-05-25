@@ -13,11 +13,16 @@ def _load_dataset(croissant: Path) -> object:
 
 
 def test_partial_mapping_reports_unresolved_slots(minimal_croissant: Path) -> None:
+    """Partial slots (record_set set but binding incomplete) are reported.
+
+    Truly empty stubs (no fields touched) are scaffolded TODOs, not authoring
+    errors, and don't show up in the preview's unresolved list.
+    """
     mapping = Mapping.model_validate(
         {
             "croissant": str(minimal_croissant),
-            "entities": {"gene": {}},
-            "relations": {"gene_in_disease": {}},
+            "entities": {"gene": {"record_set": "genes"}},
+            "relations": {"gene_in_disease": {"record_set": "genes"}},
         }
     )
     result = preview_mapping(mapping, _load_dataset(minimal_croissant))

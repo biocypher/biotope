@@ -12,6 +12,7 @@ entity creation so the session needs only one pass.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from biotope.croissant.mapping import (
     Mapping,
     inspect_dataset,
     preview_mapping,
+    render_inspection_text,
     to_snake_case,
 )
 from biotope.croissant.mapping.defaults import intent_comment, unresolved_scaffold
@@ -37,6 +39,7 @@ from biotope.croissant.mapping.render import (
     render_mapping_with_appendix,
 )
 from biotope.croissant.spec import CroissantDatasetModel, FieldKind
+from biotope.metadata import STATUS_RAW, get_status
 from biotope.project_model import Project, find_project
 
 
@@ -49,10 +52,60 @@ console = Console()
 
 
 def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> None:
-    """Resolve sources, then run the wizard's main loop."""
-    project_path, project = _resolve_project()
-    croissant_path, mapping_path = _resolve_targets(croissant_arg, mapping_arg, project_path)
+    """Dispatch to slot-first or per-mapping flow based on args.
 
+    With no ``croissant_arg`` or ``mapping_arg``, the wizard runs the
+    project-wide slot-first loop: intent is the entry point, slots are the
+    primary navigation, datasets are picked per-slot. Passing a croissant or
+    mapping path drops directly into the per-mapping editor (today's flow).
+    """
+    project_path, project = _resolve_project()
+
+    if croissant_arg is not None or mapping_arg is not None:
+        croissant_path, mapping_path = _resolve_targets(croissant_arg, mapping_arg, project_path)
+        _run_per_mapping(project_path, project, croissant_path, mapping_path)
+        return
+
+    project_root = _project_root_from(project_path)
+    has_intent = bool(project.required_entities or project.required_relations)
+    has_croissants = bool(_all_croissants(project_root))
+    has_mappings = bool(sorted((project_root / "mappings").glob("*.mapping.yaml")))
+
+    # Truly empty project — show guidance and bail, same as before the refactor.
+    if not has_intent and not has_croissants and not has_mappings:
+        _show_empty_state(project_root)
+        raise click.Abort
+
+    # Have data but no intent — offer to capture it so slot-first has anchors.
+    if not has_intent:
+        try:
+            if Confirm.ask("No entities or relations declared yet. Capture intent now?", default=True):
+                project = _intent_capture(project_path, project)
+                has_intent = bool(project.required_entities or project.required_relations)
+        except (KeyboardInterrupt, click.Abort):
+            console.print("\n[yellow]↩ Skipped intent capture.[/yellow]")
+
+    if not has_intent:
+        # Still no intent (declined or aborted) — fall back to the per-mapping
+        # picker so the user can resume / start a single mapping directly.
+        try:
+            croissant_arg = _pick_existing_resource(project_root)
+        except click.Abort:
+            return
+        croissant_path, mapping_path = _resolve_targets(croissant_arg, None, project_path)
+        _run_per_mapping(project_path, project, croissant_path, mapping_path)
+        return
+
+    _slot_first_loop(project_path, project_root)
+
+
+def _run_per_mapping(
+    project_path: Path,
+    project: Project,
+    croissant_path: Path,
+    mapping_path: Path,
+) -> None:
+    """Set up state for one croissant and run the per-mapping editor loop."""
     from biotope.commands.map import _load_croissant  # avoid circular import at module load
 
     dataset = _load_croissant(str(croissant_path))
@@ -73,7 +126,6 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
         )
     )
 
-    # Intent capture on first run if empty
     if not (project.required_entities or project.required_relations):
         try:
             if Confirm.ask("No entities or relations declared yet. Capture intent now?", default=True):
@@ -95,6 +147,11 @@ def launch_wizard(*, croissant_arg: str | None, mapping_arg: Path | None) -> Non
     )
 
 
+def _project_root_from(project_path: Path) -> Path:
+    """Return the project root directory for a ``project.yaml`` path."""
+    return project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
+
+
 # ---------------------------------------------------------------------------
 # Setup helpers
 # ---------------------------------------------------------------------------
@@ -113,7 +170,13 @@ def _resolve_targets(
     mapping_arg: Path | None,
     project_path: Path,
 ) -> tuple[Path, Path]:
-    project_root = project_path.parent.parent if project_path.parent.name == ".biotope" else project_path.parent
+    """Resolve (croissant_path, mapping_path) for the per-mapping editor.
+
+    Callers always provide at least one of ``croissant_arg`` / ``mapping_arg``;
+    the slot-first flow is entered when both are absent, so this never picks a
+    croissant on its own.
+    """
+    project_root = _project_root_from(project_path)
     mappings_dir = project_root / "mappings"
     mappings_dir.mkdir(parents=True, exist_ok=True)
 
@@ -130,33 +193,34 @@ def _resolve_targets(
                 raise click.Abort
             return Path(croissant_str), mapping_path
 
-    if croissant_arg is None:
-        croissant_arg = _pick_existing_resource(project_root)
-
+    assert croissant_arg is not None, "_resolve_targets requires croissant or mapping arg"
     croissant_path = Path(croissant_arg).resolve()
-    mapping_path = mappings_dir / f"{_mapping_stem(croissant_path)}.mapping.yaml"
-    if mapping_arg is not None:
-        mapping_path = mapping_arg
+    mapping_path = mapping_arg or (mappings_dir / f"{_mapping_stem(croissant_path)}.mapping.yaml")
     return croissant_path, mapping_path
 
 
 def _pick_existing_resource(project_root: Path) -> str:
-    from biotope.commands.map import discover_croissants  # avoid circular import
-
-    croissants = discover_croissants(project_root)
-    croissants += sorted(project_root.glob("*.croissant.json"))
+    """Per-mapping picker: pick a mapping file to resume or a mappable croissant
+    to start a new mapping. Raw datasets are listed as a hidden-count footer,
+    not as actionable choices — they have no schema biotope can bind against.
+    """
+    mappable = _mappable_croissants(project_root)
+    raw = _raw_croissants(project_root)
     mappings = sorted((project_root / "mappings").glob("*.mapping.yaml"))
 
-    if not croissants and not mappings:
-        _show_empty_state(project_root)
+    if not mappable and not mappings:
+        console.print(
+            "[yellow]No mappable datasets or existing mappings in this project.[/yellow]\n"
+            "[dim]Raw datasets need a structured derivative (CSV, etc.) before a mapping can bind to them.[/dim]"
+        )
         raise click.Abort
-    if len(croissants) == 1 and not mappings:
-        return str(croissants[0])
+    if len(mappable) == 1 and not mappings:
+        return str(mappable[0])
 
     items: list[tuple[str, str, str]] = []
     for p in mappings:
         items.append(("mapping", str(p), "resume mapping"))
-    for p in croissants:
+    for p in mappable:
         try:
             rel = p.relative_to(project_root)
         except ValueError:
@@ -170,12 +234,53 @@ def _pick_existing_resource(project_root: Path) -> str:
     for i, (_, path, label) in enumerate(items, start=1):
         table.add_row(str(i), label, path)
     console.print(table)
+
+    if raw:
+        rel_raw = []
+        for p in raw:
+            try:
+                rel_raw.append(str(p.relative_to(project_root)))
+            except ValueError:
+                rel_raw.append(str(p))
+        console.print(
+            f"[dim]{len(raw)} raw dataset(s) hidden (no schema to map yet): "
+            f"{', '.join(rel_raw)}[/dim]"
+        )
+
     idx = IntPrompt.ask("Selection", default=1)
     kind, path, _ = items[max(1, min(idx, len(items))) - 1]
     if kind == "mapping":
         data = yaml.safe_load(Path(path).read_text()) or {}
         return data.get("croissant", path)
     return path
+
+
+def _all_croissants(project_root: Path) -> list[Path]:
+    from biotope.commands.map import discover_croissants  # avoid circular import
+
+    croissants = discover_croissants(project_root)
+    croissants += sorted(project_root.glob("*.croissant.json"))
+    return croissants
+
+
+def _croissant_status(croissant_path: Path) -> str:
+    """Read ``biotope:status`` from a croissant manifest; return ``STATUS_RAW``
+    on any read failure so unreadable manifests don't masquerade as mappable.
+    """
+    try:
+        data = json.loads(croissant_path.read_text())
+    except (OSError, ValueError):
+        return STATUS_RAW
+    return get_status(data)
+
+
+def _mappable_croissants(project_root: Path) -> list[Path]:
+    """Croissants that have a schema biotope can map (status ≠ raw)."""
+    return [p for p in _all_croissants(project_root) if _croissant_status(p) != STATUS_RAW]
+
+
+def _raw_croissants(project_root: Path) -> list[Path]:
+    return [p for p in _all_croissants(project_root) if _croissant_status(p) == STATUS_RAW]
 
 
 def _show_empty_state(project_root: Path) -> None:
@@ -205,6 +310,312 @@ def _mapping_stem(path: Path) -> str:
         if name.endswith(suffix):
             return name[: -len(suffix)]
     return path.stem
+
+
+# ---------------------------------------------------------------------------
+# Slot-first loop: project-wide navigation anchored on declared intent
+# ---------------------------------------------------------------------------
+
+
+def _slot_first_loop(project_path: Path, project_root: Path) -> None:
+    """Project-wide menu: slots are the primary axis, datasets are per-slot.
+
+    Each iteration re-reads ``project.yaml`` and all ``mappings/*.mapping.yaml``
+    so inline edits (intent capture, new bindings created from a sub-flow) are
+    reflected immediately.
+    """
+    while True:
+        project = Project.load(project_path)
+        slot_state = _collect_slot_state(project_root, project)
+        _render_slot_table(slot_state, project)
+        try:
+            choice = _slot_menu_choice(slot_state)
+        except KeyboardInterrupt:
+            console.print("\n💾 [cyan]biotope map[/cyan] exited.")
+            return
+        if choice == "quit":
+            console.print("💾 [cyan]biotope map[/cyan] exited.")
+            return
+        try:
+            if choice == "intent":
+                _intent_capture(project_path, project)
+            elif choice == "view":
+                _view_data_browser(project_root)
+            elif choice.startswith("slot:"):
+                _, kind, key = choice.split(":", 2)
+                _resolve_slot(project_path, project_root, kind, key, slot_state)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]↩ Cancelled — back to the slot menu.[/yellow]")
+            continue
+
+
+def _collect_slot_state(
+    project_root: Path,
+    project: Project,
+) -> dict[str, dict[str, list[Path]]]:
+    """Aggregate per-slot bindings across all mapping files in the project.
+
+    Returns ``{slot_code: {"resolved": [paths], "partial": [paths]}}``.
+    ``slot_code`` is ``entity:<snake>`` or ``relation:<snake>``. A slot is
+    "partial" when it exists in a mapping file but ``_entity_is_resolved`` /
+    ``_relation_is_resolved`` is False.
+    """
+    state: dict[str, dict[str, list[Path]]] = {}
+    for raw in project.required_entities:
+        state[f"entity:{to_snake_case(raw)}"] = {"resolved": [], "partial": []}
+    for raw in project.required_relations:
+        state[f"relation:{to_snake_case(raw)}"] = {"resolved": [], "partial": []}
+
+    mappings_dir = project_root / "mappings"
+    if not mappings_dir.is_dir():
+        return state
+
+    for mapping_path in sorted(mappings_dir.glob("*.mapping.yaml")):
+        try:
+            data = yaml.safe_load(mapping_path.read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        for key, val in (data.get("entities") or {}).items():
+            code = f"entity:{key}"
+            if code not in state:
+                continue
+            bucket = "resolved" if _entity_is_resolved(val or {}) else "partial"
+            state[code][bucket].append(mapping_path)
+        for key, val in (data.get("relations") or {}).items():
+            code = f"relation:{key}"
+            if code not in state:
+                continue
+            bucket = "resolved" if _relation_is_resolved(val or {}) else "partial"
+            state[code][bucket].append(mapping_path)
+    return state
+
+
+def _render_slot_table(
+    slot_state: dict[str, dict[str, list[Path]]],
+    project: Project,
+) -> None:
+    resolved_count = sum(1 for buckets in slot_state.values() if buckets["resolved"])
+    total = len(slot_state)
+    title = f"Declared slots — {resolved_count}/{total} resolved (project-wide)"
+    table = Table(title=title, show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("", width=2)
+    table.add_column("Kind", style="dim", width=8)
+    table.add_column("Name")
+    table.add_column("Bound in", style="dim")
+    for i, (code, buckets) in enumerate(slot_state.items(), start=1):
+        kind, key = code.split(":", 1)
+        resolved = buckets["resolved"]
+        partial = buckets["partial"]
+        if resolved:
+            icon = "[green]✓[/green]"
+        elif partial:
+            icon = "[yellow]◐[/yellow]"
+        else:
+            icon = "○"
+        bindings: list[str] = []
+        for p in resolved:
+            bindings.append(p.stem.replace(".mapping", ""))
+        for p in partial:
+            bindings.append(f"{p.stem.replace('.mapping', '')} [yellow](partial)[/yellow]")
+        table.add_row(str(i), icon, kind, key, ", ".join(bindings) or "—")
+    console.print(table)
+    console.print(f"[dim]Purpose:[/dim] {project.purpose or '[dim](not set)[/dim]'}")
+    if resolved_count == total and total > 0:
+        console.print("[green]All slots resolved. Run `biotope build` to generate the BioCypher project.[/green]")
+
+
+def _slot_menu_choice(slot_state: dict[str, dict[str, list[Path]]]) -> str:
+    """Render the slot-first menu and return a choice code."""
+    slot_codes = list(slot_state.keys())
+    actions = [
+        ("view", r"\[v] view data — browse croissant record sets and sample rows"),
+        ("intent", r"\[i] edit intent (entities / relations / purpose)"),
+        ("quit", r"\[q] save and quit"),
+    ]
+    console.print("[dim]Enter a slot number to bind it, or one of:[/dim]")
+    for _, label in actions:
+        console.print(f"  {label}")
+
+    default = next(
+        (str(i) for i, code in enumerate(slot_codes, start=1) if not slot_state[code]["resolved"]),
+        "q",
+    )
+    while True:
+        raw = Prompt.ask("Selection", default=default).strip().lower()
+        for code, _ in actions:
+            if raw == code or raw == code[0]:
+                return code
+        try:
+            idx = int(raw)
+        except ValueError:
+            console.print("[yellow]Enter a slot number or one of v/i/q.[/yellow]")
+            continue
+        if 1 <= idx <= len(slot_codes):
+            return f"slot:{slot_codes[idx - 1]}"
+        console.print(f"[yellow]No slot #{idx}.[/yellow]")
+
+
+def _resolve_slot(
+    project_path: Path,
+    project_root: Path,
+    kind: str,
+    key: str,
+    slot_state: dict[str, dict[str, list[Path]]],
+) -> None:
+    """Bind one declared slot to a croissant by dropping into the slot editor.
+
+    Lists non-raw croissants ranked by field-name overlap with the slot key,
+    annotates each with its existing binding status for this slot, then loads
+    the chosen croissant's mapping draft and invokes the per-slot editor.
+    """
+    slot_code = f"{kind}:{key}"
+    existing_resolved = slot_state.get(slot_code, {}).get("resolved", [])
+    existing_partial = slot_state.get(slot_code, {}).get("partial", [])
+
+    candidates = _mappable_croissants(project_root)
+    if not candidates:
+        console.print(
+            "[yellow]No mappable croissants in this project yet.[/yellow]\n"
+            "[dim]Add data with `biotope add` and re-run.[/dim]"
+        )
+        return
+
+    from biotope.commands.map import _load_croissant  # avoid circular import
+
+    rows: list[tuple[Path, int, str, str]] = []
+    tokens = _slot_tokens(key)
+    for croissant_path in candidates:
+        try:
+            dataset = _load_croissant(str(croissant_path))
+        except Exception:  # noqa: BLE001
+            continue
+        inspection = inspect_dataset(dataset, datasets_location=None, preview_rows=0)
+        score = _score_inspection_for_tokens(inspection, tokens)
+        hint = _inspection_hint(inspection)
+        try:
+            rel = str(croissant_path.relative_to(project_root))
+        except ValueError:
+            rel = str(croissant_path)
+        rows.append((croissant_path, score, rel, hint))
+
+    rows.sort(key=lambda r: (-r[1], r[2]))
+
+    table = Table(title=f"Pick a croissant to bind {kind} `{key}`", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Croissant", style="cyan")
+    table.add_column("Record sets / fields", style="dim")
+    table.add_column("Match", style="dim", width=8)
+    table.add_column("Binding", style="dim")
+    for i, (path, score, rel, hint) in enumerate(rows, start=1):
+        mapping_stem = _mapping_stem(path)
+        binding = ""
+        if any(p.stem.replace(".mapping", "") == mapping_stem for p in existing_resolved):
+            binding = "[green]resolved[/green]"
+        elif any(p.stem.replace(".mapping", "") == mapping_stem for p in existing_partial):
+            binding = "[yellow]partial[/yellow]"
+        match = f"{score}" if score else ""
+        table.add_row(str(i), rel, hint, match, binding)
+    console.print(table)
+    console.print("[dim]Enter a number, or press Enter to cancel.[/dim]")
+
+    raw = Prompt.ask("Croissant", default="")
+    if not raw.strip():
+        return
+    try:
+        idx = int(raw)
+    except ValueError:
+        return
+    if not 1 <= idx <= len(rows):
+        return
+
+    croissant_path, _, _, _ = rows[idx - 1]
+    project = Project.load(project_path)
+    mappings_dir = project_root / "mappings"
+    mappings_dir.mkdir(parents=True, exist_ok=True)
+    mapping_path = mappings_dir / f"{_mapping_stem(croissant_path)}.mapping.yaml"
+
+    dataset = _load_croissant(str(croissant_path))
+    datasets_location = infer_datasets_location(croissant_path)
+    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    draft = _load_or_init_draft(mapping_path, croissant_path, project)
+    draft = _sync_slots_from_intent(draft, project)
+
+    if kind == "entity":
+        _edit_entity_slot(draft, key, inspection)
+    elif kind == "relation":
+        _edit_relation_slot(draft, key, inspection, project_path, project)
+    _autosave(mapping_path, draft, dataset, datasets_location, Project.load(project_path))
+    console.print(f"💾 Saved [cyan]{mapping_path}[/cyan]")
+
+
+def _slot_tokens(slot_key: str) -> list[str]:
+    """Tokens for matching a slot key against field names (lowercased, ≥2 chars)."""
+    return [t for t in slot_key.split("_") if len(t) >= 2]
+
+
+def _score_inspection_for_tokens(inspection: DatasetInspection, tokens: list[str]) -> int:
+    """Count token occurrences as substrings in record-set + field names."""
+    if not tokens:
+        return 0
+    score = 0
+    for rs in inspection.record_sets:
+        haystack = rs.name.lower() + " " + " ".join(f.name.lower() for f in rs.fields)
+        for tok in tokens:
+            if tok in haystack:
+                score += 1
+    return score
+
+
+def _inspection_hint(inspection: DatasetInspection, max_fields: int = 4) -> str:
+    parts: list[str] = []
+    for rs in inspection.record_sets:
+        field_names = [f.name for f in rs.fields[:max_fields]]
+        suffix = " …" if len(rs.fields) > max_fields else ""
+        parts.append(f"{rs.name} ({', '.join(field_names)}{suffix})")
+    return "; ".join(parts) or "[no record sets]"
+
+
+def _view_data_browser(project_root: Path) -> None:
+    """Browse non-raw croissants: list them, then dump the inspector view for one."""
+    candidates = _mappable_croissants(project_root)
+    if not candidates:
+        console.print(
+            "[yellow]No mappable croissants to inspect.[/yellow]\n"
+            "[dim]Raw datasets (markdown, opaque blobs) have no schema yet.[/dim]"
+        )
+        return
+
+    table = Table(title="Mappable datasets", show_lines=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Croissant", style="cyan")
+    for i, p in enumerate(candidates, start=1):
+        try:
+            rel = str(p.relative_to(project_root))
+        except ValueError:
+            rel = str(p)
+        table.add_row(str(i), rel)
+    console.print(table)
+    console.print("[dim]Enter a number to inspect, or press Enter to return.[/dim]")
+
+    raw = Prompt.ask("Dataset", default="")
+    if not raw.strip():
+        return
+    try:
+        idx = int(raw)
+    except ValueError:
+        return
+    if not 1 <= idx <= len(candidates):
+        return
+
+    from biotope.commands.map import _load_croissant  # avoid circular import
+
+    croissant_path = candidates[idx - 1]
+    dataset = _load_croissant(str(croissant_path))
+    datasets_location = infer_datasets_location(croissant_path)
+    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    console.print(Panel(render_inspection_text(inspection), title=str(croissant_path), border_style="cyan"))
+    Prompt.ask("[dim]Press Enter to return to the slot menu[/dim]", default="")
 
 
 # ---------------------------------------------------------------------------
@@ -425,8 +836,9 @@ def _main_loop(
     inspection: DatasetInspection,
     draft: dict[str, Any],
 ) -> None:
+    project_root = _project_root_from(project_path)
     while True:
-        _render_progress(draft, project)
+        _render_progress(project_path, project_root, project)
         try:
             choice = _menu_choice(draft)
         except KeyboardInterrupt:
@@ -458,15 +870,23 @@ def _main_loop(
         _autosave(mapping_path, draft, dataset, datasets_location, project)
 
 
-def _render_progress(draft: dict[str, Any], project: Project) -> None:
-    entities = draft.get("entities") or {}
-    relations = draft.get("relations") or {}
-    resolved_e = sum(1 for v in entities.values() if _entity_is_resolved(v))
-    resolved_r = sum(1 for v in relations.values() if _relation_is_resolved(v))
+def _render_progress(project_path: Path, project_root: Path, project: Project) -> None:
+    """Render progress against project-wide slot state.
+
+    A slot is satisfied if *any* mapping file in the project resolves it —
+    BioCypher dedups across emissions at build time, so a slot bound in one
+    croissant counts even when editing another. This mirrors what the
+    slot-first menu shows.
+    """
+    state = _collect_slot_state(project_root, project)
+    entity_codes = [c for c in state if c.startswith("entity:")]
+    relation_codes = [c for c in state if c.startswith("relation:")]
+    resolved_e = sum(1 for c in entity_codes if state[c]["resolved"])
+    resolved_r = sum(1 for c in relation_codes if state[c]["resolved"])
     console.print(
         Panel(
-            f"[bold]Entities:[/bold] {resolved_e}/{len(entities)} resolved\n"
-            f"[bold]Relations:[/bold] {resolved_r}/{len(relations)} resolved\n"
+            f"[bold]Entities:[/bold] {resolved_e}/{len(entity_codes)} resolved (project-wide)\n"
+            f"[bold]Relations:[/bold] {resolved_r}/{len(relation_codes)} resolved (project-wide)\n"
             f"[bold]Purpose:[/bold] {project.purpose or '[dim](not set)[/dim]'}",
             title="Mapping progress",
             border_style="blue",

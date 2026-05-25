@@ -237,6 +237,25 @@ class EntityMapping(_Model):
     def is_resolved(self) -> bool:
         return self.record_set is not None and self.id is not None and self.id.is_resolved()
 
+    def is_empty(self) -> bool:
+        """True for a slot stub the user never bound — all fields at defaults.
+
+        Intent capture seeds such stubs into every mapping (as a TODO list),
+        but bindings can live in *any* mapping. An empty stub here means
+        "declared project-wide, but not bound in this file"; the build and the
+        compiler should treat it as not-declared-in-this-mapping rather than
+        partial-and-broken.
+        """
+        return (
+            self.record_set is None
+            and self.id is None
+            and not self.properties
+            and self.schema_term is None
+            and self.namespace is None
+            and self.where is None
+            and isinstance(self.scan, RowScan)
+        )
+
 
 class RelationMapping(_Model):
     """One semantic relation declaration (compiles to a BioCypher edge type)."""
@@ -268,6 +287,18 @@ class RelationMapping(_Model):
             and self.source.is_resolved()
             and self.target is not None
             and self.target.is_resolved()
+        )
+
+    def is_empty(self) -> bool:
+        """See :meth:`EntityMapping.is_empty`."""
+        return (
+            self.record_set is None
+            and self.source is None
+            and self.target is None
+            and not self.properties
+            and self.schema_term is None
+            and self.where is None
+            and isinstance(self.scan, RowScan)
         )
 
 
@@ -414,11 +445,21 @@ class Mapping(_Model):
         return not self.unresolved_slots()
 
     def unresolved_slots(self) -> list[str]:
+        """Return labels of slots that are partially bound (started but not finished).
+
+        Empty stubs — declared by intent capture but never bound in this
+        mapping — are skipped: they are not errors, just inactive in this file.
+        See :meth:`EntityMapping.is_empty`.
+        """
         slots: list[str] = []
         for entity_name, entity in self.entities.items():
+            if entity.is_empty():
+                continue
             if not entity.is_resolved():
                 slots.append(f"entities.{entity_name}")
         for rel_name, relation in self.relations.items():
+            if relation.is_empty():
+                continue
             if not relation.is_resolved():
                 slots.append(f"relations.{rel_name}")
         return slots

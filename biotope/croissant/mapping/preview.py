@@ -129,9 +129,13 @@ def preview_mapping(
 
 def _classify_slots(mapping: Mapping, preview: MappingPreview) -> None:
     for name, entity in mapping.entities.items():
+        if entity.is_empty():
+            continue
         path = f"entities.{name}"
         (preview.resolved_slots if entity.is_resolved() else preview.unresolved_slots).append(path)
     for name, relation in mapping.relations.items():
+        if relation.is_empty():
+            continue
         path = f"relations.{name}"
         (preview.resolved_slots if relation.is_resolved() else preview.unresolved_slots).append(path)
 
@@ -144,6 +148,8 @@ def _validate_against_dataset(
     rs_index = {rs.name: rs for rs in inspection.record_sets}
 
     for name, entity in mapping.entities.items():
+        if entity.is_empty():
+            continue
         path = f"entities.{name}"
         if entity.record_set is None:
             preview.findings.append(ValidationFinding("warning", path, "record_set not set"))
@@ -162,6 +168,8 @@ def _validate_against_dataset(
             _validate_selector(prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview)
 
     for name, relation in mapping.relations.items():
+        if relation.is_empty():
+            continue
         path = f"relations.{name}"
         if relation.record_set is None:
             preview.findings.append(ValidationFinding("warning", path, "record_set not set"))

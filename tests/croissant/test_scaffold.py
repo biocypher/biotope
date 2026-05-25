@@ -62,12 +62,19 @@ def test_materialize_minimal(tmp_path: Path, minimal_croissant: Path) -> None:
 
 
 def test_strict_build_rejects_unresolved(tmp_path: Path, minimal_croissant: Path) -> None:
+    """Partial slots (started but not finished) abort the build.
+
+    Empty stubs from intent capture are intentionally tolerated — they're how
+    a slot declared in ``project.yaml`` shows up across every mapping without
+    forcing the user to bind it everywhere. Partial slots, however, mean the
+    user started binding and stopped midway: that's a real error.
+    """
     mapping_path = tmp_path / "incomplete.mapping.yaml"
     mapping_path.write_text(
         yaml.safe_dump(
             {
                 "croissant": str(minimal_croissant),
-                "entities": {"gene": {}},
+                "entities": {"gene": {"record_set": "genes"}},  # partial: no id
             },
             sort_keys=False,
         )

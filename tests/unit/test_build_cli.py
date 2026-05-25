@@ -90,7 +90,10 @@ def test_build_rejects_unresolved_mapping(tmp_path: Path, monkeypatch) -> None:
 
     r = runner.invoke(build, [])
     assert r.exit_code != 0
-    assert "not fully resolved" in r.output
+    # `gene` was declared in intent but never bound in any mapping — the
+    # project-wide coverage check should call that out, not just "unresolved".
+    assert "not bound in any mapping" in r.output
+    assert "gene" in r.output
 
 
 def test_propose_mapping_deprecated_alias_still_works(tmp_path: Path, monkeypatch) -> None:

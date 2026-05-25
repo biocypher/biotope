@@ -30,7 +30,7 @@ import click
 from rich.console import Console
 
 from biotope.croissant.api import materialize
-from biotope.project_model import find_project
+from biotope.project_model import Project, find_project
 
 
 console = Console()
@@ -79,9 +79,16 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
         if candidate.is_file():
             alignment_path = candidate
 
+    project = Project.load(project_path)
     out_dir = out_dir or (project_root / "build")
     try:
-        result = materialize(out_dir, mapping_paths, alignment_path)
+        result = materialize(
+            out_dir,
+            mapping_paths,
+            alignment_path,
+            required_entities=list(project.required_entities),
+            required_relations=list(project.required_relations),
+        )
     except ValueError as exc:
         click.echo(f"❌ Build aborted: {exc}")
         raise click.Abort from exc

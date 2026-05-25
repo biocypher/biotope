@@ -56,6 +56,9 @@ def iter_entity_tuples(
     preview engine so partial mappings still produce some output.
     """
     for name, entity in mapping.entities.items():
+        if entity.is_empty():
+            # Stub from intent capture; the slot is bound in another mapping.
+            continue
         if not entity.is_resolved():
             if only_resolved:
                 continue
@@ -87,6 +90,8 @@ def iter_relation_tuples(
     ``relationship_id`` is ``None`` in v1 (BioCypher auto-generates one).
     """
     for name, relation in mapping.relations.items():
+        if relation.is_empty():
+            continue
         if not relation.is_resolved():
             if only_resolved:
                 continue

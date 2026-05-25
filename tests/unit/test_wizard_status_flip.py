@@ -107,11 +107,13 @@ def test_unresolved_mapping_does_not_flip(tmp_path: Path) -> None:
     croissant = tmp_path / "minimal.jsonld"
     _write_minimal_croissant(croissant)
 
-    # Intentionally not resolved: no `id` on the entity.
+    # Partial slot: record_set picked but no `id` yet — started, not finished.
+    # (A truly empty stub would be treated as not-declared-in-this-mapping and
+    # would not block resolution.)
     mapping = Mapping.model_validate(
         {
             "croissant": str(croissant),
-            "entities": {"gene": {}},
+            "entities": {"gene": {"record_set": "rs"}},
         }
     )
     assert not mapping.is_resolved()
