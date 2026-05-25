@@ -36,8 +36,7 @@ package management workflow.
 ## 1. Initialise a project
 
 First run `biotope init` and choose a project name and purpose. For this
-tutorial, our name will be `airports` and our purpose is to "`Find which US
-airports are most connected and which airlines use them as their hubs.`".
+tutorial, our name will be `airports` and our purpose is to "`Find which US airports are most connected and which airlines use them as their hubs.`".
 Or, fully CLI-based:
 
 ```bash
@@ -127,49 +126,51 @@ the two paths:
 
 !!! Processing
 
-    === "Human"
+````
+=== "Human"
 
-        Before LLM agents, the most reliable way to process simple unstructured
-        text into the structured form required for our pipeline is manual
-        curation into a structured form (such as a CSV of triples). You can
-        imagine doing this here, but for this tutorial we ship the pre-extracted
-        CSV so you can fetch it directly, to save time:
+    Before LLM agents, the most reliable way to process simple unstructured
+    text into the structured form required for our pipeline is manual
+    curation into a structured form (such as a CSV of triples). You can
+    imagine doing this here, but for this tutorial we ship the pre-extracted
+    CSV so you can fetch it directly, to save time:
 
-        ```bash
-        uv run biotope get \
-          https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airport-hubs.csv \
-          --output-dir data/notes --no-add
-        ```
+    ```bash
+    uv run biotope get \
+      https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airport-hubs.csv \
+      --output-dir data/notes --no-add
+    ```
 
-        Note the `--no-add` flag; we are acting like we'd create the file by
-        hand to then add as a derivative of the unstructured markdown note.
-        Running the biotope pipeline with an agent (see "Agent" tab) will allow
-        us to automate the task. After we have created (or downloaded) the file,
-        we need to indicate that the new file was derived from the unstructured
-        version (to remove it from the queue):
+    Note the `--no-add` flag; we are acting like we'd create the file by
+    hand to then add as a derivative of the unstructured markdown note.
+    Running the biotope pipeline with an agent (see "Agent" tab) will allow
+    us to automate the task. After we have created (or downloaded) the file,
+    we need to indicate that the new file was derived from the unstructured
+    version (to remove it from the queue):
 
-        ```bash
-        uv run biotope add data/notes/airport-hubs.csv \
-          --derived-from data/notes/airports-notes
-        ```
+    ```bash
+    uv run biotope add data/notes/airport-hubs.csv \
+      --derived-from data/notes/airports-notes
+    ```
 
-    === "Agent"
+=== "Agent"
 
-        If you use an agent to run the biotope pipeline, it will be instructed
-        and figure out to read `data/notes/airports-notes.md`, extract the
-        `(airport_iata, airline_code, airline_name)` triples it mentions, and
-        write the result to `data/notes/airport-hubs.csv`. Different agents
-        might choose to do this differently; through the biotope scaffolding,
-        the results should be equivalent. This will result in the same state as
-        the first command in the human example.
-        
-        Then, the agent should also record the provenance link by calling the
-        same command as in the human example:
+    If you use an agent to run the biotope pipeline, it will be instructed
+    and figure out to read `data/notes/airports-notes.md`, extract the
+    `(airport_iata, airline_code, airline_name)` triples it mentions, and
+    write the result to `data/notes/airport-hubs.csv`. Different agents
+    might choose to do this differently; through the biotope scaffolding,
+    the results should be equivalent. This will result in the same state as
+    the first command in the human example.
 
-        ```bash
-        uv run biotope add data/notes/airport-hubs.csv \
-          --derived-from data/notes/airports-notes
-        ```
+    Then, the agent should also record the provenance link by calling the
+    same command as in the human example:
+
+    ```bash
+    uv run biotope add data/notes/airport-hubs.csv \
+      --derived-from data/notes/airports-notes
+    ```
+````
 
 The `--derived-from` flag stamps `prov:wasDerivedFrom` into the new manifest and
 hides the original notes from the active `raw` queue — biotope knows they've
@@ -197,66 +198,68 @@ small, fixed vocabulary: this could be, for instance, two nouns (`airport`,
 
 !!! Declaring intent
 
-    === "Human"
+````
+=== "Human"
 
-        Launch the wizard with no arguments:
+    Launch the wizard with no arguments:
 
-        ```bash
-        uv run biotope map
-        ```
+    ```bash
+    uv run biotope map
+    ```
 
-        The project has data and purpose but no fully declared intent yet, so
-        the wizard opens with an intent-capture prompt:
+    The project has data and purpose but no fully declared intent yet, so
+    the wizard opens with an intent-capture prompt:
 
-        ```
-        ╭───────────────── Current intent ─────────────────╮
-        │ purpose: Find which US airports are most         │
-        │          connected and which airlines use them   │
-        │          as their hubs.                          │
-        │ entities: (none)                                 │
-        │ relations: (none)                                │
-        ╰──────────────────────────────────────────────────╯
+    ```
+    ╭───────────────── Current intent ─────────────────╮
+    │ purpose: Find which US airports are most         │
+    │          connected and which airlines use them   │
+    │          as their hubs.                          │
+    │ entities: (none)                                 │
+    │ relations: (none)                                │
+    ╰──────────────────────────────────────────────────╯
 
-        Enter a new purpose, or press Enter to keep the current one.
-        Purpose: ⏎
+    Enter a new purpose, or press Enter to keep the current one.
+    Purpose: ⏎
 
-        Add entities one per line. Press Enter on an empty line to stop.
-        Entity name: airport
-        Entity name: airline
-        Entity name: ⏎
+    Add entities one per line. Press Enter on an empty line to stop.
+    Entity name: airport
+    Entity name: airline
+    Entity name: ⏎
 
-        Add relations one per line. Press Enter on an empty line to stop.
-        Relation name: number of flights
-        Relation name: is hub for
-        Relation name: ⏎
+    Add relations one per line. Press Enter on an empty line to stop.
+    Relation name: number of flights
+    Relation name: is hub for
+    Relation name: ⏎
 
-        💾 Saved intent to .biotope/project.yaml
-        ```
+    💾 Saved intent to .biotope/project.yaml
+    ```
 
-        Names are normalised to snake_case behind the scenes
-        (`number of flights` → `number_of_flights`).
+    Names are normalised to snake_case behind the scenes
+    (`number of flights` → `number_of_flights`).
 
-        If you're unsure what data you have to bind these to, pick
-        `[v] view data` from the slot menu the wizard drops you into
-        next — it prints each croissant's record sets, field types, and
-        a few sample rows so you can decide which dataset feeds which
-        slot. The same view is available non-interactively as
-        `uv run biotope map inspect <croissant>`.
+    If you're unsure what data you have to bind these to, pick
+    `[v] view data` from the slot menu the wizard drops you into
+    next — it prints each croissant's record sets, field types, and
+    a few sample rows so you can decide which dataset feeds which
+    slot. The same view is available non-interactively as
+    `uv run biotope map inspect <croissant>`.
 
-    === "Agent"
+=== "Agent"
 
-        Same effect, non-interactively — in auto-mode, the agent will decide on
-        an adequate representation and initialise accordingly. In ambiguous
-        cases, it is instructed to check with the user.
+    Same effect, non-interactively — in auto-mode, the agent will decide on
+    an adequate representation and initialise accordingly. In ambiguous
+    cases, it is instructed to check with the user.
 
-        ```bash
-        uv run biotope map \
-          --entity airport --entity airline \
-          --relation number_of_flights --relation is_hub_for
-        ```
+    ```bash
+    uv run biotope map \
+      --entity airport --entity airline \
+      --relation number_of_flights --relation is_hub_for
+    ```
 
-        This appends to `required_entities` / `required_relations` in
-        `.biotope/project.yaml` and exits without entering the wizard.
+    This appends to `required_entities` / `required_relations` in
+    `.biotope/project.yaml` and exits without entering the wizard.
+````
 
 After this step, `.biotope/project.yaml` declares four slots that the
 rest of the walkthrough must resolve.
@@ -295,129 +298,133 @@ one relation); the other two follow the same pattern.
 
 !!! Binding an entity
 
-    === "Human"
+````
+=== "Human"
 
-        ```
-        Selection (1): 1
+    ```
+    Selection (1): 1
 
-        Pick a croissant to bind entity `airport`
-        # │ Croissant                                  │ Match
-        1 │ .biotope/datasets/data/flights.jsonld      │   2
-        2 │ .biotope/datasets/data/notes/airport-hubs… │   1
-        Croissant: 1
+    Pick a croissant to bind entity `airport`
+    # │ Croissant                                  │ Match
+    1 │ .biotope/datasets/data/flights.jsonld      │   2
+    2 │ .biotope/datasets/data/notes/airport-hubs… │   1
+    Croissant: 1
 
-        Record sets
-        # │ Name             │ Fields
-        1 │ airports          │ iata, name, city, state, country, latitude, longitude
-        2 │ flights-airport   │ origin, destination, count
-        Pick record set (1): 1
+    Record sets
+    # │ Name             │ Fields
+    1 │ airports          │ iata, name, city, state, country, latitude, longitude
+    2 │ flights-airport   │ origin, destination, count
+    Pick record set (1): 1
 
-        Scan kind — (r)ow, (e)xplode one, (m)ulti-axis (r): r
+    Scan kind — (r)ow, (e)xplode one, (m)ulti-axis (r): r
 
-        Namespace (optional): ⏎
+    Namespace (optional): ⏎
 
-        Choose action (field): field
-        ID field: iata
-        Transform [passthrough]: as_curie
-        CURIE prefix: iata
+    Choose action (field): field
+    ID field: iata
+    Transform [passthrough]: as_curie
+    CURIE prefix: iata
 
-        Property fields (comma-separated): name, city, state, country, latitude, longitude
+    Property fields (comma-separated): name, city, state, country, latitude, longitude
 
-        💾 Saved mappings/flights.mapping.yaml
-        ```
+    💾 Saved mappings/flights.mapping.yaml
+    ```
 
-    === "Agent"
+=== "Agent"
 
-        An agent skips the wizard and writes the binding straight into
-        the mapping file (scaffolding it first with
-        `uv run biotope map scaffold .biotope/datasets/data/flights.jsonld`
-        if it doesn't exist yet):
+    An agent skips the wizard and writes the binding straight into
+    the mapping file (scaffolding it first with
+    `uv run biotope map scaffold .biotope/datasets/data/flights.jsonld`
+    if it doesn't exist yet):
 
-        ```yaml
-        # mappings/flights.mapping.yaml
-        croissant: .biotope/datasets/data/flights.jsonld
-        entities:
-          airport:
-            record_set: airports
-            scan: row
-            id: {field: iata, transform: as_curie, args: {prefix: iata}}
-            properties:
-              name: name
-              city: city
-              state: state
-              country: country
-              latitude: latitude
-              longitude: longitude
-        ```
+    ```yaml
+    # mappings/flights.mapping.yaml
+    croissant: .biotope/datasets/data/flights.jsonld
+    entities:
+      airport:
+        record_set: airports
+        scan: row
+        id: {field: iata, transform: as_curie, args: {prefix: iata}}
+        properties:
+          name: name
+          city: city
+          state: state
+          country: country
+          latitude: latitude
+          longitude: longitude
+    ```
 
-        The scaffold's inspector appendix — or
-        `uv run biotope map inspect <croissant> --json` — gives the agent
-        the field catalogue to ground these picks.
+    The scaffold's inspector appendix — or
+    `uv run biotope map inspect <croissant> --json` — gives the agent
+    the field catalogue to ground these picks.
+````
 
 ### Binding the `is_hub_for` relation → airport-hubs croissant
 
 !!! Binding a relation
 
-    === "Human"
+````
+=== "Human"
 
-        ```
-        Selection (4): 4
+    ```
+    Selection (4): 4
 
-        Pick a croissant to bind relation `is_hub_for`
-        # │ Croissant                                  │ Match
-        1 │ .biotope/datasets/data/notes/airport-hubs… │   2
-        2 │ .biotope/datasets/data/flights.jsonld      │   0
-        Croissant: 1
+    Pick a croissant to bind relation `is_hub_for`
+    # │ Croissant                                  │ Match
+    1 │ .biotope/datasets/data/notes/airport-hubs… │   2
+    2 │ .biotope/datasets/data/flights.jsonld      │   0
+    Croissant: 1
 
-        Pick record set (1): 1            # airport-hubs
-        Scan kind (r/e/m) (r): r
+    Pick record set (1): 1            # airport-hubs
+    Scan kind (r/e/m) (r): r
 
-        ── Source endpoint ──
-        Entity: airport
-        ID field: airport_iata
-        Transform: as_curie
-        CURIE prefix: iata
+    ── Source endpoint ──
+    Entity: airport
+    ID field: airport_iata
+    Transform: as_curie
+    CURIE prefix: iata
 
-        ── Target endpoint ──
-        Entity: airline
-        ID field: airline_code
-        Transform: as_curie
-        CURIE prefix: airline
+    ── Target endpoint ──
+    Entity: airline
+    ID field: airline_code
+    Transform: as_curie
+    CURIE prefix: airline
 
-        Property fields (comma-separated, blank for none): ⏎
+    Property fields (comma-separated, blank for none): ⏎
 
-        💾 Saved mappings/airport-hubs.mapping.yaml
-        ```
+    💾 Saved mappings/airport-hubs.mapping.yaml
+    ```
 
-        The `airport` endpoint reuses the entity already bound in the
-        flights mapping — both sides mint `iata:<code>` IDs, so
-        BioCypher dedups them at build. The `airline` endpoint is the
-        first reference to that entity; bind its full properties when
-        you do slot 2.
+    The `airport` endpoint reuses the entity already bound in the
+    flights mapping — both sides mint `iata:<code>` IDs, so
+    BioCypher dedups them at build. The `airline` endpoint is the
+    first reference to that entity; bind its full properties when
+    you do slot 2.
 
-    === "Agent"
+=== "Agent"
 
-        ```yaml
-        # mappings/airport-hubs.mapping.yaml
-        croissant: .biotope/datasets/data/notes/airport-hubs.jsonld
-        entities:
-          airport:
-            record_set: airport-hubs
-            scan: row
-            id: {field: airport_iata, transform: as_curie, args: {prefix: iata}}
-          airline:
-            record_set: airport-hubs
-            scan: row
-            id: {field: airline_code, transform: as_curie, args: {prefix: airline}}
-            properties:
-              name: airline_name
-        relations:
-          is_hub_for:
-            record_set: airport-hubs
-            scan: row
-            source: {entity: airport, field: airport_iata, transform: as_curie, args: {prefix: iata}}
-            target: {entity: airline, field: airline_code, transform: as_curie, args: {prefix: airline}}
-        ```
+    ```yaml
+    # mappings/airport-hubs.mapping.yaml
+    croissant: .biotope/datasets/data/notes/airport-hubs.jsonld
+    entities:
+      airport:
+        record_set: airport-hubs
+        scan: row
+        id: {field: airport_iata, transform: as_curie, args: {prefix: iata}}
+      airline:
+        record_set: airport-hubs
+        scan: row
+        id: {field: airline_code, transform: as_curie, args: {prefix: airline}}
+        properties:
+          name: airline_name
+    relations:
+      is_hub_for:
+        record_set: airport-hubs
+        scan: row
+        source: {entity: airport, field: airport_iata, transform: as_curie, args: {prefix: iata}}
+        target: {entity: airline, field: airline_code, transform: as_curie, args: {prefix: airline}}
+    ```
+````
 
 ### Bind the remaining two slots
 

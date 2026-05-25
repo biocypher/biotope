@@ -642,9 +642,7 @@ def _render_slot_resolution_rich(agg: MultiMappingPreview, all_files: list[str])
                 tail = f"{tail} (resolved by multiple — should be a single source of truth)"
             lines.append(f"[{color}]{marker}[/{color}] {slot}   ← {tail}")
         else:
-            lines.append(
-                f"[red]○[/red] {slot}   [dim](stub present in: {', '.join(unresolved_in)})[/dim]"
-            )
+            lines.append(f"[red]○[/red] {slot}   [dim](stub present in: {', '.join(unresolved_in)})[/dim]")
     has_unresolved = any(slot not in agg.slot_resolution for slot in all_slots)
     border = "yellow" if has_unresolved else "green"
     console.print(Panel("\n".join(lines), title="Slot resolution", border_style=border, expand=False))

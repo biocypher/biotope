@@ -115,15 +115,15 @@ def test_init_refuses_existing_biotope(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
-def test_init_creates_initial_commit_and_leaves_clean_tree(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_init_creates_initial_commit_and_leaves_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """After init, the scaffold should be committed so `git status` is clean —
     otherwise init artefacts (config.yaml, AGENTS.md, ...) leak into the user's
     first `biotope status` and look like changes they made."""
     for var, val in (
-        ("GIT_AUTHOR_NAME", "t"), ("GIT_AUTHOR_EMAIL", "t@t"),
-        ("GIT_COMMITTER_NAME", "t"), ("GIT_COMMITTER_EMAIL", "t@t"),
+        ("GIT_AUTHOR_NAME", "t"),
+        ("GIT_AUTHOR_EMAIL", "t@t"),
+        ("GIT_COMMITTER_NAME", "t"),
+        ("GIT_COMMITTER_EMAIL", "t@t"),
     ):
         monkeypatch.setenv(var, val)
     runner = CliRunner()
@@ -131,14 +131,10 @@ def test_init_creates_initial_commit_and_leaves_clean_tree(
     assert result.exit_code == 0, result.output
 
     root = tmp_path / "g"
-    porcelain = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True
-    )
+    porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True)
     assert porcelain.stdout.strip() == "", f"expected clean tree, got:\n{porcelain.stdout}"
 
-    log = subprocess.run(
-        ["git", "log", "--oneline"], cwd=root, capture_output=True, text=True, check=True
-    )
+    log = subprocess.run(["git", "log", "--oneline"], cwd=root, capture_output=True, text=True, check=True)
     assert "initialize biotope project" in log.stdout
 
 

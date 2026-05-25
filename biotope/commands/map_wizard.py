@@ -242,10 +242,7 @@ def _pick_existing_resource(project_root: Path) -> str:
                 rel_raw.append(str(p.relative_to(project_root)))
             except ValueError:
                 rel_raw.append(str(p))
-        console.print(
-            f"[dim]{len(raw)} raw dataset(s) hidden (no schema to map yet): "
-            f"{', '.join(rel_raw)}[/dim]"
-        )
+        console.print(f"[dim]{len(raw)} raw dataset(s) hidden (no schema to map yet): " f"{', '.join(rel_raw)}[/dim]")
 
     idx = IntPrompt.ask("Selection", default=1)
     kind, path, _ = items[max(1, min(idx, len(items))) - 1]

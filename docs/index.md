@@ -4,21 +4,21 @@ CLI for the BioCypher ecosystem. Turns Croissant-described data into a BioCypher
 
 !!! warning "Pre-alpha, developer-facing"
 
-    APIs, CLI flags, and config-file layouts will change. End-user docs come after the design stabilises.
-
+```
+APIs, CLI flags, and config-file layouts will change. End-user docs come after the design stabilises.
+```
 
 ## Quick start: from `init` to a knowledge graph
 
-
 1. Run `uvx biotope init` or use any other way to make the package available (e.g., `pip install`).
 
-2. Enter desired project name (e.g., `my-kg`) and the overall purpose of the KG (e.g.,
-`Which approved drugs target proteins with relevance in type 2 diabetes?`).
+1. Enter desired project name (e.g., `my-kg`) and the overall purpose of the KG (e.g.,
+   `Which approved drugs target proteins with relevance in type 2 diabetes?`).
 
-3. Enter directory (`cd my-kg`).
+1. Enter directory (`cd my-kg`).
 
-4. Start your coding agent. The `AGENTS.md` file in the directory will onboard it.
-For more information on the process, read on.
+1. Start your coding agent. The `AGENTS.md` file in the directory will onboard it.
+   For more information on the process, read on.
 
 ## Quick start: without coding agent
 

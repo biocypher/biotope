@@ -143,9 +143,7 @@ def scaffold_mapping(
     # empty stubs the scaffold just laid down. ``Mapping.unresolved_slots``
     # excludes empty stubs (they're inactive, not broken), so for the
     # scaffold's user-facing TODO we compute the full not-resolved list.
-    todo = [
-        f"entities.{name}" for name, entity in mapping.entities.items() if not entity.is_resolved()
-    ] + [
+    todo = [f"entities.{name}" for name, entity in mapping.entities.items() if not entity.is_resolved()] + [
         f"relations.{name}" for name, relation in mapping.relations.items() if not relation.is_resolved()
     ]
     return {
