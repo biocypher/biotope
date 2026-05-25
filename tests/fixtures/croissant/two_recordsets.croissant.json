@@ -1,0 +1,42 @@
+{
+  "@context": {"@vocab": "https://schema.org/"},
+  "@type": "sc:Dataset",
+  "name": "two_recordsets",
+  "description": "Fixture with two record sets joined by gene_id.",
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "genes",
+      "name": "genes",
+      "contentUrl": "genes.csv",
+      "encodingFormat": "text/csv"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "gene_disease",
+      "name": "gene_disease",
+      "contentUrl": "gene_disease.csv",
+      "encodingFormat": "text/csv"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "genes",
+      "name": "genes",
+      "field": [
+        {"name": "gene_id", "dataType": "sc:Text"},
+        {"name": "symbol", "dataType": "sc:Text"}
+      ]
+    },
+    {
+      "@id": "gene_disease",
+      "name": "gene_disease",
+      "field": [
+        {"name": "association_id", "dataType": "sc:Text"},
+        {"name": "gene_id", "dataType": "sc:Text"},
+        {"name": "disease_id", "dataType": "sc:Text"},
+        {"name": "score", "dataType": "sc:Float"}
+      ]
+    }
+  ]
+}

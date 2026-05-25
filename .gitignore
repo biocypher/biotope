@@ -2,6 +2,7 @@
 *.json
 !release-please-config.json
 !.release-please-manifest.json
+!tests/fixtures/**/*.json
 .biotope/
 
 ### Linux template
