@@ -233,6 +233,26 @@ def init(
                 subprocess.run(["git", "add", *scaffold_paths], cwd=project_dir, check=True)
             except (subprocess.CalledProcessError, FileNotFoundError) as exc:
                 click.echo(f"⚠️  Could not stage scaffold files: {exc}")
+            else:
+                # Commit the scaffold so `biotope status` starts clean — otherwise
+                # init artefacts sit in the index and confuse new users into thinking
+                # they themselves staged config.yaml, AGENTS.md, etc. Falls back to
+                # leaving the scaffold staged if git identity isn't configured.
+                try:
+                    subprocess.run(
+                        ["git", "commit", "-q", "-m", "chore: initialize biotope project"],
+                        cwd=project_dir,
+                        check=True,
+                        capture_output=True,
+                    )
+                except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+                    detail = ""
+                    if isinstance(exc, subprocess.CalledProcessError) and exc.stderr:
+                        detail = f": {exc.stderr.decode(errors='replace').strip().splitlines()[-1]}"
+                    click.echo(
+                        f"⚠️  Could not create initial commit{detail}. "
+                        "Scaffold files remain staged; commit them manually."
+                    )
 
     if interactive:
         editor = os.environ.get("EDITOR", "vi")
