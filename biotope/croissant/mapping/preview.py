@@ -108,6 +108,201 @@ class MappingPreview:
         }
 
 
+@dataclass
+class AggregatedEntity:
+    """Entity merged across all mapping files that project it."""
+
+    key: str
+    schema_term: str
+    namespace: str
+    properties: dict[str, str]
+    sources: list[str]  # mapping file names that contributed
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "schema_term": self.schema_term,
+            "namespace": self.namespace,
+            "properties": dict(self.properties),
+            "sources": list(self.sources),
+        }
+
+
+@dataclass
+class AggregatedRelation:
+    """Relation merged across all mapping files that project it."""
+
+    key: str
+    schema_term: str
+    source_entity_key: str
+    target_entity_key: str
+    properties: dict[str, str]
+    sources: list[str]
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "schema_term": self.schema_term,
+            "source_entity_key": self.source_entity_key,
+            "target_entity_key": self.target_entity_key,
+            "properties": dict(self.properties),
+            "sources": list(self.sources),
+        }
+
+
+@dataclass
+class MultiMappingPreview:
+    """Project-level aggregation of multiple per-file ``MappingPreview`` objects.
+
+    Builds the actual KG schema topology (entity → relation → entity), plus a
+    slot-resolution index that records which mapping file (if any) resolves
+    each slot. Conflicts in schema_term, namespace, or property types across
+    files are reported as findings.
+    """
+
+    entities: list[AggregatedEntity] = field(default_factory=list)
+    relations: list[AggregatedRelation] = field(default_factory=list)
+    # slot_path -> [mapping file names that resolve it]
+    slot_resolution: dict[str, list[str]] = field(default_factory=dict)
+    # slot_path -> [mapping file names that have a non-empty but unresolved stub]
+    slot_unresolved: dict[str, list[str]] = field(default_factory=dict)
+    findings: list[ValidationFinding] = field(default_factory=list)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "schema": {
+                "entities": [e.to_json() for e in self.entities],
+                "relations": [r.to_json() for r in self.relations],
+            },
+            "slot_resolution": {k: list(v) for k, v in self.slot_resolution.items()},
+            "slot_unresolved": {k: list(v) for k, v in self.slot_unresolved.items()},
+            "findings": [f.to_json() for f in self.findings],
+        }
+
+
+def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappingPreview:
+    """Merge a list of (file_name, MappingPreview) pairs into a project-level view.
+
+    Entities and relations are merged by ``key``. Mismatched ``schema_term``,
+    ``namespace``, endpoint, or property types across files are recorded as
+    findings, but the first-seen value wins so the topology still renders.
+    """
+    agg = MultiMappingPreview()
+    entity_by_key: dict[str, AggregatedEntity] = {}
+    relation_by_key: dict[str, AggregatedRelation] = {}
+
+    for file_name, prev in previews:
+        for slot in prev.resolved_slots:
+            agg.slot_resolution.setdefault(slot, []).append(file_name)
+        for slot in prev.unresolved_slots:
+            agg.slot_unresolved.setdefault(slot, []).append(file_name)
+
+        for e in prev.entities:
+            existing = entity_by_key.get(e.key)
+            if existing is None:
+                entity_by_key[e.key] = AggregatedEntity(
+                    key=e.key,
+                    schema_term=e.schema_term,
+                    namespace=e.namespace,
+                    properties=dict(e.properties),
+                    sources=[file_name],
+                )
+                continue
+            existing.sources.append(file_name)
+            if existing.schema_term != e.schema_term:
+                agg.findings.append(
+                    ValidationFinding(
+                        "warning",
+                        f"entities.{e.key}",
+                        f"schema_term disagrees: {existing.schema_term!r} (from {existing.sources[0]}) "
+                        f"vs {e.schema_term!r} (from {file_name})",
+                    )
+                )
+            if existing.namespace != e.namespace:
+                agg.findings.append(
+                    ValidationFinding(
+                        "warning",
+                        f"entities.{e.key}",
+                        f"namespace disagrees: {existing.namespace!r} (from {existing.sources[0]}) "
+                        f"vs {e.namespace!r} (from {file_name})",
+                    )
+                )
+            for prop_name, prop_type in e.properties.items():
+                if prop_name in existing.properties and existing.properties[prop_name] != prop_type:
+                    agg.findings.append(
+                        ValidationFinding(
+                            "warning",
+                            f"entities.{e.key}.properties.{prop_name}",
+                            f"property type disagrees: {existing.properties[prop_name]!r} "
+                            f"vs {prop_type!r} (from {file_name})",
+                        )
+                    )
+                else:
+                    existing.properties.setdefault(prop_name, prop_type)
+
+        for r in prev.relations:
+            existing = relation_by_key.get(r.key)
+            if existing is None:
+                relation_by_key[r.key] = AggregatedRelation(
+                    key=r.key,
+                    schema_term=r.schema_term,
+                    source_entity_key=r.source_entity_key,
+                    target_entity_key=r.target_entity_key,
+                    properties=dict(r.properties),
+                    sources=[file_name],
+                )
+                continue
+            existing.sources.append(file_name)
+            if existing.schema_term != r.schema_term:
+                agg.findings.append(
+                    ValidationFinding(
+                        "warning",
+                        f"relations.{r.key}",
+                        f"schema_term disagrees: {existing.schema_term!r} (from {existing.sources[0]}) "
+                        f"vs {r.schema_term!r} (from {file_name})",
+                    )
+                )
+            if (existing.source_entity_key, existing.target_entity_key) != (
+                r.source_entity_key,
+                r.target_entity_key,
+            ):
+                agg.findings.append(
+                    ValidationFinding(
+                        "warning",
+                        f"relations.{r.key}",
+                        f"endpoints disagree: {existing.source_entity_key}->{existing.target_entity_key} "
+                        f"(from {existing.sources[0]}) vs "
+                        f"{r.source_entity_key}->{r.target_entity_key} (from {file_name})",
+                    )
+                )
+            for prop_name, prop_type in r.properties.items():
+                if prop_name in existing.properties and existing.properties[prop_name] != prop_type:
+                    agg.findings.append(
+                        ValidationFinding(
+                            "warning",
+                            f"relations.{r.key}.properties.{prop_name}",
+                            f"property type disagrees: {existing.properties[prop_name]!r} "
+                            f"vs {prop_type!r} (from {file_name})",
+                        )
+                    )
+                else:
+                    existing.properties.setdefault(prop_name, prop_type)
+
+    for slot, files in agg.slot_resolution.items():
+        if len(files) > 1:
+            agg.findings.append(
+                ValidationFinding(
+                    "warning",
+                    slot,
+                    f"resolved by multiple mappings: {', '.join(files)}",
+                )
+            )
+
+    agg.entities = list(entity_by_key.values())
+    agg.relations = list(relation_by_key.values())
+    return agg
+
+
 def preview_mapping(
     mapping: Mapping,
     dataset: CroissantDatasetModel,

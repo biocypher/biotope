@@ -28,7 +28,14 @@ from biotope.croissant.mapping.model import (
     Selector,
     to_snake_case,
 )
-from biotope.croissant.mapping.preview import MappingPreview, preview_mapping
+from biotope.croissant.mapping.preview import (
+    AggregatedEntity,
+    AggregatedRelation,
+    MappingPreview,
+    MultiMappingPreview,
+    aggregate_previews,
+    preview_mapping,
+)
 from biotope.croissant.mapping.render import (
     build_inspector_appendix,
     render_mapping_with_appendix,
@@ -36,6 +43,8 @@ from biotope.croissant.mapping.render import (
 )
 
 __all__ = [
+    "AggregatedEntity",
+    "AggregatedRelation",
     "CompiledAdapter",
     "DatasetInspection",
     "Endpoint",
@@ -44,11 +53,13 @@ __all__ = [
     "FieldInfo",
     "Mapping",
     "MappingPreview",
+    "MultiMappingPreview",
     "RecordSetInfo",
     "RelationMapping",
     "RowScan",
     "Scan",
     "Selector",
+    "aggregate_previews",
     "build_inspector_appendix",
     "compile_mapping",
     "derive_namespace",

@@ -26,6 +26,8 @@ from biotope.croissant.acquisition import infer_datasets_location
 from biotope.croissant.api import scaffold_mapping
 from biotope.croissant.mapping import (
     Mapping,
+    MultiMappingPreview,
+    aggregate_previews,
     inspect_dataset,
     load_mapping,
     preview_mapping,
@@ -335,18 +337,21 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
         )
         previews.append((path, mapping, result))
 
+    aggregated = aggregate_previews([(path.name, result) for path, _, result in previews])
+
     if as_json:
-        if len(previews) == 1:
-            click.echo(json.dumps(previews[0][2].to_json(), indent=2, default=str))
-        else:
-            payload = {path.name: result.to_json() for path, _, result in previews}
-            click.echo(json.dumps(payload, indent=2, default=str))
+        payload = {
+            "global": aggregated.to_json(),
+            "mappings": {path.name: result.to_json() for path, _, result in previews},
+        }
+        click.echo(json.dumps(payload, indent=2, default=str))
         return
 
+    _render_global_schema_rich(aggregated)
+    _render_slot_resolution_rich(aggregated, [path.name for path, _, _ in previews])
+    _render_global_findings_rich(aggregated)
     for path, mapping, result in previews:
-        if len(previews) > 1:
-            console.print(Panel(f"[bold]{path.name}[/bold]", border_style="cyan", expand=False))
-        _render_preview_rich(mapping, result)
+        _render_per_file_panels(path, result)
 
 
 # ---------------------------------------------------------------------------
@@ -579,26 +584,96 @@ def _discover_project_mappings() -> list[Path]:
     return _discover_mapping_paths(mappings_dir)
 
 
-def _render_preview_rich(mapping: Mapping, result) -> None:
-    if result.resolved_slots:
+def _render_global_schema_rich(agg: MultiMappingPreview) -> None:
+    """Render the merged KG topology across all mapping files."""
+    if not (agg.entities or agg.relations):
         console.print(
             Panel(
-                "\n".join(f"✓ {s}" for s in result.resolved_slots),
-                title="Resolved slots",
-                border_style="green",
+                "[dim]No resolved entities or relations yet. Run [bold]biotope map[/bold] to "
+                "fill in the mapping files.[/dim]",
+                title="KG schema",
+                border_style="dim",
                 expand=False,
             )
         )
-    if result.unresolved_slots:
-        console.print(
-            Panel(
-                "\n".join(f"○ {s}" for s in result.unresolved_slots),
-                title="Unresolved slots",
-                border_style="yellow",
-                expand=False,
+        return
+
+    sections: list[str] = []
+    if agg.entities:
+        sections.append("[bold]Entities:[/bold]")
+        for e in agg.entities:
+            label = e.schema_term if e.schema_term == e.key else f"{e.key} (label: {e.schema_term})"
+            props = ", ".join(f"{k}:{v}" for k, v in e.properties.items()) or "(none)"
+            sources = ", ".join(e.sources)
+            sections.append(f"  {label}   namespace: {e.namespace}")
+            sections.append(f"    properties: {props}")
+            sections.append(f"    [dim]from: {sources}[/dim]")
+    if agg.relations:
+        if sections:
+            sections.append("")
+        sections.append("[bold]Relations:[/bold]")
+        for r in agg.relations:
+            label = r.schema_term if r.schema_term == r.key else f"{r.key} (label: {r.schema_term})"
+            props = ", ".join(f"{k}:{v}" for k, v in r.properties.items()) or "(none)"
+            sources = ", ".join(r.sources)
+            # Escape `[` so Rich doesn't interpret `[label]` as a style tag.
+            sections.append(f"  {r.source_entity_key} --\\[{label}]--> {r.target_entity_key}")
+            sections.append(f"    properties: {props}")
+            sections.append(f"    [dim]from: {sources}[/dim]")
+    console.print(Panel("\n".join(sections), title="KG schema", border_style="cyan", expand=False))
+
+
+def _render_slot_resolution_rich(agg: MultiMappingPreview, all_files: list[str]) -> None:
+    """Show which mapping file resolves each slot; flag unresolved slots."""
+    all_slots = sorted(set(agg.slot_resolution) | set(agg.slot_unresolved))
+    if not all_slots:
+        return
+    lines: list[str] = []
+    for slot in all_slots:
+        resolvers = agg.slot_resolution.get(slot, [])
+        unresolved_in = agg.slot_unresolved.get(slot, [])
+        if resolvers:
+            marker = "✓"
+            color = "green"
+            tail = ", ".join(resolvers)
+            if len(resolvers) > 1:
+                marker = "⚠"
+                color = "yellow"
+                tail = f"{tail} (resolved by multiple — should be a single source of truth)"
+            lines.append(f"[{color}]{marker}[/{color}] {slot}   ← {tail}")
+        else:
+            lines.append(
+                f"[red]○[/red] {slot}   [dim](stub present in: {', '.join(unresolved_in)})[/dim]"
             )
+    has_unresolved = any(slot not in agg.slot_resolution for slot in all_slots)
+    border = "yellow" if has_unresolved else "green"
+    console.print(Panel("\n".join(lines), title="Slot resolution", border_style=border, expand=False))
+
+
+def _render_global_findings_rich(agg: MultiMappingPreview) -> None:
+    """Project-level findings (cross-file conflicts, double-resolution)."""
+    if not agg.findings:
+        return
+    lines = [f"[{f.severity}] {f.path}: {f.message}" for f in agg.findings]
+    border = "red" if any(f.severity == "error" for f in agg.findings) else "yellow"
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="Project-level findings",
+            border_style=border,
+            expand=False,
         )
-    if result.findings:
+    )
+
+
+def _render_per_file_panels(path: Path, result) -> None:
+    """Render file-local information: validation findings and sample tuples."""
+    has_findings = bool(result.findings)
+    has_samples = bool(result.sample_node_tuples or result.sample_edge_tuples)
+    if not (has_findings or has_samples):
+        return
+    console.print(Panel(f"[bold]{path.name}[/bold]", border_style="cyan", expand=False))
+    if has_findings:
         lines = [f"[{f.severity}] {f.path}: {f.message}" for f in result.findings]
         console.print(
             Panel(
@@ -608,23 +683,7 @@ def _render_preview_rich(mapping: Mapping, result) -> None:
                 expand=False,
             )
         )
-    if result.entities or result.relations:
-        sections: list[str] = ["[bold]Entities:[/bold]"]
-        for e in result.entities:
-            props = ", ".join(f"{k}:{v}" for k, v in e.properties.items()) or "(none)"
-            sections.append(
-                f"  {e.key} -> {e.schema_term} [namespace={e.namespace}, input_label={e.input_label}]\n"
-                f"    properties: {props}"
-            )
-        sections.append("[bold]Relations:[/bold]")
-        for r in result.relations:
-            props = ", ".join(f"{k}:{v}" for k, v in r.properties.items()) or "(none)"
-            sections.append(
-                f"  {r.key} -> {r.schema_term} [{r.source} -> {r.target}, input_label={r.input_label}]\n"
-                f"    properties: {props}"
-            )
-        console.print(Panel("\n".join(sections), title="Projected schema", border_style="cyan", expand=False))
-    if result.sample_node_tuples or result.sample_edge_tuples:
+    if has_samples:
         lines = []
         if result.sample_node_tuples:
             lines.append("[bold]Sample node tuples:[/bold]")

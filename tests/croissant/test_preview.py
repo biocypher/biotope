@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from biotope.croissant.mapping import Mapping, preview_mapping
+from biotope.croissant.mapping import Mapping, aggregate_previews, preview_mapping
 from biotope.croissant.spec import load_from_path
 
 
@@ -223,3 +223,186 @@ def test_preview_emits_sample_tuples_when_data_available(
     assert len(result.sample_node_tuples) >= 1
     node = result.sample_node_tuples[0]
     assert node[1] == "gene"
+
+
+# ---------------------------------------------------------------------------
+# Multi-mapping aggregation
+# ---------------------------------------------------------------------------
+
+
+def _two_file_setup(tmp_path: Path) -> tuple[object, object]:
+    """Build two Croissant files + two mapping previews matching the airports tutorial:
+    file A defines entity `airport` (with properties) and relation `number_of_flights`;
+    file B defines entity `airline` and relation `is_hub_for` (airport->airline).
+    """
+    a_path = tmp_path / "a.jsonld"
+    a_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"a","recordSet":[
+          {"@id":"airports","name":"airports","field":[
+            {"name":"iata","dataType":"sc:Text"},
+            {"name":"name","dataType":"sc:Text"},
+            {"name":"city","dataType":"sc:Text"}]},
+          {"@id":"flights","name":"flights","field":[
+            {"name":"origin","dataType":"sc:Text"},
+            {"name":"destination","dataType":"sc:Text"},
+            {"name":"count","dataType":"sc:Integer"}]}
+        ]}
+        """
+    )
+    b_path = tmp_path / "b.jsonld"
+    b_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"b","recordSet":[
+          {"@id":"hubs","name":"hubs","field":[
+            {"name":"airport_iata","dataType":"sc:Text"},
+            {"name":"airline_code","dataType":"sc:Text"},
+            {"name":"airline_name","dataType":"sc:Text"}]}
+        ]}
+        """
+    )
+
+    mapping_a = Mapping.model_validate(
+        {
+            "croissant": str(a_path),
+            "entities": {
+                "airport": {
+                    "record_set": "airports",
+                    "id": "iata",
+                    "properties": {"name": "name", "city": "city"},
+                },
+                "airline": {},
+            },
+            "relations": {
+                "number_of_flights": {
+                    "record_set": "flights",
+                    "source": {"entity": "airport", "field": "origin"},
+                    "target": {"entity": "airport", "field": "destination"},
+                    "properties": {"count": "count"},
+                },
+                "is_hub_for": {},
+            },
+        }
+    )
+    mapping_b = Mapping.model_validate(
+        {
+            "croissant": str(b_path),
+            "entities": {
+                "airport": {},
+                "airline": {
+                    "record_set": "hubs",
+                    "id": "airline_code",
+                    "properties": {"airline_name": "airline_name"},
+                },
+            },
+            "relations": {
+                "is_hub_for": {
+                    "record_set": "hubs",
+                    "source": {"entity": "airport", "field": "airport_iata"},
+                    "target": {"entity": "airline", "field": "airline_code"},
+                },
+                "number_of_flights": {},
+            },
+        }
+    )
+    pa = preview_mapping(mapping_a, load_from_path(a_path))
+    pb = preview_mapping(mapping_b, load_from_path(b_path))
+    return pa, pb
+
+
+def test_aggregate_merges_entities_across_files(tmp_path: Path) -> None:
+    pa, pb = _two_file_setup(tmp_path)
+    agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
+    keys = {e.key for e in agg.entities}
+    assert keys == {"airport", "airline"}
+    airport = next(e for e in agg.entities if e.key == "airport")
+    assert airport.sources == ["a.mapping.yaml"]
+    airline = next(e for e in agg.entities if e.key == "airline")
+    assert airline.sources == ["b.mapping.yaml"]
+
+
+def test_aggregate_builds_relation_topology(tmp_path: Path) -> None:
+    pa, pb = _two_file_setup(tmp_path)
+    agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
+    rels = {r.key: r for r in agg.relations}
+    assert rels["number_of_flights"].source_entity_key == "airport"
+    assert rels["number_of_flights"].target_entity_key == "airport"
+    assert rels["is_hub_for"].source_entity_key == "airport"
+    assert rels["is_hub_for"].target_entity_key == "airline"
+
+
+def test_aggregate_slot_resolution_index(tmp_path: Path) -> None:
+    pa, pb = _two_file_setup(tmp_path)
+    agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
+    assert agg.slot_resolution["entities.airport"] == ["a.mapping.yaml"]
+    assert agg.slot_resolution["entities.airline"] == ["b.mapping.yaml"]
+    assert agg.slot_resolution["relations.number_of_flights"] == ["a.mapping.yaml"]
+    assert agg.slot_resolution["relations.is_hub_for"] == ["b.mapping.yaml"]
+
+
+def test_aggregate_flags_double_resolution(tmp_path: Path) -> None:
+    """If two files both resolve the same slot, the aggregator warns."""
+    croissant_path = tmp_path / "c.jsonld"
+    croissant_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"c","recordSet":[
+          {"@id":"genes","name":"genes","field":[
+            {"name":"ensembl_id","dataType":"sc:Text"},
+            {"name":"symbol","dataType":"sc:Text"}]}
+        ]}
+        """
+    )
+    body = {
+        "croissant": str(croissant_path),
+        "entities": {"gene": {"record_set": "genes", "id": "ensembl_id"}},
+    }
+    pa = preview_mapping(Mapping.model_validate(body), load_from_path(croissant_path))
+    pb = preview_mapping(Mapping.model_validate(body), load_from_path(croissant_path))
+    agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
+    assert agg.slot_resolution["entities.gene"] == ["a.mapping.yaml", "b.mapping.yaml"]
+    assert any("resolved by multiple" in f.message for f in agg.findings)
+
+
+def test_aggregate_flags_endpoint_conflict(tmp_path: Path) -> None:
+    """Same relation key with different endpoints across files → warning."""
+    croissant_path = tmp_path / "d.jsonld"
+    croissant_path.write_text(
+        """
+        {"@type":"sc:Dataset","name":"d","recordSet":[
+          {"@id":"rs","name":"rs","field":[
+            {"name":"a","dataType":"sc:Text"},
+            {"name":"b","dataType":"sc:Text"}]}
+        ]}
+        """
+    )
+    base = {
+        "croissant": str(croissant_path),
+        "entities": {
+            "x": {"record_set": "rs", "id": "a"},
+            "y": {"record_set": "rs", "id": "b"},
+        },
+    }
+    a_body = {
+        **base,
+        "relations": {
+            "rel": {
+                "record_set": "rs",
+                "source": {"entity": "x", "field": "a"},
+                "target": {"entity": "y", "field": "b"},
+            }
+        },
+    }
+    b_body = {
+        **base,
+        "relations": {
+            "rel": {
+                "record_set": "rs",
+                "source": {"entity": "y", "field": "b"},
+                "target": {"entity": "x", "field": "a"},
+            }
+        },
+    }
+    pa = preview_mapping(Mapping.model_validate(a_body), load_from_path(croissant_path))
+    pb = preview_mapping(Mapping.model_validate(b_body), load_from_path(croissant_path))
+    agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
+    assert any("endpoints disagree" in f.message for f in agg.findings)
