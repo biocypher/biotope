@@ -21,6 +21,34 @@ Biotope enables compliance through:
 
 ______________________________________________________________________
 
+## Annotation-only path (no KG build required)
+
+Cluster metadata management is a **standalone use case**. You do not need to
+run `biotope map` or `biotope build` to satisfy compliance — the contract
+stops at "every dataset is annotated to the cluster pattern, and the audit
+script reports green".
+
+The minimal cluster-only flow for a data maintainer is:
+
+| Step | Command | What it does |
+| --- | --- | --- |
+| 1 | `biotope init` | Scaffold `.biotope/`, emit `pyproject.toml`, drop `AGENTS.md` into the project |
+| 2 | `biotope config set-validation-pattern --pattern cluster-strict` | Declare the cluster pattern locally |
+| 3 | `biotope config set-remote-validation --url …` | Pin to the cluster validation server (cached, with local fallback) |
+| 4 | `biotope add <path>` | Run croissant-baker recursively; supported files land as `processed`, unsupported files as `raw` stubs |
+| 5 | `biotope annotate apply <path> --set k=v …` | Apply scoped YAML edits to fill missing fields |
+| 5b | `biotope annotate edit …` | Interactive prompts when scripting isn't enough |
+| 6 | `biotope annotate validate` | Validate a single JSON-LD against the merged (remote + local) schema |
+| 7 | `biotope queue` *(or `--json`)* | Worklist of raw / processed / mapped datasets |
+| 8 | `biotope mark <dataset> processed` | Manual status override when needed |
+| 9 | `biotope status --detailed` | Per-file annotation completeness against the active pattern |
+
+The KG verbs (`biotope map`, `biotope build`, `biotope view`,
+`biotope discover`, `biotope propose-alignment`) remain optional. A cluster
+project can ignore them entirely and still pass the audit.
+
+______________________________________________________________________
+
 ## Admin Workflow: Enforcing Compliance
 
 1. **Define Cluster Requirements**
@@ -70,7 +98,14 @@ ______________________________________________________________________
    biotope config show-validation
    ```
 1. **Annotate and validate your data**
-   - Use `biotope annotate` and `biotope status` to ensure all required fields are present.
+   ```bash
+   biotope add data/                              # baker-recursive ingest
+   biotope annotate apply data/ --set creator.name="Jane Doe" --set license="CC-BY-4.0"
+   biotope annotate validate                      # check against the merged schema
+   biotope queue                                  # worklist of raw vs processed
+   biotope status --detailed                      # per-file annotation completeness
+   ```
+   The full step-by-step is in [Annotation-only path](#annotation-only-path-no-kg-build-required) above. See also the [agentic / baker section](#agentic--baker-annotation-on-a-cluster) further down for cluster annotation loops.
 
 ______________________________________________________________________
 
@@ -124,6 +159,78 @@ ______________________________________________________________________
 - **Automated Checks**: Integrate compliance checking into cron jobs or CI/CD pipelines.
 - **User Onboarding**: Provide setup instructions for new users (see above).
 - **Monitoring**: Use scripts to monitor compliance rates and send alerts.
+
+______________________________________________________________________
+
+## Server-side validation schema
+
+The remote validation endpoint serves a YAML document. Biotope fetches it,
+merges it with the project's local validation config, caches the result, and
+uses the merged schema to gate `biotope annotate validate` and the annotated /
+incomplete counts surfaced by `biotope status`. The exact shape is:
+
+```yaml
+annotation_validation:
+  enabled: true                        # bool; if false, all metadata passes
+  minimum_required_fields:             # list of Croissant top-level fields that must be present
+    - name
+    - description
+    - creator
+    - dateCreated
+    - distribution
+    - license
+  field_validation:                    # per-field rules, keyed by field name
+    name:
+      type: string                     # one of: string | object | array
+      min_length: 1                    # int (strings: trimmed length; arrays: item count)
+    description:
+      type: string
+      min_length: 20
+    creator:
+      type: object
+      required_keys: [name, institution]  # required dict keys when type=object
+    dateCreated:
+      type: string
+      format: date                     # only "date" supported; parsed via datetime.fromisoformat
+    distribution:
+      type: array
+      min_length: 1
+```
+
+| Path | Type | Meaning |
+| --- | --- | --- |
+| `annotation_validation.enabled` | bool | Master switch. `false` short-circuits validation. |
+| `annotation_validation.minimum_required_fields` | list[str] | Croissant fields that must exist on the dataset JSON-LD. |
+| `annotation_validation.field_validation.<field>.type` | str | `string`, `object`, or `array`. Mismatches produce an error. |
+| `annotation_validation.field_validation.<field>.min_length` | int | For `string`, trimmed character count; for `array`, item count. |
+| `annotation_validation.field_validation.<field>.required_keys` | list[str] | For `object` types, dict keys that must be present. |
+| `annotation_validation.field_validation.<field>.format` | str | Currently only `"date"` is recognised (ISO 8601). |
+
+**Merge rules** (see `biotope/validation.py:160` — `_merge_validation_configs`):
+
+- `minimum_required_fields` is the **union** of remote and local — a project
+  may add fields, but may not drop fields the cluster requires.
+- `field_validation` is **local-overrides-remote** — a project may tighten
+  the rules for a given field, but typical practice is to inherit them.
+
+The canonical implementation of these rules is
+`biotope/validation.py:229` (`_validate_field`); the example server in
+`docs/examples/remote-validation-server.py` ships three drop-in
+configurations (`basic`, `comprehensive`, `clinical`).
+
+### Failure modes
+
+- **Remote unreachable, `fallback_to_local: true`** *(default)*: biotope
+  silently uses the local config only. Compliance dashboards may stop
+  catching projects that never re-fetched. Monitor the audit report rather
+  than relying on this behaviour.
+- **Remote unreachable, `fallback_to_local: false`**: `load_biotope_config`
+  raises `ValueError`. `biotope annotate validate` and any command that
+  loads validation will fail loudly.
+- **Cache**: successful responses are written to
+  `.biotope/cache/validation/<host>_<path>.yaml`. The cache is honoured for
+  `cache_duration` seconds (default `3600`). To force a refresh:
+  `biotope config clear-validation-cache`.
 
 ______________________________________________________________________
 

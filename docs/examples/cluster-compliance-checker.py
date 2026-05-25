@@ -33,7 +33,7 @@ def find_biotope_projects(directory: Path) -> List[Path]:
     projects = []
 
     for item in directory.rglob(".biotope"):
-        if item.is_dir() and (item / "config" / "biotope.yaml").exists():
+        if item.is_dir() and (item / "config.yaml").exists():
             projects.append(item.parent)
 
     return projects
@@ -42,7 +42,7 @@ def find_biotope_projects(directory: Path) -> List[Path]:
 def get_project_validation_info(project_path: Path) -> Optional[Dict]:
     """Get validation information for a biotope project."""
     try:
-        config_path = project_path / ".biotope" / "config" / "biotope.yaml"
+        config_path = project_path / ".biotope" / "config.yaml"
         if not config_path.exists():
             return None
 
@@ -226,7 +226,7 @@ def main():
 
     if args.project:
         project_path = Path(args.project)
-        if (project_path / ".biotope" / "config" / "biotope.yaml").exists():
+        if (project_path / ".biotope" / "config.yaml").exists():
             projects = [project_path]
         else:
             print(f"Error: {args.project} is not a valid biotope project")
