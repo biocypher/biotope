@@ -9,46 +9,54 @@ CLI for the BioCypher ecosystem: Croissant-described data → BioCypher knowledg
 
 **Status: pre-alpha, developer-facing.** APIs and CLI will change. Not yet suitable for end users.
 
+## Start here
+
+The fastest way in is the **[tutorial](https://biocypher.github.io/biotope/tutorial/)**
+— a 15-minute end-to-end walk-through that builds a real knowledge graph from
+public airport/flight data. It is the canonical, most up-to-date onboarding
+path; the snippet below is just a flavour preview.
+
 ## Install
 
 ```bash
-uv pip install biotope             # or
-uv pip install -e ".[dev]"         # editable, with test deps
+uv add biotope                     # in a uv-managed venv
+pipx install biotope               # global install
+uvx biotope init my-kg             # no install: ephemeral venv for the scaffolder
+uv pip install -e ".[dev]"         # editable, with test deps (for biotope itself)
 ```
 
 ## From `init` to a knowledge graph
 
 ```bash
-# 1. Scaffold a project.
-biotope init my-kg --purpose "What approved drugs target genes in T2D?"
-cd my-kg
+# 1. Scaffold a project (uvx works fine here — no local install needed).
+uvx biotope init my-kg --purpose "What approved drugs target genes in T2D?" --no-prompt
+cd my-kg && uv sync
 
-# 2. Declare intent — what entities and relations the graph must contain.
-#    Non-interactive (agent-friendly):
-biotope map --entity gene --entity disease --entity drug \
-            --relation gene_associated_with_disease
+# 2. Bring in data — biotope get downloads + tracks; biotope add stages a
+#    local file/folder and runs croissant-baker over it.
+uv run biotope get https://example.org/opentargets.parquet --output-dir data/ot --no-add
+uv run biotope add data/ot --license CC-BY-4.0 --creator "Open Targets"
 
-# 3. Bring in data and its Croissant metadata.
-biotope add data/opentargets --license CC-BY-4.0 --creator "Open Targets"
-biotope annotate apply data/opentargets        # after reviewing data/opentargets/.biotope.yaml
+# 3. Inspect the pipeline state at any time.
+uv run biotope queue        # raw / processed / mapped, with provenance footer
 
-# 4. Generate an unresolved mapping scaffold from your declared intent.
-#    The file has one slot per entity/relation plus an inspector appendix
-#    listing record sets, field kinds, identifier-like fields, and sample rows.
-biotope map scaffold .biotope/datasets/data/opentargets.jsonld
+# 4. Declare intent — what entities and relations the graph must contain.
+#    Non-interactive (agent-friendly); without flags, `biotope map` opens
+#    a wizard that captures intent and resolves slots in one flow.
+uv run biotope map --entity gene --entity disease --entity drug \
+                   --relation gene_associated_with_disease
 
 # 5. Resolve the slots. Two equivalent paths:
-#    a) Wizard (humans):            biotope map
-#    b) Edit `mappings/*.yaml` directly, then validate (agents):
-#       biotope map inspect <croissant> --json   # field catalogue
-#       biotope map preview --json               # status + projected schema + sample tuples
+#    a) Wizard (humans):  uv run biotope map
+#    b) Edit mappings/*.mapping.yaml directly, then validate (agents):
+#       uv run biotope map scaffold .biotope/datasets/data/ot.jsonld
+#       uv run biotope map inspect  <croissant> --json   # field catalogue
+#       uv run biotope map preview  --json               # projected schema + tuples
 
-# 6. Optional: align entities across multiple mappings.
-biotope propose-alignment mappings/*.mapping.yaml --out alignment.yaml
-
-# 7. Build a runnable BioCypher project. Strict: rejects unresolved slots.
-biotope build
-biotope view
+# 6. Build a runnable BioCypher project. Strict: rejects unresolved slots.
+uv run biotope build
+uv run python build/create_knowledge_graph.py
+uv run biotope view
 ```
 
 `biotope init` is a pure scaffolder. All non-autogeneratable metadata is supplied as CLI flags — by a user or an agent reading `AGENTS.md`. Semantic decisions (which record set, which fields, which transforms) are made by the human or copilot; biotope only enumerates options, validates, and previews.
@@ -70,14 +78,17 @@ The agent surface is `AGENTS.md` (template lives at `biotope/templates/AGENTS.md
 
 ```
 init                                project scaffolding
+get add mv rm                       acquisition + tracking (baker writes croissants)
+queue mark                          pipeline-state dashboard + manual transitions
 map (inspect|scaffold|preview)      semantic mapping (intent + wizard + agent path)
-add mv status commit log push pull  git-like metadata VCS
-check-data                          checksum verification
-discover                            registry-aware source ranking
 propose-alignment                   cross-mapping same_node equivalences
-build view benchmark                build + inspect a graph
-read chat                           NLP ingestion, conversation (promises)
-search annotate get config          legacy / auxiliary
+build view                          build + inspect a graph
+status commit log push pull         git-like metadata VCS
+check-data                          checksum verification
+annotate config                     field-level annotation + project config
+
+discover benchmark                  scaffolded but not yet wired into the standard flow
+read chat search                    promises / auxiliary
 ```
 
 `biotope describe` and the heuristic `biotope propose-mapping` were removed/deprecated. Intent capture is now `biotope map --entity ... --relation ...`; scaffolding is `biotope map scaffold`. `propose-mapping` remains as a deprecated alias for the scaffold subcommand.
