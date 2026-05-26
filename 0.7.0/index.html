@@ -367,6 +367,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#data-acquisition-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data acquisition + tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#semantic-mapping" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -400,10 +411,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#deprecated" class="md-nav__link">
+  <a href="#annotation-project-config" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Deprecated
+        Annotation + project config
       
     </span>
   </a>
@@ -411,10 +422,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#promises-not-feature-complete" class="md-nav__link">
+  <a href="#stubs-not-yet-wired" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Promises (not feature-complete)
+        Stubs / not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deprecated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deprecated
       
     </span>
   </a>
@@ -962,6 +984,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#data-acquisition-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data acquisition + tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#semantic-mapping" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -995,10 +1028,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#deprecated" class="md-nav__link">
+  <a href="#annotation-project-config" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Deprecated
+        Annotation + project config
       
     </span>
   </a>
@@ -1006,10 +1039,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#promises-not-feature-complete" class="md-nav__link">
+  <a href="#stubs-not-yet-wired" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Promises (not feature-complete)
+        Stubs / not yet wired
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deprecated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deprecated
       
     </span>
   </a>
@@ -1088,6 +1132,13 @@
 </li>
 </ol>
 <h2 id="quick-start-without-coding-agent">Quick start: without coding agent<a class="headerlink" href="#quick-start-without-coding-agent" title="Permanent link">&para;</a></h2>
+<div class="admonition tip">
+<p class="admonition-title">Prefer a worked end-to-end example?</p>
+<p>The <a href="tutorial/"><strong>Tutorial</strong></a> walks through building a real knowledge graph
+from public airport/flight data in ~15 minutes. It's the most up-to-date
+onboarding path and the source of truth for the recommended workflow
+(<code>init</code> → <code>get</code> → <code>add</code> → <code>queue</code> → <code>map</code> → <code>build</code>).</p>
+</div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>biotope
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># 1. Scaffold a project.</span>
@@ -1123,17 +1174,24 @@
 <ul>
 <li><code>biotope init</code> — scaffold a project (<code>.biotope/</code>, <code>AGENTS.md</code>, <code>project.yaml</code>, <code>git init</code>).</li>
 </ul>
+<h3 id="data-acquisition-tracking">Data acquisition + tracking<a class="headerlink" href="#data-acquisition-tracking" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>biotope get &lt;url&gt;</code> — download a file (optionally into <code>--output-dir</code>) and, unless <code>--no-add</code>, track it.</li>
+<li><code>biotope add &lt;path&gt;</code> — stage data files or rooted directories; baker writes the Croissant entry under <code>.biotope/datasets/</code>. <code>--derived-from</code> records provenance for human/agent-extracted derivatives. For curated metadata that doesn't fit as CLI flags (descriptions, citations, per–record-set fields), <code>add</code> also drops a <code>.biotope.yaml</code> scaffold next to the dataset — review it, then run <code>biotope annotate apply &lt;dir&gt;</code> to merge it into the manifest.</li>
+<li><code>biotope mv</code> / <code>biotope rm</code> — move or untrack files and update metadata paths.</li>
+<li><code>biotope queue</code> — show every dataset grouped by pipeline state (<code>raw</code> / <code>processed</code> / <code>mapped</code>). The recommended dashboard during a build.</li>
+<li><code>biotope mark &lt;dataset&gt; &lt;status&gt;</code> — manually set a dataset's <code>biotope:status</code>.</li>
+</ul>
 <h3 id="semantic-mapping">Semantic mapping<a class="headerlink" href="#semantic-mapping" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>biotope map</code> — bare command. If any intent flag (<code>--purpose</code>, <code>--entity</code>, <code>--relation</code>, <code>--source</code>, <code>--notes</code>, <code>--clear-*</code>, <code>--show</code>) is passed, it updates <code>project.yaml</code> non-interactively. Otherwise it launches the guided wizard.</li>
 <li><code>biotope map inspect &lt;croissant&gt;</code> — deterministic field catalogue + sample rows. <code>--json</code> for agents.</li>
 <li><code>biotope map scaffold &lt;croissant&gt;</code> — emit an unresolved mapping scaffold with an inspector comment appendix.</li>
 <li><code>biotope map preview [&lt;mapping&gt;]</code> — validate a (partial) mapping; show projected BioCypher schema + sample tuples. <code>--json</code> for agents.</li>
+<li><code>biotope propose-alignment</code> — propose cross-mapping <code>same_node</code> equivalences.</li>
 </ul>
 <h3 id="git-like-metadata-vcs">Git-like metadata VCS<a class="headerlink" href="#git-like-metadata-vcs" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>biotope add</code> — stage data files; baker enriches the Croissant entry under <code>.biotope/datasets/</code>.</li>
-<li><code>biotope mv</code> — move tracked files; updates metadata paths.</li>
 <li><code>biotope status</code> — show staged/modified files and validation state.</li>
 <li><code>biotope commit</code> — commit metadata changes.</li>
 <li><code>biotope log</code> — show metadata commit history.</li>
@@ -1142,25 +1200,30 @@
 </ul>
 <h3 id="knowledge-graph-construction">Knowledge-graph construction<a class="headerlink" href="#knowledge-graph-construction" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>biotope discover</code> — rank registered adapters and local Croissant files against <code>required_entities</code>.</li>
-<li><code>biotope propose-alignment</code> — propose cross-mapping <code>same_node</code> equivalences.</li>
 <li><code>biotope build</code> — materialise a runnable BioCypher project from mappings + alignment. Emits <code>config/schema_config.yaml</code> (with <code>namespace</code> and autogenerated <code>input_label</code>) and per-mapping generated Python under <code>build/generated/&lt;stem&gt;/</code>.</li>
-<li><code>biotope view</code> — node/edge counts for the most recent build.</li>
-<li><code>biotope benchmark</code> — quality/coverage metrics (skeleton in v1).</li>
+<li><code>biotope view</code> — node/edge counts for the most recent build (or project competence questions if no build yet).</li>
+</ul>
+<h3 id="annotation-project-config">Annotation + project config<a class="headerlink" href="#annotation-project-config" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>biotope annotate</code> — <code>apply</code> (merge a curated <code>.biotope.yaml</code> scaffold into a dataset's Croissant manifest, with optional <code>--set dataset.&lt;field&gt;=…</code> / <code>--set record_set.&lt;field&gt;=…</code> overrides), <code>edit</code> (interactive annotation), <code>load</code> (sample records via the manifest), <code>validate</code> (mlcroissant validation).</li>
+<li><code>biotope config</code> — manage project-level validation rules, remote validation URLs, and project metadata.</li>
+</ul>
+<h3 id="stubs-not-yet-wired">Stubs / not yet wired<a class="headerlink" href="#stubs-not-yet-wired" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>biotope discover</code> — rank registered adapters and local Croissant files against <code>required_entities</code>. Exists as a CLI entry but the registry surface is not yet wired into the recommended workflow; the tutorial does not use it.</li>
+<li><code>biotope benchmark</code> — quality/coverage metrics. v1 stub: emits a skeleton JSON object so downstream tooling can structure-test against it. Real metric implementations land iteratively.</li>
+<li><code>biotope read</code> — NLP ingestion + health-check entry. Promise.</li>
+<li><code>biotope chat</code> — provider-agnostic conversational interface (biochatter backend). Promise.</li>
+<li><code>biotope search</code> — registry search across MCP / biotools. Auxiliary; not used in the standard build path.</li>
 </ul>
 <h3 id="deprecated">Deprecated<a class="headerlink" href="#deprecated" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>biotope describe</code> — removed; folded into <code>biotope map</code> intent flags.</li>
 <li><code>biotope propose-mapping</code> — deprecated alias for <code>biotope map scaffold</code>. The old heuristic ("one RecordSet per node type, FK fields as edges") is gone; the alias now produces an unresolved scaffold for human/agent completion.</li>
 </ul>
-<h3 id="promises-not-feature-complete">Promises (not feature-complete)<a class="headerlink" href="#promises-not-feature-complete" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>biotope read</code> — NLP ingestion + health-check entry.</li>
-<li><code>biotope chat</code> — provider-agnostic conversational interface (biochatter backend ships first).</li>
-<li><code>biotope search</code> / <code>biotope get</code> / <code>biotope annotate</code> / <code>biotope config</code> — auxiliary surfaces.</li>
-</ul>
 <h2 id="reading-order">Reading order<a class="headerlink" href="#reading-order" title="Permanent link">&para;</a></h2>
 <ol>
+<li><a href="tutorial/">Tutorial</a> — 15-minute end-to-end walk-through; the ground-truth onboarding path.</li>
 <li><a href="architecture/">Architecture</a> — modules, data flow, config files.</li>
 <li><a href="project-context/">Project context</a> — project layout and <code>.biotope/</code> files.</li>
 <li><a href="api-docs/init/">Commands</a> — per-command reference, generated from docstrings.</li>
