@@ -1,0 +1,1732 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Biotope - CLI integration for BioCypher ecosystem packages">
+      
+      
+        <meta name="author" content="BioCypher Team">
+      
+      
+        <link rel="canonical" href="https://biocypher.github.io/biotope/0.7.1/tutorial/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Tutorial - Biotope</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tutorial-build-your-first-knowledge-graph" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Biotope" class="md-header__button md-logo" aria-label="Biotope" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Biotope
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Tutorial
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="light-blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="blue-grey" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/biocypher/biotope" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    biocypher/biotope
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Biotope" class="md-nav__button md-logo" aria-label="Biotope" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Biotope
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/biocypher/biotope" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    biocypher/biotope
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-initialise-a-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Initialise a project
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-bring-in-the-structured-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Bring in the structured data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-bring-in-the-unstructured-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Bring in the unstructured notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-inspect-the-pipeline-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Inspect the pipeline queue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-process-the-raw-input-into-the-kg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Process the raw input into the KG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-declare-what-the-graph-should-contain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Declare what the graph should contain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-bind-each-slot-to-real-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Bind each slot to real data
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Bind each slot to real data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#binding-the-airport-entity-flights-croissant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binding the airport entity → flights croissant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#binding-the-is_hub_for-relation-airport-hubs-croissant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binding the is_hub_for relation → airport-hubs croissant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bind-the-remaining-two-slots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bind the remaining two slots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-note-on-the-two-airport-bindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A note on the two airport bindings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Build
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-run-the-graph-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Run the graph build
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-look-at-the-result" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Look at the result
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-shortcut" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent shortcut
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cluster-compliance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cluster Compliance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Commands
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/init/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Init
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/add/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/propose-alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Propose Alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/propose-mapping/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Propose Mapping (deprecated)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/annotate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-docs/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-initialise-a-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Initialise a project
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-bring-in-the-structured-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Bring in the structured data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-bring-in-the-unstructured-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Bring in the unstructured notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-inspect-the-pipeline-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Inspect the pipeline queue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-process-the-raw-input-into-the-kg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Process the raw input into the KG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-declare-what-the-graph-should-contain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Declare what the graph should contain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-bind-each-slot-to-real-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Bind each slot to real data
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Bind each slot to real data">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#binding-the-airport-entity-flights-croissant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binding the airport entity → flights croissant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#binding-the-is_hub_for-relation-airport-hubs-croissant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Binding the is_hub_for relation → airport-hubs croissant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bind-the-remaining-two-slots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bind the remaining two slots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-note-on-the-two-airport-bindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A note on the two airport bindings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Build
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-run-the-graph-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Run the graph build
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-look-at-the-result" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Look at the result
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-shortcut" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent shortcut
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="tutorial-build-your-first-knowledge-graph">Tutorial: build your first knowledge graph<a class="headerlink" href="#tutorial-build-your-first-knowledge-graph" title="Permanent link">&para;</a></h1>
+<p>A 15-minute end-to-end walk-through. We'll take four small public files —
+two CSVs of US airport and flight data, one markdown file of free-text
+notes about a few airports, and a derived CSV that extracts the
+structured bits out of those notes — and turn them into a runnable
+knowledge graph. About 3,400 airports, 5,400 flight routes, 5 airlines,
+and 12 "is a hub for" relations.</p>
+<p>The CSVs are the routine case: croissant-baker structures them, biotope
+maps them, BioCypher writes them. The markdown file is the interesting
+case: it has facts that belong in the graph (which airline hubs at which
+airport) but no schema for biotope to act on. We'll handle that gap two
+ways — once by a human reading the prose and hand-producing the CSV, once
+by an agent doing the same extraction automatically. Either way, the same
+file ends up in the project, and the same mapping ingests it.</p>
+<p>If you'd rather hand the wheel to an agent for the whole walk-through,
+jump to the <a href="#agent-shortcut">agent shortcut</a> at the end.</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>add<span class="w"> </span>biotope<span class="w">        </span><span class="c1"># if in uv-managed venv</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># OR</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>pipx<span class="w"> </span>install<span class="w"> </span>biotope<span class="w">  </span><span class="c1"># global installation</span>
+</code></pre></div>
+<p>Or any other way to get biotope onto your <code>$PATH</code>. You can also use
+<code>uvx biotope init</code> to use a temporary venv, requiring no prior install.
+Below, we will use <code>uvx</code> for the initialisation (as it is performed in a
+parent directory), and uv for venv management and running code in the
+tutorial project itself. You are free to substitute your favourite
+package management workflow.</p>
+<h2 id="1-initialise-a-project">1. Initialise a project<a class="headerlink" href="#1-initialise-a-project" title="Permanent link">&para;</a></h2>
+<p>First run <code>biotope init</code> and choose a project name and purpose. For this
+tutorial, our name will be <code>airports</code> and our purpose is to "<code>Find which US airports are most connected and which airlines use them as their hubs.</code>".
+Or, fully CLI-based:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uvx<span class="w"> </span>biotope<span class="w"> </span>init<span class="w"> </span>airports<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--purpose<span class="w"> </span><span class="s2">&quot;Find which US airports are most connected and which airlines use them as their hubs.&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--no-prompt
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nb">cd</span><span class="w"> </span>airports
+</code></pre></div>
+<p>This creates <code>.biotope/</code> (manifests + config), <code>data/</code> (empty; for your
+files), <code>mappings/</code> (empty; for the semantic mapping files), <code>AGENTS.md</code>
+(the contract any coding agent will read), and a minimal <code>pyproject.toml</code>.
+A fresh <code>git</code> repo is initialised in the same directory.</p>
+<p>Finally, we have to install the venv for our new project:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>sync
+</code></pre></div>
+<p>You can check project status at any time using <code>uv run biotope status</code>.</p>
+<h2 id="2-bring-in-the-structured-data">2. Bring in the structured data<a class="headerlink" href="#2-bring-in-the-structured-data" title="Permanent link">&para;</a></h2>
+<p>Two CSVs from the <a href="https://github.com/vega/vega-datasets">vega-datasets</a>
+project. We download both into a single sub-folder so they end up under
+one composite manifest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>get<span class="w"> </span>https://cdn.jsdelivr.net/npm/vega-datasets/data/airports.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--output-dir<span class="w"> </span>data/flights<span class="w"> </span>--no-add
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>get<span class="w"> </span>https://cdn.jsdelivr.net/npm/vega-datasets/data/flights-airport.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>data/flights<span class="w"> </span>--no-add
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>add<span class="w"> </span>data/flights<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>--license<span class="w"> </span><span class="s2">&quot;BSD-3-Clause&quot;</span><span class="w"> </span>--creator<span class="w"> </span><span class="s2">&quot;vega-datasets&quot;</span>
+</code></pre></div>
+<p>The <code>--no-add</code> on the downloads lets the files land on disk without being
+tracked individually; the single <code>biotope add data/flights</code> then runs
+<a href="https://github.com/MIT-LCP/croissant-baker">croissant-baker</a> over the whole
+folder and writes one manifest at <code>.biotope/datasets/data/flights.jsonld</code>
+covering both record sets.</p>
+<h2 id="3-bring-in-the-unstructured-notes">3. Bring in the unstructured notes<a class="headerlink" href="#3-bring-in-the-unstructured-notes" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>get<span class="w"> </span>https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airports-notes.md<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--output-dir<span class="w"> </span>data/notes
+</code></pre></div>
+<p>This file is short prose: a paragraph per airport mentioning which
+airlines hub there. Useful information, but no schema for baker to
+structure.</p>
+<h2 id="4-inspect-the-pipeline-queue">4. Inspect the pipeline queue<a class="headerlink" href="#4-inspect-the-pipeline-queue" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>queue
+</code></pre></div>
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>queue
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="go">RAW (1) — needs processing</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="go">  • data/notes/airports-notes</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="go">PROCESSED (1) — ready to map</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="go">  • data/flights</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="go">MAPPED (0) — in the KG</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="go">  (none)</span>
+</code></pre></div>
+<p>Two things to notice:</p>
+<ul>
+<li><strong><code>data/flights</code> is <code>processed</code></strong> — croissant-baker recognised the
+  CSVs, inferred their schemas, and recorded <code>recordSet</code> + field types
+  in the manifest. Ready to be mapped.</li>
+<li><strong><code>data/notes/airports-notes</code> is <code>raw</code></strong> — baker can't structure
+  free-form markdown. The file is tracked (auditability, provenance) but
+  has no schema for the build to consume.</li>
+</ul>
+<h2 id="5-process-the-raw-input-into-the-kg">5. Process the raw input into the KG<a class="headerlink" href="#5-process-the-raw-input-into-the-kg" title="Permanent link">&para;</a></h2>
+<p>The notes contain real schema-shaped facts — which airlines hub at which
+airports — that belong in the graph. Getting them in requires extracting
+a structured CSV from the prose. That extraction is the boundary between
+the two paths:</p>
+<div class="admonition info">
+<p class="admonition-title">Processing</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Human</label><label for="__tabbed_1_2">Agent</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>Before LLM agents, the most reliable way to process simple unstructured
+text into the structured form required for our pipeline is manual
+curation into a structured form (such as a CSV of triples). You can
+imagine doing this here, but for this tutorial we ship the pre-extracted
+CSV so you can fetch it directly, to save time:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>get<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>https://raw.githubusercontent.com/biocypher/biotope/main/docs/examples/airport-hubs.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--output-dir<span class="w"> </span>data/notes<span class="w"> </span>--no-add
+</code></pre></div>
+<p>Note the <code>--no-add</code> flag; we are acting like we'd create the file by
+hand to then add as a derivative of the unstructured markdown note.
+Running the biotope pipeline with an agent (see "Agent" tab) will allow
+us to automate the task. After we have created (or downloaded) the file,
+we need to indicate that the new file was derived from the unstructured
+version (to remove it from the queue):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>add<span class="w"> </span>data/notes/airport-hubs.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>--derived-from<span class="w"> </span>data/notes/airports-notes
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<p>If you use an agent to run the biotope pipeline, it will be instructed
+and figure out to read <code>data/notes/airports-notes.md</code>, extract the
+<code>(airport_iata, airline_code, airline_name)</code> triples it mentions, and
+write the result to <code>data/notes/airport-hubs.csv</code>. Different agents
+might choose to do this differently; through the biotope scaffolding,
+the results should be equivalent. This will result in the same state as
+the first command in the human example.</p>
+<p>Then, the agent should also record the provenance link by calling the
+same command as in the human example:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>add<span class="w"> </span>data/notes/airport-hubs.csv<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--derived-from<span class="w"> </span>data/notes/airports-notes
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<p>The <code>--derived-from</code> flag stamps <code>prov:wasDerivedFrom</code> into the new manifest and
+hides the original notes from the active <code>raw</code> queue — biotope knows they've
+been consumed without renaming or moving them.  Either way, after this step the
+queue looks like:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>queue
+</code></pre></div>
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>queue
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="go">PROCESSED (2) — ready to map</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="go">  • data/flights</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="go">  • data/notes/airport-hubs  (derived from: data/notes/airports-notes)</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="go">Raw inputs already consumed (their derivatives are in the queue): 1</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="go">  • data/notes/airports-notes</span>
+</code></pre></div>
+<p>The "Raw inputs already consumed" footer is the provenance trail. The original
+notes stay in the project as a tracked input; the structured CSV is what gets
+mapped.</p>
+<h2 id="6-declare-what-the-graph-should-contain">6. Declare what the graph should contain<a class="headerlink" href="#6-declare-what-the-graph-should-contain" title="Permanent link">&para;</a></h2>
+<p>To represent the data according to our purpose, the graph should express a
+small, fixed vocabulary: this could be, for instance, two nouns (<code>airport</code>,
+<code>airline</code>) and two verbs (<code>number of flights</code>, <code>is hub for</code>).</p>
+<div class="admonition info">
+<p class="admonition-title">Declaring intent</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Human</label><label for="__tabbed_2_2">Agent</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>Launch the wizard with no arguments:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>map
+</code></pre></div>
+<p>The project has data and purpose but no fully declared intent yet, so
+the wizard opens with an intent-capture prompt:</p>
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>map
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="go">╭───────────────── Current intent ─────────────────╮</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="go">│ purpose: Find which US airports are most         │</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="go">│          connected and which airlines use them   │</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="go">│          as their hubs.                          │</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="go">│ entities: (none)                                 │</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="go">│ relations: (none)                                │</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="go">╰──────────────────────────────────────────────────╯</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="go">Enter a new purpose, or press Enter to keep the current one.</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="go">Purpose: ⏎</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="go">Add entities one per line. Press Enter on an empty line to stop.</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="go">Entity name: airport</span>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="go">Entity name: airline</span>
+<a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="go">Entity name: ⏎</span>
+<a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a>
+<a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a><span class="go">Add relations one per line. Press Enter on an empty line to stop.</span>
+<a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="go">Relation name: number of flights</span>
+<a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a><span class="go">Relation name: is hub for</span>
+<a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a><span class="go">Relation name: ⏎</span>
+<a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>
+<a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a><span class="go">💾 Saved intent to .biotope/project.yaml</span>
+</code></pre></div>
+<p>Names are normalised to snake_case behind the scenes
+(<code>number of flights</code> → <code>number_of_flights</code>).</p>
+<p>If you're unsure what data you have to bind these to, pick
+<code>[v] view data</code> from the slot menu the wizard drops you into
+next — it prints each croissant's record sets, field types, and
+a few sample rows so you can decide which dataset feeds which
+slot. The same view is available non-interactively as
+<code>uv run biotope map inspect &lt;croissant&gt;</code>.</p>
+</div>
+<div class="tabbed-block">
+<p>Same effect, non-interactively — in auto-mode, the agent will decide on
+an adequate representation and initialise accordingly. In ambiguous
+cases, it is instructed to check with the user.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>map<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span>--entity<span class="w"> </span>airport<span class="w"> </span>--entity<span class="w"> </span>airline<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span>--relation<span class="w"> </span>number_of_flights<span class="w"> </span>--relation<span class="w"> </span>is_hub_for
+</code></pre></div>
+<p>This appends to <code>required_entities</code> / <code>required_relations</code> in
+<code>.biotope/project.yaml</code> and exits without entering the wizard.</p>
+</div>
+</div>
+</div>
+</div>
+<p>After this step, <code>.biotope/project.yaml</code> declares four slots that the
+rest of the walkthrough must resolve.</p>
+<h2 id="7-bind-each-slot-to-real-data">7. Bind each slot to real data<a class="headerlink" href="#7-bind-each-slot-to-real-data" title="Permanent link">&para;</a></h2>
+<p>With the four slots declared, the wizard's main view is the slot table.
+Re-enter it (or stay in it, if you came straight from step 6):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>map
+</code></pre></div>
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>map
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="go">        Declared slots — 0/4 resolved (project-wide)</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="go">┏━━━┳━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="go">┃ # ┃   ┃ Kind     ┃ Name              ┃ Bound in   ┃</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="go">┡━━━╇━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="go">│ 1 │ ○ │ entity   │ airport           │ —          │</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="go">│ 2 │ ○ │ entity   │ airline           │ —          │</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="go">│ 3 │ ○ │ relation │ number_of_flights │ —          │</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="go">│ 4 │ ○ │ relation │ is_hub_for        │ —          │</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="go">└───┴───┴──────────┴───────────────────┴────────────┘</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="go">Enter a slot number to bind it, or one of:</span>
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="go">  [v] view data    [i] edit intent    [q] save and quit</span>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="go">Selection (1):</span>
+</code></pre></div>
+<p>Each slot is bound the same way: pick the slot number → pick the
+croissant that has the right fields → answer a handful of prompts about
+record set, scan, id, and properties. The wizard validates and autosaves
+after every step. Below are two representative bindings (one entity,
+one relation); the other two follow the same pattern.</p>
+<h3 id="binding-the-airport-entity-flights-croissant">Binding the <code>airport</code> entity → flights croissant<a class="headerlink" href="#binding-the-airport-entity-flights-croissant" title="Permanent link">&para;</a></h3>
+<div class="admonition info">
+<p class="admonition-title">Binding an entity</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Human</label><label for="__tabbed_3_2">Agent</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="go">Selection (1): 1</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="go">Pick a croissant to bind entity `airport`</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="gp"># </span>│<span class="w"> </span>Croissant<span class="w">                                  </span>│<span class="w"> </span>Match
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="go">1 │ .biotope/datasets/data/flights.jsonld      │   2</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="go">2 │ .biotope/datasets/data/notes/airport-hubs… │   1</span>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="go">Croissant: 1</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="go">Record sets</span>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="gp"># </span>│<span class="w"> </span>Name<span class="w">             </span>│<span class="w"> </span>Fields
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="go">1 │ airports          │ iata, name, city, state, country, latitude, longitude</span>
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a><span class="go">2 │ flights-airport   │ origin, destination, count</span>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="go">Pick record set (1): 1</span>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a><span class="go">Scan kind — (r)ow, (e)xplode one, (m)ulti-axis (r): r</span>
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a>
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a><span class="go">Namespace (optional): ⏎</span>
+<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>
+<a id="__codelineno-17-19" name="__codelineno-17-19" href="#__codelineno-17-19"></a><span class="go">Choose action (field): field</span>
+<a id="__codelineno-17-20" name="__codelineno-17-20" href="#__codelineno-17-20"></a><span class="go">ID field: iata</span>
+<a id="__codelineno-17-21" name="__codelineno-17-21" href="#__codelineno-17-21"></a><span class="go">Transform [passthrough]: as_curie</span>
+<a id="__codelineno-17-22" name="__codelineno-17-22" href="#__codelineno-17-22"></a><span class="go">CURIE prefix: iata</span>
+<a id="__codelineno-17-23" name="__codelineno-17-23" href="#__codelineno-17-23"></a>
+<a id="__codelineno-17-24" name="__codelineno-17-24" href="#__codelineno-17-24"></a><span class="go">Property fields (comma-separated): name, city, state, country, latitude, longitude</span>
+<a id="__codelineno-17-25" name="__codelineno-17-25" href="#__codelineno-17-25"></a>
+<a id="__codelineno-17-26" name="__codelineno-17-26" href="#__codelineno-17-26"></a><span class="go">💾 Saved mappings/flights.mapping.yaml</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<p>An agent skips the wizard and writes the binding straight into
+the mapping file (scaffolding it first with
+<code>uv run biotope map scaffold .biotope/datasets/data/flights.jsonld</code>
+if it doesn't exist yet):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># mappings/flights.mapping.yaml</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="nt">croissant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.biotope/datasets/data/flights.jsonld</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="nt">entities</span><span class="p">:</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">  </span><span class="nt">airport</span><span class="p">:</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">    </span><span class="nt">record_set</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airports</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">    </span><span class="nt">scan</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">row</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="nv">iata</span><span class="p p-Indicator">,</span><span class="nt"> transform</span><span class="p">:</span><span class="w"> </span><span class="nv">as_curie</span><span class="p p-Indicator">,</span><span class="nt"> args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="nv">iata</span><span class="p p-Indicator">}}</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">name</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">      </span><span class="nt">city</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">city</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="w">      </span><span class="nt">state</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">state</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="w">      </span><span class="nt">country</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">country</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="w">      </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">latitude</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a><span class="w">      </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">longitude</span>
+</code></pre></div>
+<p>The scaffold's inspector appendix — or
+<code>uv run biotope map inspect &lt;croissant&gt; --json</code> — gives the agent
+the field catalogue to ground these picks.</p>
+</div>
+</div>
+</div>
+</div>
+<h3 id="binding-the-is_hub_for-relation-airport-hubs-croissant">Binding the <code>is_hub_for</code> relation → airport-hubs croissant<a class="headerlink" href="#binding-the-is_hub_for-relation-airport-hubs-croissant" title="Permanent link">&para;</a></h3>
+<div class="admonition info">
+<p class="admonition-title">Binding a relation</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="4:2"><input checked="checked" id="__tabbed_4_1" name="__tabbed_4" type="radio" /><input id="__tabbed_4_2" name="__tabbed_4" type="radio" /><div class="tabbed-labels"><label for="__tabbed_4_1">Human</label><label for="__tabbed_4_2">Agent</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="go">Selection (4): 4</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="go">Pick a croissant to bind relation `is_hub_for`</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="gp"># </span>│<span class="w"> </span>Croissant<span class="w">                                  </span>│<span class="w"> </span>Match
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="go">1 │ .biotope/datasets/data/notes/airport-hubs… │   2</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="go">2 │ .biotope/datasets/data/flights.jsonld      │   0</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="go">Croissant: 1</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="go">Pick record set (1): 1            # airport-hubs</span>
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a><span class="go">Scan kind (r/e/m) (r): r</span>
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>
+<a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a><span class="go">── Source endpoint ──</span>
+<a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a><span class="go">Entity: airport</span>
+<a id="__codelineno-19-14" name="__codelineno-19-14" href="#__codelineno-19-14"></a><span class="go">ID field: airport_iata</span>
+<a id="__codelineno-19-15" name="__codelineno-19-15" href="#__codelineno-19-15"></a><span class="go">Transform: as_curie</span>
+<a id="__codelineno-19-16" name="__codelineno-19-16" href="#__codelineno-19-16"></a><span class="go">CURIE prefix: iata</span>
+<a id="__codelineno-19-17" name="__codelineno-19-17" href="#__codelineno-19-17"></a>
+<a id="__codelineno-19-18" name="__codelineno-19-18" href="#__codelineno-19-18"></a><span class="go">── Target endpoint ──</span>
+<a id="__codelineno-19-19" name="__codelineno-19-19" href="#__codelineno-19-19"></a><span class="go">Entity: airline</span>
+<a id="__codelineno-19-20" name="__codelineno-19-20" href="#__codelineno-19-20"></a><span class="go">ID field: airline_code</span>
+<a id="__codelineno-19-21" name="__codelineno-19-21" href="#__codelineno-19-21"></a><span class="go">Transform: as_curie</span>
+<a id="__codelineno-19-22" name="__codelineno-19-22" href="#__codelineno-19-22"></a><span class="go">CURIE prefix: airline</span>
+<a id="__codelineno-19-23" name="__codelineno-19-23" href="#__codelineno-19-23"></a>
+<a id="__codelineno-19-24" name="__codelineno-19-24" href="#__codelineno-19-24"></a><span class="go">Property fields (comma-separated, blank for none): ⏎</span>
+<a id="__codelineno-19-25" name="__codelineno-19-25" href="#__codelineno-19-25"></a>
+<a id="__codelineno-19-26" name="__codelineno-19-26" href="#__codelineno-19-26"></a><span class="go">💾 Saved mappings/airport-hubs.mapping.yaml</span>
+</code></pre></div>
+<p>The <code>airport</code> endpoint reuses the entity already bound in the
+flights mapping — both sides mint <code>iata:&lt;code&gt;</code> IDs, so
+BioCypher dedups them at build. The <code>airline</code> endpoint is the
+first reference to that entity; bind its full properties when
+you do slot 2.</p>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># mappings/airport-hubs.mapping.yaml</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="nt">croissant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.biotope/datasets/data/notes/airport-hubs.jsonld</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nt">entities</span><span class="p">:</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">  </span><span class="nt">airport</span><span class="p">:</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="w">    </span><span class="nt">record_set</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airport-hubs</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="w">    </span><span class="nt">scan</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">row</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="nv">airport_iata</span><span class="p p-Indicator">,</span><span class="nt"> transform</span><span class="p">:</span><span class="w"> </span><span class="nv">as_curie</span><span class="p p-Indicator">,</span><span class="nt"> args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="nv">iata</span><span class="p p-Indicator">}}</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="w">  </span><span class="nt">airline</span><span class="p">:</span>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="w">    </span><span class="nt">record_set</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airport-hubs</span>
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a><span class="w">    </span><span class="nt">scan</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">row</span>
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="w">    </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">field</span><span class="p">:</span><span class="w"> </span><span class="nv">airline_code</span><span class="p p-Indicator">,</span><span class="nt"> transform</span><span class="p">:</span><span class="w"> </span><span class="nv">as_curie</span><span class="p p-Indicator">,</span><span class="nt"> args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="nv">airline</span><span class="p p-Indicator">}}</span>
+<a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a><span class="w">    </span><span class="nt">properties</span><span class="p">:</span>
+<a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a><span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airline_name</span>
+<a id="__codelineno-20-14" name="__codelineno-20-14" href="#__codelineno-20-14"></a><span class="nt">relations</span><span class="p">:</span>
+<a id="__codelineno-20-15" name="__codelineno-20-15" href="#__codelineno-20-15"></a><span class="w">  </span><span class="nt">is_hub_for</span><span class="p">:</span>
+<a id="__codelineno-20-16" name="__codelineno-20-16" href="#__codelineno-20-16"></a><span class="w">    </span><span class="nt">record_set</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">airport-hubs</span>
+<a id="__codelineno-20-17" name="__codelineno-20-17" href="#__codelineno-20-17"></a><span class="w">    </span><span class="nt">scan</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">row</span>
+<a id="__codelineno-20-18" name="__codelineno-20-18" href="#__codelineno-20-18"></a><span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">entity</span><span class="p">:</span><span class="w"> </span><span class="nv">airport</span><span class="p p-Indicator">,</span><span class="nt"> field</span><span class="p">:</span><span class="w"> </span><span class="nv">airport_iata</span><span class="p p-Indicator">,</span><span class="nt"> transform</span><span class="p">:</span><span class="w"> </span><span class="nv">as_curie</span><span class="p p-Indicator">,</span><span class="nt"> args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="nv">iata</span><span class="p p-Indicator">}}</span>
+<a id="__codelineno-20-19" name="__codelineno-20-19" href="#__codelineno-20-19"></a><span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">entity</span><span class="p">:</span><span class="w"> </span><span class="nv">airline</span><span class="p p-Indicator">,</span><span class="nt"> field</span><span class="p">:</span><span class="w"> </span><span class="nv">airline_code</span><span class="p p-Indicator">,</span><span class="nt"> transform</span><span class="p">:</span><span class="w"> </span><span class="nv">as_curie</span><span class="p p-Indicator">,</span><span class="nt"> args</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="nv">airline</span><span class="p p-Indicator">}}</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+</div>
+<h3 id="bind-the-remaining-two-slots">Bind the remaining two slots<a class="headerlink" href="#bind-the-remaining-two-slots" title="Permanent link">&para;</a></h3>
+<p><code>airline</code> (slot 2) and <code>number_of_flights</code> (slot 3) follow the same
+pattern — pick the slot, pick the croissant (airport-hubs for <code>airline</code>,
+flights for <code>number_of_flights</code>), and answer the prompts. The
+<code>number_of_flights</code> relation binds against the <code>flights-airport</code> record
+set with <code>origin</code> → <code>destination</code> as the endpoints and <code>count</code> as a
+property. When all four slots show ✓, the wizard prints:</p>
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="go">All slots resolved. Run `biotope build` to generate the BioCypher project.</span>
+</code></pre></div>
+<h3 id="a-note-on-the-two-airport-bindings">A note on the two <code>airport</code> bindings<a class="headerlink" href="#a-note-on-the-two-airport-bindings" title="Permanent link">&para;</a></h3>
+<p>The flights mapping owns the rich Airport records (full properties); the
+airport-hubs mapping declares a <em>minimal</em> Airport (id only) so its
+<code>is_hub_for</code> relation has something to point at on the source side. Both
+mint Airport IDs the same way (<code>iata:&lt;code&gt;</code>), so BioCypher's writer
+dedups the two emissions into one Airport node per IATA code, merging
+properties from the richer side.</p>
+<h3 id="verify">Verify<a class="headerlink" href="#verify" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>map<span class="w"> </span>preview
+</code></pre></div>
+<p>You should see resolved slots and sample tuples like
+<code>('iata:00M', 'airport', {...})</code>,
+<code>(None, 'iata:ABE', 'iata:ATL', 'number_of_flights', {'count': 853})</code>,
+and <code>('airline:DL', 'airline', {'name': 'Delta Air Lines'})</code>.</p>
+<h2 id="8-build">8. Build<a class="headerlink" href="#8-build" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>build
+</code></pre></div>
+<p>This generates a self-contained BioCypher project under <code>build/</code> —
+<code>schema_config.yaml</code>, an adapter per mapping, and an entry-point
+<code>create_knowledge_graph.py</code>. Strict: any unresolved slot would have
+errored out here.</p>
+<h2 id="9-run-the-graph-build">9. Run the graph build<a class="headerlink" href="#9-run-the-graph-build" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>build/create_knowledge_graph.py
+</code></pre></div>
+<p>BioCypher writes node and edge CSVs to <code>build/biocypher-out/</code>. You may
+see <code>WARNING -- Duplicate node type airport found</code> — that's expected:
+two mappings emit Airport nodes (the rich ones from <code>flights</code> and the
+ID-only ones from <code>airport-hubs</code>), and the writer merges them.</p>
+<h2 id="10-look-at-the-result">10. Look at the result<a class="headerlink" href="#10-look-at-the-result" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>view
+</code></pre></div>
+<div class="terminal no-copy highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="gp">$ </span>uv<span class="w"> </span>run<span class="w"> </span>biotope<span class="w"> </span>view
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="go">                BioCypher build:</span>
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="go">/.../airports/build</span>
+<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a><span class="go">┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━┓</span>
+<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a><span class="go">┃ file                 ┃ lines ┃ kind ┃</span>
+<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a><span class="go">┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━┩</span>
+<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a><span class="go">│ airline.csv          │     5 │ node │</span>
+<a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a><span class="go">│ airport.csv          │  3376 │ node │</span>
+<a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a><span class="go">│ is_hub_for.csv       │    12 │ edge │</span>
+<a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a><span class="go">│ number_of_flights.csv│  5366 │ edge │</span>
+<a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a><span class="go">└──────────────────────┴───────┴──────┘</span>
+<a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a>
+<a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a><span class="go">Total nodes: 3381  edges: 5378</span>
+</code></pre></div>
+<p>That's your knowledge graph. The structured CSVs gave you 3,376 airports
+and 5,366 flight routes. The unstructured notes — only because they were
+extracted into a structured CSV first — gave you 5 airlines and 12
+"is a hub for" edges that wouldn't otherwise be in the KG.</p>
+<p>The CSVs in <code>build/biocypher-out/</code> are ready to be imported into Neo4j
+(<code>neo4j-admin database import</code>), DuckDB, or any graph store BioCypher
+targets — see the BioCypher docs for the import side.</p>
+<h2 id="agent-shortcut">Agent shortcut<a class="headerlink" href="#agent-shortcut" title="Permanent link">&para;</a></h2>
+<p>Everything above is delegable. After <code>biotope init</code>, you can <code>cd</code> into the
+project and start a copilot — Claude Code, Cursor, Aider, or anything that
+reads <code>AGENTS.md</code> — and say:</p>
+<blockquote>
+<p>"help me build the KG"</p>
+</blockquote>
+<p>The agent reads <code>AGENTS.md</code> (already in the project root), runs
+<code>biotope queue --json</code> to see what's tracked, decides whether to leave
+raw items alone or process them, scaffolds and resolves mappings using
+<code>biotope map inspect --json</code> for the field catalogue, and runs the build.
+The contract is the CLI; no agent needs to import any biotope Python.</p>
+<p>The clear division of labour:</p>
+<ul>
+<li><strong>Pure-human work, with no automation possible</strong>: extracting structured
+  facts from unstructured inputs like markdown, PDFs, or natural-language
+  notes. Without an agent, this stays manual — or stays out of the KG
+  entirely.</li>
+<li><strong>Agent territory</strong>: the extraction above, plus everything mechanical
+  from there. Slot resolution against the inspector appendix, multi-axis
+  mappings, cross-mapping alignment proposals — all suit non-interactive
+  drivers better than a human clicking through a wizard.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy 2025–2026 BioCypher Team
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/biocypher" target="_blank" rel="noopener" title="BioCypher Team" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.annotate", "content.code.copy", "navigation.indexes", "navigation.instant", "navigation.tracking", "navigation.top"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
