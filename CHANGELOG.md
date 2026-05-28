@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/biocypher/biotope/compare/biotope-v0.7.0...biotope-v0.7.1) (2026-05-28)
+
+
+### Documentation
+
+* **landing:** align commands surface and link tutorial as canonical onboarding ([#28](https://github.com/biocypher/biotope/issues/28)) ([2862055](https://github.com/biocypher/biotope/commit/2862055c7d5f6a3cdd635fcc76df88696d3c2de7))
+* **tutorial:** admonition fixes + terminal-styled console blocks ([#30](https://github.com/biocypher/biotope/issues/30)) ([5e864b4](https://github.com/biocypher/biotope/commit/5e864b49555c8f74200ba371080971216fb0e24c))
+
 ## [0.7.0](https://github.com/biocypher/biotope/compare/biotope-v0.6.1...biotope-v0.7.0) (2026-05-25)
 
 
