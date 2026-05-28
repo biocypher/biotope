@@ -97,7 +97,8 @@ structure.
 uv run biotope queue
 ```
 
-```
+```console { .terminal .no-copy }
+$ uv run biotope queue
 RAW (1) — needs processing
   • data/notes/airports-notes
 
@@ -124,7 +125,7 @@ airports — that belong in the graph. Getting them in requires extracting
 a structured CSV from the prose. That extraction is the boundary between
 the two paths:
 
-!!! Processing
+!!! info "Processing"
 
     === "Human"
 
@@ -175,7 +176,12 @@ hides the original notes from the active `raw` queue — biotope knows they've
 been consumed without renaming or moving them.  Either way, after this step the
 queue looks like:
 
+```bash
+uv run biotope queue
 ```
+
+```console { .terminal .no-copy }
+$ uv run biotope queue
 PROCESSED (2) — ready to map
   • data/flights
   • data/notes/airport-hubs  (derived from: data/notes/airports-notes)
@@ -194,7 +200,7 @@ To represent the data according to our purpose, the graph should express a
 small, fixed vocabulary: this could be, for instance, two nouns (`airport`,
 `airline`) and two verbs (`number of flights`, `is hub for`).
 
-!!! Declaring intent 
+!!! info "Declaring intent"
 
     === "Human"
 
@@ -207,7 +213,9 @@ small, fixed vocabulary: this could be, for instance, two nouns (`airport`,
         The project has data and purpose but no fully declared intent yet, so
         the wizard opens with an intent-capture prompt:
 
-        ```
+        ```console { .terminal .no-copy }
+        $ uv run biotope map
+
         ╭───────────────── Current intent ─────────────────╮
         │ purpose: Find which US airports are most         │
         │          connected and which airlines use them   │
@@ -269,7 +277,9 @@ Re-enter it (or stay in it, if you came straight from step 6):
 uv run biotope map
 ```
 
-```
+```console { .terminal .no-copy }
+$ uv run biotope map
+
         Declared slots — 0/4 resolved (project-wide)
 ┏━━━┳━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
 ┃ # ┃   ┃ Kind     ┃ Name              ┃ Bound in   ┃
@@ -292,11 +302,11 @@ one relation); the other two follow the same pattern.
 
 ### Binding the `airport` entity → flights croissant
 
-!!! Binding an entity
+!!! info "Binding an entity"
 
     === "Human"
 
-        ```
+        ```console { .terminal .no-copy }
         Selection (1): 1
 
         Pick a croissant to bind entity `airport`
@@ -355,11 +365,11 @@ one relation); the other two follow the same pattern.
 
 ### Binding the `is_hub_for` relation → airport-hubs croissant
 
-!!! Binding a relation
+!!! info "Binding a relation"
 
     === "Human"
 
-        ```
+        ```console { .terminal .no-copy }
         Selection (4): 4
 
         Pick a croissant to bind relation `is_hub_for`
@@ -427,7 +437,7 @@ flights for `number_of_flights`), and answer the prompts. The
 set with `origin` → `destination` as the endpoints and `count` as a
 property. When all four slots show ✓, the wizard prints:
 
-```
+```console { .terminal .no-copy }
 All slots resolved. Run `biotope build` to generate the BioCypher project.
 ```
 
@@ -479,7 +489,9 @@ ID-only ones from `airport-hubs`), and the writer merges them.
 uv run biotope view
 ```
 
-```
+```console { .terminal .no-copy }
+$ uv run biotope view
+
                 BioCypher build:
 /.../airports/build
 ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━┓

@@ -5,6 +5,7 @@ site_url: https://biocypher.github.io/biotope/
 
 markdown_extensions:
   - admonition
+  - attr_list
   - toc:
       permalink: true
   - pymdownx.highlight:
@@ -21,6 +22,7 @@ markdown_extensions:
 theme:
   features:
     - content.code.annotate
+    - content.code.copy
     - navigation.indexes
     - navigation.instant
     - navigation.tracking
@@ -71,6 +73,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/biocypher
       name: BioCypher Team
+
+extra_css:
+  - stylesheets/extra.css
 
 copyright: Copyright &copy 2025–2026 BioCypher Team
 
