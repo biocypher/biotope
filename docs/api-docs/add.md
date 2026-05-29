@@ -73,6 +73,39 @@ biotope add data/experiment.csv --force
 When you add a directory, biotope also writes `<dir>/.biotope.yaml` so the
 dataset can be refined collaboratively with `biotope annotate apply`.
 
+## Raw and Processed Datasets
+
+`raw` and `processed` are pipeline states, not quality labels. A curated
+resource can still enter the queue as `raw` if biotope cannot see a concrete
+record schema for mapping.
+
+`biotope add` assigns the initial state from the Croissant metadata produced by
+croissant-baker:
+
+- `processed`: the manifest has at least one `recordSet` with fields. The
+  dataset is schema-shaped and ready for `biotope map`.
+- `raw`: the manifest has no mappable `recordSet` fields. The file is still
+  tracked for provenance, but it needs extraction, conversion, annotation, or a
+  manual correction before it can be mapped.
+
+For example, a well-curated Open Targets table will normally be `processed`
+when croissant-baker can infer the columns and field types. A PDF, free-text
+notes file, opaque archive, or URL-only resource will normally stay `raw` until
+a human or agent creates a structured derivative.
+
+When you derive a structured file from a raw input, keep the provenance link:
+
+```bash
+biotope add data/derived-table.csv --derived-from data/source-notes.md
+```
+
+If the automatic state is wrong, correct it explicitly instead of moving files
+between directories:
+
+```bash
+biotope mark data/derived-table processed
+```
+
 ## Follow-on workflow
 
 ```bash
