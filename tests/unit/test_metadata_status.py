@@ -5,14 +5,18 @@ from __future__ import annotations
 import pytest
 
 from biotope.metadata import (
+    FETCHED_AT_KEY,
+    SOURCE_KEY,
     STATUS_MAPPED,
     STATUS_PROCESSED,
     STATUS_RAW,
     add_derived_from,
     classify_status_from_baker,
     get_derived_from,
+    get_source,
     get_status,
     merge_metadata,
+    set_source,
     set_status,
 )
 
@@ -76,3 +80,33 @@ def test_merge_metadata_includes_biotope_and_prov_namespaces():
     ctx = merge_metadata({})["@context"]
     assert ctx["biotope"].startswith("https://")
     assert ctx["prov"] == "http://www.w3.org/ns/prov#"
+
+
+def test_set_source_records_origin_and_timestamp():
+    """`biotope get` stamps where data came from + when it was fetched."""
+    metadata: dict = {}
+    set_source(metadata, "https://example.com/data.csv", "2026-06-01T00:00:00+00:00")
+    assert metadata[SOURCE_KEY] == "https://example.com/data.csv"
+    assert metadata[FETCHED_AT_KEY] == "2026-06-01T00:00:00+00:00"
+    assert get_source(metadata) == "https://example.com/data.csv"
+
+
+def test_set_source_leaves_clean_when_empty():
+    """Plain `biotope add` (no external origin) must not add ingress fields."""
+    metadata: dict = {}
+    set_source(metadata, None)
+    assert SOURCE_KEY not in metadata
+    assert FETCHED_AT_KEY not in metadata
+    assert get_source(metadata) is None
+
+
+def test_set_source_without_timestamp():
+    metadata: dict = {}
+    set_source(metadata, "/scratch/data/foo.csv")
+    assert metadata[SOURCE_KEY] == "/scratch/data/foo.csv"
+    assert FETCHED_AT_KEY not in metadata
+
+
+def test_get_source_accepts_node_form():
+    assert get_source({SOURCE_KEY: {"@id": "https://e.com/x"}}) == "https://e.com/x"
+    assert get_source({}) is None

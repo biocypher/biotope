@@ -117,7 +117,7 @@ def ensure_no_legacy_file_objects(metadata: dict[str, Any]) -> None:
     for distribution in metadata.get("distribution", []) or []:
         if distribution.get("@type") == LEGACY_FILE_OBJECT_TYPE:
             raise ValueError(
-                "Legacy sc:FileObject is no longer supported. " "Please regenerate the metadata with `biotope add`."
+                "Legacy sc:FileObject is no longer supported. Please regenerate the metadata with `biotope add`."
             )
 
 
@@ -184,6 +184,42 @@ def add_derived_from(metadata: dict[str, Any], source_id: str) -> None:
         return
     refs = existing + [source_id]
     metadata["prov:wasDerivedFrom"] = [{"@id": ref} for ref in refs]
+
+
+# Ingress provenance keys. ``dct:source`` names the *external* origin a dataset
+# was brought in from (URL or filesystem path) — distinct from
+# ``prov:wasDerivedFrom``, which links to *other datasets inside the project*.
+SOURCE_KEY = "dct:source"
+FETCHED_AT_KEY = "biotope:fetchedAt"
+
+
+def set_source(metadata: dict[str, Any], source: str | None, fetched_at: str | None = None) -> None:
+    """Record where a dataset was ingested from.
+
+    ``source`` is the original external location — an ``http(s)`` URL or an
+    absolute filesystem path the data was copied/downloaded from. ``fetched_at``
+    is an ISO-8601 timestamp of when biotope retrieved it. Both are optional;
+    empty values are left unset so non-ingress manifests stay clean.
+    """
+    if source:
+        metadata[SOURCE_KEY] = source
+    if fetched_at:
+        metadata[FETCHED_AT_KEY] = fetched_at
+
+
+def get_source(metadata: dict[str, Any]) -> str | None:
+    """Return a manifest's ``dct:source`` origin, or ``None``.
+
+    Accepts both the bare-string form (``"https://…"``) and the node form
+    (``{"@id": "https://…"}``) that some Croissant tooling emits.
+    """
+    raw = metadata.get(SOURCE_KEY)
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, dict):
+        value = raw.get("@id")
+        return value if isinstance(value, str) else None
+    return None
 
 
 def update_manifest_status(manifest_path: Path, status: str) -> bool:
@@ -322,7 +358,10 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
 
     if resolved.is_dir():
         rel_dir = resolved.relative_to(biotope_root)
-        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
+        # Append ``.jsonld`` to the full path rather than ``.with_suffix`` —
+        # the latter would clobber a dot in the directory name (``example.com``
+        # → ``example.jsonld``), breaking the manifest↔data mirroring.
+        metadata_path = datasets_dir / f"{rel_dir}.jsonld"
         return DatasetTarget(
             input_path=resolved,
             metadata_path=metadata_path,
@@ -333,7 +372,7 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
     if resolved.name == SCAFFOLD_FILENAME:
         dataset_dir = resolved.parent
         rel_dir = dataset_dir.relative_to(biotope_root)
-        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
+        metadata_path = datasets_dir / f"{rel_dir}.jsonld"
         return DatasetTarget(
             input_path=resolved,
             metadata_path=metadata_path,
