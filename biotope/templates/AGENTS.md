@@ -15,11 +15,15 @@ exposed as a flag on a biotope command.
    stop sign — ask first.
 1. **Data lives inside the project.** A biotope project owns its data. The
    manifest at `.biotope/datasets/<rel>.jsonld` addresses `<project>/<rel>/`,
-   so files outside the project tree are not ingestible. Acceptable shapes:
-   copy into the project, or fetch via `biotope get <url>`. Symlinks that
-   point outside the project root are rejected — they break self-containment
-   (collaborators get a broken link) and let the target's contents drift
-   without changing the tracked manifest.
+   so files outside the project tree are not ingestible. To bring external
+   data in, use `biotope get <source>` — it copies/downloads files,
+   directories, or URLs into the project and bakes the manifest in one shot.
+   `biotope add` is then only for data already inside the tree (e.g. artifacts
+   you generated). Never hand-`cp` external data and never try to make
+   `biotope add` accept an outside path. Symlinks that point outside the
+   project root are rejected — they break self-containment (collaborators get a
+   broken link) and let the target's contents drift without changing the
+   tracked manifest.
 1. **`--clear-entities` / `--clear-relations` are destructive.** They erase
    the user's declared schema. Use only when the user has explicitly asked you
    to drop and rewrite intent — never as a tidy-up before re-encoding.
@@ -27,13 +31,15 @@ exposed as a flag on a biotope command.
 ## The canonical workflow
 
 ```
-biotope init  →  biotope add  →  biotope map  →  biotope build
+biotope init  →  biotope get  →  biotope map  →  biotope build
 ```
 
 - `init` creates the project skeleton and `.biotope/project.yaml`.
-- `add` brings each dataset under the project and writes its Croissant
-  metadata. **Do this before mapping**, so you can map against fields and
-  record sets that actually exist.
+- `get` brings each dataset *into* the project — from a local file, a
+  directory, or a URL — and writes its Croissant metadata, recording where the
+  data came from. Use `biotope add` instead to register data that is *already*
+  in the tree (e.g. an artifact you generated). **Do this before mapping**, so
+  you can map against fields and record sets that actually exist.
 - `map` does two things: captures intent (`--purpose`, `--entity`,
   `--relation`) into `project.yaml`, *and* authors per-dataset mappings under
   `mappings/` that resolve those entities/relations against real data.
@@ -108,40 +114,49 @@ the heuristic is wrong or a rare correction is needed.
 
 ## Bring data in
 
-**Step 1 — copy the source folder into the project.** Data must live under the
-project root before `biotope add` can address it (see Hard rule 2). If the
-user points at a directory outside the project, copy it in first; don't try
-to make `biotope add` accept external paths.
+**`biotope get <source>` is the one verb for ingress.** It dispatches on the
+shape of the source — copy/download into the project, bake the manifest, and
+record provenance (`dct:source` + a fetch timestamp) — in a single call. Never
+hand-`cp` external data and never try to make `biotope add` accept an outside
+path (see Hard rule 2).
 
 ```bash
-cp -r /elsewhere/source_pull data/source_pull
+biotope get /scratch/data/foo.csv            # local file  → data/foo.csv
+biotope get /scratch/data/source_pull        # local dir   → data/source_pull/
+biotope get https://example.com/data.csv     # URL         → data/data.csv
+biotope get --crawl --depth 2 https://example.com/topic/   # scrape → data/<host>/
 ```
 
-For files coming from URLs use `biotope get <url>` instead — it fetches them
-into the project tree directly.
-
-**Step 2 — `biotope add` on the whole copied folder, in one call.**
+`--into <subdir>` controls where the data lands (default `data`). For a
+directory, `get` runs croissant-baker over the whole copied tree and writes one
+manifest at `.biotope/datasets/data/source_pull.jsonld` plus a
+`<dir>/.biotope.yaml` for bulk human review:
 
 ```bash
-biotope add data/source_pull \
+biotope get /scratch/data/source_pull \
   --license "CC-BY-4.0" \
   --creator "Source Org" \
   --description "..."
-```
-
-`biotope add` runs croissant-baker on the directory (recursing automatically)
-and writes one manifest at `.biotope/datasets/data/source_pull.jsonld`
-covering the whole subtree. It also writes `<dir>/.biotope.yaml` for bulk
-human review; apply edits with:
-
-```bash
 biotope annotate apply data/source_pull
 biotope annotate apply data/source_pull --set creator="Source Org"
 ```
 
 Pass any metadata the baker *cannot* infer (license, creator, creator email,
 description, access restrictions, legal obligations, collaboration details,
-RAI metadata) as flags on the `add` call.
+RAI metadata) as flags on the `get` call — they are the same flags `biotope add` accepts.
+
+By default `get` classifies the new manifest exactly like `biotope add`
+(structured data → `processed`, documents/HTML/scrapes → `raw`); pass
+`--status raw|processed` to override. Scraped pages each record their own source
+URL on the `cr:FileObject`, so the manifest can say where every page came from.
+
+**`biotope add` is for data already in the tree** — typically a derived
+artifact you produced from a raw input. It takes the same metadata flags but
+does not move or fetch anything:
+
+```bash
+biotope add data/annual_report_tables.json --derived-from data/annual_report.pdf
+```
 
 ### Choosing what to `add`
 

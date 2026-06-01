@@ -32,10 +32,11 @@ uv pip install -e ".[dev]"         # editable, with test deps (for biotope itsel
 uvx biotope init my-kg --purpose "What approved drugs target genes in T2D?" --no-prompt
 cd my-kg && uv sync
 
-# 2. Bring in data — biotope get downloads + tracks; biotope add stages a
-#    local file/folder and runs croissant-baker over it.
-uv run biotope get https://example.org/opentargets.parquet --output-dir data/ot --no-add
-uv run biotope add data/ot --license CC-BY-4.0 --creator "Open Targets"
+# 2. Bring in data — `biotope get` is the universal ingress verb: copy or
+#    download a local file, directory, or URL into the project (or `--crawl` a
+#    site) and bake its manifest in one shot, recording where it came from.
+#    `biotope add` registers data already in the tree (e.g. derived artifacts).
+uv run biotope get https://example.org/opentargets.parquet --into data/ot --license CC-BY-4.0
 
 # 3. Inspect the pipeline state at any time.
 uv run biotope queue        # raw / processed / mapped, with provenance footer
