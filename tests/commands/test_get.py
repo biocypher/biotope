@@ -113,6 +113,45 @@ def test_download_file_failure(mock_get, tmp_path):
     assert result is None
 
 
+@mock.patch("requests.get")
+def test_download_file_sanitizes_traversal_filename(mock_get, tmp_path):
+    """A malicious Content-Disposition must not escape the output directory."""
+    mock_resp = mock.Mock()
+    mock_resp.headers = {
+        "content-length": "4",
+        "Content-Disposition": 'attachment; filename="../../etc/evil"',
+    }
+    mock_resp.iter_content.return_value = [b"data"]
+    mock_resp.raise_for_status.return_value = None
+    mock_get.return_value = mock_resp
+
+    output_dir = tmp_path / "downloads"
+    output_dir.mkdir()
+    result = download_file("https://example.com/x", output_dir)
+
+    assert result is not None
+    assert result.parent == output_dir
+    assert result.name == "evil"
+    assert not (tmp_path / "etc" / "evil").exists()
+
+
+@mock.patch("requests.get")
+def test_download_file_empty_basename_fallback(mock_get, tmp_path):
+    """A URL with no filename falls back to a safe default name."""
+    mock_resp = mock.Mock()
+    mock_resp.headers = {"content-length": "4"}
+    mock_resp.iter_content.return_value = [b"data"]
+    mock_resp.raise_for_status.return_value = None
+    mock_get.return_value = mock_resp
+
+    output_dir = tmp_path / "downloads"
+    output_dir.mkdir()
+    result = download_file("https://example.com/", output_dir)
+
+    assert result is not None
+    assert result.name == "downloaded_file"
+
+
 def test_find_biotope_root(biotope_project):
     """Test finding biotope project root."""
     # Test from project root
@@ -177,6 +216,10 @@ def test_call_biotope_add_success(mock_stage, mock_add, biotope_project):
             "legal_obligations": None,
             "collaboration_partner": None,
             "rai_fields": {},
+            "status_override": None,
+            "derived_from": [],
+            "source": None,
+            "fetched_at": None,
         },
     )
     mock_stage.assert_called_once_with(biotope_project)
