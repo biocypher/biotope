@@ -21,6 +21,7 @@ from biotope.metadata import (
     normalize_metadata_shape,
     parse_key_value_pairs,
     resolve_target,
+    set_source,
     set_status,
 )
 from biotope.utils import (
@@ -53,7 +54,7 @@ from biotope.utils import (
     "status_override",
     type=click.Choice(["raw", "processed"]),
     default=None,
-    help="Override pipeline state. Default: 'processed' if baker produced a " "complete record set, 'raw' otherwise.",
+    help="Override pipeline state. Default: 'processed' if baker produced a complete record set, 'raw' otherwise.",
 )
 @click.option(
     "--derived-from",
@@ -224,6 +225,7 @@ def _add_file(
     _enrich_with_baker(metadata, abs_file)
     _apply_dataset_metadata(metadata, defaults, overrides, biotope_root)
     _apply_pipeline_state(metadata, overrides)
+    _apply_source_provenance(metadata, overrides)
 
     target = resolve_target(abs_file, biotope_root)
     target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -448,6 +450,7 @@ def _bake_directory(
     _dedupe_file_objects_covered_by_filesets(metadata_dict, abs_dir, biotope_root)
     _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root)
     _apply_pipeline_state(metadata_dict, overrides)
+    _apply_source_provenance(metadata_dict, overrides)
 
     target.metadata_path.parent.mkdir(parents=True, exist_ok=True)
     with open(target.metadata_path, "w", encoding="utf-8") as handle:
@@ -615,7 +618,19 @@ def _default_overrides() -> dict[str, Any]:
         "rai_fields": {},
         "status_override": None,
         "derived_from": [],
+        "source": None,
+        "fetched_at": None,
     }
+
+
+def _apply_source_provenance(metadata: dict[str, Any], overrides: dict[str, Any]) -> None:
+    """Stamp external ingress provenance (``dct:source`` + fetch timestamp).
+
+    No-op for plain ``biotope add`` (data already in the tree, no external
+    origin). ``biotope get`` populates ``source``/``fetched_at`` to record the
+    URL or path the data was brought in from.
+    """
+    set_source(metadata, overrides.get("source"), overrides.get("fetched_at"))
 
 
 def _apply_pipeline_state(metadata: dict[str, Any], overrides: dict[str, Any]) -> None:
@@ -677,7 +692,9 @@ def _resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
         return str(rel.with_suffix("") if rel.suffix else rel)
 
     # If it's a data dir we just baked, the canonical id is the dir rel path.
-    dir_manifest = (datasets_dir / rel).with_suffix(".jsonld")
+    # Append ``.jsonld`` rather than ``with_suffix`` so a dotted directory name
+    # (e.g. a scraped ``data/example.com``) isn't clobbered to ``example.jsonld``.
+    dir_manifest = datasets_dir / f"{rel}.jsonld"
     if dir_manifest.is_file():
         return str(rel)
 

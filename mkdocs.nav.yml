@@ -12,6 +12,7 @@ nav:
   - Cluster Compliance: cluster-compliance.md
   - Commands:
       - Init: api-docs/init.md
+      - Get: api-docs/get.md
       - Add: api-docs/add.md
       - Map: api-docs/map.md
       - Build: api-docs/build.md

@@ -24,10 +24,12 @@ APIs, CLI flags, and config-file layouts will change. End-user docs come after t
 
 !!! tip "Prefer a worked end-to-end example?"
 
-    The [**Tutorial**](tutorial.md) walks through building a real knowledge graph
-    from public airport/flight data in ~15 minutes. It's the most up-to-date
-    onboarding path and the source of truth for the recommended workflow
-    (`init` → `get` → `add` → `queue` → `map` → `build`).
+```
+The [**Tutorial**](tutorial.md) walks through building a real knowledge graph
+from public airport/flight data in ~15 minutes. It's the most up-to-date
+onboarding path and the source of truth for the recommended workflow
+(`init` → `get` → `add` → `queue` → `map` → `build`).
+```
 
 ```bash
 uv pip install biotope
@@ -70,8 +72,8 @@ All semantic decisions (which record set, which fields, which transforms) are ma
 
 ### Data acquisition + tracking
 
-- `biotope get <url>` — download a file (optionally into `--output-dir`) and, unless `--no-add`, track it.
-- `biotope add <path>` — stage data files or rooted directories; baker writes the Croissant entry under `.biotope/datasets/`. `--derived-from` records provenance for human/agent-extracted derivatives. For curated metadata that doesn't fit as CLI flags (descriptions, citations, per–record-set fields), `add` also drops a `.biotope.yaml` scaffold next to the dataset — review it, then run `biotope annotate apply <dir>` to merge it into the manifest.
+- `biotope get <source>` — universal ingress verb: copy/download a local file, directory, or URL into the project (or `--crawl` a website) and bake its manifest, recording `dct:source` + a fetch timestamp. Lands under `--into` (default `data`); `--no-add` skips tracking.
+- `biotope add <path>` — register data **already in the tree** (e.g. derived artifacts); baker writes the Croissant entry under `.biotope/datasets/`. `--derived-from` records provenance for human/agent-extracted derivatives. For curated metadata that doesn't fit as CLI flags (descriptions, citations, per–record-set fields), `add` also drops a `.biotope.yaml` scaffold next to the dataset — review it, then run `biotope annotate apply <dir>` to merge it into the manifest.
 - `biotope mv` / `biotope rm` — move or untrack files and update metadata paths.
 - `biotope queue` — show every dataset grouped by pipeline state (`raw` / `processed` / `mapped`). The recommended dashboard during a build.
 - `biotope mark <dataset> <status>` — manually set a dataset's `biotope:status`.
