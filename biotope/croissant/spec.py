@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.request import urlopen
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -122,6 +122,14 @@ class CroissantFieldModel(ConfiguredBaseModel):
     )
     sub_field: list[CroissantFieldModel] = Field(default_factory=list)
     source: CroissantFieldSource | None = None
+
+    @field_validator("sub_field", mode="before")
+    @classmethod
+    def _coerce_sub_field(cls, value: object) -> object:
+        """Croissant baker sometimes emits a lone ``subField`` object instead of a list."""
+        if isinstance(value, dict):
+            return [value]
+        return value
 
     def kind(self) -> FieldKind:
         """Return the normalised :class:`FieldKind` for this field."""

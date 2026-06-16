@@ -65,3 +65,19 @@ def test_field_kind_recognises_cr_is_array() -> None:
     )
     assert field.repeated is True
     assert field.kind() == FieldKind.ARRAY
+
+
+def test_sub_field_accepts_singular_dict() -> None:
+    """Regression: baker may emit one nested field object instead of a subField list."""
+    field = CroissantFieldModel.model_validate(
+        {
+            "name": "authors",
+            "subField": {
+                "name": "name",
+                "dataType": "sc:Text",
+            },
+        },
+    )
+    assert len(field.sub_field) == 1
+    assert field.sub_field[0].name == "name"
+    assert field.kind() == FieldKind.STRUCT
