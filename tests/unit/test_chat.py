@@ -23,16 +23,29 @@ def test_chat_without_biochatter(runner):
         assert "biochatter is not installed" in result.output
 
 
+def test_chat_missing_api_key(runner):
+    """Test that chat fails with a biotope-owned message when no API key is set."""
+    with patch.dict(os.environ, {}, clear=True):
+        result = runner.invoke(chat)
+        assert result.exit_code == 1
+        assert "No API key provided" in result.output
+        assert "OPENAI_API_KEY" in result.output
+
+
 @pytest.mark.skipif(not HAS_BIOCHATTER, reason="biochatter not installed")
 class TestChatWithBiochatter:
     """Tests that require biochatter to be installed."""
 
-    def test_chat_missing_api_key(self, runner):
-        """Test that chat fails when no API key is provided."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = runner.invoke(chat)
-            assert result.exit_code == 1
-            assert "Error: The api_key client option must be set either by passing" in result.output
+    def test_chat_backend_failure_user_message(self, runner):
+        """Backend exceptions are translated to biotope UX messages, not passed through."""
+        with patch("biotope.commands.chat.GptConversation") as mock_gpt:
+            mock_gpt.side_effect = RuntimeError("internal biochatter failure detail")
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+                result = runner.invoke(chat, ["--no-interactive"], input="test query")
+
+        assert result.exit_code == 1
+        assert "Chat session failed" in result.output
+        assert "internal biochatter failure detail" not in result.output
 
     def test_chat_non_interactive(self, runner):
         """Test non-interactive chat mode."""

@@ -85,13 +85,20 @@ def chat(
     """
     if not HAS_BIOCHATTER:
         click.echo(
-            "Error: biochatter is not installed. Install it with: pip install biotope[chat]",
+            "Error: biochatter is not installed. Reinstall biotope to restore dependencies.",
+            err=True,
+        )
+        ctx.exit(1)
+
+    if not api_key and not os.getenv("OPENAI_API_KEY"):
+        click.echo(
+            "No API key provided. "
+            "Please provide an API key using the --api-key option or set the OPENAI_API_KEY environment variable.",
             err=True,
         )
         ctx.exit(1)
 
     try:
-        # Initialize biochatter with the specified model
         conversation = GptConversation(
             model_name=model_name,
             prompts=prompts,
@@ -102,14 +109,6 @@ def chat(
             conversation.set_api_key(api_key)
         else:
             conversation.set_api_key(os.getenv("OPENAI_API_KEY"))
-
-        if not api_key and not os.getenv("OPENAI_API_KEY"):
-            click.echo(
-                "No API key provided. "
-                "Please provide an API key using the --api-key option or set the OPENAI_API_KEY environment variable.",
-                err=True,
-            )
-            ctx.exit(1)
 
         if interactive:
             click.echo("Starting interactive chat session (Ctrl+C to exit)")
@@ -134,6 +133,9 @@ def chat(
 
     except KeyboardInterrupt:
         click.echo("\nChat session ended.")
-    except Exception as e:
-        click.echo(f"Error: {e!s}", err=True)
+    except Exception:
+        click.echo(
+            "Error: Chat session failed. Check your API key, model name, and network connection.",
+            err=True,
+        )
         ctx.exit(1)

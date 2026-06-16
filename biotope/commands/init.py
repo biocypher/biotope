@@ -36,10 +36,7 @@ console = Console()
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
 
-# Biocypher floor mirrors biotope's own runtime pin — `head_ontology: null`
-# headless support landed in 0.14.0 (biocypher PR #523) and the generated
-# `build/create_knowledge_graph.py` depends on it.
-BIOCYPHER_REQ = "biocypher>=0.14.0,<1"
+BIOCYPHER_REQ = "biocypher>=0.14.0"
 
 
 def _installed_biotope_version() -> str:
@@ -47,7 +44,7 @@ def _installed_biotope_version() -> str:
     try:
         return _installed_version("biotope")
     except PackageNotFoundError:
-        return "0.5.0"
+        return "0.8.0"
 
 
 def _emit_pyproject(name: str, purpose: str) -> str:
