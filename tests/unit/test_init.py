@@ -36,7 +36,7 @@ def test_init_default_layout(tmp_path: Path) -> None:
 
 
 def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None:
-    """The generated pyproject must pin biotope (floor) and biocypher>=0.14."""
+    """The generated project pyproject must pin biotope and biocypher."""
     runner = CliRunner()
     result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
     assert result.exit_code == 0, result.output

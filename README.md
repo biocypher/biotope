@@ -88,7 +88,7 @@ check-data                          checksum verification
 annotate config                     field-level annotation + project config
 
 discover benchmark                  scaffolded but not yet wired into the standard flow
-read chat search                    promises / auxiliary
+read search                         promises / auxiliary
 ```
 
 `biotope describe` and the heuristic `biotope propose-mapping` were removed/deprecated. Intent capture is now `biotope map --entity ... --relation ...`; scaffolding is `biotope map scaffold`. `propose-mapping` remains as a deprecated alias for the scaffold subcommand.

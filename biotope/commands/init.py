@@ -36,8 +36,6 @@ console = Console()
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
 
-BIOCYPHER_REQ = "biocypher>=0.14.0"
-
 
 def _installed_biotope_version() -> str:
     """Best-effort: the running biotope's version, or a sane floor on miss."""
@@ -70,7 +68,7 @@ def _emit_pyproject(name: str, purpose: str) -> str:
         f'requires-python = ">=3.10,<3.13"\n'
         f"dependencies = [\n"
         f'    "biotope>={biotope_floor}",\n'
-        f'    "{BIOCYPHER_REQ}",\n'
+        f'    "biocypher>=0.14.0",\n'
         f"]\n"
         f"\n"
         f"[build-system]\n"

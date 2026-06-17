@@ -107,7 +107,6 @@ All semantic decisions (which record set, which fields, which transforms) are ma
 - `biotope discover` — rank registered adapters and local Croissant files against `required_entities`. Exists as a CLI entry but the registry surface is not yet wired into the recommended workflow; the tutorial does not use it.
 - `biotope benchmark` — quality/coverage metrics. v1 stub: emits a skeleton JSON object so downstream tooling can structure-test against it. Real metric implementations land iteratively.
 - `biotope read` — NLP ingestion + health-check entry. Promise.
-- `biotope chat` — provider-agnostic conversational interface (biochatter backend). Promise.
 - `biotope search` — registry search across MCP / biotools. Auxiliary; not used in the standard build path.
 
 ### Deprecated
