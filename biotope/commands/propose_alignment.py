@@ -47,6 +47,8 @@ def propose_alignment(mappings: tuple[Path, ...], out: Path | None, to_stdout: b
         console.print(f"✅ Wrote {target}")
     else:
         click.echo(result["yaml"], nl=False)
+    if result.get("reason"):
+        console.print(f"[yellow]Note:[/yellow] {result['reason']}")
 
 
 def _default_output_path(mappings: tuple[Path, ...]) -> Path | None:

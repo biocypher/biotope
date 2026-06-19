@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from biotope.croissant.build_runtime import load_build_metrics
 from biotope.project_model import find_project
 
 
@@ -59,6 +60,23 @@ def benchmark(build_dir: Path | None, out: Path | None) -> None:
             },
         },
     }
+
+    build_metrics = load_build_metrics(build_dir)
+    if build_metrics is not None:
+        total_edges = build_metrics.get("total_edges", 0)
+        importable = build_metrics.get("importable_edges", 0)
+        orphaned = build_metrics.get("orphaned_count", 0)
+        fraction = (importable / total_edges) if total_edges else 1.0
+        report["metrics"]["id_consistency"] = {
+            "implemented": True,
+            "description": "Fraction of edge endpoints resolving to existing nodes.",
+            "total_edges": total_edges,
+            "importable_edges": importable,
+            "orphaned_count": orphaned,
+            "fraction": fraction,
+            "by_relationship": build_metrics.get("by_relationship", {}),
+            "compile_drops": build_metrics.get("compile_drops", {}),
+        }
     payload = json.dumps(report, indent=2)
     if out:
         Path(out).write_text(payload + "\n")

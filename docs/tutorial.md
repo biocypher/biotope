@@ -47,9 +47,10 @@ cd airports
 ```
 
 This creates `.biotope/` (manifests + config), `data/` (empty; for your
-files), `mappings/` (empty; for the semantic mapping files), `AGENTS.md`
-(the contract any coding agent will read), and a minimal `pyproject.toml`.
-A fresh `git` repo is initialised in the same directory.
+files), `mappings/` (empty; for the semantic mapping files), and a minimal
+`pyproject.toml`. A coding agent picks up the project contract from the
+standalone `biotope` skill. A fresh `git` repo is initialised in the same
+directory.
 
 Finally, we have to install the venv for our new project:
 
@@ -519,11 +520,11 @@ targets — see the BioCypher docs for the import side.
 
 Everything above is delegable. After `biotope init`, you can `cd` into the
 project and start a copilot — Claude Code, Cursor, Aider, or anything that
-reads `AGENTS.md` — and say:
+loads the standalone `biotope` skill — and say:
 
 > "help me build the KG"
 
-The agent reads `AGENTS.md` (already in the project root), runs
+The agent picks up the project contract from the `biotope` skill, runs
 `biotope queue --json` to see what's tracked, decides whether to leave
 raw items alone or process them, scaffolds and resolves mappings using
 `biotope map inspect --json` for the field catalogue, and runs the build.

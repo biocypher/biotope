@@ -40,7 +40,7 @@ from biotope.croissant.mapping.model import (
     Mapping,
     Selector,
 )
-from biotope.croissant.spec import FieldKind, load_from_path
+from biotope.croissant.spec import FIELD_KIND_PYTHON_TYPES, LITERAL_VALUE_PYTHON_TYPES, FieldKind, load_from_path
 
 
 SCHEMA_CONFIG_HEADER = (
@@ -132,6 +132,8 @@ def _selector_type(
     mapping: Mapping,
     field_kinds: dict[str, FieldKind],
 ) -> str:
+    if selector.value is not None:
+        return LITERAL_VALUE_PYTHON_TYPES.get(type(selector.value), "str")
     if selector.use is not None:
         return "str"
     if selector.transform == "as_curie":
@@ -144,18 +146,7 @@ def _selector_type(
     if kind == FieldKind.STRUCT:
         msg = f"Struct-valued property field {selector.field!r} is not supported in v1"
         raise ValueError(msg)
-    return _BIOCYPHER_TYPES.get(kind, "str")
-
-
-_BIOCYPHER_TYPES: dict[FieldKind, str] = {
-    FieldKind.STRING: "str",
-    FieldKind.URL: "str",
-    FieldKind.DATE: "str",
-    FieldKind.BOOLEAN: "bool",
-    FieldKind.INTEGER: "int",
-    FieldKind.FLOAT: "float",
-    FieldKind.ARRAY: "str[]",
-}
+    return FIELD_KIND_PYTHON_TYPES.get(kind, "str")
 
 
 # ---------------------------------------------------------------------------
@@ -224,19 +215,19 @@ def _emit_build_script(project_name: str, stems: list[str], aligned: bool) -> st
     adapter_inits = ",\n        ".join(f'"{stem}": _build_{stem}()' for stem in stems)
     if aligned:
         alignment_import = "from biotope.croissant.alignment import load_alignment, merge_adapters\n"
-        write_block = (
+        stream_block = (
             "    alignment = load_alignment(HERE / 'alignment.yaml')\n"
             "    merged = merge_adapters(adapters, alignment)\n"
-            "    bc.write_nodes(merged.get_nodes())\n"
-            "    bc.write_edges(merged.get_edges())\n"
+            "    nodes = list(merged.get_nodes())\n"
+            "    edges = list(merged.get_edges())\n"
         )
         itertools_import = ""
     else:
         alignment_import = ""
         itertools_import = "from itertools import chain\n"
-        write_block = (
-            "    bc.write_nodes(chain.from_iterable(a.get_nodes() for a in adapters.values()))\n"
-            "    bc.write_edges(chain.from_iterable(a.get_edges() for a in adapters.values()))\n"
+        stream_block = (
+            "    nodes = list(chain.from_iterable(a.get_nodes() for a in adapters.values()))\n"
+            "    edges = list(chain.from_iterable(a.get_edges() for a in adapters.values()))\n"
         )
     return f'''"""Generated entry point for the {project_name} graph build."""
 
@@ -245,6 +236,12 @@ from pathlib import Path
 import sys
 {itertools_import}
 from biocypher import BioCypher
+
+from biotope.croissant.build_runtime import (
+    compute_orphan_metrics,
+    purge_biocypher_output,
+    write_build_metrics,
+)
 
 HERE = Path(__file__).parent
 if str(HERE) not in sys.path:
@@ -260,6 +257,8 @@ os.chdir(HERE)
 {alignment_import}
 
 def build() -> None:
+    purge_biocypher_output(HERE)
+
     bc = BioCypher(
         biocypher_config_path=str(HERE / "config" / "biocypher_config.yaml"),
         schema_config_path=str(HERE / "config" / "schema_config.yaml"),
@@ -269,12 +268,41 @@ def build() -> None:
         {adapter_inits}
     }}
 
-{write_block}    bc.write_import_call()
+{stream_block}    compile_drops: dict[str, int] = {{}}
+    for _adapter in adapters.values():
+        for _key, _value in _adapter.compile_stats().as_dict().items():
+            compile_drops[_key] = compile_drops.get(_key, 0) + _value
+
+    metrics = compute_orphan_metrics(nodes, edges)
+    metrics["compile_drops"] = compile_drops
+
+    bc.write_nodes(nodes)
+    bc.write_edges(edges)
+    bc.write_schema_info()
+    bc.write_import_call()
+    write_build_metrics(HERE, metrics)
+
+    orphaned = metrics.get("orphaned_count", 0)
+    if orphaned:
+        print(
+            f"Warning: {{orphaned}} edge(s) have endpoints not in the node id set; "
+            "see biocypher-out/build_metrics.json",
+        )
 
 
 if __name__ == "__main__":
     build()
 '''
+
+
+def _read_dbms(biocypher_config_path: Path) -> str:
+    """Read the active ``dbms`` back from a generated/user-authored config.
+
+    Used to report the true active target even when the "only write if
+    missing" guard left a pre-existing, user-authored config untouched.
+    """
+    config = yaml.safe_load(biocypher_config_path.read_text()) or {}
+    return str(config.get("biocypher", {}).get("dbms", "csv"))
 
 
 def materialize_project(
@@ -284,6 +312,7 @@ def materialize_project(
     *,
     required_entities: list[str] | None = None,
     required_relations: list[str] | None = None,
+    target: str = "csv",
 ) -> dict[str, str]:
     """Write a runnable BioCypher project to ``project_dir``.
 
@@ -296,6 +325,12 @@ def materialize_project(
       supplied, every declared slot must be resolved in at least one mapping.
       Used by ``biotope build`` to surface "you forgot to bind X" before the
       KG is generated with silent gaps.
+
+    ``target`` sets the ``dbms:`` written into a freshly-created
+    ``biocypher_config.yaml`` (default ``csv``, matching prior behavior). If
+    the config already exists, biotope's "only write if missing" guard
+    preserves the user-authored file — ``target`` is then ignored and the
+    return value reports whatever ``dbms`` is actually on disk.
     """
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "config").mkdir(exist_ok=True)
@@ -330,7 +365,7 @@ def materialize_project(
         # fetch Biolink — upgrade if you see network errors on first run.
         biocypher_config_path.write_text(
             "biocypher:\n"
-            "  dbms: csv\n"
+            f"  dbms: {target}\n"
             "  log_to_disk: true\n"
             "  output_directory: biocypher-out\n"
             "  head_ontology: null\n",
@@ -366,6 +401,7 @@ def materialize_project(
         "project_dir": str(project_dir),
         "schema_config": str(schema_config_path),
         "biocypher_config": str(biocypher_config_path),
+        "dbms": _read_dbms(biocypher_config_path),
         "build_script": str(script_path),
         "alignment": str(written_alignment) if written_alignment else "",
         "generated_packages": ",".join(stems),

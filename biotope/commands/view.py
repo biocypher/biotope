@@ -18,6 +18,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from biotope.croissant.biocypher_labels import schema_term_to_csv_stem
+from biotope.croissant.build_runtime import load_build_metrics
 from biotope.project_model import Project, find_project
 
 
@@ -45,11 +47,11 @@ def _render_project_header(project_path: Path) -> None:
     )
 
 
-def _load_edge_labels(schema_config_path: Path) -> set[str] | None:
-    """Return the set of ``input_label`` values that BioCypher treats as edges.
+def _load_edge_csv_stems(schema_config_path: Path) -> set[str] | None:
+    """Return CSV basename stems for schema entries BioCypher writes as edges.
 
-    Returns ``None`` if the schema config can't be read — callers should fall
-    back to a filename heuristic.
+    BioCypher names files from schema *terms* (YAML keys) in PascalCase, not
+    from ``input_label``. Returns ``None`` when the config can't be read.
     """
     if not schema_config_path.is_file():
         return None
@@ -59,18 +61,35 @@ def _load_edge_labels(schema_config_path: Path) -> set[str] | None:
         config = yaml.safe_load(schema_config_path.read_text()) or {}
     except (OSError, yaml.YAMLError):
         return None
-    edges: set[str] = set()
-    for entry in config.values():
+    stems: set[str] = set()
+    for schema_term, entry in config.items():
         if not isinstance(entry, dict):
             continue
-        if entry.get("represented_as") == "edge":
-            label = entry.get("input_label")
-            if isinstance(label, str):
-                edges.add(label)
-    return edges
+        if entry.get("represented_as") == "edge" and isinstance(schema_term, str):
+            stems.add(schema_term_to_csv_stem(schema_term))
+    return stems
+
+
+def _load_active_target(build_dir: Path) -> str | None:
+    """Read the active ``dbms`` out of the build's biocypher_config.yaml."""
+    config_path = build_dir / "config" / "biocypher_config.yaml"
+    if not config_path.is_file():
+        return None
+    try:
+        import yaml
+
+        config = yaml.safe_load(config_path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    dbms = config.get("biocypher", {}).get("dbms")
+    return str(dbms) if dbms is not None else None
 
 
 def _render_build_summary(build_dir: Path) -> None:
+    target = _load_active_target(build_dir)
+    if target is not None:
+        console.print(f"\n[bold]target (dbms):[/bold] {target}")
+
     output_dir = build_dir / "biocypher-out"
     if not output_dir.is_dir():
         console.print(f"\n[yellow]No biocypher-out/ yet at {output_dir}.[/yellow]")
@@ -84,11 +103,8 @@ def _render_build_summary(build_dir: Path) -> None:
 
     total_nodes = 0
     total_edges = 0
-    # Consult the build's schema_config.yaml to know which output CSVs are
-    # nodes vs edges. BioCypher names files by `input_label`, so we index the
-    # schema by that key. Fall back to a filename heuristic if the config is
-    # missing.
-    edge_labels = _load_edge_labels(build_dir / "config" / "schema_config.yaml")
+    # Consult schema_config.yaml: edge CSV stems are PascalCase schema terms.
+    edge_stems = _load_edge_csv_stems(build_dir / "config" / "schema_config.yaml")
     # BioCypher 0.14+ emits a single `<label>.csv` per label; older versions
     # emit one or more `<label>-partNNN.csv` files plus a `<label>-header.csv`.
     # Globbing both forms (and skipping header-only files) lets `view` work
@@ -102,8 +118,8 @@ def _render_build_summary(build_dir: Path) -> None:
         except OSError:
             count = -1
         stem = csv_file.stem.split("-part")[0]
-        if edge_labels is not None:
-            kind = "edge" if stem in edge_labels else "node"
+        if edge_stems is not None:
+            kind = "edge" if stem in edge_stems else "node"
         else:
             kind = "edge" if "edge" in csv_file.name.lower() else "node"
         table.add_row(csv_file.name, str(count), kind)
@@ -114,6 +130,24 @@ def _render_build_summary(build_dir: Path) -> None:
 
     console.print(table)
     console.print(f"\nTotal nodes: [cyan]{total_nodes}[/cyan]  edges: [cyan]{total_edges}[/cyan]")
+
+    metrics = load_build_metrics(build_dir)
+    if metrics is not None:
+        orphaned = metrics.get("orphaned_count", 0)
+        total = metrics.get("total_edges", 0)
+        importable = metrics.get("importable_edges", 0)
+        console.print(
+            f"Orphaned edges: [cyan]{orphaned}[/cyan] / {total} "
+            f"([cyan]{importable}[/cyan] importable)",
+        )
+        compile_drops = metrics.get("compile_drops")
+        if isinstance(compile_drops, dict) and any(compile_drops.values()):
+            dropped_nodes = compile_drops.get("dropped_nodes_non_scalar", 0)
+            dropped_edges = compile_drops.get("dropped_edges_non_scalar", 0)
+            console.print(
+                f"Compile drops: [cyan]{dropped_nodes}[/cyan] nodes, "
+                f"[cyan]{dropped_edges}[/cyan] edges (non-scalar ids)",
+            )
 
 
 @click.command()

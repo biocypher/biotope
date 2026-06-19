@@ -378,6 +378,48 @@ def test_add_command_directory_recurses_by_default(
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
+def test_add_command_directory_already_tracked_skips_without_rebake(
+    mock_stage,
+    mock_csv,
+    mock_bake,
+    mock_is_git,
+    mock_find_root,
+    runner,
+    git_repo,
+):
+    mock_find_root.return_value = git_repo
+    mock_is_git.return_value = True
+
+    data_dir = git_repo / "data"
+    data_dir.mkdir()
+    fake_metadata = {"recordSet": [{"@id": "#rs", "field": []}], "distribution": []}
+    mock_bake.return_value = (fake_metadata, 2)
+
+    with runner.isolated_filesystem():
+        os.chdir(git_repo)
+        first = runner.invoke(add, [str(data_dir)])
+        assert first.exit_code == 0
+        mock_bake.assert_called_once()
+        # The real `_bake_directory` writes metadata_path; the mock doesn't,
+        # so simulate that side effect for the "already tracked" check.
+        (git_repo / ".biotope" / "datasets" / "data.jsonld").write_text("{}")
+
+        second = runner.invoke(add, [str(data_dir)])
+        assert second.exit_code == 0
+        assert "already exists" in second.output
+        mock_bake.assert_called_once()  # not called again
+
+        third = runner.invoke(add, ["--rebake", str(data_dir)])
+        assert third.exit_code == 0
+        assert "Re-baked" in third.output
+        assert mock_bake.call_count == 2
+
+
+@mock.patch("biotope.commands.add.find_biotope_root")
+@mock.patch("biotope.commands.add.is_git_repo")
+@mock.patch("biotope.commands.add._bake_directory")
+@mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
+@mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_resolves_relative_directory(
     mock_stage,
     mock_csv,

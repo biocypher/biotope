@@ -17,7 +17,7 @@ APIs, CLI flags, and config-file layouts will change. End-user docs come after t
 
 1. Enter directory (`cd my-kg`).
 
-1. Start your coding agent. The `AGENTS.md` file in the directory will onboard it.
+1. Start your coding agent. The standalone `biotope` skill will onboard it.
    For more information on the process, read on.
 
 ## Quick start: without coding agent
@@ -66,7 +66,7 @@ All semantic decisions (which record set, which fields, which transforms) are ma
 
 ### Project lifecycle
 
-- `biotope init` — scaffold a project (`.biotope/`, `AGENTS.md`, `project.yaml`, `git init`).
+- `biotope init` — scaffold a project (`.biotope/`, `project.yaml`, `git init`).
 
 ### Data acquisition + tracking
 

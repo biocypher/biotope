@@ -59,9 +59,10 @@ class _Model(BaseModel):
 class Selector(_Model):
     """How to derive a value from a row.
 
-    A selector resolves a value from either a record field (``field``) or a
-    named reusable selector (``use``), optionally passing it through a named
-    transform.
+    A selector resolves a value from a record field (``field``), a named
+    reusable selector (``use``), or a literal constant (``value``, e.g. a
+    fixed id shared by every row — no need to materialize it as a real
+    column). Transforms don't apply to literals.
 
     YAML accepts two forms — both normalize to this model:
 
@@ -71,6 +72,7 @@ class Selector(_Model):
 
     field: str | None = None
     use: str | None = None
+    value: Any | None = None
     transform: str = "passthrough"
     args: dict[str, Any] = Field(default_factory=dict)
 
@@ -83,15 +85,16 @@ class Selector(_Model):
 
     @model_validator(mode="after")
     def _check(self) -> Selector:
-        if self.field is not None and self.use is not None:
-            msg = "Selector cannot set both `field` and `use`"
+        set_count = sum(x is not None for x in (self.field, self.use, self.value))
+        if set_count > 1:
+            msg = "Selector may set only one of `field`, `use`, `value`"
             raise ValueError(msg)
         return self
 
     def is_resolved(self) -> bool:
         if self.transform == "hash_id":
             return bool(self.args.get("fields"))
-        return self.field is not None or self.use is not None
+        return self.field is not None or self.use is not None or self.value is not None
 
 
 class Endpoint(_Model):
@@ -267,6 +270,13 @@ class RelationMapping(_Model):
     target: Endpoint | None = None
     properties: dict[str, Selector] = Field(default_factory=dict)
     where: str | None = None
+    deferred: bool = False
+    """Marked unsupported by the available data (``biotope map defer-relation``).
+
+    Distinct from unresolved (started but not finished) or empty (never
+    bound): ``build`` skips a deferred relation without raising, instead of
+    forcing a ``where: "1=0"`` workaround.
+    """
 
     @model_validator(mode="before")
     @classmethod
@@ -289,10 +299,14 @@ class RelationMapping(_Model):
             and self.target.is_resolved()
         )
 
+    def is_deferred(self) -> bool:
+        return self.deferred
+
     def is_empty(self) -> bool:
-        """See :meth:`EntityMapping.is_empty`."""
+        """See :meth:`EntityMapping.is_empty`. A deferred relation is never empty."""
         return (
-            self.record_set is None
+            not self.deferred
+            and self.record_set is None
             and self.source is None
             and self.target is None
             and not self.properties
@@ -458,11 +472,15 @@ class Mapping(_Model):
             if not entity.is_resolved():
                 slots.append(f"entities.{entity_name}")
         for rel_name, relation in self.relations.items():
-            if relation.is_empty():
+            if relation.is_empty() or relation.is_deferred():
                 continue
             if not relation.is_resolved():
                 slots.append(f"relations.{rel_name}")
         return slots
+
+    def deferred_relations(self) -> list[str]:
+        """Names of relations marked unsupported by ``biotope map --defer-relation``."""
+        return [name for name, relation in self.relations.items() if relation.is_deferred()]
 
     def assert_resolved(self) -> None:
         unresolved = self.unresolved_slots()

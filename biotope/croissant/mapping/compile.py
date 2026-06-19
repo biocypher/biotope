@@ -15,10 +15,11 @@ Tuple shapes (BioCypher conventions):
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from biotope.croissant.acquisition.context import AcquisitionContext
+from biotope.croissant.biocypher_labels import escape_node_id
 from biotope.croissant.mapping.model import (
     EntityMapping,
     ExplodeScan,
@@ -39,6 +40,26 @@ NodeTuple = tuple[str, str, dict[str, Any]]
 EdgeTuple = tuple[str | None, str, str, str, dict[str, Any]]
 
 
+@dataclass
+class CompileStats:
+    """Row-level compile counters for nodes and edges."""
+
+    emitted_nodes: int = 0
+    emitted_edges: int = 0
+    dropped_nodes_non_scalar: int = 0
+    dropped_edges_non_scalar: int = 0
+    deferred_relations: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "emitted_nodes": self.emitted_nodes,
+            "emitted_edges": self.emitted_edges,
+            "dropped_nodes_non_scalar": self.dropped_nodes_non_scalar,
+            "dropped_edges_non_scalar": self.dropped_edges_non_scalar,
+            "deferred_relations": self.deferred_relations,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Entity emission
 # ---------------------------------------------------------------------------
@@ -49,6 +70,7 @@ def iter_entity_tuples(
     context: AcquisitionContext,
     *,
     only_resolved: bool = False,
+    stats: CompileStats | None = None,
 ) -> Iterator[NodeTuple]:
     """Yield ``(node_id, node_label, properties)`` for each declared entity.
 
@@ -74,9 +96,13 @@ def iter_entity_tuples(
         for ctx in scan_op.iter_contexts(context, ids=mapping.ids):
             node_id = resolve_selector(entity.id, ctx)  # type: ignore[arg-type]
             if not _is_scalar_id(node_id):
+                if stats is not None:
+                    stats.dropped_nodes_non_scalar += 1
                 continue
             properties = {prop_name: resolve_selector(prop, ctx) for prop_name, prop in entity.properties.items()}
-            yield (str(node_id), label, properties)
+            if stats is not None:
+                stats.emitted_nodes += 1
+            yield (escape_node_id(str(node_id)), label, properties)
 
 
 def iter_relation_tuples(
@@ -84,6 +110,7 @@ def iter_relation_tuples(
     context: AcquisitionContext,
     *,
     only_resolved: bool = False,
+    stats: CompileStats | None = None,
 ) -> Iterator[EdgeTuple]:
     """Yield ``(relationship_id, source_id, target_id, label, properties)`` per relation.
 
@@ -91,6 +118,10 @@ def iter_relation_tuples(
     """
     for name, relation in mapping.relations.items():
         if relation.is_empty():
+            continue
+        if relation.is_deferred():
+            if stats is not None:
+                stats.deferred_relations += 1
             continue
         if not relation.is_resolved():
             if only_resolved:
@@ -108,9 +139,19 @@ def iter_relation_tuples(
             source_id = resolve_selector(relation.source.as_selector(), ctx)  # type: ignore[union-attr]
             target_id = resolve_selector(relation.target.as_selector(), ctx)  # type: ignore[union-attr]
             if not _is_scalar_id(source_id) or not _is_scalar_id(target_id):
+                if stats is not None:
+                    stats.dropped_edges_non_scalar += 1
                 continue
             properties = {prop_name: resolve_selector(prop, ctx) for prop_name, prop in relation.properties.items()}
-            yield (None, str(source_id), str(target_id), label, properties)
+            if stats is not None:
+                stats.emitted_edges += 1
+            yield (
+                None,
+                escape_node_id(str(source_id)),
+                escape_node_id(str(target_id)),
+                label,
+                properties,
+            )
 
 
 def _is_scalar_id(value: Any) -> bool:
@@ -193,12 +234,24 @@ class CompiledAdapter:
 
     mapping: Mapping
     context: AcquisitionContext
+    _compile_stats: CompileStats = field(default_factory=CompileStats, init=False, repr=False)
+    _stats_computed: bool = field(default=False, init=False, repr=False)
 
     def get_nodes(self) -> Iterator[NodeTuple]:
         return iter_entity_tuples(self.mapping, self.context)
 
     def get_edges(self) -> Iterator[EdgeTuple]:
         return iter_relation_tuples(self.mapping, self.context)
+
+    def compile_stats(self) -> CompileStats:
+        """Return row-level drop/emission counters (single full scan, cached)."""
+        if not self._stats_computed:
+            stats = CompileStats()
+            list(iter_entity_tuples(self.mapping, self.context, stats=stats))
+            list(iter_relation_tuples(self.mapping, self.context, stats=stats))
+            self._compile_stats = stats
+            self._stats_computed = True
+        return self._compile_stats
 
 
 def compile_mapping(mapping: Mapping, context: AcquisitionContext) -> CompiledAdapter:

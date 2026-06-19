@@ -55,6 +55,20 @@ class FieldKind(str, Enum):
     STRUCT = "struct"
 
 
+FIELD_KIND_PYTHON_TYPES: dict[FieldKind, str] = {
+    FieldKind.STRING: "str",
+    FieldKind.URL: "str",
+    FieldKind.DATE: "str",
+    FieldKind.BOOLEAN: "bool",
+    FieldKind.INTEGER: "int",
+    FieldKind.FLOAT: "float",
+    FieldKind.ARRAY: "str[]",
+}
+
+LITERAL_VALUE_PYTHON_TYPES: dict[type, str] = {bool: "bool", int: "int", float: "float", str: "str"}
+"""Python type → schema type name, for typing a `Selector.value` literal."""
+
+
 SCALAR_KIND_MAP: dict[str, FieldKind] = {
     CroissantScalarType.TEXT.value: FieldKind.STRING,
     CroissantScalarType.BOOLEAN.value: FieldKind.BOOLEAN,
@@ -153,6 +167,14 @@ class CroissantRecordSetModel(ConfiguredBaseModel):
     name: str
     description: str | None = None
     field: list[CroissantFieldModel] = Field(default_factory=list)
+
+    @field_validator("field", mode="before")
+    @classmethod
+    def _coerce_field(cls, value: object) -> object:
+        """Croissant baker sometimes emits a lone ``field`` object instead of a list."""
+        if isinstance(value, dict):
+            return [value]
+        return value
 
     def field_by_name(self, name: str) -> CroissantFieldModel | None:
         """Return the field with the given name, or ``None`` if absent."""

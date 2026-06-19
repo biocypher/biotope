@@ -41,6 +41,18 @@ def test_selector_rejects_both_field_and_use() -> None:
         Selector.model_validate({"field": "x", "use": "y"})
 
 
+def test_selector_rejects_field_and_value_together() -> None:
+    with pytest.raises(ValidationError):
+        Selector.model_validate({"field": "x", "value": "y"})
+
+
+def test_selector_literal_value_is_resolved() -> None:
+    selector = Selector.model_validate({"value": "mondo:0005267"})
+    assert selector.is_resolved()
+    assert selector.field is None
+    assert selector.use is None
+
+
 def test_scan_coercion_accepts_row_and_explode() -> None:
     e = EntityMapping.model_validate({"scan": "row"})
     assert isinstance(e.scan, RowScan)
@@ -209,6 +221,111 @@ def test_compile_emits_node_tuples(minimal_croissant: Path, gene_csv: Path) -> N
     # input_label is the mapping key
     assert all(n[1] == "gene" for n in nodes)
     assert all(n[2]["symbol"] for n in nodes)
+
+
+def test_compile_resolves_literal_property_constant(minimal_croissant: Path, gene_csv: Path) -> None:
+    """A literal `value:` selector removes the need to materialize a constant
+    column (e.g. a fixed MONDO id shared by every row in a table)."""
+    dataset = load_from_path(minimal_croissant)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(minimal_croissant),
+            "entities": {
+                "gene": {
+                    "record_set": "genes",
+                    "id": "ensembl_id",
+                    "properties": {"symbol": "symbol", "source": {"value": "ensembl"}},
+                }
+            },
+        }
+    )
+    with AcquisitionContext(dataset, datasets_location=gene_csv.parent) as ctx:
+        adapter = compile_mapping(mapping, ctx)
+        nodes = list(adapter.get_nodes())
+    assert len(nodes) == 2
+    assert all(n[2]["source"] == "ensembl" for n in nodes)
+
+
+def test_deferred_relation_skipped_by_compile_and_unresolved_check(
+    two_recordsets_croissant: Path, two_recordsets_dir: Path
+) -> None:
+    """A deferred relation (data can't support it) is honestly skipped, not an error."""
+    from biotope.croissant.mapping.compile import CompileStats, iter_relation_tuples
+
+    dataset = load_from_path(two_recordsets_croissant)
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(two_recordsets_croissant),
+            "entities": {
+                "gene": {"record_set": "genes", "id": "gene_id"},
+                "disease": {"record_set": "gene_disease", "id": "disease_id"},
+            },
+            "relations": {
+                "gene_in_disease": {
+                    "deferred": True,
+                }
+            },
+        }
+    )
+    assert mapping.unresolved_slots() == []
+    assert mapping.deferred_relations() == ["gene_in_disease"]
+
+    with AcquisitionContext(dataset, datasets_location=two_recordsets_dir) as ctx:
+        stats = CompileStats()
+        edges = list(iter_relation_tuples(mapping, ctx, stats=stats))
+    assert edges == []
+    assert stats.deferred_relations == 1
+
+
+def test_map_defer_relation_cli_roundtrip(tmp_path: Path, two_recordsets_croissant: Path) -> None:
+    from click.testing import CliRunner
+
+    from biotope.commands.map import defer_relation, undefer_relation
+
+    mapping_path = tmp_path / "x.mapping.yaml"
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(two_recordsets_croissant),
+            "entities": {
+                "gene": {"record_set": "genes", "id": "gene_id"},
+                "disease": {"record_set": "gene_disease", "id": "disease_id"},
+            },
+            "relations": {
+                "gene_in_disease": {
+                    "record_set": "gene_disease",
+                    "source": {"entity": "gene", "field": "gene_id"},
+                    "target": {"entity": "disease", "field": "disease_id"},
+                }
+            },
+        }
+    )
+    dump_mapping(mapping, mapping_path)
+
+    runner = CliRunner()
+    result = runner.invoke(defer_relation, [str(mapping_path), "gene_in_disease"])
+    assert result.exit_code == 0, result.output
+    reloaded = load_mapping(mapping_path)
+    assert reloaded.relations["gene_in_disease"].is_deferred()
+
+    result = runner.invoke(undefer_relation, [str(mapping_path), "gene_in_disease"])
+    assert result.exit_code == 0, result.output
+    reloaded = load_mapping(mapping_path)
+    assert not reloaded.relations["gene_in_disease"].is_deferred()
+
+
+def test_map_defer_relation_unknown_name_errors(tmp_path: Path, two_recordsets_croissant: Path) -> None:
+    from click.testing import CliRunner
+
+    from biotope.commands.map import defer_relation
+
+    mapping_path = tmp_path / "x.mapping.yaml"
+    mapping = Mapping.model_validate({"croissant": str(two_recordsets_croissant)})
+    dump_mapping(mapping, mapping_path)
+
+    runner = CliRunner()
+    result = runner.invoke(defer_relation, [str(mapping_path), "nope"])
+    assert result.exit_code != 0
+    assert "Unknown relation" in result.output
 
 
 def test_compile_emits_edge_tuples(two_recordsets_croissant: Path, two_recordsets_dir: Path) -> None:
@@ -569,7 +686,7 @@ def test_explode_with_raw_field_id_drops_rows_under_scalar_guard(tmp_path: Path)
         """
     )
     from biotope.croissant.acquisition.context import RecordRow
-    from biotope.croissant.mapping.compile import iter_entity_tuples
+    from biotope.croissant.mapping.compile import CompileStats, iter_entity_tuples
     from biotope.croissant.spec import load_from_path
 
     load_from_path(croissant_path)
@@ -592,6 +709,11 @@ def test_explode_with_raw_field_id_drops_rows_under_scalar_guard(tmp_path: Path)
 
     nodes = list(iter_entity_tuples(mapping, _StubCtx()))
     assert nodes == [], "non-scalar ids must be dropped, not emitted as 'list literals'"
+
+    stats = CompileStats()
+    list(iter_entity_tuples(mapping, _StubCtx(), stats=stats))
+    assert stats.dropped_nodes_non_scalar == 2
+    assert stats.emitted_nodes == 0
 
 
 def test_named_id_via_use(minimal_croissant: Path, gene_csv: Path) -> None:

@@ -93,6 +93,24 @@ def merge_metadata(dynamic_metadata: dict[str, Any]) -> dict[str, Any]:
     return metadata
 
 
+def _coerce_list_fields(obj: Any, keys: tuple[str, ...] = ("field", "subField")) -> None:
+    """Wrap lone dicts in lists for Croissant list-shaped keys (in-place)."""
+    if isinstance(obj, dict):
+        for key in keys:
+            value = obj.get(key)
+            if isinstance(value, dict):
+                obj[key] = [value]
+        for value in obj.values():
+            if isinstance(value, list):
+                for item in value:
+                    _coerce_list_fields(item, keys)
+            elif isinstance(value, dict):
+                _coerce_list_fields(value, keys)
+    elif isinstance(obj, list):
+        for item in obj:
+            _coerce_list_fields(item, keys)
+
+
 def normalize_metadata_shape(metadata: dict[str, Any]) -> dict[str, Any]:
     """Return a copy with uniform Croissant keys; reject legacy sc:FileObject."""
     normalized = copy.deepcopy(metadata)
@@ -108,6 +126,7 @@ def normalize_metadata_shape(metadata: dict[str, Any]) -> dict[str, Any]:
             record_set.setdefault("field", [])
             record_set["field"].extend(fields)
 
+    _coerce_list_fields(normalized)
     ensure_no_legacy_file_objects(normalized)
     return normalized
 

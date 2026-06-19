@@ -59,7 +59,7 @@ uv run python build/create_knowledge_graph.py
 uv run biotope view
 ```
 
-`biotope init` is a pure scaffolder. All non-autogeneratable metadata is supplied as CLI flags — by a user or an agent reading `AGENTS.md`. Semantic decisions (which record set, which fields, which transforms) are made by the human or copilot; biotope only enumerates options, validates, and previews.
+`biotope init` is a pure scaffolder. All non-autogeneratable metadata is supplied as CLI flags — by a user or an agent following the standalone `biotope` skill. Semantic decisions (which record set, which fields, which transforms) are made by the human or copilot; biotope only enumerates options, validates, and previews.
 
 ## Architecture
 
@@ -71,8 +71,6 @@ Two layers, both in this repo:
 | KG construction | `biotope.croissant.*` | `spec`, `codegen`, `acquisition`, `mapping`, `alignment`, `scaffold`, `registry` — Croissant → BioCypher project |
 
 `biotope.croissant.api` exposes `scaffold_mapping`, `propose_alignment`, `materialize`, `discover_sources` as pure functions; the CLI verbs are thin wrappers. The mapping authoring surface lives under `biotope.commands.map` (Click group) and `biotope.commands.map_wizard` (Rich-based guided flow).
-
-The agent surface is `AGENTS.md` (template lives at `biotope/templates/AGENTS.md`, copied into every project by `init`). No MCP server — agents drive the same CLI a human uses.
 
 ## Commands
 

@@ -13,6 +13,7 @@ from biotope.metadata import (
     get_derived_from,
     get_status,
     merge_metadata,
+    normalize_metadata_shape,
     set_status,
 )
 
@@ -76,3 +77,22 @@ def test_merge_metadata_includes_biotope_and_prov_namespaces():
     ctx = merge_metadata({})["@context"]
     assert ctx["biotope"].startswith("https://")
     assert ctx["prov"] == "http://www.w3.org/ns/prov#"
+
+
+def test_normalize_metadata_shape_coerces_singleton_field_and_subfield() -> None:
+    metadata = {
+        "recordSet": [
+            {
+                "@id": "#rs",
+                "name": "genes",
+                "field": {
+                    "name": "authors",
+                    "subField": {"name": "name", "dataType": "sc:Text"},
+                },
+            },
+        ],
+    }
+    normalized = normalize_metadata_shape(metadata)
+    field = normalized["recordSet"][0]["field"]
+    assert isinstance(field, list)
+    assert isinstance(field[0]["subField"], list)

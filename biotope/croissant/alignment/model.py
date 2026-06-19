@@ -67,6 +67,15 @@ class Equivalence(_Model):
     b: Reference
     kind: EquivalenceKind = EquivalenceKind.SAME_NODE
     join_on: JoinKeys
+    confidence: float | None = None
+    """Heuristic confidence in [0, 1] attached by ``propose_alignment``.
+
+    ``None`` for hand-authored equivalences; proposals always set it.
+    """
+    reason: str | None = None
+    """Why this pairing/join field was proposed (e.g. "shared id-like field
+    `ensembl_id`"). ``None`` for hand-authored equivalences.
+    """
 
 
 class Alignment(_Model):

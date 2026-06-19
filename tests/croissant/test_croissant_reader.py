@@ -81,3 +81,20 @@ def test_sub_field_accepts_singular_dict() -> None:
     assert len(field.sub_field) == 1
     assert field.sub_field[0].name == "name"
     assert field.kind() == FieldKind.STRUCT
+
+
+def test_record_set_field_accepts_singular_dict() -> None:
+    """Regression: baker may emit one field object instead of a field list."""
+    from biotope.croissant.spec import CroissantRecordSetModel
+
+    record_set = CroissantRecordSetModel.model_validate(
+        {
+            "name": "genes",
+            "field": {
+                "name": "id",
+                "dataType": "sc:Text",
+            },
+        },
+    )
+    assert len(record_set.field) == 1
+    assert record_set.field[0].name == "id"
