@@ -30,7 +30,7 @@ def test_init_default_layout(tmp_path: Path) -> None:
     assert (root / "mappings").is_dir()
     assert (root / ".biotope" / "config.yaml").is_file()
     assert (root / ".biotope" / "project.yaml").is_file()
-    # The agent contract now lives in the standalone biotope skill, not a
+    # The agent contract lives in the biotope plugin skills, not a
     # per-project root AGENTS.md, so init must NOT emit one by default.
     assert not (root / "AGENTS.md").exists()
     assert (root / ".gitignore").is_file()

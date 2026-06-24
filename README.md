@@ -59,7 +59,7 @@ uv run python build/create_knowledge_graph.py
 uv run biotope view
 ```
 
-`biotope init` is a pure scaffolder. All non-autogeneratable metadata is supplied as CLI flags — by a user or an agent following the standalone `biotope` skill. Semantic decisions (which record set, which fields, which transforms) are made by the human or copilot; biotope only enumerates options, validates, and previews.
+`biotope init` is a pure scaffolder. All non-autogeneratable metadata is supplied as CLI flags — by a user or an agent following the biotope plugin skills (biotope-croissant → biocypher → biochatter). Semantic decisions (which record set, which fields, which transforms) are made by the human or copilot; biotope only enumerates options, validates, and previews.
 
 ## Architecture
 

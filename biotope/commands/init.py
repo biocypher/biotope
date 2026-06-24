@@ -4,8 +4,9 @@ Default behavior is **pure scaffold**: create the directory layout, write an
 empty ``project.yaml``, run ``git init``. No content questions. The agent (or
 the user via ``biotope map``) fills in the competence questions afterwards.
 
-The agent-facing contract is the standalone ``biotope`` **skill**
-(``skills/biotope/``), loaded only when the task is graph construction.
+The agent-facing contract is the **biotope** plugin skills (``skills/biotope-croissant``,
+``skills/biocypher``, ``skills/biochatter``), installed via the virtual-human
+marketplace. Load only the skill that matches the current pipeline stage.
 Pass ``--agents-md`` to also drop a root ``AGENTS.md`` template, for agents
 that don't support skills.
 

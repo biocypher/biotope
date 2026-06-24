@@ -17,7 +17,7 @@ APIs, CLI flags, and config-file layouts will change. End-user docs come after t
 
 1. Enter directory (`cd my-kg`).
 
-1. Start your coding agent. The standalone `biotope` skill will onboard it.
+1. Start your coding agent. The biotope plugin skills (biotope-croissant → biocypher → biochatter) will onboard it.
    For more information on the process, read on.
 
 ## Quick start: without coding agent

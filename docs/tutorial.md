@@ -49,7 +49,7 @@ cd airports
 This creates `.biotope/` (manifests + config), `data/` (empty; for your
 files), `mappings/` (empty; for the semantic mapping files), and a minimal
 `pyproject.toml`. A coding agent picks up the project contract from the
-standalone `biotope` skill. A fresh `git` repo is initialised in the same
+biotope plugin skills (biotope-croissant → biocypher → biochatter). A fresh `git` repo is initialised in the same
 directory.
 
 Finally, we have to install the venv for our new project:
@@ -520,7 +520,7 @@ targets — see the BioCypher docs for the import side.
 
 Everything above is delegable. After `biotope init`, you can `cd` into the
 project and start a copilot — Claude Code, Cursor, Aider, or anything that
-loads the standalone `biotope` skill — and say:
+loads the biotope plugin skills (biotope-croissant → biocypher → biochatter) — and say:
 
 > "help me build the KG"
 
