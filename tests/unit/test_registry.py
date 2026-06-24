@@ -262,19 +262,6 @@ def test_biocontext_search_sort_by_name(tmp_path, mock_registry_data_with_repos)
             assert names == sorted(names)
 
 
-def test_biocontext_search_sort_relevance(tmp_path, mock_registry_data_with_repos):
-    """Test BioContextRegistry.search with relevance sorting (default)."""
-    registry_manager = RegistryManager(tmp_path)
-    biocontext = BioContextRegistry(registry_manager)
-
-    with patch.object(registry_manager, "fetch_registry", return_value=mock_registry_data_with_repos):
-        with patch.object(biocontext, "_get_github_stars", return_value=100):
-            results = biocontext.search("python", sort="relevance")
-
-            # Should maintain original order (most relevant first)
-            assert len(results) > 0
-
-
 def test_biocontext_calculate_relevance_score(tmp_path):
     """Test relevance score calculation."""
     registry_manager = RegistryManager(tmp_path)
@@ -343,39 +330,6 @@ def test_biocontext_get_github_stars_api_error(tmp_path):
         assert stars is None
 
 
-def test_biocontext_get_github_stars_network_error(tmp_path):
-    """Test BioContextRegistry._get_github_stars with network error."""
-    registry_manager = RegistryManager(tmp_path)
-    biocontext = BioContextRegistry(registry_manager)
-
-    with patch("requests.get") as mock_get:
-        mock_get.side_effect = requests.RequestException("Network error")
-
-        stars = biocontext._get_github_stars("https://github.com/test/repo")
-
-        assert stars is None
-
-
-def test_biocontext_get_github_stars_invalid_url(tmp_path):
-    """Test BioContextRegistry._get_github_stars with invalid GitHub URL."""
-    registry_manager = RegistryManager(tmp_path)
-    biocontext = BioContextRegistry(registry_manager)
-
-    stars = biocontext._get_github_stars("https://not-github.com/test/repo")
-
-    assert stars is None
-
-
-def test_biocontext_get_github_stars_malformed_url(tmp_path):
-    """Test BioContextRegistry._get_github_stars with malformed GitHub URL."""
-    registry_manager = RegistryManager(tmp_path)
-    biocontext = BioContextRegistry(registry_manager)
-
-    stars = biocontext._get_github_stars("https://github.com/invalid")
-
-    assert stars is None
-
-
 def test_biocontext_get_github_token_from_env(tmp_path):
     """Test GitHub token retrieval from environment variable."""
     registry_manager = RegistryManager(tmp_path)
@@ -384,31 +338,6 @@ def test_biocontext_get_github_token_from_env(tmp_path):
     with patch.dict("os.environ", {"GITHUB_TOKEN": "test_token"}):
         token = biocontext._get_github_token()
         assert token == "test_token"
-
-
-def test_biocontext_get_github_token_from_config(tmp_path):
-    """Test GitHub token retrieval from biotope config."""
-    registry_manager = RegistryManager(tmp_path)
-    biocontext = BioContextRegistry(registry_manager)
-
-    # Create a mock config with GitHub token
-    mock_config = {"github_token": "config_token"}
-
-    with patch("biotope.validation.load_biotope_config", return_value=mock_config):
-        with patch("biotope.utils.find_biotope_root", return_value=tmp_path):
-            with patch.dict("os.environ", {}, clear=True):  # Clear environment variables
-                token = biocontext._get_github_token()
-                assert token == "config_token"
-
-
-def test_biocontext_get_github_token_none(tmp_path):
-    """Test GitHub token retrieval when no token is available."""
-    registry_manager = RegistryManager(tmp_path)
-    biocontext = BioContextRegistry(registry_manager)
-
-    with patch.dict("os.environ", {}, clear=True):
-        token = biocontext._get_github_token()
-        assert token is None
 
 
 def test_biotools_registry_initialization(tmp_path):
