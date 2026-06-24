@@ -18,9 +18,9 @@ The corollary: don't try to fix id mismatches downstream with alignment or hand-
 
 `propose-alignment` (and any automatic equivalence finder) keys off shared structure — a shared property name, a shared value. That heuristic happily proposes merges that destroy meaning: collapsing two *different* studies because they share `species: human`, or merging a gene with a transcription factor because they share a symbol. Each proposal carries a `reason` and `confidence` to inform your audit — read them, then apply only the equivalences that are true identity. When you've already canonicalized ids (principle 1), the correct alignment set is usually **empty** — and that's the healthy outcome, not a failure. Proposals are hypotheses, never instructions.
 
-## 3. Verify the graph; never trust the build exit code
+## 3. Verify the graph; never trust preview or build exit code
 
-A build can succeed while dropping a large fraction of edges. After every build, check node and edge counts against what you expect (`biotope view`) and look specifically for **edge survival**: a relation that should carry thousands of edges but emits dozens is the signature of an id-namespace mismatch (back to principle 1), not a data shortage. Spot-check that the entities you care about actually carry the edges they should. Don't report a graph as working on the strength of a clean build alone.
+`biotope map preview` validates mapping structure, not endpoint coverage — a clean preview can still produce thousands of orphaned edges. After every build: `biotope view` and `build_metrics.json`. `orphaned_count` must be 0. A relation with far fewer edges than expected signals id-namespace mismatch (principle 1).
 
 ## 4. Never fabricate data to satisfy a schema slot
 
@@ -40,8 +40,4 @@ Describe data at the granularity of the *dataset*, not the file. Pointing the tr
 
 ## 8. The declared schema is a contract — grow it, don't silently reshape it
 
-Adding entities and relations is safe. Removing or restructuring what the user declared — or encoding a concept named in the `purpose` as something *other* than a first-class entity/relation — changes the meaning of the project and needs the user's explicit sign-off. Treat `required_entities` / `required_relations` and `purpose` as the user's words; resolve mappings *against* them rather than bending them to fit a convenient binding. The purpose sentence is what someone reading the project a year out will rely on.
-
----
-
-**The through-line:** put the judgement early (canonical ids, honest schema, audited merges, careful extraction) and the mechanical build stays reliable. Effort spent making ids and the manifest correct up front is repaid many times over in answers the graph gets right.
+Adding entities and relations is safe. Removing or reshaping what the user declared — or encoding a `purpose` concept as something other than a first-class entity/relation — needs explicit consent. If the data can't support a declared slot, ask: defer (`biotope map defer-relation`) or revise the schema together.

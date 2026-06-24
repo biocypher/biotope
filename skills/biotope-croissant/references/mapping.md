@@ -50,7 +50,7 @@ A `properties` value is normally a column name (`title: title`). For a constant 
 ```yaml
     properties:
       title: title
-      source_db: { value: "ELIXIR" }       # literal, not read from the data
+      source_db: { value: "SourceDB" }
 ```
 
 ## Id selectors and transforms
@@ -138,12 +138,20 @@ relations:
 
 ## Minimal vs rich
 
-The same entity can be bound richly in one mapping (full properties) and minimally in another (id only) so a relation has an endpoint to point at. Both must mint the id the same way; BioCypher merges the emissions into one node, taking properties from the rich side. This is the normal pattern when one dataset defines an entity and another only references it.
+Same entity: rich binding in one mapping (full properties), minimal in another (id only). Both mint the id identically. BioCypher merges into one node.
+
+**Per-file rule:** every relation endpoint's `entity` must appear under `entities:` in **that same file** — add a minimal stub if needed.
+
+## Shared entities
+
+If multiple record sets reference the same entity type (e.g. a tag, category, or ontology term), emit that entity from **each** record set that contributes edges to it — not only from one "primary" source. Otherwise edges target ids with no matching node → orphans at build.
+
+Pick the record set with the richest linkage when one source embeds references another only holds a summary table.
 
 ## Validate
 
 ```bash
-biotope map preview --json     # walks ALL mappings under mappings/
+biotope map preview --json
 ```
 
-Read `unresolved_slots` (must be empty) and `findings` (no errors) and the sample emitted tuples — e.g. `('iata:ABE', 'airport', {...})` and `(None, 'iata:ABE', 'iata:ATL', 'number_of_flights', {'count': 853})`. Iterate here, not at build time. Cross-mapping equivalences: `biotope propose-alignment mappings/*.mapping.yaml` — proposals only, audit each.
+`preview` checks YAML structure and field existence — **not** whether relation targets will resolve to emitted nodes. Check `unresolved_slots`, `findings`, and `sample_edge_tuples`. Orphan detection requires build + `biotope view` (`build_metrics.json`).

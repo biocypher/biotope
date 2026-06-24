@@ -5,9 +5,9 @@ description: Build a knowledge graph from data files using biotope, the CLI for 
 
 # biotope: build a knowledge graph from data
 
-biotope is a CLI. The whole contract is the CLI — never import biotope's Python modules and never hand-edit the files under `.biotope/`; every action is a command or a flag. Your job is the semantic judgement (which record set is an entity, which field is its id, which transforms apply); biotope enumerates options, validates, and builds deterministically.
+biotope is a CLI. Never import its Python modules, browse its source, or hand-edit `.biotope/`. Use commands, flags, `--help`, and error text only. If stuck, ask the user.
 
-A project is a directory with `.biotope/` (manifests + config), `data/` (the files), and `mappings/` (one `*.mapping.yaml` per logical dataset). Real projects hold **several** mappings; `build` streams nodes and edges from all of them and deduplicates nodes by id at build time.
+Project layout: `.biotope/` (manifests + config), `data/`, `mappings/` (one `*.mapping.yaml` per logical dataset). `build` streams all mappings and deduplicates nodes by id.
 
 First of all, ensure biotope>=0.8.0 is installed.
 
@@ -17,17 +17,40 @@ pipx install biotope     # isolated global install you can call as `biotope`
 uv add biotope           # inside an existing uv project
 ```
 
-## The pipeline
+Unreleased checkout: `uv pip install -e /path/to/biotope` (use venv or `--break-system-packages` in containers). Verify with `biotope --version`.
+
+## Pipeline
 
 ```
-init  →  add  →  map  →  build  →  run + verify
+init  →  add  →  map  →  build  →  verify
 ```
 
-Run `biotope status` / `biotope queue` any time to see where things stand. In a uv-managed project prefix commands with `uv run` (`uv run biotope ...`); with a global install just call `biotope`.
+`biotope status` / `biotope queue` show pipeline state. In uv projects: `uv run biotope ...`.
 
-### 1. Orient before touching anything
+## Agent loop — do not skip
 
-Review the data and interview the user about the purpose of the representation and the questions the graph must answer. This will inform the the **entities** (the nouns of their domain), the **relations** between them, and which datasets they already have versus need to find. Some of this may already be in `.biotope/project.yaml` (`purpose`, `required_entities`, `required_relations`) — confirm it's current rather than assuming, and never silently overwrite it (see the schema-is-a-contract rule in `references/reliability.md`).
+Mapping is iterative. A clean `preview` does **not** mean edges resolve — orphans appear only after build.
+
+```
+inspect --json  →  write mapping  →  preview --json  →  build  →  view
+       ↑___________________________________|  (fix mapping, not generated code)
+```
+
+**Before build** — run `biotope map preview --json` and parse the JSON (rich output truncates in agent context). Gate:
+
+- `unresolved_slots` empty; `findings` has no errors
+- Mapping covers every `required_entity` / `required_relation` from `project.yaml`
+- Every relation **target** entity is emitted from **every** record set that references it (see `references/mapping.md`, shared entities)
+- `sample_edge_tuples` target ids use the same id minting as the entity definition
+- Binding still matches the user's stated `purpose` and entities — if not, **ask** (defer unsupported relations, or get explicit consent before changing the schema)
+
+**After build** — `biotope view` and `build/biocypher-out/build_metrics.json`. `orphaned_count` must be 0. Non-zero → fix ids or entity coverage, re-preview, rebuild. Relation with far fewer edges than expected → id-namespace mismatch.
+
+**When to ask the user:** purpose vs mapping mismatch; relation unsupported by data; disagreeing id columns across sources; need `--clear-entities` / `--clear-relations`.
+
+### 1. Orient
+
+Ask the user: what should this graph answer? What entities and relations matter? Answers become `purpose` and `biotope map --entity` / `--relation` flags. Don't infer from file shapes alone. If `project.yaml` already has intent, confirm it's current. Never silently overwrite it (`references/reliability.md`).
 
 ### 2. init — scaffold
 
@@ -43,9 +66,9 @@ biotope init . --no-prompt        # project root is the current directory
 uv sync
 ```
 
-Use `.` when the user wants biotope set up inside a folder that already exists; use a name when you're creating a fresh project directory. Don't probe by trial-and-error in `/tmp` — pick the form from the user's intent.
+Use `.` when the user wants biotope set up inside a folder that already exists; use a name when you're creating a fresh project directory. Don't probe by trial-and-error in `/tmp` — pick the form from the user's intent. **Form A always requires the `cd`** — every command in the rest of this pipeline (`queue`, `add`, `map`, `build`, ...) assumes the working directory is the project root, so running them from the parent directory after `init my-kg` will fail to find the project.
 
-**Fresh environments (containers/CI) often have no git identity**, so init's auto-commit step prints `unable to auto-detect email address` and leaves the scaffold staged. That's harmless — the project is fully initialised. Either set identity once (`git config user.email you@example.com && git config user.name you`) or pass `--no-git` to skip git entirely.
+Containers may skip auto-commit (missing git identity) — harmless. **Never `--no-git`** in fresh/ephemeral environments; biotope needs `.biotope` + `.git` to find the project.
 
 ### 3. add — bring data under the project
 
@@ -58,7 +81,7 @@ biotope add data/ot --license CC-BY-4.0 --creator "Open Targets" --description "
 
 `biotope add <dir>` runs croissant-baker over the directory and writes **one** manifest at `.biotope/datasets/<rel>.jsonld` covering the whole subtree. Pass metadata the baker cannot infer (license, creator, description, access terms) as flags. **One logical dataset → one manifest** — point `add` at the folder that *is* the dataset, never at individual partition files, and don't split one dataset across subdirectory `add`s (it fragments lineage). For genuinely independent datasets under a shared parent, add each as its own path: `biotope add data/study_a data/study_b`.
 
-If you edit the files in an already-tracked directory (e.g. preprocessing adds a column), the manifest goes stale — `map` warns when it detects drift. Refresh it with `biotope add <dir> --rebake`; biotope refuses to silently re-bake a tracked directory, so a new column isn't mappable until you do.
+Stale manifest after preprocessing → `biotope add <dir> --rebake`.
 
 The **queue** tells you each dataset's state:
 
@@ -89,18 +112,16 @@ biotope map --entity gene --entity disease --entity drug \
 
 This appends to `required_entities` / `required_relations` in `project.yaml`. Names accept free text and are normalised to `snake_case`. Adding is always safe; `--clear-entities` / `--clear-relations` are destructive and need the user's explicit say-so.
 
-Second, **author one mapping file per dataset** that resolves those slots against real fields. Scaffold an empty mapping (its comment appendix lists every record set, field, id-like candidate, and sample rows), inspect when you need more, edit the YAML, then preview:
+Second, **author mapping YAML** per dataset. Read `references/mapping.md` first. Follow the [agent loop](#agent-loop--do-not-skip):
 
 ```bash
 biotope map scaffold .biotope/datasets/data/ot.jsonld
-biotope map inspect  .biotope/datasets/data/ot.jsonld --json   # field catalogue
+biotope map inspect  .biotope/datasets/data/ot.jsonld --json
 # edit mappings/ot.mapping.yaml
-biotope map preview --json                                     # validate ALL mappings
+biotope map preview --json
 ```
 
-The mapping YAML grammar — id selectors, transforms, `scan: row` vs `explode`, multi-axis scans, relation endpoints, reusable `ids:`/`use:` — is in `references/mapping.md`. Read it before writing a mapping. Iterate `preview` until `unresolved_slots` is empty and `findings` has no errors. `inspect` and `preview` are the canonical evidence views — never run `build` hoping for an error message to tell you the schema.
-
-Cross-mapping identity (the same node arriving from two files) is handled by matching ids, not by a merge step — if both sides mint the id the same way, BioCypher dedups them. `biotope propose-alignment mappings/*.mapping.yaml` only proposes equivalences and only across ≥2 files; **audit every proposal, apply none blind** (see `references/reliability.md`).
+Cross-file identity = matching ids (same field semantics, transform, prefix). `biotope propose-alignment mappings/*.mapping.yaml` proposes only — audit each (`references/reliability.md`).
 
 ### 5. build — choose the output target, materialise, then run
 
@@ -113,24 +134,24 @@ uv run python build/create_knowledge_graph.py
 
 `build` writes plain, committable Python + YAML under `build/` (`config/schema_config.yaml`, an adapter per mapping, and `create_knowledge_graph.py`) and prints the resolved `target (dbms)`. The entry point regenerates `build/biocypher-out/` from scratch each run (so re-running after a target change is clean) and writes `build_metrics.json` (orphaned edges + compile drops).
 
-### 6. Verify — never trust the exit code, report the format honestly
+### 6. Verify
 
 ```bash
-biotope view      # target (dbms), node + edge counts, orphaned-edge metrics, schema diff
-biotope status    # tracked files still consistent?
+biotope view      # counts, orphaned edges, schema diff
+biotope status
 ```
 
-A build can succeed while dropping edges whose endpoints don't resolve to a node. `biotope view` prints the active target plus orphaned-edge and compile-drop counts (also in `build/biocypher-out/build_metrics.json`) — read them, don't just trust the exit code. A relation that should have thousands of edges but emits dozens means an id-namespace mismatch; fix the ids upstream (see `references/reliability.md`), don't patch generated files. **Never claim a graph "works" without `biotope view` confirming non-empty, sane outputs, and state the target it reports** rather than guessing the format.
+See [agent loop](#agent-loop--do-not-skip). Never claim success without `biotope view` showing non-empty output and stating the reported target.
 
-## Reliability principles — read these
+## Reliability
 
-The difference between a graph that answers questions and one that quietly loses a third of them is almost always set *before* the build, in how ids and data are prepared. `references/reliability.md` holds the durable principles: canonicalize ids up front, audit auto-alignments, verify edge survival, never fabricate data to satisfy a slot, keep manifest and data in sync, treat the schema as a contract. Read it on any non-trivial graph.
+`references/reliability.md` — canonical ids, edge survival, honest schema, audited alignments. Read on non-trivial graphs.
 
 ## House rules
 
-- Use flags, never interactive prompts; never hand-edit `.biotope/` files or the generated `build/` adapters and `create_knowledge_graph.py`. If output looks wrong, fix the input (purpose, mapping, data) and re-run. The one editable thing under `build/` is `config/biocypher_config.yaml` (output target, ontology) — `build` preserves it across rebuilds.
-- Use `biotope add` / `commit` / `mv` for metadata, not raw file moves — they keep the git-tracked manifests consistent.
-- Keep `purpose:` honest — it's the one sentence a future reader relies on.
+- Flags only, no interactive prompts. Wrong output → fix purpose/mapping/data, re-run. Only editable generated file: `build/config/biocypher_config.yaml`.
+- Metadata moves via `biotope add` / `commit` / `mv`, not raw file moves.
+- Keep `purpose:` honest.
 
 ## Command reference
 
@@ -147,13 +168,9 @@ annotate config                   field-level annotation + project config
 discover                          find candidate datasets for declared entities
 ```
 
-## Optional next steps (ask the user first)
+## Optional next steps
 
-A successful biotope build may be the end state — especially with `--target csv`. **Do not** proceed to Neo4j import, standalone BioCypher configuration, or natural-language querying unless the user wants it.
+Ask before Neo4j import, BioCypher tuning, or NL querying. CSV-only may be the end state.
 
-Ask explicitly, e.g.: *"The graph is built and `biotope view` looks good. Do you want help with (a) loading it into Neo4j / tuning BioCypher outputs, or (b) querying it in natural language?"*
-
-- **(a)** → load the **biocypher** skill
-- **(b)** → load the **biochatter** skill (requires a loaded graph DB and `schema_info.yaml`; see biocypher skill for `write_schema_info()` if missing)
-
-If the user only needed Croissant manifests, mapping, or CSV output, stop here.
+- Neo4j / BioCypher outputs → **biocypher** skill
+- NL querying → **biochatter** skill (needs loaded graph + `schema_info.yaml`)

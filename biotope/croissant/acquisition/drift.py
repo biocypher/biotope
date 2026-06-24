@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from biotope.metadata import SCAFFOLD_FILENAME
+
 
 def detect_manifest_drift(croissant_path: str | Path, datasets_location: str | Path) -> list[Path]:
     """Return data files modified more recently than the Croissant manifest.
@@ -22,6 +24,11 @@ def detect_manifest_drift(croissant_path: str | Path, datasets_location: str | P
     error). Best-effort and coarse-grained: it does not parse which files
     belong to which record set, just whether *anything* under
     ``datasets_location`` moved after the manifest was last written.
+
+    ``SCAFFOLD_FILENAME`` (``.biotope.yaml``) is excluded: ``biotope add``
+    writes it into the same directory right after baking the manifest, so it
+    is always newer by construction and would otherwise register as drift on
+    every single ``add``, regardless of whether the data actually changed.
     """
     croissant_path = Path(croissant_path)
     datasets_location = Path(datasets_location)
@@ -31,7 +38,7 @@ def detect_manifest_drift(croissant_path: str | Path, datasets_location: str | P
     manifest_mtime = croissant_path.stat().st_mtime
     drifted: list[Path] = []
     for candidate in datasets_location.rglob("*"):
-        if not candidate.is_file():
+        if not candidate.is_file() or candidate.name == SCAFFOLD_FILENAME:
             continue
         if candidate.stat().st_mtime > manifest_mtime:
             drifted.append(candidate)
