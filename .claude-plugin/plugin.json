@@ -1,0 +1,6 @@
+{
+  "name": "biotope",
+  "version": "0.8.0",
+  "description": "Croissant-driven knowledge-graph construction (BioCypher ecosystem).",
+  "author": { "name": "BioCypher Team" }
+}
