@@ -15,10 +15,13 @@ ways — once by a human reading the prose and hand-producing the CSV, once
 by an agent doing the same extraction automatically. Either way, the same
 file ends up in the project, and the same mapping ingests it.
 
-If you'd rather hand the wheel to an agent for the whole walk-through,
-jump to the [agent shortcut](#agent-shortcut) at the end.
+If you have the [biotope plugin](index.md#install-the-plugin) installed, jump to the [agent shortcut](#agent-shortcut) at the end — invoke `/biotope-croissant` or ask your agent to help build the KG.
 
 ## Prerequisites
+
+**Recommended:** install the [biotope plugin](index.md#install-the-plugin) in your coding agent (Claude Code, Cursor, Codex).
+
+**Or** install the CLI:
 
 ```bash
 uv add biotope        # if in uv-managed venv
@@ -26,12 +29,7 @@ uv add biotope        # if in uv-managed venv
 pipx install biotope  # global installation
 ```
 
-Or any other way to get biotope onto your `$PATH`. You can also use
-`uvx biotope init` to use a temporary venv, requiring no prior install.
-Below, we will use `uvx` for the initialisation (as it is performed in a
-parent directory), and uv for venv management and running code in the
-tutorial project itself. You are free to substitute your favourite
-package management workflow.
+You can also use `uvx biotope init` with no prior install. Below we use `uvx` for initialisation (from a parent directory) and `uv` inside the project. Substitute your own package workflow if you prefer.
 
 ## 1. Initialise a project
 
@@ -518,13 +516,13 @@ targets — see the BioCypher docs for the import side.
 
 ## Agent shortcut
 
-Everything above is delegable. After `biotope init`, you can `cd` into the
-project and start a copilot — Claude Code, Cursor, Aider, or anything that
-loads the biotope plugin skills (biotope-croissant → biocypher → biochatter) — and say:
+Everything above is delegable. After `biotope init`, `cd` into the project,
+open your agent (with the [biotope plugin](index.md#install-the-plugin) installed),
+invoke `/biotope-croissant` or say:
 
-> "help me build the KG"
+> *What does biotope do? Help me build the KG.*
 
-The agent picks up the project contract from the `biotope` skill, runs
+The agent picks up the skill contract, runs
 `biotope queue --json` to see what's tracked, decides whether to leave
 raw items alone or process them, scaffolds and resolves mappings using
 `biotope map inspect --json` for the field catalogue, and runs the build.

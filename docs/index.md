@@ -1,125 +1,60 @@
 # biotope
 
-CLI for the BioCypher ecosystem. Turns Croissant-described data into a BioCypher knowledge graph; tracks the metadata in a git-like workflow.
+Turn tables, CSVs, and mixed biomedical data into a queryable knowledge graph — with version-controlled metadata. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
 
-!!! warning "Pre-alpha, developer-facing"
+!!! warning "Pre-alpha"
 
-```
-APIs, CLI flags, and config-file layouts will change. End-user docs come after the design stabilises.
-```
+    CLI flags and APIs will change. The plugin skills are the most stable onboarding path.
 
-## Quick start: from `init` to a knowledge graph
+## Install the plugin
 
-1. Run `uvx biotope init` or use any other way to make the package available (e.g., `pip install`).
+Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope](https://github.com/biocypher/biotope).
 
-1. Enter desired project name (e.g., `my-kg`) and the overall purpose of the KG (e.g.,
-   `Which approved drugs target proteins with relevance in type 2 diabetes?`).
+| Harness | Setup |
+| ------- | ----- |
+| **Claude Code** | `/plugin marketplace add biocypher/biotope` then `/plugin install biotope@biotope` |
+| **Cursor** | [Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace) → import `biocypher/biotope` |
+| **Codex** | [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli) pointing at this repo |
 
-1. Enter directory (`cd my-kg`).
+## Use it
 
-1. Start your coding agent. The biotope plugin skills (biotope-croissant → biocypher → biochatter) will onboard it.
-   For more information on the process, read on.
+The plugin ships three skills that chain as the pipeline progresses:
 
-## Quick start: without coding agent
+| Skill | Use when |
+| ----- | -------- |
+| **biotope-croissant** | Turning data files into a knowledge graph (`init` → `add` → `map` → `build`) |
+| **biocypher** | Tuning export backends, schema config, Neo4j import |
+| **biochatter** | Natural-language queries over a loaded graph |
 
-!!! tip "Prefer a worked end-to-end example?"
+You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-croissant`) or just ask:
 
-    The [**Tutorial**](tutorial.md) walks through building a real knowledge graph
-    from public airport/flight data in ~15 minutes. It's the most up-to-date
-    onboarding path and the source of truth for the recommended workflow
-    (`init` → `get` → `add` → `queue` → `map` → `build`).
+> *What does biotope do? I want to build a graph from my data.*
+
+The agent reads the skill contract and runs `biotope` commands for you.
+
+**Worked example:** [Tutorial](tutorial.md) — build a real airport/flight knowledge graph in ~15 minutes.
+
+## CLI (manual / scripting)
+
+If you prefer the terminal or need CI:
 
 ```bash
-uv pip install biotope
-
-# 1. Scaffold a project.
-biotope init my-kg --purpose "Find approved drugs that target proteins relevant in T2D."
-cd my-kg
-
-# 2. Declare what the graph must contain (agent-friendly flags).
-biotope map --entity gene --entity disease --entity drug \
-            --relation gene_associated_with_disease
-
-# 3. Bring in data + its Croissant metadata.
-biotope add data/ot.parquet --license CC-BY-4.0
-
-# 4. Generate an unresolved mapping scaffold for that Croissant file.
-#    The scaffold has one slot per declared entity/relation plus an inspector
-#    appendix listing record sets, field kinds, and sample rows.
-biotope map scaffold .biotope/datasets/ot.jsonld
-
-# 5. Resolve the slots — pick a record set, fields, transforms for each entity
-#    and relation. Two equivalent paths:
-biotope map                   # interactive guided wizard (humans)
-# …or edit mappings/*.mapping.yaml directly and consult:
-biotope map inspect .biotope/datasets/ot.jsonld --json
-biotope map preview --json    # status + projected schema + sample tuples
-
-# 6. Build a runnable BioCypher project. Strict: rejects unresolved slots.
-biotope build
-biotope view
+uvx biotope init my-kg    # no install — ephemeral venv for scaffolding
+pipx install biotope      # global install
+uv add biotope              # inside a uv-managed project
 ```
 
-All semantic decisions (which record set, which fields, which transforms) are made by the human or copilot agent. biotope only enumerates options, validates, and previews — it never auto-picks a "best" record set.
+**Reference:** [Commands](commands.md) overview · [API docs](api-docs/init.md) per-command detail
 
-## Commands
-
-### Project lifecycle
-
-- `biotope init` — scaffold a project (`.biotope/`, `project.yaml`, `git init`).
-
-### Data acquisition + tracking
-
-- `biotope get <url>` — download a file (optionally into `--output-dir`) and, unless `--no-add`, track it.
-- `biotope add <path>` — stage data files or rooted directories; baker writes the Croissant entry under `.biotope/datasets/`. `--derived-from` records provenance for human/agent-extracted derivatives. For curated metadata that doesn't fit as CLI flags (descriptions, citations, per–record-set fields), `add` also drops a `.biotope.yaml` scaffold next to the dataset — review it, then run `biotope annotate apply <dir>` to merge it into the manifest.
-- `biotope mv` / `biotope rm` — move or untrack files and update metadata paths.
-- `biotope queue` — show every dataset grouped by pipeline state (`raw` / `processed` / `mapped`). The recommended dashboard during a build.
-- `biotope mark <dataset> <status>` — manually set a dataset's `biotope:status`.
-
-### Semantic mapping
-
-- `biotope map` — bare command. If any intent flag (`--purpose`, `--entity`, `--relation`, `--source`, `--notes`, `--clear-*`, `--show`) is passed, it updates `project.yaml` non-interactively. Otherwise it launches the guided wizard.
-- `biotope map inspect <croissant>` — deterministic field catalogue + sample rows. `--json` for agents.
-- `biotope map scaffold <croissant>` — emit an unresolved mapping scaffold with an inspector comment appendix.
-- `biotope map preview [<mapping>]` — validate a (partial) mapping; show projected BioCypher schema + sample tuples. `--json` for agents.
-- `biotope propose-alignment` — propose cross-mapping `same_node` equivalences.
-
-### Git-like metadata VCS
-
-- `biotope status` — show staged/modified files and validation state.
-- `biotope commit` — commit metadata changes.
-- `biotope log` — show metadata commit history.
-- `biotope push` / `biotope pull` — sync metadata with a remote.
-- `biotope check-data` — verify data files against recorded checksums.
-
-### Knowledge-graph construction
-
-- `biotope build` — materialise a runnable BioCypher project from mappings + alignment. Emits `config/schema_config.yaml` (with `namespace` and autogenerated `input_label`) and per-mapping generated Python under `build/generated/<stem>/`.
-- `biotope view` — node/edge counts for the most recent build (or project competence questions if no build yet).
-
-### Annotation + project config
-
-- `biotope annotate` — `apply` (merge a curated `.biotope.yaml` scaffold into a dataset's Croissant manifest, with optional `--set dataset.<field>=…` / `--set record_set.<field>=…` overrides), `edit` (interactive annotation), `load` (sample records via the manifest), `validate` (mlcroissant validation).
-- `biotope config` — manage project-level validation rules, remote validation URLs, and project metadata.
-
-### Stubs / not yet wired
-
-- `biotope discover` — rank registered adapters and local Croissant files against `required_entities`. Exists as a CLI entry but the registry surface is not yet wired into the recommended workflow; the tutorial does not use it.
-- `biotope benchmark` — quality/coverage metrics. v1 stub: emits a skeleton JSON object so downstream tooling can structure-test against it. Real metric implementations land iteratively.
-- `biotope read` — NLP ingestion + health-check entry. Promise.
-- `biotope search` — registry search across MCP / biotools. Auxiliary; not used in the standard build path.
-
-### Deprecated
-
-- `biotope describe` — removed; folded into `biotope map` intent flags.
-- `biotope propose-mapping` — deprecated alias for `biotope map scaffold`. The old heuristic ("one RecordSet per node type, FK fields as edges") is gone; the alias now produces an unresolved scaffold for human/agent completion.
+All semantic decisions (which record set, which fields, which transforms) are made by the human or agent. biotope enumerates options, validates, and previews — it never auto-picks a "best" record set.
 
 ## Reading order
 
-1. [Tutorial](tutorial.md) — 15-minute end-to-end walk-through; the ground-truth onboarding path.
+1. [Tutorial](tutorial.md) — end-to-end walk-through; ground-truth onboarding path.
+1. [Commands](commands.md) — command overview by pipeline stage.
 1. [Architecture](architecture.md) — modules, data flow, config files.
 1. [Project context](project-context.md) — project layout and `.biotope/` files.
-1. [Commands](api-docs/init.md) — per-command reference, generated from docstrings.
+1. [API docs](api-docs/init.md) — per-command reference, generated from docstrings.
 
 ## Repo
 

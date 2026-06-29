@@ -49,7 +49,7 @@ pipx install biotope      # global install
 uv add biotope              # inside a uv-managed project
 ```
 
-Typical flow: `init` → `add` (or `get`) → `map` → `build` → `view`. Full command reference lives in the [docs](https://biocypher.github.io/biotope/).
+Typical flow: `init` → `add` (or `get`) → `map` → `build` → `view`. Command overview: [docs/commands](https://biocypher.github.io/biotope/commands/).
 
 ## For developers
 
