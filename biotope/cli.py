@@ -26,15 +26,16 @@ from biotope.commands.rm import rm as rm_cmd
 from biotope.commands.search import search as search_cmd
 from biotope.commands.status import status as status_cmd
 from biotope.commands.view import view as view_cmd
+from biotope._version import __version__
 
 
 @click.group()
-@click.version_option(version="0.8.0")
+@click.version_option(version=__version__, prog_name="biotope")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """biotope: Croissant-driven knowledge-graph projects for the BioCypher ecosystem."""
     ctx.ensure_object(dict)
-    ctx.obj = {"version": "0.8.0"}
+    ctx.obj = {"version": __version__}
 
 
 # Project lifecycle

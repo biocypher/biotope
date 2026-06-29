@@ -1,0 +1,8 @@
+"""Installed package version (from pyproject.toml metadata at build time)."""
+
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("biotope")
+except PackageNotFoundError:
+    __version__ = "0.0.0+dev"

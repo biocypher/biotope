@@ -1,7 +1,6 @@
 """Provide top level symbols."""
 
+from biotope._version import __version__
 from biotope.cli import cli
 
-__all__ = ["cli"]
-
-__version__ = "0.8.0"
+__all__ = ["__version__", "cli"]

@@ -12,7 +12,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "biotope"
-version = "0.8.0"
+version = "0.7.1"
 description = "CLI integration for BioCypher ecosystem packages"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
@@ -45,7 +45,6 @@ dependencies = [
 dev = [
     "pre-commit>=4.1.0",
     "pytest>=8.3.5,<9.0.0",
-    "bump2version>=1.0.1",
     "mkdocs-material>=9.6.20",
     "mike>=2.1.3",
     "mkdocstrings-python>=1.16.10",
