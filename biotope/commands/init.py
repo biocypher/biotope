@@ -20,14 +20,13 @@ import os
 import shutil
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _installed_version
 from pathlib import Path
 
 import click
 import yaml
 from rich.console import Console
 
+from biotope._version import __version__
 from biotope.project_model import Project, resolve_project_path
 
 
@@ -43,11 +42,8 @@ TEMPLATES = Path(__file__).parent.parent / "templates"
 
 
 def _installed_biotope_version() -> str:
-    """Best-effort: the running biotope's version, or a sane floor on miss."""
-    try:
-        return _installed_version("biotope")
-    except PackageNotFoundError:
-        return "0.8.0"
+    """Version of the running biotope install (from package metadata)."""
+    return __version__
 
 
 def _emit_pyproject(name: str, purpose: str) -> str:
