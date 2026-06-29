@@ -30,13 +30,23 @@ def test_init_default_layout(tmp_path: Path) -> None:
     assert (root / "mappings").is_dir()
     assert (root / ".biotope" / "config.yaml").is_file()
     assert (root / ".biotope" / "project.yaml").is_file()
-    assert (root / "AGENTS.md").is_file()
+    # The agent contract lives in the biotope plugin skills, not a
+    # per-project root AGENTS.md, so init must NOT emit one by default.
+    assert not (root / "AGENTS.md").exists()
     assert (root / ".gitignore").is_file()
     assert (root / "pyproject.toml").is_file()
 
 
+def test_init_agents_md_flag_opts_in(tmp_path: Path) -> None:
+    """--agents-md restores the legacy root contract for backward compat."""
+    runner = CliRunner()
+    result = _invoke(runner, "withagents", "--dir", str(tmp_path), "--no-git", "--agents-md")
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "withagents" / "AGENTS.md").is_file()
+
+
 def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None:
-    """The generated pyproject must pin biotope (floor) and biocypher>=0.14."""
+    """The generated project pyproject must pin biotope and biocypher."""
     runner = CliRunner()
     result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
     assert result.exit_code == 0, result.output
@@ -44,7 +54,7 @@ def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None
     pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
     assert 'name = "myproj"' in pyproject
     assert "biotope>=" in pyproject
-    assert "biocypher>=0.14.0" in pyproject
+    assert "biocypher>=0.15.0" in pyproject
     assert "requires-python" in pyproject
 
 

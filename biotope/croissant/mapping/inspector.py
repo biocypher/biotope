@@ -231,9 +231,16 @@ def render_inspection_text(inspection: DatasetInspection) -> str:
             )
         lines.append("  fields:")
         for f in rs.fields:
-            sub = f" sub_fields=[{', '.join(f.sub_fields)}]" if f.sub_fields else ""
             descr = f" — {f.description}" if f.description else ""
-            lines.append(f"    - {f.name} [{f.kind}]{sub}{descr}")
+            if f.sub_fields:
+                sub = f" sub_fields=[{', '.join(f.sub_fields)}]"
+                hint = (
+                    f' (struct: when exploded, use field: "$item.<subfield>", '
+                    f'e.g. field: "$item.{f.sub_fields[0]}"; "$<axis>.<subfield>" for multi-axis scans)'
+                )
+                lines.append(f"    - {f.name} [{f.kind}]{sub}{descr}{hint}")
+            else:
+                lines.append(f"    - {f.name} [{f.kind}]{descr}")
         lines.extend(_render_samples_kv(rs))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

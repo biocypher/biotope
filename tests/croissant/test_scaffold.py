@@ -48,6 +48,38 @@ def test_materialize_minimal(tmp_path: Path, minimal_croissant: Path) -> None:
     assert (project_dir / "create_knowledge_graph.py").exists()
     assert (project_dir / "generated" / "minimal" / "adapter.py").is_file()
     assert (project_dir / "generated" / "minimal" / "__init__.py").is_file()
+    assert result["dbms"] == "csv"
+    assert bc_yaml["biocypher"]["dbms"] == "csv"
+
+
+def test_materialize_target_neo4j(tmp_path: Path, minimal_croissant: Path) -> None:
+    mapping_path = tmp_path / "minimal.mapping.yaml"
+    _write_minimal_mapping(mapping_path, minimal_croissant)
+
+    project_dir = tmp_path / "project"
+    result = materialize(project_dir, [mapping_path], target="neo4j")
+
+    assert result["dbms"] == "neo4j"
+    biocypher_config = project_dir / "config" / "biocypher_config.yaml"
+    bc_yaml = yaml.safe_load(biocypher_config.read_text())
+    assert bc_yaml["biocypher"]["dbms"] == "neo4j"
+
+
+def test_materialize_preserves_existing_config_target(tmp_path: Path, minimal_croissant: Path) -> None:
+    """The 'only write if missing' guard means a user-authored dbms wins, and
+    is faithfully reported back even though `target` asked for something else."""
+    mapping_path = tmp_path / "minimal.mapping.yaml"
+    _write_minimal_mapping(mapping_path, minimal_croissant)
+
+    project_dir = tmp_path / "project"
+    (project_dir / "config").mkdir(parents=True)
+    (project_dir / "config" / "biocypher_config.yaml").write_text(
+        "biocypher:\n  dbms: neo4j\n  log_to_disk: true\n  output_directory: biocypher-out\n  head_ontology: null\n"
+    )
+
+    result = materialize(project_dir, [mapping_path], target="csv")
+
+    assert result["dbms"] == "neo4j"
 
     schema_text = (project_dir / "config" / "schema_config.yaml").read_text()
     schema_yaml = yaml.safe_load("\n".join(line for line in schema_text.splitlines() if not line.startswith("#")))
@@ -59,6 +91,12 @@ def test_materialize_minimal(tmp_path: Path, minimal_croissant: Path) -> None:
     assert "preferred_id" not in gene
     assert result["project_dir"] == str(project_dir)
     assert "minimal" in result["generated_packages"]
+
+    build_script = (project_dir / "create_knowledge_graph.py").read_text()
+    assert "purge_biocypher_output" in build_script
+    assert "write_schema_info" in build_script
+    assert "write_build_metrics" in build_script
+    assert "compute_orphan_metrics" in build_script
 
 
 def test_strict_build_rejects_unresolved(tmp_path: Path, minimal_croissant: Path) -> None:

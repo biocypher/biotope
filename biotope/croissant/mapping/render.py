@@ -97,6 +97,8 @@ def _relation_payload(relation: RelationMapping) -> dict[str, Any]:
         out["properties"] = {k: _selector_payload(v) for k, v in relation.properties.items()}
     if relation.where is not None:
         out["where"] = relation.where
+    if relation.deferred:
+        out["deferred"] = relation.deferred
     return out
 
 
@@ -107,6 +109,7 @@ def _selector_payload(sel: Selector) -> Any:
         {
             "field": sel.field,
             "use": sel.use,
+            "value": sel.value,
             "transform": sel.transform if sel.transform != "passthrough" else None,
             "args": sel.args or None,
         }

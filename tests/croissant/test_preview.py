@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from biotope.croissant.mapping import Mapping, aggregate_previews, preview_mapping
-from biotope.croissant.spec import load_from_path
+from biotope.croissant.spec import CroissantDatasetModel, load_from_path
 
 
 def _load_dataset(croissant: Path) -> object:
@@ -52,6 +52,54 @@ def test_validation_flags_unknown_field(minimal_croissant: Path) -> None:
     )
     result = preview_mapping(mapping, _load_dataset(minimal_croissant))
     assert any("ghost_field" in f.message for f in result.findings)
+
+
+def test_struct_subfield_property_resolves_real_kind() -> None:
+    """`$item.<subfield>` must reflect the struct sub-field's declared Croissant
+    kind, not the v1 blanket `str` previously returned for every `$item*` field."""
+    dataset = CroissantDatasetModel.model_validate(
+        {
+            "@type": "sc:Dataset",
+            "name": "struct-test",
+            "distribution": [{"@type": "cr:FileObject", "@id": "genes", "contentUrl": "genes.csv"}],
+            "recordSet": [
+                {
+                    "@id": "genes",
+                    "name": "genes",
+                    "field": [
+                        {"name": "ensembl_id", "dataType": "sc:Text"},
+                        {
+                            "name": "diseases",
+                            "isArray": True,
+                            "subField": [
+                                {"name": "id", "dataType": "sc:Text"},
+                                {"name": "score", "dataType": "sc:Float"},
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    mapping = Mapping.model_validate(
+        {
+            "croissant": "struct-test.json",
+            "entities": {
+                "gene": {
+                    "record_set": "genes",
+                    "scan": {"explode": "diseases"},
+                    "id": "ensembl_id",
+                    "properties": {"disease_id": "$item.id", "disease_score": "$item.score", "raw": "$item"},
+                }
+            },
+        }
+    )
+    result = preview_mapping(mapping, dataset)
+    assert len(result.entities) == 1
+    props = result.entities[0].properties
+    assert props["disease_id"] == "str"
+    assert props["disease_score"] == "float"
+    assert props["raw"] == "str"  # whole-element access, not a single typed leaf
 
 
 def test_resolved_entity_projected_with_namespace(minimal_croissant: Path) -> None:

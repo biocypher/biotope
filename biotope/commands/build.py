@@ -24,6 +24,7 @@ specific project, edit the generated ``build/config/biocypher_config.yaml``
 from __future__ import annotations
 
 import json
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import click
@@ -34,6 +35,27 @@ from biotope.project_model import Project, find_project
 
 
 console = Console()
+
+# `head_ontology: null` (biotope's headless-by-default config) requires
+# BioCypher's NullOntology shim. Older versions silently ignore the key and
+# fetch Biolink instead, which fails offline with a confusing network error.
+MIN_BIOCYPHER_VERSION = (0, 15, 0)
+
+
+def _check_biocypher_version() -> None:
+    try:
+        installed = version("biocypher")
+    except PackageNotFoundError:
+        return  # not installed in this env; nothing to assert against here
+    parts = tuple(int(p) for p in installed.split(".")[:3] if p.isdigit())
+    if parts < MIN_BIOCYPHER_VERSION:
+        floor = ".".join(str(p) for p in MIN_BIOCYPHER_VERSION)
+        click.echo(
+            f"❌ Installed biocypher {installed} is older than {floor}, required for "
+            "biotope's headless `head_ontology: null` config (older versions silently "
+            "fetch Biolink instead, which fails offline). Upgrade biocypher first."
+        )
+        raise click.Abort
 
 
 @click.command()
@@ -58,8 +80,15 @@ console = Console()
     default=None,
     help="Where to materialise the BioCypher project. Default: <project_root>/build.",
 )
-def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path | None) -> None:
+@click.option(
+    "--target",
+    type=click.Choice(["csv", "neo4j"]),
+    default="csv",
+    help="Output backend (`dbms:`) for a freshly-generated biocypher_config.yaml.",
+)
+def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path | None, target: str) -> None:
     """Build a deterministic BioCypher project from this biotope's mappings."""
+    _check_biocypher_version()
     project_path = find_project()
     if project_path is None:
         click.echo("❌ No project.yaml found. Run `biotope init <name>` first.")
@@ -88,12 +117,14 @@ def build(mappings_dir: Path | None, alignment_path: Path | None, out_dir: Path 
             alignment_path,
             required_entities=list(project.required_entities),
             required_relations=list(project.required_relations),
+            target=target,
         )
     except ValueError as exc:
         click.echo(f"❌ Build aborted: {exc}")
         raise click.Abort from exc
 
     console.print(f"✅ Built BioCypher project at [cyan]{out_dir}[/cyan]")
+    console.print(f"   target (dbms): [bold]{result.get('dbms', target)}[/bold]")
     click.echo(json.dumps(result, indent=2, default=str))
 
 

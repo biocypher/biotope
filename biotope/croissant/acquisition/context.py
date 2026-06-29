@@ -182,10 +182,14 @@ class AcquisitionContext:
         path_str = str(path)
         if suffix in {".parquet", ".pq"}:
             return self._conn.read_parquet(path_str, hive_partitioning=True)
-        if suffix in {".csv"}:
-            return self._conn.read_csv(path_str, header=True)
-        if suffix in {".tsv"}:
-            return self._conn.read_csv(path_str, header=True, sep="\t")
+        if suffix in {".csv", ".tsv"}:
+            sep = "\t" if suffix == ".tsv" else ","
+            # all_varchar=True disables DuckDB column type auto-detection, which
+            # samples only the first N rows and mis-types columns whose string
+            # values appear later (e.g. cell_type read as BIGINT then hitting
+            # "B_cell"). The graph build stringifies every value anyway and no
+            # mapping uses numeric `where` filters, so VARCHAR-everywhere is safe.
+            return self._conn.read_csv(path_str, header=True, sep=sep, all_varchar=True)
         if suffix in {".json", ".jsonl", ".ndjson"}:
             return self._conn.read_json(path_str)
         # Fallback: assume parquet directory.

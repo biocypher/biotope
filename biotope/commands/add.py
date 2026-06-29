@@ -35,6 +35,7 @@ from biotope.utils import (
 @click.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option("--force", "-f", is_flag=True, help="Force add even if file already tracked")
+@click.option("--rebake", is_flag=True, help="Refresh an already-tracked directory's manifest from disk")
 @click.option("--name", help="Dataset name override")
 @click.option("--description", help="Dataset description override")
 @click.option("--license", "license_value", help="Dataset license")
@@ -65,6 +66,7 @@ from biotope.utils import (
 def add(
     paths: tuple[Path, ...],
     force: bool,
+    rebake: bool,
     name: str | None,
     description: str | None,
     license_value: str | None,
@@ -143,6 +145,16 @@ def add(
                 skipped_entries.append(path)
             continue
 
+        target = resolve_target(path, biotope_root)
+        already_tracked = target.metadata_path.exists()
+        if already_tracked and not force and not rebake:
+            click.echo(
+                f"⚠️  {target.metadata_path.relative_to(biotope_root)} already exists "
+                "(use --rebake to refresh it from the current files, or --force to overwrite)"
+            )
+            skipped_entries.append(path)
+            continue
+
         baked = _bake_directory(path, biotope_root, overrides)
         if baked is None:
             skipped_entries.append(path)
@@ -152,9 +164,9 @@ def add(
         added_entries.append(path)
         baked_dirs.append((path.resolve(), metadata_dict))
         n_record_sets = len(metadata_dict.get("recordSet", []))
-        target = resolve_target(path, biotope_root)
+        verb = "Re-baked" if already_tracked else "Generated"
         click.echo(
-            f"  ✨ Generated {target.metadata_path.relative_to(biotope_root)} "
+            f"  ✨ {verb} {target.metadata_path.relative_to(biotope_root)} "
             f"({n_source_files} source file(s), {n_record_sets} record set(s))"
         )
 

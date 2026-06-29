@@ -1,9 +1,14 @@
 """``biotope init`` — scaffold a new biotope project.
 
-Default behavior is **pure scaffold**: create the directory layout, drop an
-``AGENTS.md`` for the agent surface, write an empty ``project.yaml``, run
-``git init``. No content questions. The agent (or the user via
-``biotope map``) fills in the competence questions afterwards.
+Default behavior is **pure scaffold**: create the directory layout, write an
+empty ``project.yaml``, run ``git init``. No content questions. The agent (or
+the user via ``biotope map``) fills in the competence questions afterwards.
+
+The agent-facing contract is the **biotope** plugin skills (``skills/biotope-croissant``,
+``skills/biocypher``, ``skills/biochatter``), installed via the virtual-human
+marketplace. Load only the skill that matches the current pipeline stage.
+Pass ``--agents-md`` to also drop a root ``AGENTS.md`` template, for agents
+that don't support skills.
 
 Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
 ``project.yaml`` so the user can fill ``purpose:`` before exiting init.
@@ -36,18 +41,13 @@ console = Console()
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
 
-# Biocypher floor mirrors biotope's own runtime pin — `head_ontology: null`
-# headless support landed in 0.14.0 (biocypher PR #523) and the generated
-# `build/create_knowledge_graph.py` depends on it.
-BIOCYPHER_REQ = "biocypher>=0.14.0,<1"
-
 
 def _installed_biotope_version() -> str:
     """Best-effort: the running biotope's version, or a sane floor on miss."""
     try:
         return _installed_version("biotope")
     except PackageNotFoundError:
-        return "0.5.0"
+        return "0.8.0"
 
 
 def _emit_pyproject(name: str, purpose: str) -> str:
@@ -73,7 +73,7 @@ def _emit_pyproject(name: str, purpose: str) -> str:
         f'requires-python = ">=3.10,<3.13"\n'
         f"dependencies = [\n"
         f'    "biotope>={biotope_floor}",\n'
-        f'    "{BIOCYPHER_REQ}",\n'
+        f'    "biocypher>=0.15.0",\n'
         f"]\n"
         f"\n"
         f"[build-system]\n"
@@ -152,6 +152,12 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
     default=False,
     help="Open $EDITOR on project.yaml so you can fill in purpose before exiting init.",
 )
+@click.option(
+    "--agents-md",
+    is_flag=True,
+    default=False,
+    help="Also drop a root AGENTS.md, for agents that don't support skills.",
+)
 def init(
     name: str | None,
     dir: Path,  # noqa: A002
@@ -160,12 +166,13 @@ def init(
     no_git: bool,
     visible: bool,
     interactive: bool,
+    agents_md: bool,
 ) -> None:
     """Scaffold a new biotope project.
 
     Default invocation: ``biotope init my-project``. Creates ``my-project/`` with
-    ``.biotope/``, ``data/``, ``mappings/``, an ``AGENTS.md`` for agents to read,
-    and an empty ``project.yaml``. Runs ``git init`` unless ``--no-git`` is set.
+    ``.biotope/``, ``data/``, ``mappings/``, and an empty ``project.yaml``. Runs
+    ``git init`` unless ``--no-git`` is set.
     """
     if name is None:
         name = click.prompt("Project name", type=str)
@@ -177,8 +184,9 @@ def init(
             click.echo(PURPOSE_PROMPT)
             purpose = click.prompt("purpose", default="", show_default=False)
 
+    in_place = name == "."
     project_dir = (dir / name).resolve() if name != "." else dir.resolve()
-    if name == ".":
+    if in_place:
         name = project_dir.name
 
     if (project_dir / ".biotope").exists():
@@ -199,9 +207,10 @@ def init(
     project_yaml_path.parent.mkdir(parents=True, exist_ok=True)
     project.dump(project_yaml_path)
 
-    agents_md_dest = project_dir / "AGENTS.md"
-    agents_md_src = TEMPLATES / "AGENTS.md"
-    shutil.copy(agents_md_src, agents_md_dest)
+    if agents_md:
+        agents_md_dest = project_dir / "AGENTS.md"
+        agents_md_src = TEMPLATES / "AGENTS.md"
+        shutil.copy(agents_md_src, agents_md_dest)
 
     gitignore = project_dir / ".gitignore"
     if not gitignore.exists():
@@ -224,7 +233,9 @@ def init(
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             click.echo(f"⚠️  git init failed: {exc}")
         else:
-            scaffold_paths = [".gitignore", "AGENTS.md", ".biotope/"]
+            scaffold_paths = [".gitignore", ".biotope/"]
+            if agents_md:
+                scaffold_paths.append("AGENTS.md")
             if pyproject_was_written:
                 scaffold_paths.append("pyproject.toml")
             if visible:
@@ -236,7 +247,7 @@ def init(
             else:
                 # Commit the scaffold so `biotope status` starts clean — otherwise
                 # init artefacts sit in the index and confuse new users into thinking
-                # they themselves staged config.yaml, AGENTS.md, etc. Falls back to
+                # they themselves staged config.yaml, pyproject.toml, etc. Falls back to
                 # leaving the scaffold staged if git identity isn't configured.
                 try:
                     subprocess.run(
@@ -267,9 +278,9 @@ def init(
     if purpose:
         console.print(f"   purpose: [dim]{purpose}[/dim]")
     if pyproject_was_written:
+        cd_clause = "" if in_place else f"[bold]cd {project_dir.name}[/bold] and "
         console.print(
-            "   Next: [bold]cd "
-            f"{project_dir.name}[/bold] and install deps:\n"
+            f"   Next: {cd_clause}install deps:\n"
             "         [bold]uv sync[/bold]   (or: pip install -e .)\n"
             "         then [bold]biotope add <data>[/bold] (or [bold]biotope get <url>[/bold])"
             " to bring data in."

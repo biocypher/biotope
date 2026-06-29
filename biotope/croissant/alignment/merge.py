@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from biotope.croissant.alignment.model import Alignment, EquivalenceKind
+from biotope.croissant.biocypher_labels import escape_node_id
 from biotope.croissant.mapping.compile import CompiledAdapter, EdgeTuple, NodeTuple
 
 
@@ -35,12 +36,35 @@ class MergedAdapter:
                     join_field, canonical_prefix = rewrites[key]
                     join_value = props.get(join_field)
                     if join_value is not None:
-                        node_id = f"{canonical_prefix}:{join_value}"
+                        node_id = escape_node_id(f"{canonical_prefix}:{join_value}")
                 yield (node_id, label, props)
 
     def get_edges(self) -> Iterator[EdgeTuple]:
+        id_map = self._node_id_map()
         for adapter in self.adapters_by_stem.values():
-            yield from adapter.get_edges()
+            for rel_id, src, tgt, label, props in adapter.get_edges():
+                yield (
+                    rel_id,
+                    id_map.get(src, src),
+                    id_map.get(tgt, tgt),
+                    label,
+                    props,
+                )
+
+    def _node_id_map(self) -> dict[str, str]:
+        """Map pre-alignment node ids to rewritten ids used in ``get_nodes()``."""
+        rewrites = self._build_node_id_rewrites()
+        mapping: dict[str, str] = {}
+        for stem, adapter in self.adapters_by_stem.items():
+            for node_id, label, props in adapter.get_nodes():
+                key = (stem, label)
+                if key not in rewrites:
+                    continue
+                join_field, prefix = rewrites[key]
+                join_value = props.get(join_field)
+                if join_value is not None:
+                    mapping[node_id] = escape_node_id(f"{prefix}:{join_value}")
+        return mapping
 
     def _build_node_id_rewrites(self) -> dict[tuple[str, str], tuple[str, str]]:
         """Build ``{(mapping_stem, entity_key): (join_field, prefix)}``.

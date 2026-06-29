@@ -180,8 +180,8 @@ def _warn_destructive_clears(
 
     The flag still works — the friction is purely informational so that an
     agent (or human) running the command sees that they are about to erase
-    the project's declared intent. AGENTS.md hard rule 1 forbids doing this
-    without the user's explicit instruction.
+    the project's declared intent. The schema-is-a-contract rule forbids doing
+    this without the user's explicit instruction.
     """
     sections: list[str] = []
     if clear_entities and project.required_entities:
@@ -236,6 +236,7 @@ def inspect(croissant: str, as_json: bool, preview_rows: int) -> None:
     """Inspect a Croissant dataset deterministically."""
     dataset = _load_croissant(croissant)
     datasets_location = infer_datasets_location(croissant)
+    _warn_if_manifest_drifted(croissant, datasets_location)
     inspection = inspect_dataset(
         dataset,
         datasets_location=datasets_location,
@@ -269,6 +270,7 @@ def scaffold(croissant: str, out: Path | None, to_stdout: bool, preview_rows: in
         raise click.UsageError("Choose either --out or --stdout, not both.")
 
     _load_croissant(croissant)  # validate up front with friendly errors
+    _warn_if_manifest_drifted(croissant, infer_datasets_location(croissant))
 
     target = out
     if target is None and not to_stdout:
@@ -329,6 +331,7 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
         mapping = load_mapping(path)
         dataset = _load_croissant(mapping.croissant)
         datasets_location = infer_datasets_location(mapping.croissant)
+        _warn_if_manifest_drifted(mapping.croissant, datasets_location)
         result = preview_mapping(
             mapping,
             dataset,
@@ -355,8 +358,69 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
 
 
 # ---------------------------------------------------------------------------
+# `biotope map defer-relation` / `undefer-relation`
+# ---------------------------------------------------------------------------
+
+
+@map_group.command(name="defer-relation")
+@click.argument("mapping_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("relation_name", type=str)
+def defer_relation(mapping_path: Path, relation_name: str) -> None:
+    """Mark a declared relation as unsupported by the available data.
+
+    A deferred relation is skipped by ``biotope build`` (counted,
+    not silently dropped). Use ``undefer-relation`` to reverse.
+    """
+    _set_relation_deferred(mapping_path, relation_name, deferred=True)
+    console.print(f"✅ Marked relations.{relation_name} as deferred in [cyan]{mapping_path}[/cyan]")
+
+
+@map_group.command(name="undefer-relation")
+@click.argument("mapping_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("relation_name", type=str)
+def undefer_relation(mapping_path: Path, relation_name: str) -> None:
+    """Reverse a previous ``defer-relation``."""
+    _set_relation_deferred(mapping_path, relation_name, deferred=False)
+    console.print(f"✅ Cleared deferred on relations.{relation_name} in [cyan]{mapping_path}[/cyan]")
+
+
+def _set_relation_deferred(mapping_path: Path, relation_name: str, *, deferred: bool) -> None:
+    from biotope.croissant.mapping import dump_mapping
+
+    mapping = load_mapping(mapping_path)
+    if relation_name not in mapping.relations:
+        known = ", ".join(sorted(mapping.relations)) or "(none declared)"
+        raise click.UsageError(f"Unknown relation {relation_name!r}. Known relations: {known}")
+    relation = mapping.relations[relation_name].model_copy(update={"deferred": deferred})
+    updated_relations = {**mapping.relations, relation_name: relation}
+    updated = mapping.model_copy(update={"relations": updated_relations})
+    dump_mapping(updated, mapping_path)
+
+
+# ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+
+def _warn_if_manifest_drifted(croissant_path: str, datasets_location: Path | None) -> None:
+    """Print a stderr warning when data under ``datasets_location`` looks newer
+    than the Croissant manifest — a mapping can't see columns added since the
+    last bake. Printed to stderr so it never pollutes ``--json`` output."""
+    if datasets_location is None:
+        return
+    from biotope.croissant.acquisition import detect_manifest_drift
+
+    drifted = detect_manifest_drift(croissant_path, datasets_location)
+    if not drifted:
+        return
+    sample = ", ".join(p.name for p in drifted[:3])
+    more = f" (+{len(drifted) - 3} more)" if len(drifted) > 3 else ""
+    click.echo(
+        f"⚠️  {len(drifted)} file(s) under {datasets_location} are newer than "
+        f"this Croissant manifest: {sample}{more}. If columns changed, "
+        "re-run `biotope add --rebake <dir>` before mapping.",
+        err=True,
+    )
 
 
 def _load_croissant(path: str) -> CroissantDatasetModel:

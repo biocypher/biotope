@@ -54,6 +54,9 @@ class ResolutionContext:
 
 def resolve_selector(selector: Selector, ctx: ResolutionContext) -> Any:
     """Resolve a :class:`Selector` against ``ctx`` and return the resulting value."""
+    if selector.value is not None:
+        return selector.value
+
     if selector.use is not None:
         if ctx.ids is None or selector.use not in ctx.ids:
             msg = f"Named id {selector.use!r} not defined in mapping ids"

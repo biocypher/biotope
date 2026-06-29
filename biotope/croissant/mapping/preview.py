@@ -24,7 +24,12 @@ from biotope.croissant.mapping.model import (
     Selector,
     to_sentence_case,
 )
-from biotope.croissant.spec import CroissantDatasetModel, FieldKind
+from biotope.croissant.spec import (
+    FIELD_KIND_PYTHON_TYPES,
+    LITERAL_VALUE_PYTHON_TYPES,
+    CroissantDatasetModel,
+    FieldKind,
+)
 
 
 @dataclass
@@ -316,7 +321,7 @@ def preview_mapping(
     preview = MappingPreview()
     _classify_slots(mapping, preview)
     _validate_against_dataset(mapping, inspection, preview)
-    _project_schema(mapping, preview)
+    _project_schema(mapping, preview, dataset)
     if datasets_location is not None and sample_rows > 0:
         _emit_sample_tuples(mapping, dataset, datasets_location, sample_rows, preview)
     return preview
@@ -502,14 +507,15 @@ def _validate_selector(
         )
 
 
-def _project_schema(mapping: Mapping, preview: MappingPreview) -> None:
+def _project_schema(mapping: Mapping, preview: MappingPreview, dataset: CroissantDatasetModel) -> None:
     for name, entity in mapping.entities.items():
         if not entity.is_resolved():
             continue
         schema_term = entity.schema_term or to_sentence_case(name)
         namespace = entity.namespace or _derive_namespace(entity.id, mapping.ids) or "id"
         properties = {
-            prop_name: _property_type(prop, entity.record_set, mapping) for prop_name, prop in entity.properties.items()
+            prop_name: _property_type(prop, entity.record_set, entity.scan, dataset)
+            for prop_name, prop in entity.properties.items()
         }
         preview.entities.append(
             EntityProjection(
@@ -531,7 +537,7 @@ def _project_schema(mapping: Mapping, preview: MappingPreview) -> None:
         source_term = entity_terms.get(source_entity_key, source_entity_key)
         target_term = entity_terms.get(target_entity_key, target_entity_key)
         properties = {
-            prop_name: _property_type(prop, relation.record_set, mapping)
+            prop_name: _property_type(prop, relation.record_set, relation.scan, dataset)
             for prop_name, prop in relation.properties.items()
         }
         preview.relations.append(
@@ -560,14 +566,55 @@ def _derive_namespace(selector: Selector | None, ids: dict[str, Selector]) -> st
     return None
 
 
-def _property_type(prop: Selector, record_set: str | None, mapping: Mapping) -> str:
+def _property_type(
+    prop: Selector,
+    record_set: str | None,
+    scan: Any,
+    dataset: CroissantDatasetModel,
+) -> str:
+    if prop.value is not None:
+        return LITERAL_VALUE_PYTHON_TYPES.get(type(prop.value), "str")
     if prop.use is not None:
         return "str"
     if record_set is None or prop.field is None:
         return "str"
-    if prop.field.startswith("$item"):
-        return "str"  # struct fields not supported in v1
+    if prop.field.startswith("$"):
+        return _struct_subfield_type(prop.field, record_set, scan, dataset)
     return "str"  # actual Croissant kind mapping is handled in materialize
+
+
+def _struct_subfield_type(
+    field: str,
+    record_set: str,
+    scan: Any,
+    dataset: CroissantDatasetModel,
+) -> str:
+    """Resolve the real Croissant kind for a ``$<axis>.<subfield>`` selector.
+
+    ``$item``/``$<axis>`` (no dot) refers to the whole exploded element, not a
+    single typed leaf — that stays ``str``. Only the dotted form names one
+    struct sub-field, which has its own declared kind.
+    """
+    axis, _, subpath = field[1:].partition(".")
+    if not subpath or not isinstance(scan, ExplodeScan):
+        return "str"
+    array_field_name = scan.axes.get(axis)
+    if array_field_name is None:
+        return "str"
+    rs = dataset.record_set_by_name(record_set)
+    base_field = rs.field_by_name(array_field_name) if rs is not None else None
+    if base_field is None:
+        return "str"
+    sub_field = next((sf for sf in base_field.sub_field if sf.name == subpath), None)
+    if sub_field is None:
+        return "str"
+    try:
+        kind = sub_field.kind()
+    except ValueError:
+        return "str"
+    if kind == FieldKind.STRUCT:
+        return "str"
+    return FIELD_KIND_PYTHON_TYPES.get(kind, "str")
 
 
 def _emit_sample_tuples(

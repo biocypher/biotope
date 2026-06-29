@@ -6,7 +6,6 @@ from biotope.commands.add import add as add_cmd
 from biotope.commands.annotate import annotate as annotate_cmd
 from biotope.commands.benchmark import benchmark as benchmark_cmd
 from biotope.commands.build import build as build_cmd
-from biotope.commands.chat import chat as chat_cmd
 from biotope.commands.check_data import check_data as check_data_cmd
 from biotope.commands.commit import commit as commit_cmd
 from biotope.commands.config import config as config_cmd
@@ -30,12 +29,12 @@ from biotope.commands.view import view as view_cmd
 
 
 @click.group()
-@click.version_option(version="0.5.0")
+@click.version_option(version="0.8.0")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """biotope: Croissant-driven knowledge-graph projects for the BioCypher ecosystem."""
     ctx.ensure_object(dict)
-    ctx.obj = {"version": "0.5.0"}
+    ctx.obj = {"version": "0.8.0"}
 
 
 # Project lifecycle
@@ -58,7 +57,6 @@ cli.add_command(mark_cmd, "mark")
 cli.add_command(read_cmd, "read")
 cli.add_command(search_cmd, "search")
 cli.add_command(get_cmd, "get")
-cli.add_command(chat_cmd, "chat")
 cli.add_command(annotate_cmd, "annotate")
 
 # Git-inspired version control commands

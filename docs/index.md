@@ -17,7 +17,7 @@ APIs, CLI flags, and config-file layouts will change. End-user docs come after t
 
 1. Enter directory (`cd my-kg`).
 
-1. Start your coding agent. The `AGENTS.md` file in the directory will onboard it.
+1. Start your coding agent. The biotope plugin skills (biotope-croissant → biocypher → biochatter) will onboard it.
    For more information on the process, read on.
 
 ## Quick start: without coding agent
@@ -66,7 +66,7 @@ All semantic decisions (which record set, which fields, which transforms) are ma
 
 ### Project lifecycle
 
-- `biotope init` — scaffold a project (`.biotope/`, `AGENTS.md`, `project.yaml`, `git init`).
+- `biotope init` — scaffold a project (`.biotope/`, `project.yaml`, `git init`).
 
 ### Data acquisition + tracking
 
@@ -107,7 +107,6 @@ All semantic decisions (which record set, which fields, which transforms) are ma
 - `biotope discover` — rank registered adapters and local Croissant files against `required_entities`. Exists as a CLI entry but the registry surface is not yet wired into the recommended workflow; the tutorial does not use it.
 - `biotope benchmark` — quality/coverage metrics. v1 stub: emits a skeleton JSON object so downstream tooling can structure-test against it. Real metric implementations land iteratively.
 - `biotope read` — NLP ingestion + health-check entry. Promise.
-- `biotope chat` — provider-agnostic conversational interface (biochatter backend). Promise.
 - `biotope search` — registry search across MCP / biotools. Auxiliary; not used in the standard build path.
 
 ### Deprecated

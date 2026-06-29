@@ -96,6 +96,19 @@ def test_build_rejects_unresolved_mapping(tmp_path: Path, monkeypatch) -> None:
     assert "gene" in r.output
 
 
+def test_build_aborts_on_too_old_biocypher(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+    r = runner.invoke(init, ["bcc-old", "--dir", str(tmp_path), "--no-git", "--no-prompt"])
+    assert r.exit_code == 0, r.output
+    monkeypatch.chdir(tmp_path / "bcc-old")
+    monkeypatch.setattr("biotope.commands.build.version", lambda _name: "0.13.0")
+
+    r = runner.invoke(build, [])
+    assert r.exit_code != 0
+    assert "0.13.0" in r.output
+    assert "0.15.0" in r.output
+
+
 def test_propose_mapping_deprecated_alias_still_works(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     r = runner.invoke(init, ["bcc-e2e", "--dir", str(tmp_path), "--no-git", "--no-prompt"])

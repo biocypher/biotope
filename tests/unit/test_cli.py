@@ -41,7 +41,7 @@ def test_cli_commands():
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
     # Check that all our commands are listed in help
-    for command in ["init", "build", "read", "chat", "view"]:
+    for command in ["init", "build", "read", "view"]:
         assert command in result.output
 
 

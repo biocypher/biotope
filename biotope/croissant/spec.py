@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.request import urlopen
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -53,6 +53,20 @@ class FieldKind(str, Enum):
     URL = "url"
     ARRAY = "array"
     STRUCT = "struct"
+
+
+FIELD_KIND_PYTHON_TYPES: dict[FieldKind, str] = {
+    FieldKind.STRING: "str",
+    FieldKind.URL: "str",
+    FieldKind.DATE: "str",
+    FieldKind.BOOLEAN: "bool",
+    FieldKind.INTEGER: "int",
+    FieldKind.FLOAT: "float",
+    FieldKind.ARRAY: "str[]",
+}
+
+LITERAL_VALUE_PYTHON_TYPES: dict[type, str] = {bool: "bool", int: "int", float: "float", str: "str"}
+"""Python type → schema type name, for typing a `Selector.value` literal."""
 
 
 SCALAR_KIND_MAP: dict[str, FieldKind] = {
@@ -123,6 +137,14 @@ class CroissantFieldModel(ConfiguredBaseModel):
     sub_field: list[CroissantFieldModel] = Field(default_factory=list)
     source: CroissantFieldSource | None = None
 
+    @field_validator("sub_field", mode="before")
+    @classmethod
+    def _coerce_sub_field(cls, value: object) -> object:
+        """Croissant baker sometimes emits a lone ``subField`` object instead of a list."""
+        if isinstance(value, dict):
+            return [value]
+        return value
+
     def kind(self) -> FieldKind:
         """Return the normalised :class:`FieldKind` for this field."""
         if self.repeated:
@@ -145,6 +167,14 @@ class CroissantRecordSetModel(ConfiguredBaseModel):
     name: str
     description: str | None = None
     field: list[CroissantFieldModel] = Field(default_factory=list)
+
+    @field_validator("field", mode="before")
+    @classmethod
+    def _coerce_field(cls, value: object) -> object:
+        """Croissant baker sometimes emits a lone ``field`` object instead of a list."""
+        if isinstance(value, dict):
+            return [value]
+        return value
 
     def field_by_name(self, name: str) -> CroissantFieldModel | None:
         """Return the field with the given name, or ``None`` if absent."""
