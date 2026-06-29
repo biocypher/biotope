@@ -19,6 +19,8 @@ Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope]
 | **Cursor** | [Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace) → import `biocypher/biotope` |
 | **Codex** | [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli) pointing at this repo |
 
+**Skills only:** copy the folder(s) you need from [`skills/`](skills/) into your project — e.g. `.cursor/skills/`, `.claude/skills/`. Start with `biotope-croissant`; add `biocypher` or `biochatter` when you reach those stages.
+
 ## Use it
 
 The plugin ships three skills that chain as the pipeline progresses:
@@ -35,8 +37,6 @@ You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-
 
 The agent reads the skill contract and runs `biotope` commands for you.
 
-**Worked example:** [15-minute tutorial](https://biocypher.github.io/biotope/tutorial/) — build a real airport/flight knowledge graph end to end.
-
 **Reference:** [biocypher.github.io/biotope](https://biocypher.github.io/biotope/)
 
 ## CLI (manual / scripting)
@@ -49,7 +49,9 @@ pipx install biotope      # global install
 uv add biotope              # inside a uv-managed project
 ```
 
-Typical flow: `init` → `add` (or `get`) → `map` → `build` → `view`. Command overview: [docs/commands](https://biocypher.github.io/biotope/commands/).
+Typical flow: `init` → `add` (or `get`) → `map` → `build` → `view`. Command overview: [docs/commands.md](docs/commands.md).
+
+**Worked example:** [15-minute tutorial](docs/tutorial.md) — hands-on airport/flight knowledge graph, step by step in the terminal.
 
 ## For developers
 
