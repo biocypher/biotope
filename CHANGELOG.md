@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/biocypher/biotope/compare/biotope-v0.7.1...biotope-v0.8.0) (2026-06-29)
+
+
+### Features
+
+* decouple biotope runtime from biochatter and biocypher ([1a100f8](https://github.com/biocypher/biotope/commit/1a100f8e4c2a2a34d61349b0e3c0de2138b6dde3))
+* decouple biotope runtime from biochatter and biocypherinitial commit ([11eb5f0](https://github.com/biocypher/biotope/commit/11eb5f06f54974b74638a99aa390a20d86ba72de))
+
 ## [0.7.1](https://github.com/biocypher/biotope/compare/biotope-v0.7.0...biotope-v0.7.1) (2026-05-28)
 
 
