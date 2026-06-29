@@ -1,107 +1,72 @@
 # biotope
 
+Turn tables, CSVs, and mixed biomedical data into a queryable knowledge graph — with version-controlled metadata. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
+
 |         |                                                                                                                                                                                                                                                                                                                                              |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Package | [![Latest PyPI Version](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/) [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/) [![Docs](https://github.com/biocypher/biotope/actions/workflows/docs_mkdocs.yaml/badge.svg)](https://biocypher.github.io/biotope/) |
 | Meta    | [![Apache 2.0](https://img.shields.io/pypi/l/biotope.svg)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)                                                                                                         |
 
-CLI for the BioCypher ecosystem: Croissant-described data → BioCypher knowledge graph, with git-like metadata version control.
+> **Pre-alpha.** CLI flags and APIs will change. The plugin skills are the most stable onboarding path.
 
-**Status: pre-alpha, developer-facing.** APIs and CLI will change. Not yet suitable for end users.
+## Install the plugin
 
-## Start here
+Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope](https://github.com/biocypher/biotope).
 
-The fastest way in is the **[tutorial](https://biocypher.github.io/biotope/tutorial/)**
-— a 15-minute end-to-end walk-through that builds a real knowledge graph from
-public airport/flight data. It is the canonical, most up-to-date onboarding
-path; the snippet below is just a flavour preview.
+| Harness | Setup |
+| ------- | ----- |
+| **Claude Code** | `/plugin marketplace add biocypher/biotope` then `/plugin install biotope@biotope` |
+| **Cursor** | [Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace) → import `biocypher/biotope` |
+| **Codex** | [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli) pointing at this repo |
 
-## Install
+## Use it
+
+The plugin ships three skills that chain as the pipeline progresses:
+
+| Skill | Use when |
+| ----- | -------- |
+| **biotope-croissant** | Turning data files into a knowledge graph (`init` → `add` → `map` → `build`) |
+| **biocypher** | Tuning export backends, schema config, Neo4j import |
+| **biochatter** | Natural-language queries over a loaded graph |
+
+You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-croissant`) or just ask:
+
+> *What does biotope do? I want to build a graph from my data.*
+
+The agent reads the skill contract and runs `biotope` commands for you.
+
+**Worked example:** [15-minute tutorial](https://biocypher.github.io/biotope/tutorial/) — build a real airport/flight knowledge graph end to end.
+
+**Reference:** [biocypher.github.io/biotope](https://biocypher.github.io/biotope/)
+
+## CLI (manual / scripting)
+
+If you prefer the terminal or need CI:
 
 ```bash
-uv add biotope                     # in a uv-managed venv
-pipx install biotope               # global install
-uvx biotope init my-kg             # no install: ephemeral venv for the scaffolder
-uv pip install -e ".[dev]"         # editable, with test deps (for biotope itself)
+uvx biotope init my-kg    # no install — ephemeral venv for scaffolding
+pipx install biotope      # global install
+uv add biotope              # inside a uv-managed project
 ```
 
-## From `init` to a knowledge graph
+Typical flow: `init` → `add` (or `get`) → `map` → `build` → `view`. Full command reference lives in the [docs](https://biocypher.github.io/biotope/).
 
-```bash
-# 1. Scaffold a project (uvx works fine here — no local install needed).
-uvx biotope init my-kg --purpose "What approved drugs target genes in T2D?" --no-prompt
-cd my-kg && uv sync
+## For developers
 
-# 2. Bring in data — biotope get downloads + tracks; biotope add stages a
-#    local file/folder and runs croissant-baker over it.
-uv run biotope get https://example.org/opentargets.parquet --output-dir data/ot --no-add
-uv run biotope add data/ot --license CC-BY-4.0 --creator "Open Targets"
+biotope is a CLI for the [BioCypher](https://biocypher.org/) ecosystem: Croissant-described data → BioCypher knowledge graph, with git-like metadata version control.
 
-# 3. Inspect the pipeline state at any time.
-uv run biotope queue        # raw / processed / mapped, with provenance footer
+| Layer | Module | Role |
+| ----- | ------ | ---- |
+| Project & VCS | `biotope.commands.*` | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` — metadata workflow |
+| KG construction | `biotope.croissant.*` | Croissant → BioCypher project (`map`, `build`, `alignment`, …) |
 
-# 4. Declare intent — what entities and relations the graph must contain.
-#    Non-interactive (agent-friendly); without flags, `biotope map` opens
-#    a wizard that captures intent and resolves slots in one flow.
-uv run biotope map --entity gene --entity disease --entity drug \
-                   --relation gene_associated_with_disease
-
-# 5. Resolve the slots. Two equivalent paths:
-#    a) Wizard (humans):  uv run biotope map
-#    b) Edit mappings/*.mapping.yaml directly, then validate (agents):
-#       uv run biotope map scaffold .biotope/datasets/data/ot.jsonld
-#       uv run biotope map inspect  <croissant> --json   # field catalogue
-#       uv run biotope map preview  --json               # projected schema + tuples
-
-# 6. Build a runnable BioCypher project. Strict: rejects unresolved slots.
-uv run biotope build
-uv run python build/create_knowledge_graph.py
-uv run biotope view
-```
-
-`biotope init` is a pure scaffolder. All non-autogeneratable metadata is supplied as CLI flags — by a user or an agent following the biotope plugin skills (biotope-croissant → biocypher → biochatter). Semantic decisions (which record set, which fields, which transforms) are made by the human or copilot; biotope only enumerates options, validates, and previews.
-
-## Architecture
-
-Two layers, both in this repo:
-
-| Layer           | Module                | Role                                                                                                             |
-| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Project & VCS   | `biotope.commands.*`  | `init`, `add`, `commit`, `status`, `log`, `push`, `pull`, `mv`, `check-data` — git-like metadata workflow        |
-| KG construction | `biotope.croissant.*` | `spec`, `codegen`, `acquisition`, `mapping`, `alignment`, `scaffold`, `registry` — Croissant → BioCypher project |
-
-`biotope.croissant.api` exposes `scaffold_mapping`, `propose_alignment`, `materialize`, `discover_sources` as pure functions; the CLI verbs are thin wrappers. The mapping authoring surface lives under `biotope.commands.map` (Click group) and `biotope.commands.map_wizard` (Rich-based guided flow).
-
-## Commands
-
-```
-init                                project scaffolding
-get add mv rm                       acquisition + tracking (baker writes croissants)
-queue mark                          pipeline-state dashboard + manual transitions
-map (inspect|scaffold|preview)      semantic mapping (intent + wizard + agent path)
-propose-alignment                   cross-mapping same_node equivalences
-build view                          build + inspect a graph
-status commit log push pull         git-like metadata VCS
-check-data                          checksum verification
-annotate config                     field-level annotation + project config
-
-discover benchmark                  scaffolded but not yet wired into the standard flow
-read search                         promises / auxiliary
-```
-
-`biotope describe` and the heuristic `biotope propose-mapping` were removed/deprecated. Intent capture is now `biotope map --entity ... --relation ...`; scaffolding is `biotope map scaffold`. `propose-mapping` remains as a deprecated alias for the scaffold subcommand.
-
-See `docs/architecture.md` for the data-flow diagram and `docs/api-docs/` for per-command reference.
-
-## Development
+Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.croissant.api` exposes pure functions; CLI verbs are thin wrappers. See [architecture](https://biocypher.github.io/biotope/architecture/) and [API docs](https://biocypher.github.io/biotope/api-docs/init/).
 
 ```bash
 uv sync --extra dev
 uv run pytest
 uv run ruff check biotope tests
 ```
-
-Build backend is hatchling; lockfile is `uv.lock`. CI runs `uv sync` + `uv run pytest` on Python 3.10 and 3.12.
 
 ## Copyright
 
