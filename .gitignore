@@ -3,6 +3,8 @@
 !release-please-config.json
 !.release-please-manifest.json
 !tests/fixtures/**/*.json
+!.claude-plugin/marketplace.json
+!.claude-plugin/plugin.json
 .biotope/
 
 ### Linux template

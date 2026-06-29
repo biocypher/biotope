@@ -1,0 +1,10 @@
+{
+    "name": "biotope",
+    "owner": { "name": "Virtual Human CHC" },
+    "plugins": [{
+        "name": "biotope",
+        "source": ".",
+        "description": "Croissant-driven knowledge-graph construction (BioCypher ecosystem)."
+      }
+    ]
+}
