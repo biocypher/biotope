@@ -1,5 +1,5 @@
 site_name: Biotope
-site_description: Biotope - CLI integration for BioCypher ecosystem packages
+site_description: Turn biomedical data into a queryable knowledge graph — agent-first, with version-controlled metadata.
 site_author: BioCypher Team
 site_url: https://biocypher.github.io/biotope/
 
@@ -45,10 +45,11 @@ theme:
 nav:
   - Home: index.md
   - Tutorial: tutorial.md
+  - Commands: commands.md
   - Architecture: architecture.md
   - Project Context: project-context.md
   - Cluster Compliance: cluster-compliance.md
-  - Commands:
+  - API Reference:
       - Init: api-docs/init.md
       - Add: api-docs/add.md
       - Map: api-docs/map.md
