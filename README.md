@@ -62,7 +62,7 @@ biotope is a CLI for the [BioCypher](https://biocypher.org/) ecosystem: Croissan
 | Project & VCS | `biotope.commands.*` | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` — metadata workflow |
 | KG construction | `biotope.croissant.*` | Croissant → BioCypher project (`map`, `build`, `alignment`, …) |
 
-Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.croissant.api` exposes pure functions; CLI verbs are thin wrappers. See [architecture](https://biocypher.github.io/biotope/architecture/) and [API docs](https://biocypher.github.io/biotope/api-docs/init/).
+Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.croissant.api` exposes pure functions; CLI verbs are thin wrappers. See [how biotope works](https://biocypher.github.io/biotope/architecture/) and the [command overview](https://biocypher.github.io/biotope/commands/).
 
 ```bash
 uv sync --extra dev

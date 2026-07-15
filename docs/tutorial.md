@@ -1,32 +1,29 @@
 # Tutorial: build your first knowledge graph
 
-A 15-minute end-to-end walk-through. We'll take four small public files —
-two CSVs of US airport and flight data, one markdown file of free-text
-notes about a few airports, and a derived CSV that extracts the
-structured bits out of those notes — and turn them into a runnable
-knowledge graph. About 3,400 airports, 5,400 flight routes, 5 airlines,
-and 12 "is a hub for" relations.
+This 15-minute tutorial turns four small public files into a knowledge graph:
+two CSVs of US airports and flights, one markdown file with airport notes, and
+a CSV derived from those notes. The result contains about 3,400 airports,
+5,400 flight routes, 5 airlines, and 12 "is a hub for" relations.
 
-The CSVs are the routine case: croissant-baker structures them, biotope
-maps them, BioCypher writes them. The markdown file is the interesting
-case: it has facts that belong in the graph (which airline hubs at which
-airport) but no schema for biotope to act on. We'll handle that gap two
-ways — once by a human reading the prose and hand-producing the CSV, once
-by an agent doing the same extraction automatically. Either way, the same
-file ends up in the project, and the same mapping ingests it.
+Croissant-baker can describe the CSV schemas directly. The markdown file needs
+an extra step because it contains useful facts but has no schema. We will
+extract those facts into a CSV, first as a manual task and then with an agent.
+Both paths produce the same file and use the same mapping.
 
-If you have the [biotope plugin](index.md#install-the-plugin) installed, jump to the [agent shortcut](#agent-shortcut) at the end — invoke `/biotope-croissant` or ask your agent to help build the KG.
+If you have the [biotope plugin](plugin.md) installed, jump to the
+[agent shortcut](#agent-shortcut) at the end. Invoke `/biotope-croissant` or
+ask your agent to help build the graph.
 
 ## Prerequisites
 
-**Recommended:** install the [biotope plugin](index.md#install-the-plugin) in your coding agent (Claude Code, Cursor, Codex).
+Recommended path: install the [biotope plugin](plugin.md) in your coding agent.
 
-**Or** install the CLI:
+To use the CLI directly, install it:
 
 ```bash
-uv add biotope        # if in uv-managed venv
+uv add "biotope>=0.8.0"        # if in uv-managed venv
 # OR
-pipx install biotope  # global installation
+pipx install "biotope>=0.8.0"  # global installation
 ```
 
 You can also use `uvx biotope init` with no prior install. Below we use `uvx` for initialisation (from a parent directory) and `uv` inside the project. Substitute your own package workflow if you prefer.
@@ -110,29 +107,27 @@ MAPPED (0) — in the KG
 
 Two things to notice:
 
-- **`data/flights` is `processed`** — croissant-baker recognised the
-  CSVs, inferred their schemas, and recorded `recordSet` + field types
-  in the manifest. Ready to be mapped.
-- **`data/notes/airports-notes` is `raw`** — baker can't structure
-  free-form markdown. The file is tracked (auditability, provenance) but
-  has no schema for the build to consume.
+- `data/flights` is `processed`: croissant-baker recognised the CSVs,
+  inferred their schemas, and recorded the `recordSet` and field types in the
+  manifest. The dataset is ready to map.
+- `data/notes/airports-notes` is `raw`: baker cannot structure free-form
+  markdown. Biotope tracks the file for provenance, but the build has no schema
+  to consume yet.
 
 ## 5. Process the raw input into the KG
 
-The notes contain real schema-shaped facts — which airlines hub at which
-airports — that belong in the graph. Getting them in requires extracting
-a structured CSV from the prose. That extraction is the boundary between
-the two paths:
+The notes say which airlines use which airports as hubs. To put those facts in
+the graph, extract them into a structured CSV. You can do this manually or ask
+an agent:
 
 !!! info "Processing"
 
     === "Human"
 
-        Before LLM agents, the most reliable way to process simple unstructured
-        text into the structured form required for our pipeline is manual
-        curation into a structured form (such as a CSV of triples). You can
-        imagine doing this here, but for this tutorial we ship the pre-extracted
-        CSV so you can fetch it directly, to save time:
+        Without an agent, read the notes and enter the facts in a CSV with
+        `airport_iata`, `airline_code`, and `airline_name` columns. This
+        tutorial provides the finished CSV so you can continue without doing
+        that transcription:
 
         ```bash
         uv run biotope get \
@@ -140,12 +135,8 @@ the two paths:
           --output-dir data/notes --no-add
         ```
 
-        Note the `--no-add` flag; we are acting like we'd create the file by
-        hand to then add as a derivative of the unstructured markdown note.
-        Running the biotope pipeline with an agent (see "Agent" tab) will allow
-        us to automate the task. After we have created (or downloaded) the file,
-        we need to indicate that the new file was derived from the unstructured
-        version (to remove it from the queue):
+        `--no-add` downloads the file without tracking it yet. Add it separately
+        so you can record that it was derived from the markdown notes:
 
         ```bash
         uv run biotope add data/notes/airport-hubs.csv \
@@ -154,26 +145,20 @@ the two paths:
 
     === "Agent"
 
-        If you use an agent to run the biotope pipeline, it will be instructed
-        and figure out to read `data/notes/airports-notes.md`, extract the
-        `(airport_iata, airline_code, airline_name)` triples it mentions, and
-        write the result to `data/notes/airport-hubs.csv`. Different agents
-        might choose to do this differently; through the biotope scaffolding,
-        the results should be equivalent. This will result in the same state as
-        the first command in the human example.
-
-        Then, the agent should also record the provenance link by calling the
-        same command as in the human example:
+        The agent reads `data/notes/airports-notes.md`, extracts
+        `(airport_iata, airline_code, airline_name)` rows, and writes them to
+        `data/notes/airport-hubs.csv`. Review the extracted rows before adding
+        the file. The agent then records its provenance with the same command
+        used in the human path:
 
         ```bash
         uv run biotope add data/notes/airport-hubs.csv \
           --derived-from data/notes/airports-notes
         ```
 
-The `--derived-from` flag stamps `prov:wasDerivedFrom` into the new manifest and
-hides the original notes from the active `raw` queue — biotope knows they've
-been consumed without renaming or moving them.  Either way, after this step the
-queue looks like:
+The `--derived-from` flag adds `prov:wasDerivedFrom` to the new manifest and
+removes the original notes from the active `raw` queue. It does not rename or
+move them. After either path, the queue looks like:
 
 ```bash
 uv run biotope queue
@@ -244,16 +229,15 @@ small, fixed vocabulary: this could be, for instance, two nouns (`airport`,
 
         If you're unsure what data you have to bind these to, pick
         `[v] view data` from the slot menu the wizard drops you into
-        next — it prints each croissant's record sets, field types, and
+        next. It prints each croissant's record sets, field types, and
         a few sample rows so you can decide which dataset feeds which
         slot. The same view is available non-interactively as
         `uv run biotope map inspect <croissant>`.
 
     === "Agent"
 
-        Same effect, non-interactively — in auto-mode, the agent will decide on
-        an adequate representation and initialise accordingly. In ambiguous
-        cases, it is instructed to check with the user.
+        The agent records the same intent without opening the wizard. If the
+        requested representation is ambiguous, it asks before continuing.
 
         ```bash
         uv run biotope map \
@@ -358,9 +342,9 @@ one relation); the other two follow the same pattern.
               longitude: longitude
         ```
 
-        The scaffold's inspector appendix — or
-        `uv run biotope map inspect <croissant> --json` — gives the agent
-        the field catalogue to ground these picks.
+        The scaffold's inspector appendix gives the agent the field catalogue
+        for these choices. The same data is available from
+        `uv run biotope map inspect <croissant> --json`.
 
 ### Binding the `is_hub_for` relation → airport-hubs croissant
 
@@ -398,7 +382,7 @@ one relation); the other two follow the same pattern.
         ```
 
         The `airport` endpoint reuses the entity already bound in the
-        flights mapping — both sides mint `iata:<code>` IDs, so
+        flights mapping. Both sides mint `iata:<code>` IDs, so
         BioCypher dedups them at build. The `airline` endpoint is the
         first reference to that entity; bind its full properties when
         you do slot 2.
@@ -430,8 +414,8 @@ one relation); the other two follow the same pattern.
 ### Bind the remaining two slots
 
 `airline` (slot 2) and `number_of_flights` (slot 3) follow the same
-pattern — pick the slot, pick the croissant (airport-hubs for `airline`,
-flights for `number_of_flights`), and answer the prompts. The
+pattern. Pick the slot, select the croissant (`airport-hubs` for `airline` and
+`flights` for `number_of_flights`), then answer the prompts. The
 `number_of_flights` relation binds against the `flights-airport` record
 set with `origin` → `destination` as the endpoints and `count` as a
 property. When all four slots show ✓, the wizard prints:
@@ -466,10 +450,10 @@ and `('airline:DL', 'airline', {'name': 'Delta Air Lines'})`.
 uv run biotope build
 ```
 
-This generates a self-contained BioCypher project under `build/` —
-`schema_config.yaml`, an adapter per mapping, and an entry-point
-`create_knowledge_graph.py`. Strict: any unresolved slot would have
-errored out here.
+This creates a self-contained BioCypher project under `build/`, including
+`schema_config.yaml`, one adapter per mapping, and
+`create_knowledge_graph.py`. The command stops if any mapping slot remains
+unresolved.
 
 ## 9. Run the graph build
 
@@ -478,9 +462,9 @@ uv run python build/create_knowledge_graph.py
 ```
 
 BioCypher writes node and edge CSVs to `build/biocypher-out/`. You may
-see `WARNING -- Duplicate node type airport found` — that's expected:
-two mappings emit Airport nodes (the rich ones from `flights` and the
-ID-only ones from `airport-hubs`), and the writer merges them.
+see `WARNING -- Duplicate node type airport found`. This is expected because
+two mappings emit Airport nodes: rich nodes from `flights` and ID-only nodes
+from `airport-hubs`. The writer merges them.
 
 ## 10. Look at the result
 
@@ -506,18 +490,17 @@ Total nodes: 3381  edges: 5378
 ```
 
 That's your knowledge graph. The structured CSVs gave you 3,376 airports
-and 5,366 flight routes. The unstructured notes — only because they were
-extracted into a structured CSV first — gave you 5 airlines and 12
-"is a hub for" edges that wouldn't otherwise be in the KG.
+and 5,366 flight routes. Extracting the unstructured notes into a CSV added
+5 airlines and 12 "is a hub for" edges.
 
 The CSVs in `build/biocypher-out/` are ready to be imported into Neo4j
 (`neo4j-admin database import`), DuckDB, or any graph store BioCypher
-targets — see the BioCypher docs for the import side.
+targets. See the BioCypher docs for import instructions.
 
 ## Agent shortcut
 
 Everything above is delegable. After `biotope init`, `cd` into the project,
-open your agent (with the [biotope plugin](index.md#install-the-plugin) installed),
+open your agent with the [biotope plugin](plugin.md) installed,
 invoke `/biotope-croissant` or say:
 
 > *What does biotope do? Help me build the KG.*
@@ -528,13 +511,10 @@ raw items alone or process them, scaffolds and resolves mappings using
 `biotope map inspect --json` for the field catalogue, and runs the build.
 The contract is the CLI; no agent needs to import any biotope Python.
 
-The clear division of labour:
+Without an agent, extracting facts from markdown, PDFs, or other unstructured
+sources remains manual. An agent can perform that extraction, but you should
+review the structured output before it enters the graph.
 
-- **Pure-human work, with no automation possible**: extracting structured
-  facts from unstructured inputs like markdown, PDFs, or natural-language
-  notes. Without an agent, this stays manual — or stays out of the KG
-  entirely.
-- **Agent territory**: the extraction above, plus everything mechanical
-  from there. Slot resolution against the inspector appendix, multi-axis
-  mappings, cross-mapping alignment proposals — all suit non-interactive
-  drivers better than a human clicking through a wizard.
+The remaining work is deterministic. The agent resolves mapping slots against
+the inspector output, previews the mappings, proposes alignments, builds the
+graph, and checks the result.

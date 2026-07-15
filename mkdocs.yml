@@ -45,29 +45,14 @@ theme:
 nav:
   - Home: index.md
   - Tutorial: tutorial.md
+  - Plugin & Skills: plugin.md
   - Commands: commands.md
-  - Architecture: architecture.md
-  - Project Context: project-context.md
-  - Cluster Compliance: cluster-compliance.md
-  - API Reference:
-      - Init: api-docs/init.md
-      - Add: api-docs/add.md
-      - Map: api-docs/map.md
-      - Build: api-docs/build.md
-      - Propose Alignment: api-docs/propose-alignment.md
-      - Propose Mapping (deprecated): api-docs/propose-mapping.md
-      - Annotate: api-docs/annotate.md
-      - Search: api-docs/search.md
-      - Config: api-docs/config.md
+  - Mapping: mapping.md
+  - How it works: architecture.md
+  - Cluster compliance: cluster-compliance.md
 
 plugins:
   - search
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          options:
-            heading_level: 3
 
 extra:
   social:
