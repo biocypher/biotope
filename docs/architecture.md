@@ -1,114 +1,116 @@
-# Architecture
+# How biotope works
 
-biotope has two concerns wired into one CLI:
+Biotope has two jobs:
 
-1. **Project & metadata version control** — git-like tracking of datasets and their Croissant metadata.
-1. **Knowledge-graph construction** — Croissant JSON-LD → BioCypher project, deterministically.
+1. Track datasets and their Croissant metadata with git-like commands.
+2. Turn Croissant-described data into a runnable BioCypher project.
 
-Both layers live in this repo.
+The installed `biotope` package does not import BioCypher or BioChatter. A
+generated project declares BioCypher as its graph writer; BioChatter can query
+the loaded graph later.
 
-## Modules
+## Project layout
 
+```text
+my-kg/
+├── .biotope/
+│   ├── project.yaml       graph purpose and required entities or relations
+│   ├── config.yaml        validation and registry settings
+│   ├── datasets/          Croissant metadata for tracked data
+│   └── workflows/         reserved
+├── data/                  tracked data; ignored by Git
+├── mappings/              semantic mappings
+├── alignment.yaml         optional cross-dataset equivalences
+├── build/                 generated BioCypher project
+├── pyproject.toml         project dependencies
+└── .gitignore
 ```
-biotope/
-├── commands/              CLI verbs (Click)
-│   ├── map.py             biotope map group: inspect / scaffold / preview / wizard
-│   └── map_wizard.py      Rich-based guided wizard
-├── croissant/             KG construction backend
-│   ├── spec.py            Pydantic models for Croissant 1.1
-│   ├── codegen/           Jinja schema codegen (typed Dataset/Field classes)
-│   ├── acquisition/       DuckDB row streaming
-│   ├── mapping/           semantic mapping IR (entities/relations/selectors/scans)
-│   │   ├── model.py       Pydantic IR + legacy nodes/edges rejection
-│   │   ├── selectors.py   value-level resolver (passthrough/as_curie/hash_id + $item)
-│   │   ├── scans.py       RowScanOperation, ExplodeScanOperation
-│   │   ├── inspector.py   deterministic Croissant inspector (records/fields/samples)
-│   │   ├── preview.py     validate partial mapping + project BioCypher schema
-│   │   ├── compile.py     compile mapping into BioCypher-compatible tuple streams
-│   │   ├── defaults.py    unresolved-scaffold builder (heuristic-free)
-│   │   └── render.py      semantic YAML renderer + inspector appendix
-│   ├── alignment/         alignment.yaml schema + cross-mapping merge
-│   ├── scaffold/          emits a runnable BioCypher project
-│   ├── registry/          BioCypher-adapter registry client (local + HTTP)
-│   └── api.py             pure-function surface for tests + CLI verbs
-├── project_model.py       .biotope/project.yaml schema
-└── templates/AGENTS.md    agent instructions copied into new projects
-```
+
+`biotope init --visible` writes `project.yaml` at the project root. Other
+managed files remain under `.biotope/`. Commands find the nearest project by
+walking upward from the current directory.
+
+Dataset state (`raw`, `processed`, or `mapped`) lives in each Croissant
+manifest, not in the `data/` directory structure.
 
 ## Data flow
 
-```
-biotope init ─► .biotope/project.yaml          (purpose only)
-                  │
-                  │ biotope map --entity ... --relation ...
-                  ▼
-            project.yaml with required_entities / required_relations
-                  │
-raw files ──► biotope add ──► .biotope/datasets/<name>.jsonld    (Croissant; baker-enriched)
-                  │
-                  │ biotope map scaffold <croissant>
-                  ▼
-            mappings/<name>.mapping.yaml  (unresolved slots + inspector appendix)
-                  │
-                  │ biotope map (wizard)  OR  edit YAML + biotope map preview --json
-                  ▼
-            mappings/<name>.mapping.yaml  (fully resolved entities + relations)
-                  │
-                  ├─► biotope propose-alignment ──► alignment.yaml      (optional, multi-mapping)
-                  │
-                  ▼
-            biotope build ──► build/
-                              ├── config/schema_config.yaml  (namespace + input_label)
-                              ├── mappings/                  (copied YAML for provenance)
-                              ├── generated/<stem>/          (deterministic adapter.py per mapping)
-                              └── create_knowledge_graph.py  (BioCypher entry point)
-                                          │
-                                          ▼
-                              python create_knowledge_graph.py ──► BioCypher CSV/Neo4j
-                                          │
-                                          ▼
-                                   biotope view / benchmark
+```text
+biotope init
+    │
+    ├─ biotope map --purpose/--entity/--relation
+    │      └─ .biotope/project.yaml
+    │
+data files
+    └─ biotope add
+           └─ .biotope/datasets/*.jsonld
+                    │
+                    └─ biotope map inspect/scaffold/preview
+                           └─ mappings/*.mapping.yaml
+                                    │
+                                    ├─ biotope propose-alignment (optional)
+                                    │      └─ alignment.yaml
+                                    │
+                                    └─ biotope build
+                                           └─ build/
+                                                ├─ config/schema_config.yaml
+                                                ├─ generated/*/adapter.py
+                                                └─ create_knowledge_graph.py
 ```
 
-Each transformation is deterministic. Semantic decisions stay with the human or copilot agent: biotope only enumerates options, validates, and previews. `build` is strict — it refuses to compile mappings with unresolved slots or the legacy `nodes`/`edges` schema.
+`biotope add` uses
+[croissant-baker](https://github.com/biocypher/croissant-baker) to infer
+structural metadata where possible. Mapping connects Croissant record sets and
+fields to graph entities and relations. `build` compiles resolved mappings into
+BioCypher tuple streams.
 
-## Configuration files
+## Semantic decisions and determinism
 
-| File                         | Owner         | Purpose                                                                                                                                                 |
-| ---------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.biotope/project.yaml`      | content       | Competence questions: `purpose`, `required_entities`, `required_relations`                                                                              |
-| `.biotope/config.yaml`       | technical     | Croissant schema version, validation rules, registry URLs                                                                                               |
-| `.biotope/datasets/*.jsonld` | autogenerated | Croissant metadata per tracked file (baker fills structure)                                                                                             |
-| `mappings/*.mapping.yaml`    | authored      | Semantic IR: `entities` + `relations` over Croissant record sets, with `ids` for reusable selectors. Compiles directly into BioCypher node/edge tuples. |
-| `alignment.yaml`             | proposed      | Cross-mapping `same_node` equivalences over semantic entity keys                                                                                        |
-| `AGENTS.md`                  | template      | Agent instructions; copied at `init` time                                                                                                               |
+Biotope catalogs fields, validates mappings, and previews tuples. A human or
+agent chooses record sets, identifiers, transforms, entities, and relations.
+`build` rejects unresolved mapping slots and the removed `nodes`/`edges`
+mapping schema.
 
-Resolution precedence (lowest first): `~/.config/biotope/config.yaml` → `.biotope/config.yaml` → `.biotope/project.yaml` → CLI flag. CLI flags always win.
+With the same Croissant manifests, mappings, alignment, and data, compilation
+produces the same generated project. LLMs sit above this deterministic
+boundary:
 
-`--visible` at `init` promotes `project.yaml` to the project root for users who don't want a dotfolder.
-
-## Agent surface
-
-The CLI is the agent contract. An agent reads `AGENTS.md`, asks the user competence questions, and translates answers into CLI invocations — the same ones a human would type. There is no MCP server; nothing is hidden behind a different protocol.
-
-Hook points for richer integration exist in `biotope.croissant.api` and `biotope.croissant.registry.client.RegistryClient`.
-
-## Determinism boundary
-
-Below the CLI everything is deterministic Python. LLMs, when present, sit above the CLI:
-
-```
-human / LLM agent  ── reads AGENTS.md ──► biotope <verb> --flag …
-                                              │  deterministic
-                                              ▼
-                                    biotope.croissant.api.*
+```text
+human or agent → biotope CLI → biotope.croissant.api → generated project
 ```
 
-Builds are reproducible from `mapping.yaml` + `alignment.yaml` + the Croissant files in `.biotope/datasets/`. Rebuilding with the same inputs yields the same graph.
+## Configuration
 
-## Relationship to neighbouring repos
+| File | Purpose |
+| --- | --- |
+| `.biotope/project.yaml` | Graph purpose, entities, relations, and data sources |
+| `.biotope/config.yaml` | Croissant version, validation rules, and registry URLs |
+| `.biotope/datasets/*.jsonld` | Generated and curated Croissant metadata |
+| `mappings/*.mapping.yaml` | Authored entity and relation mappings |
+| `alignment.yaml` | Optional `same_node` equivalences across mappings |
 
-- **[croissant-baker](https://github.com/biocypher/croissant-baker)** — invoked by `biotope add` to autogenerate Croissant field-level metadata (column types, row counts) for handled file formats.
-- **[BioCypher](https://github.com/biocypher/biocypher)** — the `build` output is a BioCypher project; biotope does not depend on BioCypher at the library level.
-- **[epistemic-agent](https://github.com/biocypher/epistemic-agent)** — shares the problem-first / `AGENTS.md` convention. Integration via `biotope read` is planned.
-- **[BioContextAI registry](https://github.com/biocontext-ai/registry)** — discovery surface for MCP servers; `biotope discover` reads from a separate BioCypher-adapter registry that mirrors the shape conventions.
+Settings resolve from lowest to highest priority:
+
+```text
+~/.config/biotope/config.yaml
+→ .biotope/config.yaml
+→ .biotope/project.yaml
+→ CLI flags
+```
+
+Inspect resolved project intent with `biotope map --show`.
+
+## Agent interface
+
+Plugin skills are the default agent contract:
+
+```text
+biotope-croissant → biocypher → biochatter
+```
+
+Each skill covers one pipeline stage and invokes public CLI commands.
+`biotope init --agents-md` can add a root `AGENTS.md` for agents without skill
+support. See [Plugin and skills](plugin.md) for setup.
+
+For Python integrations, `biotope.croissant.api` exposes the deterministic
+functions used by the CLI.
