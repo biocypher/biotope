@@ -20,6 +20,13 @@ the report — its shape is new and still moving.
 - **Retire the hand-rolled coverage reconstruction.** `_append_uncovered_file_objects`
   and `_iter_directory_files` re-derive by directory walk what `scan_report`
   now states, and cannot tell "no handler claimed it" from "the handler failed".
+- **Let `claims()` say why it refused.** A handler that recognises a file by
+  extension and then rejects its content warns on its own logger
+  (`missing Parquet PAR1 footer magic`), and the pipeline separately reports the
+  file as `no_handler`. Two lines for one file, and the specific reason — the
+  useful one — never reaches the scan report or `--report`. Returning a refusal
+  rather than `False` would fix both, at the cost of changing the contract for
+  all nine handlers.
 
 ## Pipeline state
 
