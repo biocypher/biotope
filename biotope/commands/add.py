@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import click
 import yaml
+from rich.console import Console
+from rich.markup import escape
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
@@ -401,6 +406,51 @@ def _creator_for_baker(
     return [{key: value for key, value in creator_node.items() if key in {"name", "email", "url"}}]
 
 
+class _BakerWarnings(logging.Handler):
+    """Prints croissant-baker's per-file warnings above the live progress bar."""
+
+    def __init__(self, progress: Progress) -> None:
+        super().__init__(logging.WARNING)
+        self._progress = progress
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # A message naming a file is data: unescaped, "[/]" in a path raises and
+        # "[dim]" silently eats the characters around it. soft_wrap keeps a long
+        # diagnostic on one line, where it can be grepped.
+        self._progress.console.print(f"  [yellow]![/yellow] {escape(record.getMessage())}", soft_wrap=True)
+
+
+@contextmanager
+def _bake_progress(label: str):
+    """Yield a baker progress callback, with its warnings rendered as they arrive.
+
+    The baker names each file it cannot describe through its own logger; without
+    a handler those are swallowed and only the closing summary survives.
+    """
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TextColumn("[dim]{task.fields[file]}"),
+        console=Console(),
+        transient=True,
+    )
+    task = progress.add_task(label, total=None, file="")
+    handler = _BakerWarnings(progress)
+    baker_log = logging.getLogger("croissant_baker")
+    baker_log.addHandler(handler)
+    try:
+        with progress:
+
+            def report(done: int, total: int, path: str) -> None:
+                progress.update(task, completed=done, total=total, file=Path(path).name)
+
+            yield report
+    finally:
+        baker_log.removeHandler(handler)
+
+
 def _echo_scan_coverage(generator: Any) -> None:
     """Forward the baker's coverage summary: what it could not describe, and why."""
     for line in generator.scan_report.summary_lines():
@@ -454,7 +504,8 @@ def _bake_directory(
     )
 
     try:
-        metadata_dict = normalize_metadata_shape(generator.generate_metadata())
+        with _bake_progress(f"Baking {rel_dir}") as report:
+            metadata_dict = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
     except ValueError as exc:
         _echo_scan_coverage(generator)
         if str(exc) != "No supported files found in the dataset":
@@ -466,7 +517,6 @@ def _bake_directory(
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
-    _dedupe_file_objects_covered_by_filesets(metadata_dict, abs_dir, biotope_root)
     _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root)
     _apply_pipeline_state(metadata_dict, overrides)
 
@@ -498,50 +548,6 @@ def _build_minimal_directory_metadata(
     for file_path in _iter_directory_files(abs_dir):
         metadata["distribution"].append(make_file_object(file_path, biotope_root))
     return metadata
-
-
-def _dedupe_file_objects_covered_by_filesets(
-    metadata_dict: dict[str, Any],
-    abs_dir: Path,
-    biotope_root: Path,
-) -> None:
-    """Drop baker FileObjects whose contentUrl is already covered by a FileSet glob.
-
-    Baker emits both a FileSet (with `includes` glob) and a FileObject per
-    physical file. RecordSet field sources only reference the FileSet, so the
-    per-file FileObjects are redundant. Keep FileObjects only when they are
-    genuinely standalone (not glob-covered).
-    """
-    distributions = metadata_dict.get("distribution", []) or []
-    fileset_covered: set[Path] = set()
-    for distribution in distributions:
-        if distribution.get("@type") != "cr:FileSet":
-            continue
-        includes = distribution.get("includes")
-        patterns = [includes] if isinstance(includes, str) else list(includes or [])
-        for pattern in patterns:
-            for candidate in abs_dir.glob(pattern):
-                if candidate.is_file():
-                    fileset_covered.add(candidate.resolve())
-
-    if not fileset_covered:
-        return
-
-    deduped: list[dict[str, Any]] = []
-    for distribution in distributions:
-        if distribution.get("@type") != FILE_OBJECT_TYPE:
-            deduped.append(distribution)
-            continue
-        content_url = distribution.get("contentUrl")
-        if not content_url:
-            deduped.append(distribution)
-            continue
-        resolved = resolve_content_url(content_url, abs_dir, biotope_root)
-        if resolved is not None and resolved.resolve() in fileset_covered:
-            continue
-        deduped.append(distribution)
-
-    metadata_dict["distribution"] = deduped
 
 
 def _append_uncovered_file_objects(

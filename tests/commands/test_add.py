@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
@@ -279,33 +280,34 @@ def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
     assert not is_file_tracked(project_root / "elsewhere.txt", project_root)
 
 
-def test_dedupe_file_objects_covered_by_filesets(tmp_path):
-    """Regression: baker emits FileSet + per-file FileObjects; keep only the FileSet."""
-    from biotope.commands.add import _dedupe_file_objects_covered_by_filesets
+def _write_png(path: Path) -> None:
+    """A 1x1 PNG, so the image handler claims it and emits a FileSet."""
+    from PIL import Image
 
+    Image.new("RGB", (1, 1)).save(path)
+
+
+def test_glob_covered_files_keep_their_checksum(tmp_path):
+    """A FileSet describes structure; it does not stand in for a file's identity.
+
+    Dropping the FileObjects a FileSet glob covers took every checksum with them,
+    so `check-data` silently verified a fraction of the files it listed.
+    """
     project_root = tmp_path / "project"
-    data_dir = project_root / "data" / "partitions"
-    data_dir.mkdir(parents=True)
+    data_dir = project_root / "data" / "images"
     (project_root / ".biotope" / "datasets").mkdir(parents=True)
-    (data_dir / "part-00.parquet").write_bytes(b"x")
-    (data_dir / "part-01.parquet").write_bytes(b"y")
-    (data_dir / "_SUCCESS").write_text("")
+    data_dir.mkdir(parents=True)
+    for name in ("a.png", "b.png"):
+        _write_png(data_dir / name)
 
-    metadata = {
-        "distribution": [
-            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-            {"@type": "cr:FileObject", "@id": "fo1", "contentUrl": "part-00.parquet"},
-            {"@type": "cr:FileObject", "@id": "fo2", "contentUrl": "part-01.parquet"},
-            {"@type": "cr:FileObject", "@id": "fo3", "contentUrl": "data/partitions/_SUCCESS"},
-        ]
-    }
-    _dedupe_file_objects_covered_by_filesets(metadata, data_dir, project_root)
+    metadata_dict, _ = _bake_directory(data_dir, project_root, {})
 
-    types = [(d.get("@type"), d.get("@id")) for d in metadata["distribution"]]
-    assert ("cr:FileSet", "fs") in types
-    assert ("cr:FileObject", "fo3") in types  # genuinely uncovered survives
-    assert ("cr:FileObject", "fo1") not in types
-    assert ("cr:FileObject", "fo2") not in types
+    file_objects = [
+        d for d in metadata_dict["distribution"] if d.get("@type") == "cr:FileObject"
+    ]
+    assert any(d.get("@type") == "cr:FileSet" for d in metadata_dict["distribution"])
+    assert {Path(d["contentUrl"]).name for d in file_objects} == {"a.png", "b.png"}
+    assert all(d.get("sha256") for d in file_objects)
 
 
 def test_bake_directory_tracks_unparseable_files(tmp_path):
@@ -466,10 +468,8 @@ def test_add_command_rejects_name_for_multiple_paths(mock_is_git, mock_find_root
 
 
 # ---------------------------------------------------------------------------
-# croissant-baker integration
-#
-# Exercised against the real baker: the integration broke once because an
-# import moved, and the failure was swallowed by an `except ImportError`.
+# croissant-baker integration — run against the real baker, because the last
+# break was an import move swallowed by an `except ImportError`.
 # ---------------------------------------------------------------------------
 
 
@@ -533,3 +533,13 @@ def test_bake_directory_describes_compressed_files(mixed_dataset):
         if item.get("@type") == "cr:FileObject"
     ]
     assert ["text/csv", "application/gzip"] in encodings
+
+
+def test_baker_warnings_survive_markup_in_a_filename(capsys):
+    """A path is data, not rich markup: "[/]" in one used to abort the bake."""
+    from biotope.commands.add import _bake_progress
+
+    with _bake_progress("t"):
+        logging.getLogger("croissant_baker").warning("report[/].csv: [dim]failed")
+
+    assert "report[/].csv: [dim]failed" in capsys.readouterr().out
