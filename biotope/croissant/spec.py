@@ -191,8 +191,9 @@ class CroissantFileSetModel(ConfiguredBaseModel):
     id: str = Field(alias=Key.ID.value)
     name: str | None = None
     description: str | None = None
-    includes: str
-    encoding_format: str | None = None
+    # A compressed file carries both media types, and one glob per compression.
+    includes: str | list[str]
+    encoding_format: str | list[str] | None = None
 
 
 class CroissantFileObjectModel(ConfiguredBaseModel):
@@ -203,7 +204,7 @@ class CroissantFileObjectModel(ConfiguredBaseModel):
     name: str | None = None
     description: str | None = None
     content_url: str | None = Field(default=None, alias=Key.CONTENT_URL.value)
-    encoding_format: str | None = None
+    encoding_format: str | list[str] | None = None
 
 
 class CroissantDatasetModel(ConfiguredBaseModel):

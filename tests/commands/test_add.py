@@ -463,3 +463,73 @@ def test_add_command_rejects_name_for_multiple_paths(mock_is_git, mock_find_root
 
     assert result.exit_code != 0
     assert "--name can only be used when adding one path" in result.output
+
+
+# ---------------------------------------------------------------------------
+# croissant-baker integration
+#
+# Exercised against the real baker: the integration broke once because an
+# import moved, and the failure was swallowed by an `except ImportError`.
+# ---------------------------------------------------------------------------
+
+
+EXAMPLE_CSV = Path(__file__).resolve().parents[1] / "example_gene_expression.csv"
+
+
+@pytest.fixture
+def mixed_dataset(tmp_path):
+    """A project holding one gzipped CSV the baker reads and one file it cannot."""
+    import gzip
+
+    project_root = tmp_path / "project"
+    data_dir = project_root / "data" / "mixed"
+    (project_root / ".biotope" / "datasets").mkdir(parents=True)
+    data_dir.mkdir(parents=True)
+    (data_dir / "expression.csv.gz").write_bytes(gzip.compress(EXAMPLE_CSV.read_bytes()))
+    (data_dir / "README.md").write_text("notes")
+    return project_root, data_dir
+
+
+@pytest.mark.parametrize("compress", [False, True])
+def test_enrich_with_baker_builds_record_set(tmp_path, compress):
+    """A single-file add gets a recordSet, whether or not the file is wrapped."""
+    import gzip
+
+    from biotope.commands.add import _enrich_with_baker
+
+    payload = EXAMPLE_CSV.read_bytes()
+    file_path = tmp_path / ("data.csv.gz" if compress else "data.csv")
+    file_path.write_bytes(gzip.compress(payload) if compress else payload)
+
+    metadata = {"distribution": [{"@id": "file_0", "@type": "cr:FileObject"}]}
+    _enrich_with_baker(metadata, file_path)
+
+    fields = metadata["recordSet"][0]["field"]
+    assert [f["name"] for f in fields] == ["GeneID", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"]
+    assert all(f["source"]["fileObject"]["@id"] == "file_0" for f in fields)
+
+
+def test_bake_directory_reports_coverage(mixed_dataset, capsys):
+    """Undescribed files are otherwise invisible: biotope backfills them like any other."""
+    project_root, data_dir = mixed_dataset
+
+    _bake_directory(data_dir, project_root, {})
+
+    out = capsys.readouterr().out
+    assert "Scanned 2 file(s): 1 described, 1 not described." in out
+    assert "no registered handler: 1" in out
+
+
+def test_bake_directory_describes_compressed_files(mixed_dataset):
+    """A wrapped file yields a recordSet and keeps both media types."""
+    project_root, data_dir = mixed_dataset
+
+    metadata_dict, _ = _bake_directory(data_dir, project_root, {})
+
+    assert metadata_dict["recordSet"]
+    encodings = [
+        item.get("encodingFormat")
+        for item in metadata_dict["distribution"]
+        if item.get("@type") == "cr:FileObject"
+    ]
+    assert ["text/csv", "application/gzip"] in encodings

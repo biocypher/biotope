@@ -77,3 +77,67 @@ def test_check_data_rejects_legacy_file_objects(runner, tracked_project):
 
     assert result.exit_code != 0
     assert "Legacy sc:FileObject is no longer supported" in result.output
+
+
+def test_check_data_resolves_dataset_relative_content_url(runner, tmp_path):
+    """A baker-written contentUrl is relative to the dataset directory, not the project root.
+
+    A manifest carries both conventions: croissant-baker addresses the files it
+    described relative to the data directory, biotope's backfilled file objects
+    relative to the project root. Resolving only the latter reports every baked
+    file as MISSING.
+    """
+    import hashlib
+
+    project_root = tmp_path
+    (project_root / ".git").mkdir()
+    (project_root / ".biotope" / "datasets" / "data").mkdir(parents=True)
+
+    data_dir = project_root / "data" / "inputs"
+    data_dir.mkdir(parents=True)
+    baked = data_dir / "baked.csv"
+    baked.write_text("gene,expression\nBRCA1,12.5")
+    backfilled = data_dir / "opaque.bin"
+    backfilled.write_bytes(b"\x00\x01")
+
+    def sha(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    manifest = project_root / ".biotope" / "datasets" / "data" / "inputs.jsonld"
+    manifest.write_text(
+        json.dumps(
+            {
+                "@context": {"@vocab": "https://schema.org/"},
+                "@type": "sc:Dataset",
+                "name": "inputs",
+                "distribution": [
+                    # baker convention: relative to data/inputs/
+                    {
+                        "@type": "cr:FileObject",
+                        "@id": "file_1",
+                        "name": "baked.csv",
+                        "contentUrl": "baked.csv",
+                        "sha256": sha(baked),
+                    },
+                    # biotope convention: relative to the project root
+                    {
+                        "@type": "cr:FileObject",
+                        "@id": "file_2",
+                        "name": "opaque.bin",
+                        "contentUrl": "data/inputs/opaque.bin",
+                        "sha256": sha(backfilled),
+                    },
+                ],
+            }
+        )
+    )
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(project_root)
+        result = runner.invoke(check_data, [])
+    finally:
+        os.chdir(original_cwd)
+
+    assert result.exit_code == 0
+    assert "MISSING" not in result.output.upper()

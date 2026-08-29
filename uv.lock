@@ -169,7 +169,7 @@ wheels = [
 
 [[package]]
 name = "biotope"
-version = "0.7.1"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -195,7 +195,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.8" },
-    { name = "croissant-baker", specifier = ">=0.3,<1" },
+    { name = "croissant-baker", editable = "../croissant-baker" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "mike", marker = "extra == 'dev'", specifier = ">=2.1.3" },
@@ -453,8 +453,8 @@ wheels = [
 
 [[package]]
 name = "croissant-baker"
-version = "0.3.1"
-source = { registry = "https://pypi.org/simple" }
+version = "0.3.2"
+source = { editable = "../croissant-baker" }
 dependencies = [
     { name = "mlcroissant" },
     { name = "nibabel" },
@@ -469,9 +469,35 @@ dependencies = [
     { name = "typer" },
     { name = "wfdb" },
 ]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/08/b683831a81861a961219e1e7f97159f5fab3ed4fa66bf41091edff22b0b9/croissant_baker-0.3.1-py3-none-any.whl", hash = "sha256:8807377a5552887cb7ccb44d9d42cb18e474c88b2ac232635f8f0809419f10eb", size = 66665, upload-time = "2026-05-19T15:17:24.966Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "mlcroissant", specifier = ">=1.1.0,<1.2.0" },
+    { name = "nibabel", specifier = ">=5.0" },
+    { name = "pillow", specifier = ">=12.2.0" },
+    { name = "pyarrow", specifier = ">=23.0.1" },
+    { name = "pydicom", specifier = ">=2.4" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=15.0.0" },
+    { name = "tifffile", specifier = ">=2024.1.0" },
+    { name = "typer", specifier = ">=0.9.0" },
+    { name = "wfdb", specifier = ">=4.3.1" },
 ]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = ">=4.5.1" },
+    { name = "pytest", specifier = ">=7.0" },
+    { name = "ruff", specifier = ">=0.1.0" },
+]
+docs = [
+    { name = "griffe", specifier = ">=2.0" },
+    { name = "mkdocs", specifier = ">=1.6,<2" },
+    { name = "mkdocs-material", specifier = ">=9.7,<10" },
+    { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0" },
+    { name = "typer-cli" },
+]
+test = [{ name = "pytest", specifier = ">=7.0" }]
 
 [[package]]
 name = "cycler"

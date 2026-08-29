@@ -159,6 +159,8 @@ def _resolve_source_string(
 ) -> str | None:
     for dist in dataset.distribution:
         if isinstance(dist, CroissantFileSetModel) and dist.id == rs.name:
+            if isinstance(dist.includes, list):
+                return ", ".join(dist.includes)
             return dist.includes
         if isinstance(dist, CroissantFileObjectModel) and dist.id == rs.name:
             return dist.content_url

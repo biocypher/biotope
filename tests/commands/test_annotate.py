@@ -315,3 +315,29 @@ def test_interactive_alias_still_invokes_hidden_command(runner):
     result = runner.invoke(annotate, ["interactive", "--help"])
     assert result.exit_code == 0
     assert "--staged" in result.output
+
+
+def test_merge_record_set_row_keeps_list_encoding_format():
+    """`add` writes the manifest's encodingFormat into the scaffold verbatim, so a
+    compressed file puts a list in the row; apply used to raise on `.strip()`."""
+    from biotope.commands.annotate import _merge_record_set_row
+
+    metadata = {
+        "distribution": [
+            {"@id": "cells-fileset", "@type": "cr:FileSet", "encodingFormat": "x"}
+        ]
+    }
+    record_set = {
+        "@id": "cells",
+        "field": [{"source": {"fileSet": {"@id": "cells-fileset"}}}],
+    }
+    row = {
+        "encoding_format": ["application/vnd.apache.parquet", "application/gzip"],
+    }
+
+    _merge_record_set_row(metadata, record_set, row)
+
+    assert metadata["distribution"][0]["encodingFormat"] == [
+        "application/vnd.apache.parquet",
+        "application/gzip",
+    ]

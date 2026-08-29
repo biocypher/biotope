@@ -20,6 +20,7 @@ from biotope.metadata import (
     merge_metadata,
     normalize_metadata_shape,
     parse_key_value_pairs,
+    resolve_content_url,
     resolve_target,
     set_status,
 )
@@ -246,19 +247,18 @@ def _add_file(
 
 
 def _enrich_with_baker(metadata: dict[str, Any], file_path: Path) -> None:
-    """Attach baker-derived structural metadata under ``recordSet`` if available."""
-    try:
-        from croissant_baker.metadata_generator import find_handler, register_all_handlers
-    except ImportError:
+    """Attach baker-derived structural metadata under ``recordSet``."""
+    from croissant_baker.handlers.registry import extract as baker_extract
+    from croissant_baker.handlers.registry import select_handler
+
+    # Resolves the compression wrapper first, so x.parquet.gz describes as x.parquet.
+    selection = select_handler(file_path)
+    if selection.handler is None:
+        click.echo(f"ℹ️  {file_path.name} not described: {selection.refusal}")
         return
 
-    register_all_handlers()
-    handler = find_handler(file_path)
-    if handler is None:
-        return
-
     try:
-        extracted = handler.extract_metadata(file_path)
+        extracted = baker_extract(selection.handler, selection.source, file_path)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"⚠️  baker could not extract from {file_path.name}: {exc}")
         return
@@ -401,6 +401,12 @@ def _creator_for_baker(
     return [{key: value for key, value in creator_node.items() if key in {"name", "email", "url"}}]
 
 
+def _echo_scan_coverage(generator: Any) -> None:
+    """Forward the baker's coverage summary: what it could not describe, and why."""
+    for line in generator.scan_report.summary_lines():
+        click.echo(f"  {line}")
+
+
 def _bake_directory(
     directory: Path,
     biotope_root: Path,
@@ -450,10 +456,13 @@ def _bake_directory(
     try:
         metadata_dict = normalize_metadata_shape(generator.generate_metadata())
     except ValueError as exc:
+        _echo_scan_coverage(generator)
         if str(exc) != "No supported files found in the dataset":
             click.echo(f"⚠️  Could not bake {rel_dir}: {exc}")
             return None
         metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
+    else:
+        _echo_scan_coverage(generator)
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
@@ -527,7 +536,7 @@ def _dedupe_file_objects_covered_by_filesets(
         if not content_url:
             deduped.append(distribution)
             continue
-        resolved = _resolve_distribution_path(content_url, abs_dir, biotope_root)
+        resolved = resolve_content_url(content_url, abs_dir, biotope_root)
         if resolved is not None and resolved.resolve() in fileset_covered:
             continue
         deduped.append(distribution)
@@ -565,7 +574,7 @@ def _covered_files(
             content_url = distribution.get("contentUrl")
             if not content_url:
                 continue
-            candidate = _resolve_distribution_path(content_url, abs_dir, biotope_root)
+            candidate = resolve_content_url(content_url, abs_dir, biotope_root)
             if candidate is not None and candidate.is_file():
                 covered.add(candidate.resolve())
             continue
@@ -581,21 +590,6 @@ def _covered_files(
                     covered.add(candidate.resolve())
 
     return covered
-
-
-def _resolve_distribution_path(
-    content_url: str,
-    abs_dir: Path,
-    biotope_root: Path,
-) -> Path | None:
-    """Resolve a contentUrl against dataset-first, then project-root semantics."""
-    dataset_candidate = abs_dir / content_url
-    if dataset_candidate.exists():
-        return dataset_candidate
-    root_candidate = biotope_root / content_url
-    if root_candidate.exists():
-        return root_candidate
-    return None
 
 
 def _iter_directory_files(abs_dir: Path):
@@ -788,7 +782,7 @@ def _human_source_path(distribution: dict[str, Any], source_dir: Path, biotope_r
     entry_type = distribution.get("@type")
     if entry_type == FILE_OBJECT_TYPE:
         content_url = distribution.get("contentUrl", "") or ""
-        candidate = _resolve_distribution_path(content_url, source_dir, biotope_root)
+        candidate = resolve_content_url(content_url, source_dir, biotope_root)
         if candidate is not None:
             return str(candidate.relative_to(biotope_root))
         return content_url

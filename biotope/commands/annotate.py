@@ -45,6 +45,13 @@ def merge_metadata(dynamic_metadata: dict) -> dict:
     return shared_merge_metadata(dynamic_metadata)
 
 
+def _encoding_format_text(value: Any) -> str:
+    """Render an ``encodingFormat``, which is a list for a compressed file."""
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    return str(value or "")
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 def annotate(ctx: click.Context) -> None:
@@ -535,7 +542,7 @@ def edit(
     default_format = ""
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
-        default_format = distribution[0].get("encodingFormat", "")
+        default_format = _encoding_format_text(distribution[0].get("encodingFormat"))
 
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
@@ -634,7 +641,7 @@ def edit(
         for resource in dynamic_metadata["distribution"]:
             resource_type = resource.get("@type", "").replace("sc:", "").replace("cr:", "")
             name = resource.get("name", "")
-            format = resource.get("encodingFormat", "")
+            format = _encoding_format_text(resource.get("encodingFormat"))
             hash = resource.get("sha256", "")[:8] + "..." if resource.get("sha256") else ""
 
             table.add_row(resource_type, name, format, hash)
@@ -1039,7 +1046,7 @@ def _run_interactive_annotation(
     default_format = ""
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
-        default_format = distribution[0].get("encodingFormat", "")
+        default_format = _encoding_format_text(distribution[0].get("encodingFormat"))
 
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
@@ -1341,7 +1348,12 @@ def _merge_record_set_row(
         if value:
             record_set[field_name] = value
 
-    encoding_format = (row.get("encoding_format") or "").strip()
+    # A compressed file's format is a list; the round-trip must not flatten it.
+    raw_encoding = row.get("encoding_format")
+    if isinstance(raw_encoding, list):
+        encoding_format: str | list[str] = [str(item).strip() for item in raw_encoding]
+    else:
+        encoding_format = (raw_encoding or "").strip()
     if encoding_format:
         source_id = _record_set_source_id(record_set)
         if source_id:

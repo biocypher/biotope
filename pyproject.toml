@@ -38,7 +38,7 @@ dependencies = [
     "pydantic>=2.6",
     "jinja2>=3.1.6",
     "duckdb>=1.0",
-    "croissant-baker>=0.3,<1"
+    "croissant-baker>=0.3,<1",
 ]
 
 [project.optional-dependencies]
@@ -130,3 +130,6 @@ check-yield-types = false
 # every Raises clause is noise. Args injected by click decorators are likewise
 # not interesting to repeat in docstrings.
 skip-checking-raises = true
+
+[tool.uv.sources]
+croissant-baker = { path = "../croissant-baker", editable = true }

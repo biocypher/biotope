@@ -228,6 +228,19 @@ def update_manifest_status(manifest_path: Path, status: str) -> bool:
     return True
 
 
+def resolve_content_url(content_url: str, dataset_dir: Path, biotope_root: Path) -> Path | None:
+    """Resolve a ``contentUrl`` to a file on disk, or None.
+
+    croissant-baker addresses the files it described relative to the dataset
+    directory; the file objects biotope backfills are relative to the project
+    root. One manifest carries both.
+    """
+    for candidate in (dataset_dir / content_url, biotope_root / content_url):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
     """The data directory mirrored by a manifest under the project root.
 

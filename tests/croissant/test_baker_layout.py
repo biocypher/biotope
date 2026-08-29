@@ -141,3 +141,59 @@ def test_acquisition_falls_back_to_id_minus_fileset_when_field_source_missing(
     with AcquisitionContext(dataset, datasets_location=data_dir) as ctx:
         path = ctx._resolve_path(dataset.record_set_by_name("target"))
     assert path == data_dir / "target" / "*.parquet"
+
+
+def test_spec_accepts_compressed_encoding_formats(tmp_path):
+    """A wrapped file carries both media types, and includes gains a glob per
+    compression. Typed as bare strings, these made every manifest over
+    compressed data unreadable by `map inspect`."""
+    manifest = tmp_path / "wrapped.jsonld"
+    manifest.write_text(
+        json.dumps(
+            {
+                "@context": {"@vocab": "https://schema.org/"},
+                "@type": "sc:Dataset",
+                "name": "wrapped",
+                "distribution": [
+                    {
+                        "@id": "cells-fileset",
+                        "@type": "cr:FileSet",
+                        "name": "cells",
+                        "includes": ["**/*.parquet", "**/*.parquet.gz"],
+                        "encodingFormat": [
+                            "application/vnd.apache.parquet",
+                            "application/gzip",
+                        ],
+                    },
+                    {
+                        "@id": "file_0",
+                        "@type": "cr:FileObject",
+                        "name": "cells.parquet.gz",
+                        "contentUrl": "cells.parquet.gz",
+                        "encodingFormat": [
+                            "application/vnd.apache.parquet",
+                            "application/gzip",
+                        ],
+                    },
+                    {
+                        "@id": "file_1",
+                        "@type": "cr:FileObject",
+                        "name": "notes.csv",
+                        "contentUrl": "notes.csv",
+                        "encodingFormat": "text/csv",
+                    },
+                ],
+                "recordSet": [],
+            }
+        )
+    )
+
+    dataset = load_from_path(manifest)
+
+    file_set, wrapped, plain = dataset.distribution
+    assert file_set.includes == ["**/*.parquet", "**/*.parquet.gz"]
+    assert wrapped.encoding_format == [
+        "application/vnd.apache.parquet",
+        "application/gzip",
+    ]
+    assert plain.encoding_format == "text/csv"
