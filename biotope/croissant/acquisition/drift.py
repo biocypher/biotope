@@ -22,7 +22,8 @@ def detect_manifest_drift(croissant_path: str | Path, datasets_location: str | P
 
     An empty list means no drift detected (or the manifest/location doesn't
     exist — callers should treat that as "nothing to warn about", not an
-    error). Directory checks are coarse-grained. Managed single-file manifests
+    error). Only managed baker manifests are checked. Directory checks are
+    coarse-grained. Managed single-file manifests
     check only their declared file references, so edits to project metadata
     and mappings cannot masquerade as changed source data.
 
@@ -56,6 +57,9 @@ def detect_manifest_drift(croissant_path: str | Path, datasets_location: str | P
             except (OSError, ValueError):
                 return []
         break
+    else:
+        # A standalone manifest has no managed source directory to rebake.
+        return []
 
     manifest_mtime = croissant_path.stat().st_mtime
     drifted: list[Path] = []

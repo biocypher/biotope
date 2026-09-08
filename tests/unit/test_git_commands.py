@@ -81,14 +81,6 @@ class TestGitCommands:
             assert "Biotope Project Status" in result.output
             assert "Git Repository: ✅" in result.output
 
-    def test_status_no_git_repo(self, runner, tmp_path):
-        """Test status without Git repository."""
-        with patch("biotope.commands.status.find_biotope_root", return_value=tmp_path):
-            result = runner.invoke(status)
-
-            assert result.exit_code != 0
-            assert "Not in a Git repository" in result.output
-
     def test_status_porcelain(self, runner, biotope_project):
         """Test status with porcelain output."""
         with patch("biotope.commands.status.find_biotope_root", return_value=biotope_project):

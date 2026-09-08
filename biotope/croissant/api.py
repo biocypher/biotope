@@ -1,28 +1,19 @@
 """High-level Croissant→KG operations.
 
 Pure functions shared between the test suite and the biotope CLI verbs
-(``biotope map``, ``propose-alignment``). They return
+(``biotope map``). They return
 JSON-serialisable dicts so the CLI can echo their output verbatim and tests
 can assert against structure.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from biotope.croissant.alignment.model import (
-    Alignment,
-    Equivalence,
-    EquivalenceKind,
-    JoinKeys,
-    Reference,
-)
 from biotope.croissant.mapping.defaults import intent_comment, unresolved_scaffold
-from biotope.croissant.mapping.loader import load_mapping
 from biotope.croissant.mapping.render import (
     build_inspector_appendix,
     render_mapping_with_appendix,
@@ -117,88 +108,6 @@ def propose_mapping(
         required_relations=required_relations,
         purpose=purpose,
     )
-
-
-_ID_LIKE_RE = re.compile(r"(^id$|_id$|_curie$|^curie$)", re.IGNORECASE)
-
-
-def _id_like_fields(field_names: set[str], id_selectors: dict[str, Any]) -> set[str]:
-    """Field names that look like identifiers, or are wired into ``ids:``."""
-    return {f for f in field_names if _ID_LIKE_RE.search(f) or f in id_selectors}
-
-
-def _score_join_field(field: str, id_like: set[str]) -> tuple[int, str]:
-    """Rank candidates: id-like fields first, then alphabetical for stability."""
-    return (0 if field in id_like else 1, field)
-
-
-def propose_alignment(
-    mapping_paths: list[str | Path],
-    *,
-    write_to: str | Path | None = None,
-) -> dict[str, Any]:
-    """Propose an ``alignment.yaml`` by spotting overlap in entity property names.
-
-    Operates over semantic entity keys (the mapping key, which is also the
-    generated ``input_label``).
-
-    Heuristic, not authoritative: pairs across different ``schema_term``s are
-    only proposed when the shared field is id-like (named ``id``/``*_id``/
-    ``*_curie`` or referenced from ``ids:``), since incidental shared fields
-    (e.g. ``species: human``) are a weak signal for "same node type". Every
-    proposal carries a ``confidence``/``reason`` so a human reviews before
-    ``build`` — this function never writes anything but the proposal itself.
-    """
-    mappings = [(Path(p).stem.replace(".mapping", ""), load_mapping(p)) for p in mapping_paths]
-
-    equivalences: list[Equivalence] = []
-    reason = "need >=2 mappings to propose cross-mapping equivalences" if len(mappings) < 2 else None
-
-    for i, (stem_a, mapping_a) in enumerate(mappings):
-        for stem_b, mapping_b in mappings[i + 1 :]:
-            for ent_key_a, entity_a in mapping_a.entities.items():
-                for ent_key_b, entity_b in mapping_b.entities.items():
-                    shared = set(entity_a.properties).intersection(entity_b.properties)
-                    if not shared:
-                        continue
-                    id_like = _id_like_fields(shared, mapping_a.ids) | _id_like_fields(shared, mapping_b.ids)
-                    different_type = (
-                        entity_a.schema_term is not None
-                        and entity_b.schema_term is not None
-                        and entity_a.schema_term != entity_b.schema_term
-                    )
-                    if different_type and not id_like:
-                        # Different declared types sharing only incidental
-                        # fields (e.g. `species`) — too weak to propose.
-                        continue
-                    join_field = min(shared, key=lambda f: _score_join_field(f, id_like))
-                    is_id_like = join_field in id_like
-                    confidence = 0.9 if is_id_like and not different_type else 0.6 if is_id_like else 0.3
-                    reason_text = (
-                        f"shared id-like field `{join_field}`"
-                        if is_id_like
-                        else f"shared field `{join_field}` (not id-like; review before building)"
-                    )
-                    equivalences.append(
-                        Equivalence(
-                            a=Reference(mapping=stem_a, node_type=ent_key_a),
-                            b=Reference(mapping=stem_b, node_type=ent_key_b),
-                            kind=EquivalenceKind.SAME_NODE,
-                            join_on=JoinKeys(a=join_field, b=join_field),
-                            confidence=confidence,
-                            reason=reason_text,
-                        ),
-                    )
-
-    alignment = Alignment(mappings=[str(p) for p in mapping_paths], equivalences=equivalences)
-    payload = alignment.model_dump(by_alias=True, exclude_defaults=False, mode="json")
-    yaml_text = yaml.safe_dump(payload, sort_keys=False)
-    if write_to is not None:
-        Path(write_to).write_text(yaml_text)
-    result = {"alignment": payload, "yaml": yaml_text, "wrote": str(write_to) if write_to else None}
-    if reason is not None:
-        result["reason"] = reason
-    return result
 
 
 def materialize(

@@ -207,42 +207,6 @@ def test_preview_does_not_warn_on_axis_selectors(tmp_path) -> None:
     assert bad == [], f"axis selectors falsely flagged: {bad}"
 
 
-def test_preview_warns_when_source_equals_target_field(tmp_path) -> None:
-    """A relation whose source and target read the same field should warn (self-loops)."""
-    croissant_path = tmp_path / "ot.jsonld"
-    croissant_path.write_text(
-        """
-        {
-          "@type": "sc:Dataset",
-          "name": "ot",
-          "recordSet": [{
-            "@id": "rs", "name": "rs",
-            "field": [{"name": "id", "dataType": "sc:Text"}]
-          }]
-        }
-        """
-    )
-    from biotope.croissant.spec import load_from_path
-
-    mapping = Mapping.model_validate(
-        {
-            "croissant": str(croissant_path),
-            "entities": {"e": {"record_set": "rs", "id": "id"}},
-            "relations": {
-                "self_loop": {
-                    "record_set": "rs",
-                    "source": {"entity": "e", "field": "id"},
-                    "target": {"entity": "e", "field": "id"},
-                }
-            },
-        }
-    )
-    result = preview_mapping(mapping, load_from_path(croissant_path))
-    warnings = [f for f in result.findings if f.severity == "warning"]
-    assert any("self-loops" in f.message for f in warnings)
-
-
-# ---------------------------------------------------------------------------
 # Multi-mapping aggregation
 # ---------------------------------------------------------------------------
 
@@ -357,8 +321,8 @@ def test_aggregate_slot_resolution_index(tmp_path: Path) -> None:
     assert agg.slot_resolution["relations.is_hub_for"] == ["b.mapping.yaml"]
 
 
-def test_aggregate_flags_double_resolution(tmp_path: Path) -> None:
-    """If two files both resolve the same slot, the aggregator warns."""
+def test_aggregate_combines_sources_without_duplicate_warnings(tmp_path: Path) -> None:
+    """A shared entity type across mappings is normal, not a conflict."""
     croissant_path = tmp_path / "c.jsonld"
     croissant_path.write_text(
         """
@@ -377,7 +341,7 @@ def test_aggregate_flags_double_resolution(tmp_path: Path) -> None:
     pb = preview_mapping(Mapping.model_validate(body), load_from_path(croissant_path))
     agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
     assert agg.slot_resolution["entities.gene"] == ["a.mapping.yaml", "b.mapping.yaml"]
-    assert any("resolved by multiple" in f.message for f in agg.findings)
+    assert not agg.findings
 
 
 def test_aggregate_flags_endpoint_conflict(tmp_path: Path) -> None:
@@ -431,6 +395,7 @@ def test_literal_curie_namespace_matches_declared_transform(minimal_croissant):
         {"id": {"value": "geo:GSM1"}},
         {"id": {"use": "key"}},
         {"id": {"value": "GSM1", "transform": "as_curie", "args": {"prefix": "geo"}}},
+        {"id": {"transform": "hash_id", "args": {"fields": ["ensembl_id"], "prefix": "geo"}}},
     ]
     previews = []
     for index, entity in enumerate(mappings):
@@ -465,4 +430,58 @@ def test_namespace_is_not_guessed_from_urls_or_transformed_literals(minimal_croi
                 "entities": {"sample": {"record_set": "genes", "id": selector}},
             }
         )
-        assert preview_mapping(mapping, dataset).entities[0].namespace == "id"
+        assert preview_mapping(mapping, dataset).entities[0].namespace is None
+
+
+def test_preview_keeps_all_declared_namespaces_and_does_not_invent_unknowns(minimal_croissant):
+    dataset = load_from_path(minimal_croissant)
+    results = []
+    for namespace in (None, "hgnc.symbol", "mgi.symbol"):
+        entity = {"record_set": "genes", "id": "ensembl_id"}
+        if namespace:
+            entity["namespace"] = namespace
+        result = preview_mapping(
+            Mapping.model_validate({"croissant": str(minimal_croissant), "entities": {"gene": entity}}), dataset
+        )
+        assert result.entities[0].namespace == namespace
+        results.append((str(namespace), result))
+    first_two = aggregate_previews(results[:2])
+    assert not first_two.findings
+    combined = aggregate_previews(results)
+    assert combined.to_json()["schema"]["entities"][0]["namespaces"] == ["hgnc.symbol", "mgi.symbol"]
+    assert len(combined.findings) == 1
+
+
+def test_preview_does_not_infer_self_loops_from_shared_input_fields(minimal_croissant):
+    mapping = Mapping.model_validate(
+        {
+            "croissant": str(minimal_croissant),
+            "entities": {
+                "measurement": {
+                    "record_set": "genes",
+                    "id": {"transform": "hash_id", "args": {"fields": ["ensembl_id", "symbol"]}},
+                },
+                "gene": {"record_set": "genes", "id": "ensembl_id"},
+            },
+            "relations": {
+                "measures": {
+                    "record_set": "genes",
+                    "source": {
+                        "entity": "measurement",
+                        "field": "ensembl_id",
+                        "transform": "hash_id",
+                        "args": {"fields": ["ensembl_id", "symbol"]},
+                    },
+                    "target": {
+                        "entity": "gene",
+                        "field": "ensembl_id",
+                        "transform": "as_curie",
+                        "args": {"prefix": "gene"},
+                    },
+                }
+            },
+        }
+    )
+    result = preview_mapping(mapping, load_from_path(minimal_croissant))
+    assert not result.findings
+    assert len(result.relations) == 1

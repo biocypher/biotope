@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 
 import click
-from rich.console import Console
 
 from biotope.commands.add import _resolve_dataset_ref
 from biotope.metadata import (
@@ -24,9 +23,6 @@ from biotope.metadata import (
 from biotope.utils import find_biotope_root
 
 
-console = Console()
-
-
 @click.command()
 @click.argument("dataset", type=str)
 @click.argument("status", type=click.Choice(list(STATUS_VALUES)))
@@ -34,7 +30,7 @@ console = Console()
     "--derived-from",
     "derived_from",
     multiple=True,
-    help="Add `prov:wasDerivedFrom` pointer (repeatable). Same ref forms as " "`biotope add --derived-from`.",
+    help="Add `prov:wasDerivedFrom` pointer (repeatable). Same ref forms as `biotope add --derived-from`.",
 )
 def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
     """Set DATASET's biotope:status to STATUS (raw | processed | mapped).
@@ -77,8 +73,8 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
     with open(manifest_path, "w") as handle:
         json.dump(metadata, handle, indent=2)
 
-    summary = f"[green]✓[/green] [cyan]{target_id}[/cyan] → [bold]{status}[/bold]"
+    summary = f"✓ {target_id} → {status}"
     new_provenance = [s for s in resolved_sources if s in get_derived_from(metadata)]
     if new_provenance:
         summary += f"  (derived from: {', '.join(new_provenance)})"
-    console.print(summary)
+    click.echo(summary)

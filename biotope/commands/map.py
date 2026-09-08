@@ -64,7 +64,7 @@ console = Console()
 @click.option("--clear-entities", is_flag=True, help="Empty required_entities before adding.")
 @click.option("--clear-relations", is_flag=True, help="Empty required_relations before adding.")
 @click.option("--clear-sources", is_flag=True, help="Empty data_sources before adding.")
-@click.option("--show", is_flag=True, help="Print intent + mapping progress and exit.")
+@click.option("--show", is_flag=True, help="Print project intent and exit.")
 @click.pass_context
 def map_group(
     ctx: click.Context,
@@ -392,7 +392,11 @@ def _set_relation_deferred(mapping_path: Path, relation_name: str, *, deferred: 
     mapping = load_mapping(mapping_path)
     if relation_name not in mapping.relations:
         known = ", ".join(sorted(mapping.relations)) or "(none declared)"
-        raise click.UsageError(f"Unknown relation {relation_name!r}. Known relations: {known}")
+        raise click.UsageError(
+            f"Unknown relation {relation_name!r} in this mapping. Known relations: {known}. "
+            f"For an unbound gap, add {relation_name}: {{deferred: true}} under relations in the mapping YAML. "
+            "Project intent alone does not create a per-file relation."
+        )
     set_relation_deferred(mapping, mapping_path, relation_name, deferred=deferred)
 
 
@@ -668,7 +672,7 @@ def _render_global_schema_rich(agg: MultiMappingPreview) -> None:
             label = e.schema_term if e.schema_term == e.key else f"{e.key} (label: {e.schema_term})"
             props = ", ".join(f"{k}:{v}" for k, v in e.properties.items()) or "(none)"
             sources = ", ".join(e.sources)
-            sections.append(f"  {label}   namespace: {e.namespace}")
+            sections.append(f"  {label}   namespaces: {', '.join(e.namespaces) or 'unknown'}")
             sections.append(f"    properties: {props}")
             sections.append(f"    [dim]from: {sources}[/dim]")
     if agg.relations:
@@ -699,10 +703,6 @@ def _render_slot_resolution_rich(agg: MultiMappingPreview, all_files: list[str])
             marker = "✓"
             color = "green"
             tail = ", ".join(resolvers)
-            if len(resolvers) > 1:
-                marker = "⚠"
-                color = "yellow"
-                tail = f"{tail} (resolved by multiple — should be a single source of truth)"
             lines.append(f"[{color}]{marker}[/{color}] {slot}   ← {tail}")
         elif unresolved_in:
             lines.append(f"[red]○[/red] {slot}   [dim](stub present in: {', '.join(unresolved_in)})[/dim]")
@@ -714,7 +714,7 @@ def _render_slot_resolution_rich(agg: MultiMappingPreview, all_files: list[str])
 
 
 def _render_global_findings_rich(agg: MultiMappingPreview) -> None:
-    """Project-level findings (cross-file conflicts, double-resolution)."""
+    """Project-level findings about conflicting definitions."""
     if not agg.findings:
         return
     lines = [f"[{f.severity}] {f.path}: {f.message}" for f in agg.findings]

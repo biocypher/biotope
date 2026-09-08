@@ -62,7 +62,14 @@ A selector picks a value from a row in one of three mutually exclusive ways — 
 
 - `passthrough` (default) — use the field value as-is.
 - `as_curie` — prefix the value into a CURIE: `args: { prefix: iata }` turns `ABE` into `iata:ABE`. Use this to put every source's ids into one namespace.
-- `hash_id` — hash the field(s) into a stable synthetic id when no natural id exists.
+- `hash_id` — declare a synthetic id from an ordered list of fields:
+  `id: {transform: hash_id, args: {fields: [sample_id, gene_id], prefix: measurement}}`.
+  `args.fields` is required, even for one field. `prefix` and a positive integer
+  `length` are optional. Biotope checks the declaration; it does not execute the hash.
+
+`passthrough` accepts no arguments. `as_curie` requires a non-empty string
+`prefix` and accepts an optional string `separator`. Unknown argument names and
+undeclared fields in `args.fields` are errors.
 
 The id is what makes two emissions the same node. If the same real-world entity appears in several sources, mint its id **identically** everywhere (same field semantics, same transform, same prefix) for consistent identity in later project code. Mismatched id construction is the most common cause of dropped edges and duplicate nodes — see `reliability.md`.
 
@@ -150,9 +157,15 @@ Same entity: rich binding in one mapping (full properties), minimal in another (
 
 **Per-file rule:** every relation endpoint's `entity` must appear under `entities:` in **that same file** — add a minimal stub if needed.
 
+Both endpoints of a relation between instances of the same type use the same
+entity key: a mouse-gene to human-gene relation uses `entity: gene` on both sides,
+with separate ID selectors. An extra entity key declares a separate target type.
+
 ## Shared entities
 
-If multiple record sets reference the same entity type (e.g. a tag, category, or ontology term), plan that entity binding in **each** record set that contributes edges to it — not only from one "primary" source. Otherwise edges target ids with no matching node → orphans at build.
+The same entity type may appear in several mapping files. Use consistent identity
+semantics and review any distinct namespaces shown by the project preview.
+An unknown namespace is left unset; Biotope does not infer it from source values.
 
 Pick the record set with the richest linkage when one source embeds references another only holds a summary table.
 
@@ -167,9 +180,10 @@ This checks metadata and mapping definitions. Inspect `unresolved_slots`,
 code 1; warnings still need review. Empty stubs are inactive in this model and
 can pass without producing any schema. Compare the resolved slots with project
 intent; a passing result alone does not establish purpose coverage. A passing check does not validate source
-values, identifiers, joins, filters or transformations. Biotope provides no row
+values, identifier equality, joins, filters or transform execution. Biotope provides no row
 samples and does not execute these definitions. Stop here for this iteration.
 
 Record unsupported fields and scientific choices explicitly. Do not manufacture
-columns or change the user's schema just to make validation pass. Metadata-based
-alignment suggestions are hypotheses for review, not verified identities.
+columns or change the user's schema just to make validation pass. For an unbound
+relation, add `<relation>: {deferred: true}` under `relations:`; project intent alone
+does not create that entry. The deferral command updates entries already in the file.

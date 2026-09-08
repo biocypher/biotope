@@ -1659,7 +1659,8 @@ def _show_preview(
         sections: list[str] = []
         for e in result.entities:
             sections.append(
-                f"entity {e.key}: schema_term={e.schema_term}, namespace={e.namespace}, properties={list(e.properties)}"
+                f"entity {e.key}: schema_term={e.schema_term}, namespace={e.namespace or 'unknown'}, "
+                f"properties={list(e.properties)}"
             )
         for r in result.relations:
             sections.append(f"relation {r.key}: {r.source} -> {r.target}, properties={list(r.properties)}")

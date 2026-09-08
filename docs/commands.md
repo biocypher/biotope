@@ -7,8 +7,10 @@ for options. The workflow stops at mapping.
 ## Setup and tracking
 
 - `init <name>` creates a project; `init .` initializes the current directory.
+  `--no-git` keeps the metadata workflow usable without creating a repository.
 - `add <path>...` describes local files or directories with croissant-baker,
-  records provenance and stages manifests. `--rebake` regenerates directory descriptions; use `--force` for an individual file.
+  records provenance and stages manifests if the project owns a Git repository.
+  `--rebake` regenerates directory descriptions; use `--force` for an individual file.
 - `mv`, `rm` maintain tracked paths and metadata.
 - `queue` shows coarse `raw`, `processed` and `mapped` states; `mark` changes
   them manually. These states do not certify source values or graph readiness.
@@ -24,13 +26,13 @@ for options. The workflow stops at mapping.
   appendix. `--stdout` prints it instead.
 - `map preview [<mapping>]` checks definitions and summarizes the target schema.
   Without a path it checks all project mappings. `--json` supports agent use.
-  Errors or partially filled bindings return exit code 1; values and transformations
-  are not checked. Empty stubs are inactive in the existing multi-mapping model;
+  Errors or partially filled bindings return exit code 1. Transform arguments and
+  their source-field references are checked; source values and transform execution
+  are not. Empty stubs are inactive in the existing multi-mapping model;
   inspect the proposed schema and compare coverage with project intent.
-- `map defer-relation <mapping> <relation>` records an unsupported relation;
-  `undefer-relation` reverses it.
-- `propose-alignment` suggests equivalences between mapping definitions for
-  semantic review. It does not verify identities against data values.
+- `map defer-relation <mapping> <relation>` defers a relation already present in
+  that file; `undefer-relation` reverses it. For a gap with no binding yet, add
+  `<relation>: {deferred: true}` under `relations:` in the mapping YAML.
 
 `propose-mapping` remains an alias for `map scaffold`.
 
@@ -38,7 +40,8 @@ for options. The workflow stops at mapping.
 
 - `annotate` scaffolds, applies and validates metadata annotations.
 - `config` manages metadata validation and project configuration.
-- `status`, `commit`, `log`, `push`, `pull` provide Git-style metadata history
+- `status` summarizes tracked metadata and any Git changes.
+- `commit`, `log`, `push`, `pull` require a Git repository for metadata history
   and synchronization.
 
 Source-value loading, downloading, discovery and text extraction are outside

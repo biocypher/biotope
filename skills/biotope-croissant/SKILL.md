@@ -103,13 +103,11 @@ in the existing model and can pass with no schema. Compare resolved slots with
 project intent; review warnings too.
 
 A passing result covers metadata and definitions only. It does not validate
-values, transformations, joins or scientific correctness. Record unresolved
+source values, transform execution, joins or scientific correctness. Record unresolved
 choices and limitations alongside the mapping artifacts. Project-owned loading
 and graph construction are later work; do not run build/view or create loaders.
 
 Read [reliability.md](references/reliability.md) for identity and evidence limits.
-Leave `propose-alignment` out of this integration check: shared property names
-and constants do not establish entity equivalence.
 
 ## Supporting commands
 

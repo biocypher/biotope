@@ -116,6 +116,7 @@ The existing [spec 1 runbook](01-croissant-baker-update.runbook.md) uses:
 
 - Daria project: `/Users/vlad/Projects/virtual-human-dev/daria_mvp/data`.
 - INTRAC project: `/Users/vlad/Projects/virtual-human-dev/biotope-bench/data/intrac_260731/workspace`.
+- Openrouter data: /Users/vlad/Projects/virtual-human-dev/usecases/opentarget/opentargets-25.12 . It has an `output` for raw data and a manually written `meta/croissant.json` that we can use for comparison, but not as a golden standard (it's not perfect)
 - Local Biotope and baker installed together in each project's environment, currently using Python 3.12.
 - Metadata for the full `raw` directory, plus Daria's `context/darias_input.xlsx`, followed by spot checks and Claude Code review.
 

@@ -27,7 +27,7 @@ from biotope.croissant.spec import (
 )
 
 
-VALIDATION_SCOPE = "metadata and mapping definitions; values and transformations are not checked"
+VALIDATION_SCOPE = "metadata and mapping definitions; source values and transform execution are not checked"
 
 
 @dataclass
@@ -45,7 +45,7 @@ class EntityProjection:
     key: str
     schema_term: str
     input_label: str
-    namespace: str
+    namespace: str | None
     properties: dict[str, str]
 
     def to_json(self) -> dict[str, Any]:
@@ -112,7 +112,7 @@ class AggregatedEntity:
 
     key: str
     schema_term: str
-    namespace: str
+    namespaces: list[str]
     properties: dict[str, str]
     sources: list[str]  # mapping file names that contributed
 
@@ -120,7 +120,7 @@ class AggregatedEntity:
         return {
             "key": self.key,
             "schema_term": self.schema_term,
-            "namespace": self.namespace,
+            "namespaces": list(self.namespaces),
             "properties": dict(self.properties),
             "sources": list(self.sources),
         }
@@ -184,8 +184,8 @@ def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappi
     """Merge a list of (file_name, MappingPreview) pairs into a project-level view.
 
     Entities and relations are merged by ``key``. Mismatched ``schema_term``,
-    ``namespace``, endpoint, or property types across files are recorded as
-    findings, but the first-seen value wins so the topology still renders.
+    endpoint, or property types across files are recorded as findings, with
+    the first-seen value retained. All known namespace declarations are kept.
     """
     agg = MultiMappingPreview()
     entity_by_key: dict[str, AggregatedEntity] = {}
@@ -205,7 +205,7 @@ def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappi
                 entity_by_key[e.key] = AggregatedEntity(
                     key=e.key,
                     schema_term=e.schema_term,
-                    namespace=e.namespace,
+                    namespaces=[e.namespace] if e.namespace else [],
                     properties=dict(e.properties),
                     sources=[file_name],
                 )
@@ -220,15 +220,8 @@ def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappi
                         f"vs {e.schema_term!r} (from {file_name})",
                     )
                 )
-            if existing.namespace != e.namespace:
-                agg.findings.append(
-                    ValidationFinding(
-                        "warning",
-                        f"entities.{e.key}",
-                        f"namespace disagrees: {existing.namespace!r} (from {existing.sources[0]}) "
-                        f"vs {e.namespace!r} (from {file_name})",
-                    )
-                )
+            if e.namespace and e.namespace not in existing.namespaces:
+                existing.namespaces.append(e.namespace)
             for prop_name, prop_type in e.properties.items():
                 if prop_name in existing.properties and existing.properties[prop_name] != prop_type:
                     agg.findings.append(
@@ -290,13 +283,15 @@ def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappi
                 else:
                     existing.properties.setdefault(prop_name, prop_type)
 
-    for slot, files in agg.slot_resolution.items():
-        if len(files) > 1:
+    for entity in entity_by_key.values():
+        entity.namespaces.sort()
+        if len(entity.namespaces) > 1:
             agg.findings.append(
                 ValidationFinding(
                     "warning",
-                    slot,
-                    f"resolved by multiple mappings: {', '.join(files)}",
+                    f"entities.{entity.key}",
+                    f"namespace disagrees across mappings: {', '.join(entity.namespaces)}; "
+                    "review whether these identifier systems need alignment",
                 )
             )
 
@@ -400,17 +395,6 @@ def _validate_against_dataset(
             _validate_selector(endpoint.as_selector(), f"{path}.{side_name}", field_index, mapping.ids, preview)
         for prop_name, prop in relation.properties.items():
             _validate_selector(prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview)
-        if relation.source is not None and relation.target is not None:
-            src_field = _selector_field(relation.source.as_selector(), mapping.ids)
-            tgt_field = _selector_field(relation.target.as_selector(), mapping.ids)
-            if src_field is not None and src_field == tgt_field:
-                preview.findings.append(
-                    ValidationFinding(
-                        "warning",
-                        path,
-                        f"source and target resolve to the same field {src_field!r} — edges will be self-loops",
-                    )
-                )
 
 
 def _validate_id_not_array(
@@ -513,6 +497,50 @@ def _validate_selector(
                 f"field {selector.field!r} not declared on the chosen record set",
             )
         )
+    _validate_transform(selector, path, field_index, preview)
+
+
+def _validate_transform(
+    selector: Selector,
+    path: str,
+    field_index: dict[str, Any],
+    preview: MappingPreview,
+) -> None:
+    """Check the existing transform declarations without executing source values."""
+    allowed = {
+        "passthrough": set(),
+        "as_curie": {"prefix", "separator"},
+        "hash_id": {"fields", "prefix", "length"},
+    }
+
+    def error(suffix: str, message: str) -> None:
+        preview.findings.append(ValidationFinding("error", f"{path}.{suffix}", message))
+
+    if selector.transform not in allowed:
+        error("transform", f"unknown transform {selector.transform!r}; choose passthrough, as_curie or hash_id")
+        return
+    args = selector.args
+    for key in args.keys() - allowed[selector.transform]:
+        error(f"args.{key}", f"unknown argument {key!r} for {selector.transform}")
+    if selector.transform == "as_curie" and not (isinstance(args.get("prefix"), str) and args["prefix"].strip()):
+        error("args.prefix", "as_curie requires a non-empty string prefix")
+    if selector.transform == "hash_id":
+        fields = args.get("fields")
+        if not isinstance(fields, list) or not fields or any(not isinstance(f, str) or not f.strip() for f in fields):
+            error(
+                "args.fields",
+                "hash_id requires a non-empty list of field names, e.g. args: {fields: [sample_id, gene_id]}",
+            )
+        else:
+            for name in fields:
+                if not name.startswith("$") and name not in field_index:
+                    error("args.fields", f"field {name!r} not declared on the chosen record set")
+        if "prefix" in args and args["prefix"] is not None and not isinstance(args["prefix"], str):
+            error("args.prefix", "hash_id prefix must be a string")
+        if "length" in args and (type(args["length"]) is not int or args["length"] <= 0):
+            error("args.length", "hash_id length must be a positive integer")
+    if "separator" in args and not isinstance(args["separator"], str):
+        error("args.separator", "as_curie separator must be a string")
 
 
 def _project_schema(mapping: Mapping, preview: MappingPreview, dataset: CroissantDatasetModel) -> None:
@@ -520,7 +548,7 @@ def _project_schema(mapping: Mapping, preview: MappingPreview, dataset: Croissan
         if not entity.is_resolved():
             continue
         schema_term = entity.schema_term or to_sentence_case(name)
-        namespace = entity.namespace or _derive_namespace(entity.id, mapping.ids) or "id"
+        namespace = entity.namespace or _derive_namespace(entity.id, mapping.ids)
         properties = {
             prop_name: _property_type(prop, entity.record_set, entity.scan, dataset)
             for prop_name, prop in entity.properties.items()
@@ -571,7 +599,7 @@ def _derive_namespace(selector: Selector | None, ids: dict[str, Selector]) -> st
         selector = ids.get(selector.use)
     if selector is None:
         return None
-    if selector.transform == "as_curie":
+    if selector.transform in {"as_curie", "hash_id"}:
         prefix = selector.args.get("prefix")
         if isinstance(prefix, str):
             return prefix

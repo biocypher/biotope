@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -52,15 +53,14 @@ def test_calculate_file_checksum(sample_file):
     assert calculate_file_checksum(sample_file) == expected_hash
 
 
-def test_stage_git_changes(git_repo):
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        stage_git_changes(git_repo)
-        mock_run.assert_called_once_with(
-            ["git", "add", ".biotope/"],
-            cwd=git_repo,
-            check=True,
-        )
+def test_stage_git_changes(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    manifest = tmp_path / ".biotope/datasets/items.jsonld"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{}")
+    stage_git_changes(tmp_path)
+    staged = subprocess.check_output(["git", "diff", "--cached", "--name-only"], cwd=tmp_path, text=True)
+    assert ".biotope/datasets/items.jsonld" in staged.splitlines()
 
 
 def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
@@ -315,7 +315,6 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
@@ -323,13 +322,11 @@ def test_add_command_directory_recurses_by_default(
     mock_stage,
     mock_csv,
     mock_bake,
-    mock_is_git,
     mock_find_root,
     runner,
     git_repo,
 ):
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     data_dir = git_repo / "data"
     data_dir.mkdir()
@@ -347,7 +344,6 @@ def test_add_command_directory_recurses_by_default(
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
@@ -355,13 +351,11 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
     mock_stage,
     mock_csv,
     mock_bake,
-    mock_is_git,
     mock_find_root,
     runner,
     git_repo,
 ):
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     data_dir = git_repo / "data"
     data_dir.mkdir()
@@ -389,7 +383,6 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
@@ -397,14 +390,12 @@ def test_add_command_resolves_relative_directory(
     mock_stage,
     mock_csv,
     mock_bake,
-    mock_is_git,
     mock_find_root,
     runner,
     git_repo,
 ):
     """Regression: relative dir argument must not break CSV scaffold writing."""
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     (git_repo / "data").mkdir()
     fake_metadata = {"recordSet": [], "distribution": []}
@@ -420,10 +411,8 @@ def test_add_command_resolves_relative_directory(
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
-def test_add_command_rejects_name_for_multiple_paths(mock_is_git, mock_find_root, runner, git_repo):
+def test_add_command_rejects_name_for_multiple_paths(mock_find_root, runner, git_repo):
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     file_one = git_repo / "one.txt"
     file_two = git_repo / "two.txt"

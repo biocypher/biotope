@@ -33,7 +33,6 @@ from biotope.metadata import (
 from biotope.utils import (
     find_biotope_root,
     is_file_tracked,
-    is_git_repo,
     load_project_metadata,
     stage_git_changes,
 )
@@ -105,10 +104,6 @@ def add(
     biotope_root = find_biotope_root()
     if not biotope_root:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
-
-    if not is_git_repo(biotope_root):
-        click.echo("❌ Not in a Git repository. Initialize Git first with 'git init'.")
         raise click.Abort
 
     try:

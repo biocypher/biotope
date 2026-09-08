@@ -14,7 +14,7 @@ from biotope.croissant import api
 
 def test_removed_commands_and_sample_options_are_rejected(tmp_path):
     runner = CliRunner(mix_stderr=False)
-    for command in ("get", "search", "discover", "read"):
+    for command in ("get", "search", "discover", "read", "propose-alignment"):
         result = runner.invoke(cli, [command, "--help"])
         assert result.exit_code == 2, result.output
         assert "No such command" in result.stderr
@@ -22,6 +22,7 @@ def test_removed_commands_and_sample_options_are_rejected(tmp_path):
     assert result.exit_code == 2
     assert "No such command" in result.stderr
     assert not hasattr(api, "discover_sources")
+    assert not hasattr(api, "propose_alignment")
     result = runner.invoke(cli, ["check-data", "--fix"])
     assert result.exit_code == 2
     assert "No such option" in result.stderr
@@ -141,7 +142,10 @@ def test_structural_validation_reports_invalid_bindings(tmp_path, entity, ids, e
     result = CliRunner(mix_stderr=False).invoke(cli, ["map", "preview", str(mapping), "--json"])
     assert result.exit_code == 1, result.output
     payload = json.loads(result.stdout)
-    assert payload["validation_scope"] == "metadata and mapping definitions; values and transformations are not checked"
+    assert (
+        payload["validation_scope"]
+        == "metadata and mapping definitions; source values and transform execution are not checked"
+    )
     assert expected in result.stdout.lower()
     assert "entities.gene" in result.stdout
 
@@ -220,3 +224,65 @@ def test_deferral_does_not_change_another_relation_through_alias(tmp_path):
     assert result.exit_code != 0
     assert "alias" in result.output.lower()
     assert mapping.read_text() == text
+
+
+@pytest.mark.parametrize(
+    "selector, expected",
+    [
+        ({"field": "id", "transform": "hash_id"}, "args.fields"),
+        ({"transform": "hash_id", "args": {"fields": ["missing"]}}, "missing"),
+        ({"transform": "hash_id", "args": {"fields": ["id"], "totally_bogus_key": ["missing"]}}, "totally_bogus_key"),
+        ({"transform": "hash_id", "args": {"fields": "id"}}, "args.fields"),
+        ({"field": "id", "transform": "as_curie", "args": {}}, "args.prefix"),
+    ],
+)
+def test_transform_arguments_are_checked_without_payloads(tmp_path, selector, expected):
+    manifest = tmp_path / "source.jsonld"
+    manifest.write_text(
+        json.dumps({"recordSet": [{"name": "items", "field": [{"name": "id", "dataType": "sc:Text"}]}]})
+    )
+    mapping = tmp_path / "items.mapping.yaml"
+    body = {
+        "croissant": str(manifest),
+        "ids": {"key": selector},
+        "entities": {"item": {"record_set": "items", "id": {"use": "key"}}},
+    }
+    mapping.write_text(yaml.safe_dump(body))
+    r = CliRunner().invoke(cli, ["map", "preview", str(mapping), "--json"])
+    assert r.exit_code == 1, r.output
+    findings = json.loads(r.stdout)["mappings"][mapping.name]["findings"]
+    assert any(f["severity"] == "error" and expected in str(f) for f in findings)
+
+
+def test_no_git_project_can_describe_and_track_metadata(tmp_path, monkeypatch):
+    from biotope.validation import get_staged_metadata_files
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    parent_manifest = tmp_path / ".biotope/datasets/parent.jsonld"
+    parent_manifest.parent.mkdir(parents=True)
+    parent_manifest.write_text("{}")
+    subprocess.run(["git", "add", ".biotope"], cwd=tmp_path, check=True)
+    root = tmp_path / "project"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    r = runner.invoke(cli, ["init", ".", "--no-git", "--no-prompt"])
+    assert r.exit_code == 0, r.output
+    (root / "raw").mkdir()
+    (root / "raw" / "genes.csv").write_text("id,name\n1,A\n")
+    for args in (["add", "raw"], ["queue", "--json"], ["mark", "raw", "mapped"], ["status"]):
+        r = runner.invoke(cli, args)
+        assert r.exit_code == 0, (args, r.output, r.exception)
+    assert (root / ".biotope/datasets/raw.jsonld").is_file()
+    assert not (root / ".git").exists()
+    assert get_staged_metadata_files(root) == []
+    r = runner.invoke(cli, ["rm", "raw", "--keep-data", "--force"])
+    assert r.exit_code == 0, r.output
+    assert (root / "raw/genes.csv").is_file()
+    assert not (root / ".biotope/datasets/raw.jsonld").exists()
+    assert (
+        subprocess.run(
+            ["git", "diff", "--cached", "--name-only"], cwd=tmp_path, capture_output=True, text=True, check=True
+        ).stdout
+        == ".biotope/datasets/parent.jsonld\n"
+    )

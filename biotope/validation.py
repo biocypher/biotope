@@ -324,6 +324,10 @@ def get_staged_metadata_files(biotope_root: Path) -> List[str]:
     """Get all staged metadata files using Git."""
     import subprocess
 
+    from biotope.utils import is_git_repo
+
+    if not is_git_repo(biotope_root):
+        return []
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"], cwd=biotope_root, capture_output=True, text=True, check=True

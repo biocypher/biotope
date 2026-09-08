@@ -18,10 +18,6 @@ name does not prove equivalence, and metadata cannot prove matching values.
 Defer uncertain choices for user review. Normalization and project-specific
 loaders are later work, not part of this Biotope workflow.
 
-`propose-alignment` generates hypotheses from mapping definitions. Review each
-suggestion; do not accept equivalences solely because properties or prefixes
-match.
-
 ## Preserve research intent
 
 Keep the declared purpose and target entities/relations unless the user changes

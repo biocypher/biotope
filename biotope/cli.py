@@ -13,7 +13,6 @@ from biotope.commands.log import log as log_cmd
 from biotope.commands.map import map_group as map_cmd
 from biotope.commands.mark import mark as mark_cmd
 from biotope.commands.mv import mv as mv_cmd
-from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
 from biotope.commands.propose_mapping import propose_mapping as propose_mapping_cmd
 from biotope.commands.pull import pull as pull_cmd
 from biotope.commands.push import push as push_cmd
@@ -50,7 +49,6 @@ cli.add_command(map_cmd, "map")
 
 # Content-level workflow
 cli.add_command(propose_mapping_cmd, "propose-mapping")
-cli.add_command(propose_alignment_cmd, "propose-alignment")
 cli.add_command(queue_cmd, "queue")
 cli.add_command(mark_cmd, "mark")
 

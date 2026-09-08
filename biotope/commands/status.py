@@ -44,22 +44,13 @@ def _load_dataset_stats(biotope_root: Path, metadata_file: str) -> Optional[Data
     help="Show detailed validation errors for tracked datasets.",
 )
 def status(porcelain: bool, biotope_only: bool, detailed: bool) -> None:
-    """Show the current status of the biotope project using Git.
-
-    Displays Git status for .biotope/ directory changes.
-    Similar to git status but focused on metadata.
-    """
+    """Show metadata status and Git changes when the project uses Git."""
     console = Console()
 
     # Find biotope project root
     biotope_root = find_biotope_root()
     if not biotope_root:
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
-        raise click.Abort
-
-    # Check if we're in a Git repository
-    if not is_git_repo(biotope_root):
-        click.echo("❌ Not in a Git repository. Initialize Git first with 'git init'.")
         raise click.Abort
 
     if porcelain:
@@ -260,6 +251,8 @@ def _show_porcelain_status(biotope_root: Path, biotope_only: bool) -> None:
 
 def _get_git_status(biotope_root: Path, biotope_only: bool) -> Dict[str, List]:
     """Get Git status for .biotope/ directory."""
+    if not is_git_repo(biotope_root):
+        return {"staged": [], "modified": [], "untracked": []}
     try:
         # Get Git status
         cmd = ["git", "status", "--porcelain"]
