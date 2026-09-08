@@ -121,6 +121,8 @@ def test_queue_groups_by_status(tmp_path: Path, monkeypatch) -> None:
     assert "RAW" in r.output and "raw_doc" in r.output
     assert "PROCESSED" in r.output and "structured" in r.output
     assert "MAPPED" in r.output and "in_kg" in r.output
+    assert "mapping defined" in r.output
+    assert "in the KG" not in r.output
 
 
 def test_queue_hides_consumed_raw_from_active_section(tmp_path: Path, monkeypatch) -> None:

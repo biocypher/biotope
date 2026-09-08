@@ -19,7 +19,7 @@ def test_biotope_managed_manifest_resolves_to_existing_parallel_data_dir(tmp_pat
     manifest.parent.mkdir(parents=True)
     manifest.write_text("{}")
 
-    location = infer_datasets_location(manifest)
+    location = infer_datasets_location(str(manifest))
 
     assert location == (root / "data" / "inputs" / "opentargets").resolve()
 
@@ -53,29 +53,3 @@ def test_remote_manifest_returns_none() -> None:
     """`http(s)://` manifests have no on-disk root; callers handle None."""
     assert infer_datasets_location("https://example.com/x.jsonld") is None
     assert infer_datasets_location("http://example.com/x.jsonld") is None
-
-
-def test_string_argument_is_accepted(tmp_path: Path) -> None:
-    (tmp_path / "a" / "b").mkdir(parents=True)
-    manifest = tmp_path / ".biotope" / "datasets" / "a" / "b.jsonld"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text("{}")
-
-    assert infer_datasets_location(str(manifest)) == (tmp_path / "a" / "b").resolve()
-
-
-def test_includes_glob_composes_correctly(tmp_path: Path) -> None:
-    """End-to-end sanity: location joined with a FileSet `includes` glob hits the data."""
-    root = tmp_path
-    data_dir = root / "data" / "inputs" / "opentargets" / "drug_moa"
-    data_dir.mkdir(parents=True)
-    (data_dir / "part-00000.snappy.parquet").write_bytes(b"")
-
-    manifest = root / ".biotope" / "datasets" / "data" / "inputs" / "opentargets.jsonld"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text("{}")
-
-    location = infer_datasets_location(manifest)
-    assert location is not None
-    matches = list(location.glob("drug_moa/*.snappy.parquet"))
-    assert matches, f"glob from {location} should match the laid-out parquet"

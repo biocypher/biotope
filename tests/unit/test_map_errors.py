@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -98,12 +99,11 @@ def test_map_accepts_data_dir_and_resolves_canonical_croissant(
     canonical.parent.mkdir(parents=True, exist_ok=True)
     canonical.write_text(minimal_croissant_jsonld.read_text())
 
-    # Passing the data directory should resolve to the canonical jsonld and proceed
-    # far enough to invoke the wizard's CLI prompt loop (we kill it with EOF).
-    r = runner.invoke(map_group, ["-c", str(data_dir)], input="\n\n\n\n")
-    # Wizard will eventually fail on EOF; we just need to confirm it got past
-    # the Croissant-resolution step (no "No Croissant for this directory" panel).
-    assert "No Croissant for this directory" not in r.output
+    r = runner.invoke(map_group, ["inspect", str(data_dir), "--json"])
+    assert r.exit_code == 0, r.output
+    payload = json.loads(r.output)
+    assert payload["record_sets"][0]["name"] == "genes"
+    assert payload["record_sets"][0]["fields"][0]["name"] == "ensembl_id"
 
 
 def test_map_empty_state_recommends_add_first(tmp_path: Path, monkeypatch) -> None:

@@ -1,7 +1,7 @@
 """High-level Croissant→KG operations.
 
 Pure functions shared between the test suite and the biotope CLI verbs
-(``biotope map``, ``propose-alignment``, ``discover``, ``build``). They return
+(``biotope map``, ``propose-alignment``). They return
 JSON-serialisable dicts so the CLI can echo their output verbatim and tests
 can assert against structure.
 """
@@ -14,7 +14,6 @@ from typing import Any
 
 import yaml
 
-from biotope.croissant.acquisition import infer_datasets_location
 from biotope.croissant.alignment.model import (
     Alignment,
     Equivalence,
@@ -28,7 +27,6 @@ from biotope.croissant.mapping.render import (
     build_inspector_appendix,
     render_mapping_with_appendix,
 )
-from biotope.croissant.registry.client import LocalRegistryClient, RegistryClient
 from biotope.croissant.spec import load_from_path, load_from_url
 
 
@@ -51,54 +49,6 @@ def propose_decomposition(problem_yaml: str | Path) -> dict[str, Any]:
     }
 
 
-def discover_sources(
-    decomposition: dict[str, Any],
-    registry_paths: list[str | Path] | None = None,
-    local_baker_dir: str | Path | None = None,
-    http_registry_url: str | None = None,
-) -> dict[str, Any]:
-    """Rank candidate Croissant files and registered adapters for a decomposition."""
-    required = set(decomposition.get("required_entities", []))
-    clients: list[RegistryClient] = []
-    for p in registry_paths or []:
-        clients.append(LocalRegistryClient(p))
-    if http_registry_url is not None:
-        from biotope.croissant.registry.client import HttpRegistryClient
-
-        clients.append(HttpRegistryClient(http_registry_url))
-
-    adapter_matches: list[dict[str, Any]] = []
-    for client in clients:
-        for meta in client.list_adapters():
-            overlap = required.intersection(meta.produced_entities)
-            if not overlap:
-                continue
-            adapter_matches.append(
-                {
-                    "identifier": meta.identifier,
-                    "name": meta.name,
-                    "code_repository": meta.code_repository,
-                    "croissant_file": meta.croissant_file,
-                    "matched_entities": sorted(overlap),
-                    "score": len(overlap),
-                },
-            )
-    adapter_matches.sort(key=lambda m: m["score"], reverse=True)
-
-    croissant_files: list[dict[str, Any]] = []
-    if local_baker_dir is not None:
-        for path in sorted(Path(local_baker_dir).glob("**/*.jsonld")):
-            croissant_files.append({"path": str(path), "source": "local_baker"})
-        for path in sorted(Path(local_baker_dir).glob("**/*.croissant.json")):
-            croissant_files.append({"path": str(path), "source": "local_baker"})
-
-    return {
-        "adapter_matches": adapter_matches,
-        "croissant_files": croissant_files,
-        "required_entities": sorted(required),
-    }
-
-
 def scaffold_mapping(
     croissant_path: str | Path,
     *,
@@ -106,7 +56,6 @@ def scaffold_mapping(
     required_relations: list[str] | None = None,
     purpose: str | None = None,
     write_to: str | Path | None = None,
-    preview_rows: int = 3,
 ) -> dict[str, Any]:
     """Generate an unresolved semantic mapping scaffold for a Croissant file.
 
@@ -122,11 +71,8 @@ def scaffold_mapping(
         required_entities=required_entities or [],
         required_relations=required_relations or [],
     )
-    datasets_location = infer_datasets_location(croissant_path)
     appendix = build_inspector_appendix(
         dataset,
-        datasets_location=datasets_location,
-        preview_rows=preview_rows,
     )
     comment = intent_comment(
         required_entities=required_entities or [],
@@ -159,7 +105,6 @@ def propose_mapping(
     croissant_path: str | Path,
     *,
     write_to: str | Path | None = None,
-    preview_rows: int = 3,
     required_entities: list[str] | None = None,
     required_relations: list[str] | None = None,
     purpose: str | None = None,
@@ -168,7 +113,6 @@ def propose_mapping(
     return scaffold_mapping(
         croissant_path,
         write_to=write_to,
-        preview_rows=preview_rows,
         required_entities=required_entities,
         required_relations=required_relations,
         purpose=purpose,

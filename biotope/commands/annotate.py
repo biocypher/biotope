@@ -158,60 +158,6 @@ def validate(jsonld):
         exit(1)
 
 
-@annotate.command()
-@click.option(
-    "--jsonld",
-    "-j",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to the JSON-LD metadata file.",
-)
-@click.option(
-    "--record-set",
-    "-r",
-    required=True,
-    help="Name of the record set to load.",
-)
-@click.option(
-    "--num-records",
-    "-n",
-    type=int,
-    default=10,
-    help="Number of records to load.",
-)
-def load(jsonld, record_set, num_records):
-    """Load records from a dataset using its Croissant metadata."""
-    try:
-        # Use mlcroissant CLI to load the dataset
-        result = subprocess.run(
-            [
-                "mlcroissant",
-                "load",
-                "--jsonld",
-                jsonld,
-                "--record_set",
-                record_set,
-                "--num_records",
-                str(num_records),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        # Display the output
-        if result.stdout:
-            click.echo(result.stdout)
-
-        click.echo(f"Loaded {num_records} records from record set '{record_set}'")
-    except subprocess.CalledProcessError as e:
-        click.echo(f"Error loading dataset: {e.stderr}", err=True)
-        exit(1)
-    except Exception as e:
-        click.echo(f"Error running load command: {e!s}", err=True)
-        exit(1)
-
-
 @annotate.command(name="edit")
 @click.option(
     "--file-path",
@@ -299,7 +245,7 @@ def edit(
 
         for i, file_info in enumerate(staged_files):
             file_path = biotope_root / file_info["file_path"]
-            console.print(f"\n[bold green]File {i+1}/{len(staged_files)}: {file_path.name}[/]")
+            console.print(f"\n[bold green]File {i + 1}/{len(staged_files)}: {file_path.name}[/]")
 
             # Find the existing metadata file for this data file
             datasets_dir = biotope_root / ".biotope" / "datasets"
@@ -389,7 +335,7 @@ def edit(
 
         for i, file_path in enumerate(incomplete_files):
             metadata_file = biotope_root / file_path
-            console.print(f"\n[bold green]File {i+1}/{len(incomplete_files)}: {metadata_file.stem}[/]")
+            console.print(f"\n[bold green]File {i + 1}/{len(incomplete_files)}: {metadata_file.stem}[/]")
 
             # Load existing metadata to pre-fill
             try:

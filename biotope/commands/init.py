@@ -278,11 +278,10 @@ def init(
         console.print(
             f"   Next: {cd_clause}install deps:\n"
             "         [bold]uv sync[/bold]   (or: pip install -e .)\n"
-            "         then [bold]biotope add <data>[/bold] (or [bold]biotope get <url>[/bold])"
-            " to bring data in."
+            "         then [bold]biotope add <data>[/bold]"
+            " to describe local data."
         )
     else:
         console.print(
-            "   Next: bring data in with [bold]biotope add <data>[/bold] "
-            "(or [bold]biotope get <url>[/bold]), then [bold]biotope map[/bold].",
+            "   Next: describe local data with [bold]biotope add <data>[/bold], then [bold]biotope map[/bold].",
         )

@@ -35,14 +35,7 @@ console = Console()
     is_flag=True,
     help="Print the scaffold to stdout instead of writing an inferred file.",
 )
-@click.option(
-    "--preview-rows",
-    type=click.IntRange(min=0),
-    default=3,
-    show_default=True,
-    help="Sample rows to embed in the inspector comment appendix.",
-)
-def propose_mapping(croissant_path: str, out: Path | None, to_stdout: bool, preview_rows: int) -> None:
+def propose_mapping(croissant_path: str, out: Path | None, to_stdout: bool) -> None:
     """Generate an unresolved mapping scaffold for a Croissant JSON-LD file.
 
     [deprecated] Use ``biotope map scaffold`` instead.
@@ -69,7 +62,6 @@ def propose_mapping(croissant_path: str, out: Path | None, to_stdout: bool, prev
         required_relations=list(project.required_relations) if project else [],
         purpose=project.purpose if project else None,
         write_to=target,
-        preview_rows=preview_rows,
     )
     if target:
         console.print(f"✅ Wrote {target}")

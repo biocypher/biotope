@@ -110,7 +110,7 @@ def _run_per_mapping(
 
     dataset = _load_croissant(str(croissant_path))
     datasets_location = infer_datasets_location(croissant_path)
-    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    inspection = inspect_dataset(dataset)
 
     draft = _load_or_init_draft(mapping_path, croissant_path, project)
     _autosave(mapping_path, draft, dataset, datasets_location, project)
@@ -186,12 +186,10 @@ def _resolve_targets(
             console.print(f"❌ Mapping file not found: {mapping_path}")
             raise click.Abort
         if mapping_path.exists():
-            data = yaml.safe_load(mapping_path.read_text()) or {}
-            croissant_str = croissant_arg or data.get("croissant")
-            if croissant_str is None:
-                console.print("❌ Mapping file is missing the `croissant:` key.")
-                raise click.Abort
-            return Path(croissant_str), mapping_path
+            from biotope.croissant.mapping.loader import load_mapping
+
+            mapping = load_mapping(mapping_path)
+            return Path(croissant_arg or mapping.croissant), mapping_path
 
     assert croissant_arg is not None, "_resolve_targets requires croissant or mapping arg"
     croissant_path = Path(croissant_arg).resolve()
@@ -242,7 +240,7 @@ def _pick_existing_resource(project_root: Path) -> str:
                 rel_raw.append(str(p.relative_to(project_root)))
             except ValueError:
                 rel_raw.append(str(p))
-        console.print(f"[dim]{len(raw)} raw dataset(s) hidden (no schema to map yet): " f"{', '.join(rel_raw)}[/dim]")
+        console.print(f"[dim]{len(raw)} raw dataset(s) hidden (no schema to map yet): {', '.join(rel_raw)}[/dim]")
 
     idx = IntPrompt.ask("Selection", default=1)
     kind, path, _ = items[max(1, min(idx, len(items))) - 1]
@@ -359,9 +357,9 @@ def _collect_slot_state(
     """
     state: dict[str, dict[str, list[Path]]] = {}
     for raw in project.required_entities:
-        state[f"entity:{to_snake_case(raw)}"] = {"resolved": [], "partial": []}
+        state[f"entity:{to_snake_case(raw)}"] = {"resolved": [], "partial": [], "deferred": []}
     for raw in project.required_relations:
-        state[f"relation:{to_snake_case(raw)}"] = {"resolved": [], "partial": []}
+        state[f"relation:{to_snake_case(raw)}"] = {"resolved": [], "partial": [], "deferred": []}
 
     mappings_dir = project_root / "mappings"
     if not mappings_dir.is_dir():
@@ -382,7 +380,13 @@ def _collect_slot_state(
             code = f"relation:{key}"
             if code not in state:
                 continue
-            bucket = "resolved" if _relation_is_resolved(val or {}) else "partial"
+            bucket = (
+                "deferred"
+                if (val or {}).get("deferred")
+                else "resolved"
+                if _relation_is_resolved(val or {})
+                else "partial"
+            )
             state[code][bucket].append(mapping_path)
     return state
 
@@ -404,10 +408,13 @@ def _render_slot_table(
         kind, key = code.split(":", 1)
         resolved = buckets["resolved"]
         partial = buckets["partial"]
+        deferred = buckets.get("deferred", [])
         if resolved:
             icon = "[green]✓[/green]"
         elif partial:
             icon = "[yellow]◐[/yellow]"
+        elif deferred:
+            icon = "[yellow]—[/yellow]"
         else:
             icon = "○"
         bindings: list[str] = []
@@ -415,18 +422,20 @@ def _render_slot_table(
             bindings.append(p.stem.replace(".mapping", ""))
         for p in partial:
             bindings.append(f"{p.stem.replace('.mapping', '')} [yellow](partial)[/yellow]")
+        for p in deferred:
+            bindings.append(f"{p.stem.replace('.mapping', '')} [yellow](deferred)[/yellow]")
         table.add_row(str(i), icon, kind, key, ", ".join(bindings) or "—")
     console.print(table)
     console.print(f"[dim]Purpose:[/dim] {project.purpose or '[dim](not set)[/dim]'}")
     if resolved_count == total and total > 0:
-        console.print("[green]All slots resolved. Run `biotope build` to generate the BioCypher project.[/green]")
+        console.print("[green]All slots resolved. Run `biotope map preview` to check mapping definitions.[/green]")
 
 
 def _slot_menu_choice(slot_state: dict[str, dict[str, list[Path]]]) -> str:
     """Render the slot-first menu and return a choice code."""
     slot_codes = list(slot_state.keys())
     actions = [
-        ("view", r"\[v] view data — browse croissant record sets and sample rows"),
+        ("view", r"\[v] view data — browse declared record sets and fields"),
         ("intent", r"\[i] edit intent (entities / relations / purpose)"),
         ("quit", r"\[q] save and quit"),
     ]
@@ -487,7 +496,7 @@ def _resolve_slot(
             dataset = _load_croissant(str(croissant_path))
         except Exception:  # noqa: BLE001
             continue
-        inspection = inspect_dataset(dataset, datasets_location=None, preview_rows=0)
+        inspection = inspect_dataset(dataset)
         score = _score_inspection_for_tokens(inspection, tokens)
         hint = _inspection_hint(inspection)
         try:
@@ -534,7 +543,7 @@ def _resolve_slot(
 
     dataset = _load_croissant(str(croissant_path))
     datasets_location = infer_datasets_location(croissant_path)
-    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    inspection = inspect_dataset(dataset)
     draft = _load_or_init_draft(mapping_path, croissant_path, project)
     draft = _sync_slots_from_intent(draft, project)
 
@@ -609,8 +618,7 @@ def _view_data_browser(project_root: Path) -> None:
 
     croissant_path = candidates[idx - 1]
     dataset = _load_croissant(str(croissant_path))
-    datasets_location = infer_datasets_location(croissant_path)
-    inspection = inspect_dataset(dataset, datasets_location=datasets_location, preview_rows=3)
+    inspection = inspect_dataset(dataset)
     console.print(Panel(render_inspection_text(inspection), title=str(croissant_path), border_style="cyan"))
     Prompt.ask("[dim]Press Enter to return to the slot menu[/dim]", default="")
 
@@ -728,8 +736,6 @@ def _autosave(
         return
     appendix = build_inspector_appendix(
         dataset,
-        datasets_location=datasets_location,
-        preview_rows=3,
     )
     comment = intent_comment(
         required_entities=project.required_entities,
@@ -786,11 +792,11 @@ def _show_status_on_exit(draft: dict[str, Any], croissant_path: Path) -> None:
     if status == STATUS_MAPPED:
         lines.append("[dim](auto-flipped on resolved save — nothing else to do)[/dim]")
     elif status == STATUS_PROCESSED:
-        lines.append(f"[dim]To mark it mapped manually:[/dim] " f"[bold]biotope mark {dataset_id} mapped[/bold]")
+        lines.append(f"[dim]To mark it mapped manually:[/dim] [bold]biotope mark {dataset_id} mapped[/bold]")
     elif status == STATUS_RAW:
         lines.append(
             "[dim]Unusual — the dataset is still raw, yet you're authoring a mapping for it.[/dim]\n"
-            f"[dim]If it has a complete record set, mark it processed:[/dim] "
+            f"[dim]If baker described usable fields, you can mark it processed:[/dim] "
             f"[bold]biotope mark {dataset_id} processed[/bold]"
         )
     console.print(Panel("\n".join(lines), title="Pipeline state", border_style=colour, expand=False))
@@ -806,7 +812,7 @@ def _datasets_dir_from(croissant_path: Path) -> Path:
 
 def _flip_referenced_dataset_to_mapped(mapping: Mapping) -> None:
     """Once a wizard save produces a fully resolved mapping, the dataset it
-    references becomes ``mapped`` — configured AND ingestable. Up-edge only:
+    references becomes ``mapped`` — mapping defined (source values are not checked). Up-edge only:
     if the user later de-resolves, the status stays where it is; explicit
     ``biotope mark`` rolls it back."""
     from biotope.metadata import STATUS_MAPPED, update_manifest_status
@@ -1108,20 +1114,21 @@ def _pick_record_set(inspection: DatasetInspection, current: str | None) -> str 
     table.add_column("Description")
     table.add_column("Fields", style="dim")
     for i, rs in enumerate(inspection.record_sets, start=1):
-        marker = " *" if rs.name == current else ""
+        marker = " *" if (rs.id or rs.name) == current else ""
         table.add_row(
             f"{i}{marker}",
-            rs.name,
+            f"{rs.name} [{rs.id}]" if rs.id else rs.name,
             (rs.description or "")[:60],
             ", ".join(f.name for f in rs.fields[:6]) + (" …" if len(rs.fields) > 6 else ""),
         )
     console.print(table)
     default_idx = next(
-        (i for i, rs in enumerate(inspection.record_sets, start=1) if rs.name == current),
+        (i for i, rs in enumerate(inspection.record_sets, start=1) if (rs.id or rs.name) == current),
         1,
     )
     idx = IntPrompt.ask("Pick record set", default=default_idx)
-    return inspection.record_sets[max(1, min(idx, len(inspection.record_sets))) - 1].name
+    selected = inspection.record_sets[max(1, min(idx, len(inspection.record_sets))) - 1]
+    return selected.id or selected.name
 
 
 def _pick_scan(rs, current: Any) -> Any:
@@ -1411,7 +1418,7 @@ def _pick_id_selector(
             actions.append("use")
         actions.append("hash_id")
         actions.append("promote")
-        console.print("[dim]ID selector actions:[/dim] " f"{', '.join(actions)} (current: {existing or 'unset'})")
+        console.print(f"[dim]ID selector actions:[/dim] {', '.join(actions)} (current: {existing or 'unset'})")
         if axes:
             axis_list = ", ".join(f"${k} (={v})" for k, v in axes.items())
             console.print(
@@ -1628,7 +1635,14 @@ def _show_preview(
     if mapping is None:
         console.print("[yellow]Cannot preview: draft is not valid YAML for a mapping.[/yellow]")
         return
-    result = preview_mapping(mapping, dataset, datasets_location=datasets_location, sample_rows=3)
+    result = preview_mapping(mapping, dataset)
+    from biotope.croissant.mapping.preview import VALIDATION_SCOPE
+
+    console.print(f"Validation scope: {VALIDATION_SCOPE}.")
+    if result.deferred_slots:
+        console.print(
+            Panel("\n".join(result.deferred_slots), title="Deferred — known gaps", border_style="yellow", expand=False)
+        )
     if result.unresolved_slots:
         console.print(
             Panel(
@@ -1645,8 +1659,7 @@ def _show_preview(
         sections: list[str] = []
         for e in result.entities:
             sections.append(
-                f"entity {e.key}: schema_term={e.schema_term}, namespace={e.namespace}, "
-                f"properties={list(e.properties)}"
+                f"entity {e.key}: schema_term={e.schema_term}, namespace={e.namespace}, properties={list(e.properties)}"
             )
         for r in result.relations:
             sections.append(f"relation {r.key}: {r.source} -> {r.target}, properties={list(r.properties)}")

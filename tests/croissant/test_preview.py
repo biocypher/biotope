@@ -8,10 +8,6 @@ from biotope.croissant.mapping import Mapping, aggregate_previews, preview_mappi
 from biotope.croissant.spec import CroissantDatasetModel, load_from_path
 
 
-def _load_dataset(croissant: Path) -> object:
-    return load_from_path(croissant)
-
-
 def test_partial_mapping_reports_unresolved_slots(minimal_croissant: Path) -> None:
     """Partial slots (record_set set but binding incomplete) are reported.
 
@@ -25,7 +21,7 @@ def test_partial_mapping_reports_unresolved_slots(minimal_croissant: Path) -> No
             "relations": {"gene_in_disease": {"record_set": "genes"}},
         }
     )
-    result = preview_mapping(mapping, _load_dataset(minimal_croissant))
+    result = preview_mapping(mapping, load_from_path(minimal_croissant))
     assert "entities.gene" in result.unresolved_slots
     assert "relations.gene_in_disease" in result.unresolved_slots
     assert result.entities == []
@@ -39,7 +35,7 @@ def test_validation_flags_missing_record_set(minimal_croissant: Path) -> None:
             "entities": {"gene": {"record_set": "nope", "id": "x"}},
         }
     )
-    result = preview_mapping(mapping, _load_dataset(minimal_croissant))
+    result = preview_mapping(mapping, load_from_path(minimal_croissant))
     assert any(f.severity == "error" and "unknown record_set" in f.message for f in result.findings)
 
 
@@ -50,7 +46,7 @@ def test_validation_flags_unknown_field(minimal_croissant: Path) -> None:
             "entities": {"gene": {"record_set": "genes", "id": "ghost_field"}},
         }
     )
-    result = preview_mapping(mapping, _load_dataset(minimal_croissant))
+    result = preview_mapping(mapping, load_from_path(minimal_croissant))
     assert any("ghost_field" in f.message for f in result.findings)
 
 
@@ -119,7 +115,7 @@ def test_resolved_entity_projected_with_namespace(minimal_croissant: Path) -> No
             },
         }
     )
-    result = preview_mapping(mapping, _load_dataset(minimal_croissant))
+    result = preview_mapping(mapping, load_from_path(minimal_croissant))
     assert len(result.entities) == 1
     ent = result.entities[0]
     assert ent.namespace == "ensembl"
@@ -244,33 +240,6 @@ def test_preview_warns_when_source_equals_target_field(tmp_path) -> None:
     result = preview_mapping(mapping, load_from_path(croissant_path))
     warnings = [f for f in result.findings if f.severity == "warning"]
     assert any("self-loops" in f.message for f in warnings)
-
-
-def test_preview_emits_sample_tuples_when_data_available(
-    minimal_croissant: Path,
-    gene_csv: Path,
-    tmp_path: Path,
-) -> None:
-    croissant_path = tmp_path / "minimal.croissant.json"
-    croissant_path.write_text(minimal_croissant.read_text())
-    (tmp_path / "genes.csv").write_text(gene_csv.read_text())
-
-    mapping = Mapping.model_validate(
-        {
-            "croissant": str(croissant_path),
-            "entities": {
-                "gene": {
-                    "record_set": "genes",
-                    "id": "ensembl_id",
-                    "properties": {"symbol": "symbol"},
-                }
-            },
-        }
-    )
-    result = preview_mapping(mapping, load_from_path(croissant_path), datasets_location=tmp_path, sample_rows=2)
-    assert len(result.sample_node_tuples) >= 1
-    node = result.sample_node_tuples[0]
-    assert node[1] == "gene"
 
 
 # ---------------------------------------------------------------------------
@@ -454,3 +423,46 @@ def test_aggregate_flags_endpoint_conflict(tmp_path: Path) -> None:
     pb = preview_mapping(Mapping.model_validate(b_body), load_from_path(croissant_path))
     agg = aggregate_previews([("a.mapping.yaml", pa), ("b.mapping.yaml", pb)])
     assert any("endpoints disagree" in f.message for f in agg.findings)
+
+
+def test_literal_curie_namespace_matches_declared_transform(minimal_croissant):
+    dataset = load_from_path(minimal_croissant)
+    mappings = [
+        {"id": {"value": "geo:GSM1"}},
+        {"id": {"use": "key"}},
+        {"id": {"value": "GSM1", "transform": "as_curie", "args": {"prefix": "geo"}}},
+    ]
+    previews = []
+    for index, entity in enumerate(mappings):
+        mapping = Mapping.model_validate(
+            {
+                "croissant": str(minimal_croissant),
+                "ids": {"key": {"value": "geo:GSM1"}},
+                "entities": {"sample": {"record_set": "genes", **entity}},
+            }
+        )
+        result = preview_mapping(mapping, dataset)
+        assert result.entities[0].namespace == "geo"
+        previews.append((str(index), result))
+    assert not any("namespace disagrees" in finding.message for finding in aggregate_previews(previews).findings)
+    # Explicit namespaces still win, and a real disagreement remains visible.
+    mapping = mapping.model_copy(
+        update={"entities": {"sample": mapping.entities["sample"].model_copy(update={"namespace": "other"})}}
+    )
+    previews.append(("different", preview_mapping(mapping, dataset)))
+    assert any("namespace disagrees" in finding.message for finding in aggregate_previews(previews).findings)
+
+
+def test_namespace_is_not_guessed_from_urls_or_transformed_literals(minimal_croissant):
+    dataset = load_from_path(minimal_croissant)
+    for selector in (
+        {"value": "https://example.org/sample"},
+        {"value": "geo:GSM1", "transform": "hash_id", "args": {"fields": ["ensembl_id"]}},
+    ):
+        mapping = Mapping.model_validate(
+            {
+                "croissant": str(minimal_croissant),
+                "entities": {"sample": {"record_set": "genes", "id": selector}},
+            }
+        )
+        assert preview_mapping(mapping, dataset).entities[0].namespace == "id"

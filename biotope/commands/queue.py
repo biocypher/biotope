@@ -2,7 +2,7 @@
 
 A derived view over every manifest under ``.biotope/datasets/``. Groups them
 by ``biotope:status`` so an agent (or human) resuming a session can see, in
-one shot, what's still raw, what's ready to map, and what's already in the KG.
+one shot, what lacks field descriptions, what has described fields, and what has a mapping.
 
 The "raw" section automatically hides any dataset that something else already
 ``prov:wasDerivedFrom`` — those have been consumed by a downstream artifact
@@ -150,9 +150,9 @@ def _render(
     status_filter: str | None,
 ) -> None:
     sections = (
-        ("RAW", "needs processing", raw_active, "yellow"),
-        ("PROCESSED", "ready to map", processed, "cyan"),
-        ("MAPPED", "in the KG", mapped, "green"),
+        ("RAW", "no field description", raw_active, "yellow"),
+        ("PROCESSED", "fields described", processed, "cyan"),
+        ("MAPPED", "mapping defined", mapped, "green"),
     )
     any_emitted = False
     for label, hint, bucket, colour in sections:
@@ -179,7 +179,7 @@ def _render(
     # small dim section — they're not actionable but they're worth seeing.
     if not status_filter and raw_consumed:
         console.print(
-            f"\n[dim]Raw inputs already consumed " f"(their derivatives are in the queue): {len(raw_consumed)}[/dim]",
+            f"\n[dim]Raw inputs already consumed (their derivatives are in the queue): {len(raw_consumed)}[/dim]",
             no_wrap=True,
         )
         for entry in raw_consumed:

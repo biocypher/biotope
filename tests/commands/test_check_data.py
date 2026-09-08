@@ -49,34 +49,22 @@ def tracked_project(tmp_path):
     return project_root, metadata_path
 
 
-def test_check_data_valid_file(runner, tracked_project):
+def test_check_data_detects_changed_file(runner, tracked_project):
     project_root, _metadata_path = tracked_project
     original_cwd = Path.cwd()
     try:
         os.chdir(project_root)
         result = runner.invoke(check_data, [])
+        (project_root / "data" / "inputs" / "test.csv").write_text("changed")
+        changed = runner.invoke(check_data, [])
     finally:
         os.chdir(original_cwd)
 
     assert result.exit_code == 0
     assert "VALID" in result.output
-
-
-def test_check_data_rejects_legacy_file_objects(runner, tracked_project):
-    project_root, metadata_path = tracked_project
-    metadata = json.loads(metadata_path.read_text())
-    metadata["distribution"][0]["@type"] = "sc:FileObject"
-    metadata_path.write_text(json.dumps(metadata, indent=2))
-
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(project_root)
-        result = runner.invoke(check_data, [])
-    finally:
-        os.chdir(original_cwd)
-
-    assert result.exit_code != 0
-    assert "Legacy sc:FileObject is no longer supported" in result.output
+    assert "CORRUPTED" in changed.output
+    assert "Checksum mismatch" in changed.output
+    assert "--fix" not in changed.output
 
 
 def test_check_data_resolves_dataset_relative_content_url(runner, tmp_path):

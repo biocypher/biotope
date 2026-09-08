@@ -24,23 +24,6 @@ def test_sync_adds_new_slots_from_intent() -> None:
     assert set(synced["relations"]) == {"drug_in_disease"}
 
 
-def test_sync_drops_relation_when_intent_drops_it() -> None:
-    """Removing a relation from intent must drop its slot in the draft."""
-    draft = {
-        "croissant": "x.json",
-        "entities": {"drug": {"record_set": "rs", "id": "id"}},
-        "relations": {
-            "kept": {"record_set": "rs"},
-            "dropped": {"record_set": "rs"},  # not in new intent
-        },
-    }
-    project = _project(entities=["drug"], relations=["kept"])
-
-    synced = _sync_slots_from_intent(draft, project)
-
-    assert set(synced["relations"]) == {"kept"}
-
-
 def test_sync_clears_broken_endpoints_after_entity_removed() -> None:
     """If a relation still in intent points at a removed entity, the endpoint is cleared."""
     draft = {
@@ -115,3 +98,34 @@ def test_sync_drops_relation_whose_intent_is_gone_regardless_of_entities() -> No
     synced = _sync_slots_from_intent(draft, project)
 
     assert synced["relations"] == {}
+
+
+def test_wizard_reports_deferred_binding_as_gap(tmp_path, capsys):
+    import yaml
+
+    from biotope.commands.map_wizard import _collect_slot_state, _render_slot_table
+    from biotope.project_model import Project
+
+    (tmp_path / "mappings").mkdir()
+    (tmp_path / "mappings" / "sample.mapping.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "relations": {
+                    "sample_has_donor": {
+                        "record_set": "samples",
+                        "source": {"entity": "sample", "field": "sample_id"},
+                        "target": {"entity": "donor", "field": "donor_id"},
+                        "deferred": True,
+                    }
+                },
+            }
+        )
+    )
+    project = Project(name="review", required_relations=["sample_has_donor"])
+    state = _collect_slot_state(tmp_path, project)
+    assert state["relation:sample_has_donor"]["resolved"] == []
+    assert state["relation:sample_has_donor"]["deferred"]
+    _render_slot_table(state, project)
+    text = capsys.readouterr().out
+    assert "deferred" in text.lower()
+    assert "All slots resolved" not in text

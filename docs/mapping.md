@@ -3,16 +3,18 @@
 A mapping binds the entities and relations you declared
 (`biotope map --entity/--relation`) to real record sets and fields in one
 dataset's Croissant manifest. Write one file per logical dataset under
-`mappings/<stem>.mapping.yaml`. `build` streams every mapping and deduplicates
-nodes by id across files.
+`mappings/<stem>.mapping.yaml`. Mappings are definitions; this iteration does not execute them.
 
 Biotope never infers which record set is an entity or which field is an id. You
 decide and write it. Ground every choice in the field catalogue from
 `biotope map inspect <croissant> --json` or the scaffold's comment appendix.
-Never invent a prefix, field, or entity type the data does not have.
+Use declared fields and explain chosen identifier namespaces and target types.
 
 Generate a starting point with `biotope map scaffold <croissant>`, then fill in
 the slots.
+
+Unnamed fields appear under their declared field ID. Do not infer their meaning
+from that ID; record any unresolved interpretation.
 
 ## File shape
 
@@ -28,7 +30,7 @@ ids:                       # optional, reusable selectors
 
 ## Entities
 
-Each entity needs a `record_set`, a `scan`, and an `id`. `properties` is an
+Use the record-set `id` shown by inspection for `record_set`; display names are accepted only when unambiguous. Each entity needs a `record_set` and an `id`; `scan` defaults to `row`. `properties` is an
 optional map of `graph_property: source_field`.
 
 ```yaml
@@ -75,12 +77,15 @@ Transforms:
 
 The id is what makes two emissions the same node. If the same real-world entity
 appears in several sources, mint its id identically everywhere (same field
-semantics, transform, and prefix) so BioCypher deduplicates it. Mismatched id
+semantics, transform, and prefix) for consistent identity in later project code. Mismatched id
 construction is the most common cause of dropped edges and duplicate nodes.
+
+Preview infers the namespace of a literal CURIE such as `geo:GSM1`; an explicit
+entity `namespace:` overrides that inference. No transform is executed.
 
 ## Scans
 
-`scan` controls how rows become graph elements.
+`scan` declares intended row or array handling for future project-owned loaders.
 
 - `scan: row`: one element per row (the common case).
 - `scan: { explode: <field> }`: one element per item of an array-valued field.
@@ -133,9 +138,8 @@ relations:
       role: contribution_role
 ```
 
-Keep edge-level facts that are not nodes (a tissue, a species, a comparison
-label) as relation `properties`. Promoting them to entities creates orphan
-nodes unless every value is independently sourced and linked.
+Choose entities versus properties according to the agreed research schema.
+Do not change that choice merely to simplify a binding.
 
 If a declared relation has no supporting field, defer it instead of faking a
 binding:
@@ -144,8 +148,16 @@ binding:
 biotope map defer-relation <mapping> <relation>
 ```
 
-`build` skips deferred relations and counts them. `undefer-relation` reverses it
-when the data arrives.
+`undefer-relation` reverses the declaration when the data supports the relation.
+
+Deferred relations remain visible as known gaps in preview and the wizard.
+They appear in `deferred_slots` per mapping and `global.slot_deferred` in JSON.
+They do not count as resolved bindings or fail structural checks by themselves.
+The defer/undefer commands preserve YAML comments. If an alias would also change
+another relation, the file stays unchanged and the command asks for an explicit edit.
+
+For a constant relation endpoint, define a selector under `ids:` and refer to
+it with `use:`. A direct endpoint `value:` is not part of the mapping grammar.
 
 ## Reusable id selectors
 
@@ -174,43 +186,26 @@ file; add a minimal id-only stub if needed. The same entity can have a rich
 binding in one mapping and a minimal one in another, as long as both mint the id
 identically.
 
-If several record sets reference the same entity type, emit that entity from
+If several record sets reference the same entity type, plan that entity binding in
 each record set that contributes edges to it, not only from one primary source.
-Otherwise edges target ids with no matching node and become orphans at build.
+Whether those identifiers match source values must be checked in later project work.
 
-## Validate and verify
+## Validate
 
 ```bash
 biotope map preview --json
 ```
 
-`preview` checks YAML structure and field existence. It does not check whether
-relation targets resolve to emitted nodes, so a clean preview can still produce
-orphaned edges. Confirm the graph after building:
+This checks metadata and mapping definitions. Inspect `unresolved_slots`,
+`findings`, and the proposed schema. Errors or partially filled bindings produce exit
+code 1; warnings still need review. Empty stubs are inactive in this model and
+can pass without producing any schema. Compare the resolved slots with project
+intent; a passing result alone does not establish purpose coverage. A passing check does not validate source
+values, identifiers, joins, filters or transformations. Biotope provides no row
+samples and does not execute these definitions. Stop here for this iteration.
 
-```bash
-biotope build
-biotope view      # counts, orphaned edges, schema diff
-```
+Record unsupported fields and scientific choices explicitly. Do not manufacture
+columns or change the user's schema just to make validation pass. Metadata-based
+alignment suggestions are hypotheses for review, not verified identities.
 
-`orphaned_count` (also in `build/biocypher-out/build_metrics.json`) must be 0. A
-relation with far fewer edges than expected signals an id-namespace mismatch.
-
-## Reliability
-
-Most graph errors come from inconsistent ids or stale manifests. Follow these
-rules before building:
-
-- Pick one id column for each entity and use it in every source. Normalize
-  disagreeing forms (`UBERON_0002107` vs `UBERON:0002107`) in a committed
-  preprocessing step, and keep alternate ids as properties. Use an ontology
-  namespace where one exists.
-- Fix id mismatches in the source data. With canonical ids, the correct
-  alignment set is usually empty. Treat `propose-alignment` output as
-  hypotheses, and review each `reason` and `confidence` before applying it.
-- Defer unsupported relations instead of fabricating data to satisfy a slot.
-  The build can then report the relation as unsupported.
-- Point `add` at the folder that represents one logical dataset. Give
-  independent datasets separate manifests.
-- When preprocessing changes columns, run `biotope add <dir> --rebake` before
-  mapping the new fields.
+Malformed mappings report their filename and offending field or YAML location.

@@ -2,15 +2,12 @@
 
 import click
 
+from biotope._version import __version__
 from biotope.commands.add import add as add_cmd
 from biotope.commands.annotate import annotate as annotate_cmd
-from biotope.commands.benchmark import benchmark as benchmark_cmd
-from biotope.commands.build import build as build_cmd
 from biotope.commands.check_data import check_data as check_data_cmd
 from biotope.commands.commit import commit as commit_cmd
 from biotope.commands.config import config as config_cmd
-from biotope.commands.discover import discover as discover_cmd
-from biotope.commands.get import get as get_cmd
 from biotope.commands.init import init as init_cmd
 from biotope.commands.log import log as log_cmd
 from biotope.commands.map import map_group as map_cmd
@@ -21,15 +18,22 @@ from biotope.commands.propose_mapping import propose_mapping as propose_mapping_
 from biotope.commands.pull import pull as pull_cmd
 from biotope.commands.push import push as push_cmd
 from biotope.commands.queue import queue as queue_cmd
-from biotope.commands.read import read as read_cmd
 from biotope.commands.rm import rm as rm_cmd
-from biotope.commands.search import search as search_cmd
 from biotope.commands.status import status as status_cmd
-from biotope.commands.view import view as view_cmd
-from biotope._version import __version__
+from biotope.croissant.mapping.loader import MappingLoadError
 
 
-@click.group()
+class _CLIGroup(click.Group):
+    """Present mapping input errors consistently across retained commands."""
+
+    def invoke(self, ctx: click.Context):
+        try:
+            return super().invoke(ctx)
+        except MappingLoadError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+
+@click.group(cls=_CLIGroup)
 @click.version_option(version=__version__, prog_name="biotope")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
@@ -45,19 +49,12 @@ cli.add_command(init_cmd, "init")
 cli.add_command(map_cmd, "map")
 
 # Content-level workflow
-cli.add_command(discover_cmd, "discover")
 cli.add_command(propose_mapping_cmd, "propose-mapping")
 cli.add_command(propose_alignment_cmd, "propose-alignment")
-cli.add_command(build_cmd, "build")
-cli.add_command(view_cmd, "view")
-cli.add_command(benchmark_cmd, "benchmark")
 cli.add_command(queue_cmd, "queue")
 cli.add_command(mark_cmd, "mark")
 
-# Ingestion + NLP
-cli.add_command(read_cmd, "read")
-cli.add_command(search_cmd, "search")
-cli.add_command(get_cmd, "get")
+# Metadata annotations
 cli.add_command(annotate_cmd, "annotate")
 
 # Git-inspired version control commands

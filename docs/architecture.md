@@ -1,116 +1,67 @@
-# How biotope works
+# How Biotope works
 
-Biotope has two jobs:
-
-1. Track datasets and their Croissant metadata with git-like commands.
-2. Turn Croissant-described data into a runnable BioCypher project.
-
-The installed `biotope` package does not import BioCypher or BioChatter. A
-generated project declares BioCypher as its graph writer; BioChatter can query
-the loaded graph later.
+Croissant-baker parses source formats and assembles structural metadata. Biotope
+tracks that metadata, captures research intent, and checks mapping definitions.
+It does not implement source readers or execute mappings in the supported
+workflow. Project-specific loading and transformation are later work.
 
 ## Project layout
 
 ```text
-my-kg/
+project/
 ├── .biotope/
-│   ├── project.yaml       graph purpose and required entities or relations
-│   ├── config.yaml        validation and registry settings
-│   ├── datasets/          Croissant metadata for tracked data
+│   ├── project.yaml       purpose and required entities/relations
+│   ├── config.yaml        metadata validation settings
+│   ├── datasets/          tracked Croissant metadata
 │   └── workflows/         reserved
-├── data/                  tracked data; ignored by Git
-├── mappings/              semantic mappings
-├── alignment.yaml         optional cross-dataset equivalences
-├── build/                 generated BioCypher project
-├── pyproject.toml         project dependencies
+├── data/                  conventional local data directory
+├── mappings/              authored mapping YAML
+├── alignment.yaml         optional mapping equivalence suggestions
+├── pyproject.toml
 └── .gitignore
 ```
 
-`biotope init --visible` writes `project.yaml` at the project root. Other
-managed files remain under `.biotope/`. Commands find the nearest project by
-walking upward from the current directory.
-
-Dataset state (`raw`, `processed`, or `mapped`) lives in each Croissant
-manifest, not in the `data/` directory structure.
+`init --visible` puts `project.yaml` at the root. Other managed files stay under
+`.biotope/`. Tracking commands locate a project by walking upward to `.biotope/`
+and `.git/`. Data paths must stay within the project.
 
 ## Data flow
 
 ```text
-biotope init
-    │
-    ├─ biotope map --purpose/--entity/--relation
-    │      └─ .biotope/project.yaml
-    │
-data files
-    └─ biotope add
-           └─ .biotope/datasets/*.jsonld
-                    │
-                    └─ biotope map inspect/scaffold/preview
-                           └─ mappings/*.mapping.yaml
-                                    │
-                                    ├─ biotope propose-alignment (optional)
-                                    │      └─ alignment.yaml
-                                    │
-                                    └─ biotope build
-                                           └─ build/
-                                                ├─ config/schema_config.yaml
-                                                ├─ generated/*/adapter.py
-                                                └─ create_knowledge_graph.py
+local files → add (baker) → Croissant manifests → inspect/scaffold
+                                                     ↓
+map --purpose/--entity/--relation → project.yaml → mapping YAML → preview
 ```
 
-`biotope add` uses
-[croissant-baker](https://github.com/biocypher/croissant-baker) to infer
-structural metadata where possible. Mapping connects Croissant record sets and
-fields to graph entities and relations. `build` compiles resolved mappings into
-BioCypher tuple streams.
+Directory and single-file ingestion use baker's assembly. A file can describe
+multiple record sets. Distinct IDs preserve identities when display names
+collide. Unsupported files can be tracked without invented field descriptions.
 
-## Semantic decisions and determinism
+Inspection, scaffolding, the wizard and structural checks use manifests and
+mapping definitions. They work without source payloads. File tracking may read
+checksums or timestamps; it does not inspect data values.
 
-Biotope catalogs fields, validates mappings, and previews tuples. A human or
-agent chooses record sets, identifiers, transforms, entities, and relations.
-`build` rejects unresolved mapping slots and the removed `nodes`/`edges`
-mapping schema.
-
-With the same Croissant manifests, mappings, alignment, and data, compilation
-produces the same generated project. LLMs sit above this deterministic
-boundary:
-
-```text
-human or agent → biotope CLI → biotope.croissant.api → generated project
-```
+Purpose and entity/relation lists stay in project metadata. Detailed schema and
+selector choices stay in mapping YAML. This iteration preserves that model.
 
 ## Configuration
-
-| File | Purpose |
-| --- | --- |
-| `.biotope/project.yaml` | Graph purpose, entities, relations, and data sources |
-| `.biotope/config.yaml` | Croissant version, validation rules, and registry URLs |
-| `.biotope/datasets/*.jsonld` | Generated and curated Croissant metadata |
-| `mappings/*.mapping.yaml` | Authored entity and relation mappings |
-| `alignment.yaml` | Optional `same_node` equivalences across mappings |
 
 Settings resolve from lowest to highest priority:
 
 ```text
-~/.config/biotope/config.yaml
-→ .biotope/config.yaml
-→ .biotope/project.yaml
-→ CLI flags
+~/.config/biotope/config.yaml → .biotope/config.yaml → project.yaml → CLI flags
 ```
 
-Inspect resolved project intent with `biotope map --show`.
+Inspect intent with `biotope map --show`. Dataset state lives in each manifest:
+`raw`, `processed` or `mapped`. State and passing structural checks do not prove
+value validity, transform correctness or graph readiness.
 
 ## Agent interface
 
-Plugin skills are the default agent contract:
+The `biotope-croissant` skill guides agents through the same CLI workflow.
+`init --agents-md` optionally writes project guidance for other agents. See
+[Plugin and skills](plugin.md). Python integrations can use the metadata and
+mapping functions in `biotope.croissant.api`.
 
-```text
-biotope-croissant → biocypher → biochatter
-```
-
-Each skill covers one pipeline stage and invokes public CLI commands.
-`biotope init --agents-md` can add a root `AGENTS.md` for agents without skill
-support. See [Plugin and skills](plugin.md) for setup.
-
-For Python integrations, `biotope.croissant.api` exposes the deterministic
-functions used by the CLI.
+Downstream graph modules remain in the repository but are unsupported and
+detached from CLI registration. They are not part of this integration's tests.

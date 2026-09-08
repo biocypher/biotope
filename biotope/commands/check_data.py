@@ -25,12 +25,7 @@ from biotope.utils import find_biotope_root
     type=click.Path(exists=True, path_type=Path),
     help="Check specific file only",
 )
-@click.option(
-    "--fix",
-    is_flag=True,
-    help="Attempt to fix corrupted files by re-downloading",
-)
-def check_data(file: Optional[Path], fix: bool) -> None:
+def check_data(file: Optional[Path]) -> None:
     """
     Check data integrity against recorded checksums.
 
@@ -39,7 +34,6 @@ def check_data(file: Optional[Path], fix: bool) -> None:
 
     Args:
         file: Check specific file only
-        fix: Attempt to fix corrupted files
     """
     console = Console()
 
@@ -65,7 +59,7 @@ def check_data(file: Optional[Path], fix: bool) -> None:
             raise click.Abort from exc
 
     # Display results
-    _display_check_results(results, console, fix)
+    _display_check_results(results, console)
 
 
 def _check_single_file(file_path: Path, biotope_root: Path) -> Dict:
@@ -157,7 +151,7 @@ def calculate_file_checksum(file_path: Path) -> str:
     return sha256_hash.hexdigest()
 
 
-def _display_check_results(results: List[Dict], console: Console, fix: bool) -> None:
+def _display_check_results(results: List[Dict], console: Console) -> None:
     """Display check results in a table."""
     if not results:
         console.print("No files to check.")
@@ -195,11 +189,7 @@ def _display_check_results(results: List[Dict], console: Console, fix: bool) -> 
     # Recommendations
     if status_counts.get("corrupted", 0) > 0:
         console.print("\n[bold red]⚠️  Corrupted files detected![/]")
-        if fix:
-            console.print("Attempting to fix corrupted files...")
-            # TODO: Implement fix logic
-        else:
-            console.print("Use --fix to attempt automatic repair")
+        console.print("Review changed files and their recorded metadata before re-baking.")
 
     if status_counts.get("missing", 0) > 0:
         console.print("\n[bold yellow]⚠️  Missing files detected![/]")

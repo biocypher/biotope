@@ -8,7 +8,6 @@ re-running inspection.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import yaml
@@ -150,9 +149,6 @@ def _as_comment_block(text: str) -> str:
 
 def build_inspector_appendix(
     dataset: CroissantDatasetModel,
-    *,
-    datasets_location: str | Path | None = None,
-    preview_rows: int = 3,
 ) -> str:
     """Build the inspector comment appendix for a Croissant dataset.
 
@@ -163,6 +159,4 @@ def build_inspector_appendix(
 
     return render_inspector_text(
         dataset,
-        datasets_location=datasets_location,
-        preview_rows=preview_rows,
     )

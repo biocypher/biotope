@@ -1,6 +1,6 @@
 # Mapping grammar
 
-A mapping file binds the slots you declared (`biotope map --entity/--relation`) to real record sets and fields in one dataset's Croissant manifest. One file per logical dataset, under `mappings/<stem>.mapping.yaml`. `build` streams every mapping and deduplicates nodes by id across files.
+A mapping file binds the slots you declared (`biotope map --entity/--relation`) to real record sets and fields in one dataset's Croissant manifest. One file per logical dataset, under `mappings/<stem>.mapping.yaml`. Mappings are definitions; this iteration does not execute them.
 
 biotope does **not** infer which record set is which entity or which field is the id — you decide that and write it. Ground every pick in the field catalogue from `biotope map inspect <croissant> --json` or the scaffold's comment appendix; never invent a CURIE prefix, field, or entity type that the data doesn't have.
 
@@ -14,6 +14,9 @@ biotope does **not** infer which record set is which entity or which field is th
 - [Reusable id selectors](#reusable-id-selectors)
 - [Minimal vs rich bindings of the same entity](#minimal-vs-rich)
 - [Validate](#validate)
+
+Unnamed fields appear under their declared field ID. Do not infer their meaning
+from that ID; record any unresolved interpretation.
 
 ## File shape
 
@@ -29,7 +32,7 @@ ids:                       # optional, reusable selectors
 
 ## Entities
 
-Each entity slot needs a `record_set`, a `scan`, and an `id`; `properties` is an optional map of `graph_property: source_field`.
+Use the inspected record-set `id` for `record_set`; names are accepted only when unambiguous. Each entity slot needs a `record_set`, a `scan`, and an `id`; `properties` is an optional map of `graph_property: source_field`.
 
 ```yaml
 entities:
@@ -61,11 +64,11 @@ A selector picks a value from a row in one of three mutually exclusive ways — 
 - `as_curie` — prefix the value into a CURIE: `args: { prefix: iata }` turns `ABE` into `iata:ABE`. Use this to put every source's ids into one namespace.
 - `hash_id` — hash the field(s) into a stable synthetic id when no natural id exists.
 
-The id is what makes two emissions the same node. If the same real-world entity appears in several sources, mint its id **identically** everywhere (same field semantics, same transform, same prefix) so BioCypher dedups it. Mismatched id construction is the most common cause of dropped edges and duplicate nodes — see `reliability.md`.
+The id is what makes two emissions the same node. If the same real-world entity appears in several sources, mint its id **identically** everywhere (same field semantics, same transform, same prefix) for consistent identity in later project code. Mismatched id construction is the most common cause of dropped edges and duplicate nodes — see `reliability.md`.
 
 ## Scans
 
-`scan` controls how rows of a record set become graph elements.
+`scan` declares intended row or array handling for future project-owned loaders.
 
 - `scan: row` — one element per row (the common case).
 - `scan: {explode: <field>}` — one element per item of an array-valued field. The exploded element is referenced as `field: "$item"`, **not** the array's name. The field name selects the array; `$item` names each element inside the scan. Sibling row columns are still addressed by their plain names.
@@ -114,7 +117,12 @@ relations:
 
 Edge-level facts that aren't nodes (a tissue, a species, a comparison label) are best kept as relation `properties`, not promoted to entities — promoting them creates orphan nodes unless every value is independently sourced and linked.
 
-If a relation you declared has no supporting field in the data, mark it deferred rather than faking a binding: `biotope map defer-relation <mapping> <relation>`. `build` skips deferred relations honestly and counts them; `undefer-relation` reverses it when the data arrives.
+If a relation you declared has no supporting field in the data, mark it deferred rather than faking a binding: `biotope map defer-relation <mapping> <relation>`. `undefer-relation` reverses the declaration when the data supports it. Preview reports these under `deferred_slots`; they are known gaps, not completed bindings or structural errors.
+
+For a constant endpoint, define `ids: {sample_id: {value: "geo:GSM1"}}`, then
+use `target: {entity: sample, use: sample_id}` inside the relation. Endpoints
+accept `field:` or `use:`, not a direct `value:`. Preview recognizes the literal
+ID's `geo` namespace; an explicit entity namespace takes precedence.
 
 ## Reusable id selectors
 
@@ -138,13 +146,13 @@ relations:
 
 ## Minimal vs rich
 
-Same entity: rich binding in one mapping (full properties), minimal in another (id only). Both mint the id identically. BioCypher merges into one node.
+Same entity: rich binding in one mapping (full properties), minimal in another (id only). Both mint the id identically. Their intended identity must agree.
 
 **Per-file rule:** every relation endpoint's `entity` must appear under `entities:` in **that same file** — add a minimal stub if needed.
 
 ## Shared entities
 
-If multiple record sets reference the same entity type (e.g. a tag, category, or ontology term), emit that entity from **each** record set that contributes edges to it — not only from one "primary" source. Otherwise edges target ids with no matching node → orphans at build.
+If multiple record sets reference the same entity type (e.g. a tag, category, or ontology term), plan that entity binding in **each** record set that contributes edges to it — not only from one "primary" source. Otherwise edges target ids with no matching node → orphans at build.
 
 Pick the record set with the richest linkage when one source embeds references another only holds a summary table.
 
@@ -154,4 +162,14 @@ Pick the record set with the richest linkage when one source embeds references a
 biotope map preview --json
 ```
 
-`preview` checks YAML structure and field existence — **not** whether relation targets will resolve to emitted nodes. Check `unresolved_slots`, `findings`, and `sample_edge_tuples`. Orphan detection requires build + `biotope view` (`build_metrics.json`).
+This checks metadata and mapping definitions. Inspect `unresolved_slots`,
+`deferred_slots`, `findings`, and the proposed schema. Errors or partially filled bindings produce exit
+code 1; warnings still need review. Empty stubs are inactive in this model and
+can pass without producing any schema. Compare the resolved slots with project
+intent; a passing result alone does not establish purpose coverage. A passing check does not validate source
+values, identifiers, joins, filters or transformations. Biotope provides no row
+samples and does not execute these definitions. Stop here for this iteration.
+
+Record unsupported fields and scientific choices explicitly. Do not manufacture
+columns or change the user's schema just to make validation pass. Metadata-based
+alignment suggestions are hypotheses for review, not verified identities.

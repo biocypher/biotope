@@ -7,7 +7,6 @@ duplicate entities collapse.
 """
 
 from biotope.croissant.alignment.loader import load_alignment
-from biotope.croissant.alignment.merge import MergedAdapter, merge_adapters
 from biotope.croissant.alignment.model import (
     Alignment,
     Equivalence,
@@ -19,8 +18,6 @@ __all__ = [
     "Alignment",
     "Equivalence",
     "EquivalenceKind",
-    "MergedAdapter",
     "Reference",
     "load_alignment",
-    "merge_adapters",
 ]

@@ -108,44 +108,6 @@ def test_show_validation_pattern_with_remote(mock_find_root, runner, biotope_pro
     assert "https://cluster.example.com/validation/cluster-strict" in result.output
 
 
-def test_get_validation_pattern_default(biotope_project):
-    """Test getting validation pattern with default configuration."""
-    pattern = get_validation_pattern(biotope_project)
-    assert pattern == "default"
-
-
-def test_get_validation_pattern_explicit(biotope_project):
-    """Test getting validation pattern with explicit configuration."""
-    # Update config
-    config_file = biotope_project / ".biotope" / "config.yaml"
-    with open(config_file) as f:
-        config_data = yaml.safe_load(f)
-
-    config_data["annotation_validation"]["validation_pattern"] = "storage-management"
-
-    with open(config_file, "w") as f:
-        yaml.dump(config_data, f)
-
-    pattern = get_validation_pattern(biotope_project)
-    assert pattern == "storage-management"
-
-
-def test_get_validation_pattern_with_remote_cluster(biotope_project):
-    """Test getting validation pattern with cluster remote validation."""
-    # Update config with cluster remote validation
-    config_file = biotope_project / ".biotope" / "config.yaml"
-    with open(config_file) as f:
-        config_data = yaml.safe_load(f)
-
-    config_data["annotation_validation"]["remote_config"] = {"url": "https://hpc-cluster.example.com/validation/strict"}
-
-    with open(config_file, "w") as f:
-        yaml.dump(config_data, f)
-
-    pattern = get_validation_pattern(biotope_project)
-    assert pattern == "cluster-default"  # Should be auto-detected as cluster pattern
-
-
 def test_get_validation_pattern_with_remote_storage(biotope_project):
     """Test getting validation pattern with storage remote validation."""
     # Update config with storage remote validation

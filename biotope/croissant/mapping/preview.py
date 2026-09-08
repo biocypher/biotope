@@ -6,15 +6,10 @@ crashes on partial input; unresolved sections are reported, not fatal.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
-from biotope.croissant.acquisition.context import AcquisitionContext
-from biotope.croissant.mapping.compile import (
-    iter_entity_tuples,
-    iter_relation_tuples,
-)
 from biotope.croissant.mapping.inspector import DatasetInspection, inspect_dataset
 from biotope.croissant.mapping.model import (
     EntityMapping,
@@ -30,6 +25,9 @@ from biotope.croissant.spec import (
     CroissantDatasetModel,
     FieldKind,
 )
+
+
+VALIDATION_SCOPE = "metadata and mapping definitions; values and transformations are not checked"
 
 
 @dataclass
@@ -90,25 +88,20 @@ class RelationProjection:
 class MappingPreview:
     resolved_slots: list[str] = field(default_factory=list)
     unresolved_slots: list[str] = field(default_factory=list)
+    deferred_slots: list[str] = field(default_factory=list)
     findings: list[ValidationFinding] = field(default_factory=list)
     entities: list[EntityProjection] = field(default_factory=list)
     relations: list[RelationProjection] = field(default_factory=list)
-    sample_node_tuples: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
-    # BioCypher 5-tuple: (relationship_id_or_None, source_id, target_id, label, properties).
-    sample_edge_tuples: list[tuple[str | None, str, str, str, dict[str, Any]]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return {
             "resolved_slots": list(self.resolved_slots),
             "unresolved_slots": list(self.unresolved_slots),
+            "deferred_slots": list(self.deferred_slots),
             "findings": [f.to_json() for f in self.findings],
             "schema": {
                 "entities": [e.to_json() for e in self.entities],
                 "relations": [r.to_json() for r in self.relations],
-            },
-            "samples": {
-                "nodes": [list(t[:2]) + [t[2]] for t in self.sample_node_tuples],
-                "edges": [list(t) for t in self.sample_edge_tuples],
             },
         }
 
@@ -171,6 +164,7 @@ class MultiMappingPreview:
     slot_resolution: dict[str, list[str]] = field(default_factory=dict)
     # slot_path -> [mapping file names that have a non-empty but unresolved stub]
     slot_unresolved: dict[str, list[str]] = field(default_factory=dict)
+    slot_deferred: dict[str, list[str]] = field(default_factory=dict)
     findings: list[ValidationFinding] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
@@ -181,6 +175,7 @@ class MultiMappingPreview:
             },
             "slot_resolution": {k: list(v) for k, v in self.slot_resolution.items()},
             "slot_unresolved": {k: list(v) for k, v in self.slot_unresolved.items()},
+            "slot_deferred": {k: list(v) for k, v in self.slot_deferred.items()},
             "findings": [f.to_json() for f in self.findings],
         }
 
@@ -201,6 +196,8 @@ def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappi
             agg.slot_resolution.setdefault(slot, []).append(file_name)
         for slot in prev.unresolved_slots:
             agg.slot_unresolved.setdefault(slot, []).append(file_name)
+        for slot in prev.deferred_slots:
+            agg.slot_deferred.setdefault(slot, []).append(file_name)
 
         for e in prev.entities:
             existing = entity_by_key.get(e.key)
@@ -311,19 +308,14 @@ def aggregate_previews(previews: list[tuple[str, MappingPreview]]) -> MultiMappi
 def preview_mapping(
     mapping: Mapping,
     dataset: CroissantDatasetModel,
-    *,
-    datasets_location: str | Path | None = None,
-    sample_rows: int = 3,
 ) -> MappingPreview:
     """Validate and project ``mapping``. Tolerant of partial input."""
-    inspection = inspect_dataset(dataset, datasets_location=None, preview_rows=0)
+    inspection = inspect_dataset(dataset)
 
     preview = MappingPreview()
     _classify_slots(mapping, preview)
     _validate_against_dataset(mapping, inspection, preview)
     _project_schema(mapping, preview, dataset)
-    if datasets_location is not None and sample_rows > 0:
-        _emit_sample_tuples(mapping, dataset, datasets_location, sample_rows, preview)
     return preview
 
 
@@ -334,6 +326,9 @@ def _classify_slots(mapping: Mapping, preview: MappingPreview) -> None:
         path = f"entities.{name}"
         (preview.resolved_slots if entity.is_resolved() else preview.unresolved_slots).append(path)
     for name, relation in mapping.relations.items():
+        if relation.is_deferred():
+            preview.deferred_slots.append(f"relations.{name}")
+            continue
         if relation.is_empty():
             continue
         path = f"relations.{name}"
@@ -345,7 +340,17 @@ def _validate_against_dataset(
     inspection: DatasetInspection,
     preview: MappingPreview,
 ) -> None:
-    rs_index = {rs.name: rs for rs in inspection.record_sets}
+    def resolve_record_set(reference, path):
+        rs = inspection.by_name(reference)
+        if rs is None:
+            matches = [item for item in inspection.record_sets if item.name == reference]
+            message = (
+                f"ambiguous record_set {reference!r}; use an ID: {', '.join(item.id or item.name for item in matches)}"
+                if len(matches) > 1
+                else f"unknown record_set {reference!r}"
+            )
+            preview.findings.append(ValidationFinding("error", f"{path}.record_set", message))
+        return rs
 
     for name, entity in mapping.entities.items():
         if entity.is_empty():
@@ -354,11 +359,8 @@ def _validate_against_dataset(
         if entity.record_set is None:
             preview.findings.append(ValidationFinding("warning", path, "record_set not set"))
             continue
-        rs = rs_index.get(entity.record_set)
+        rs = resolve_record_set(entity.record_set, path)
         if rs is None:
-            preview.findings.append(
-                ValidationFinding("error", f"{path}.record_set", f"unknown record_set {entity.record_set!r}")
-            )
             continue
         field_index = {f.name: f for f in rs.fields}
         _validate_scan(entity, path, field_index, preview)
@@ -368,17 +370,14 @@ def _validate_against_dataset(
             _validate_selector(prop, f"{path}.properties.{prop_name}", field_index, mapping.ids, preview)
 
     for name, relation in mapping.relations.items():
-        if relation.is_empty():
+        if relation.is_empty() or relation.is_deferred():
             continue
         path = f"relations.{name}"
         if relation.record_set is None:
             preview.findings.append(ValidationFinding("warning", path, "record_set not set"))
             continue
-        rs = rs_index.get(relation.record_set)
+        rs = resolve_record_set(relation.record_set, path)
         if rs is None:
-            preview.findings.append(
-                ValidationFinding("error", f"{path}.record_set", f"unknown record_set {relation.record_set!r}")
-            )
             continue
         field_index = {f.name: f for f in rs.fields}
         _validate_scan(relation, path, field_index, preview)
@@ -409,7 +408,7 @@ def _validate_against_dataset(
                     ValidationFinding(
                         "warning",
                         path,
-                        f"source and target resolve to the same field {src_field!r} — " "edges will be self-loops",
+                        f"source and target resolve to the same field {src_field!r} — edges will be self-loops",
                     )
                 )
 
@@ -495,12 +494,21 @@ def _validate_selector(
     if selector is None:
         preview.findings.append(ValidationFinding("warning", path, "selector not set"))
         return
-    if selector.use is not None and selector.use not in ids:
-        preview.findings.append(ValidationFinding("error", f"{path}.use", f"unknown id {selector.use!r}"))
+    seen: set[str] = set()
+    while selector.use is not None:
+        name = selector.use
+        if name in seen:
+            preview.findings.append(ValidationFinding("error", path, f"cyclic id reference {name!r}"))
+            return
+        if name not in ids:
+            preview.findings.append(ValidationFinding("error", path, f"unknown id {name!r}"))
+            return
+        seen.add(name)
+        selector = ids[name]
     if selector.field is not None and not selector.field.startswith("$") and selector.field not in field_index:
         preview.findings.append(
             ValidationFinding(
-                "warning",
+                "error",
                 f"{path}.field",
                 f"field {selector.field!r} not declared on the chosen record set",
             )
@@ -529,7 +537,7 @@ def _project_schema(mapping: Mapping, preview: MappingPreview, dataset: Croissan
 
     entity_terms = {e.key: e.schema_term for e in preview.entities}
     for name, relation in mapping.relations.items():
-        if not relation.is_resolved():
+        if relation.is_deferred() or not relation.is_resolved():
             continue
         schema_term = relation.schema_term or to_sentence_case(name)
         source_entity_key = relation.source.entity if relation.source else ""
@@ -555,13 +563,21 @@ def _project_schema(mapping: Mapping, preview: MappingPreview, dataset: Croissan
 
 
 def _derive_namespace(selector: Selector | None, ids: dict[str, Selector]) -> str | None:
+    seen: set[str] = set()
+    while selector is not None and selector.use is not None:
+        if selector.use in seen:
+            return None
+        seen.add(selector.use)
+        selector = ids.get(selector.use)
     if selector is None:
         return None
-    if selector.use is not None and selector.use in ids:
-        return _derive_namespace(ids[selector.use], ids)
     if selector.transform == "as_curie":
         prefix = selector.args.get("prefix")
         if isinstance(prefix, str):
+            return prefix
+    if selector.transform == "passthrough" and isinstance(selector.value, str):
+        prefix, separator, local_id = selector.value.partition(":")
+        if separator and local_id and not local_id.startswith("//") and re.fullmatch(r"[A-Za-z_][\w.-]*", prefix):
             return prefix
     return None
 
@@ -572,6 +588,8 @@ def _property_type(
     scan: Any,
     dataset: CroissantDatasetModel,
 ) -> str:
+    if prop.transform in {"as_curie", "hash_id"}:
+        return "str"
     if prop.value is not None:
         return LITERAL_VALUE_PYTHON_TYPES.get(type(prop.value), "str")
     if prop.use is not None:
@@ -580,7 +598,14 @@ def _property_type(
         return "str"
     if prop.field.startswith("$"):
         return _struct_subfield_type(prop.field, record_set, scan, dataset)
-    return "str"  # actual Croissant kind mapping is handled in materialize
+    rs = dataset.record_set_by_name(record_set)
+    field = rs.field_by_name(prop.field) if rs is not None else None
+    if field is not None:
+        try:
+            return FIELD_KIND_PYTHON_TYPES.get(field.kind(), "str")
+        except ValueError:
+            pass
+    return "str"
 
 
 def _struct_subfield_type(
@@ -615,25 +640,3 @@ def _struct_subfield_type(
     if kind == FieldKind.STRUCT:
         return "str"
     return FIELD_KIND_PYTHON_TYPES.get(kind, "str")
-
-
-def _emit_sample_tuples(
-    mapping: Mapping,
-    dataset: CroissantDatasetModel,
-    datasets_location: str | Path,
-    sample_rows: int,
-    preview: MappingPreview,
-) -> None:
-    try:
-        with AcquisitionContext(dataset, datasets_location=datasets_location, limit=sample_rows) as ctx:
-            for tup in iter_entity_tuples(mapping, ctx, only_resolved=True):
-                preview.sample_node_tuples.append(tup)
-                if len(preview.sample_node_tuples) >= sample_rows * max(1, len(mapping.entities)):
-                    break
-        with AcquisitionContext(dataset, datasets_location=datasets_location, limit=sample_rows) as ctx:
-            for tup in iter_relation_tuples(mapping, ctx, only_resolved=True):
-                preview.sample_edge_tuples.append(tup)
-                if len(preview.sample_edge_tuples) >= sample_rows * max(1, len(mapping.relations)):
-                    break
-    except Exception as exc:  # pragma: no cover — best-effort preview
-        preview.findings.append(ValidationFinding("warning", "samples", f"could not stream samples: {exc}"))

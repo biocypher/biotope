@@ -6,7 +6,7 @@
   non-interactively and exits.
 * ``biotope map inspect <croissant>`` — deterministic Croissant/data inspector.
 * ``biotope map scaffold <croissant>`` — non-interactive unresolved scaffold.
-* ``biotope map preview [<mapping>]`` — compile-in-memory preview.
+* ``biotope map preview [<mapping>]`` — structural mapping summary.
 
 All semantic decisions are made by the user or the editing agent. The CLI
 never auto-picks record sets or fields.
@@ -33,6 +33,7 @@ from biotope.croissant.mapping import (
     preview_mapping,
     render_inspection_text,
 )
+from biotope.croissant.mapping.preview import VALIDATION_SCOPE
 from biotope.croissant.spec import CroissantDatasetModel, load_from_path, load_from_url
 from biotope.project_model import Project, find_project
 
@@ -231,16 +232,13 @@ def _render_intent(project_path: Path, project: Project) -> None:
 @map_group.command()
 @click.argument("croissant", type=str)
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable JSON inspection.")
-@click.option("--preview-rows", type=click.IntRange(min=0), default=3, show_default=True)
-def inspect(croissant: str, as_json: bool, preview_rows: int) -> None:
+def inspect(croissant: str, as_json: bool) -> None:
     """Inspect a Croissant dataset deterministically."""
     dataset = _load_croissant(croissant)
     datasets_location = infer_datasets_location(croissant)
     _warn_if_manifest_drifted(croissant, datasets_location)
     inspection = inspect_dataset(
         dataset,
-        datasets_location=datasets_location,
-        preview_rows=preview_rows,
     )
     if as_json:
         click.echo(json.dumps(inspection.to_json(), indent=2, default=str))
@@ -263,8 +261,7 @@ def inspect(croissant: str, as_json: bool, preview_rows: int) -> None:
     help="Where to write the scaffold. Default: mappings/<stem>.mapping.yaml under the project root.",
 )
 @click.option("--stdout", "to_stdout", is_flag=True, help="Print to stdout instead of writing a file.")
-@click.option("--preview-rows", type=click.IntRange(min=0), default=3, show_default=True)
-def scaffold(croissant: str, out: Path | None, to_stdout: bool, preview_rows: int) -> None:
+def scaffold(croissant: str, out: Path | None, to_stdout: bool) -> None:
     """Generate an unresolved semantic mapping scaffold for a Croissant file."""
     if out is not None and to_stdout:
         raise click.UsageError("Choose either --out or --stdout, not both.")
@@ -285,14 +282,13 @@ def scaffold(croissant: str, out: Path | None, to_stdout: bool, preview_rows: in
         required_relations=list(project.required_relations) if project else [],
         purpose=project.purpose if project else None,
         write_to=target,
-        preview_rows=preview_rows,
     )
     if target:
         console.print(f"✅ Wrote {target}")
         unresolved = result.get("unresolved") or []
         if unresolved:
             console.print(
-                f"[yellow]ℹ[/yellow] {len(unresolved)} unresolved slot(s); " f"run [bold]biotope map[/bold] to resolve."
+                f"[yellow]ℹ[/yellow] {len(unresolved)} unresolved slot(s); run [bold]biotope map[/bold] to resolve."
             )
     else:
         click.echo(result["yaml"], nl=False)
@@ -310,9 +306,8 @@ def scaffold(croissant: str, out: Path | None, to_stdout: bool, preview_rows: in
     required=False,
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit a machine-readable JSON preview.")
-@click.option("--rows", "sample_rows", type=click.IntRange(min=0), default=3, show_default=True)
-def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
-    """Validate a (partial) mapping and project its outputs.
+def preview(mapping_path: Path | None, as_json: bool) -> None:
+    """Check mapping definitions and summarize the target schema. No values are loaded.
 
     With no path, previews every mapping under the project's ``mappings/`` dir
     (multi-mapping projects are the norm); pass an explicit path to preview
@@ -335,19 +330,23 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
         result = preview_mapping(
             mapping,
             dataset,
-            datasets_location=datasets_location,
-            sample_rows=sample_rows,
         )
         previews.append((path, mapping, result))
 
     aggregated = aggregate_previews([(path.name, result) for path, _, result in previews])
+    invalid = any(
+        result.unresolved_slots or any(f.severity == "error" for f in result.findings) for _, _, result in previews
+    )
 
     if as_json:
         payload = {
+            "validation_scope": VALIDATION_SCOPE,
             "global": aggregated.to_json(),
             "mappings": {path.name: result.to_json() for path, _, result in previews},
         }
         click.echo(json.dumps(payload, indent=2, default=str))
+        if invalid:
+            raise click.exceptions.Exit(1)
         return
 
     _render_global_schema_rich(aggregated)
@@ -355,6 +354,9 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
     _render_global_findings_rich(aggregated)
     for path, mapping, result in previews:
         _render_per_file_panels(path, result)
+    click.echo(f"Structural checks {'need attention' if invalid else 'passed'}: {VALIDATION_SCOPE}.")
+    if invalid:
+        raise click.exceptions.Exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -368,8 +370,8 @@ def preview(mapping_path: Path | None, as_json: bool, sample_rows: int) -> None:
 def defer_relation(mapping_path: Path, relation_name: str) -> None:
     """Mark a declared relation as unsupported by the available data.
 
-    A deferred relation is skipped by ``biotope build`` (counted,
-    not silently dropped). Use ``undefer-relation`` to reverse.
+    A deferred relation records a known gap in the proposed mapping.
+    Use ``undefer-relation`` to reverse.
     """
     _set_relation_deferred(mapping_path, relation_name, deferred=True)
     console.print(f"✅ Marked relations.{relation_name} as deferred in [cyan]{mapping_path}[/cyan]")
@@ -385,16 +387,13 @@ def undefer_relation(mapping_path: Path, relation_name: str) -> None:
 
 
 def _set_relation_deferred(mapping_path: Path, relation_name: str, *, deferred: bool) -> None:
-    from biotope.croissant.mapping import dump_mapping
+    from biotope.croissant.mapping.loader import set_relation_deferred
 
     mapping = load_mapping(mapping_path)
     if relation_name not in mapping.relations:
         known = ", ".join(sorted(mapping.relations)) or "(none declared)"
         raise click.UsageError(f"Unknown relation {relation_name!r}. Known relations: {known}")
-    relation = mapping.relations[relation_name].model_copy(update={"deferred": deferred})
-    updated_relations = {**mapping.relations, relation_name: relation}
-    updated = mapping.model_copy(update={"relations": updated_relations})
-    dump_mapping(updated, mapping_path)
+    set_relation_deferred(mapping, mapping_path, relation_name, deferred=deferred)
 
 
 # ---------------------------------------------------------------------------
@@ -636,8 +635,8 @@ def _discover_single_mapping() -> Path | None:
 
 
 def _discover_project_mappings() -> list[Path]:
-    """Return every project mapping, agreeing with ``biotope build`` on identity."""
-    from biotope.commands.build import _discover_mapping_paths
+    """Return project mapping definitions, preferring explicit mapping suffixes."""
+    from biotope.croissant.mapping.loader import discover_mapping_paths
 
     project_root = _project_root_from_cwd()
     if project_root is None:
@@ -645,7 +644,7 @@ def _discover_project_mappings() -> list[Path]:
     mappings_dir = project_root / "mappings"
     if not mappings_dir.is_dir():
         return []
-    return _discover_mapping_paths(mappings_dir)
+    return discover_mapping_paths(mappings_dir)
 
 
 def _render_global_schema_rich(agg: MultiMappingPreview) -> None:
@@ -689,7 +688,7 @@ def _render_global_schema_rich(agg: MultiMappingPreview) -> None:
 
 def _render_slot_resolution_rich(agg: MultiMappingPreview, all_files: list[str]) -> None:
     """Show which mapping file resolves each slot; flag unresolved slots."""
-    all_slots = sorted(set(agg.slot_resolution) | set(agg.slot_unresolved))
+    all_slots = sorted(set(agg.slot_resolution) | set(agg.slot_unresolved) | set(agg.slot_deferred))
     if not all_slots:
         return
     lines: list[str] = []
@@ -705,9 +704,11 @@ def _render_slot_resolution_rich(agg: MultiMappingPreview, all_files: list[str])
                 color = "yellow"
                 tail = f"{tail} (resolved by multiple — should be a single source of truth)"
             lines.append(f"[{color}]{marker}[/{color}] {slot}   ← {tail}")
-        else:
+        elif unresolved_in:
             lines.append(f"[red]○[/red] {slot}   [dim](stub present in: {', '.join(unresolved_in)})[/dim]")
-    has_unresolved = any(slot not in agg.slot_resolution for slot in all_slots)
+        if slot in agg.slot_deferred:
+            lines.append(f"[yellow]—[/yellow] {slot}   deferred in: {', '.join(agg.slot_deferred[slot])} (known gap)")
+    has_unresolved = bool(agg.slot_unresolved)
     border = "yellow" if has_unresolved else "green"
     console.print(Panel("\n".join(lines), title="Slot resolution", border_style=border, expand=False))
 
@@ -729,10 +730,9 @@ def _render_global_findings_rich(agg: MultiMappingPreview) -> None:
 
 
 def _render_per_file_panels(path: Path, result) -> None:
-    """Render file-local information: validation findings and sample tuples."""
+    """Render file-local information: structural validation findings."""
     has_findings = bool(result.findings)
-    has_samples = bool(result.sample_node_tuples or result.sample_edge_tuples)
-    if not (has_findings or has_samples):
+    if not has_findings:
         return
     console.print(Panel(f"[bold]{path.name}[/bold]", border_style="cyan", expand=False))
     if has_findings:
@@ -745,17 +745,6 @@ def _render_per_file_panels(path: Path, result) -> None:
                 expand=False,
             )
         )
-    if has_samples:
-        lines = []
-        if result.sample_node_tuples:
-            lines.append("[bold]Sample node tuples:[/bold]")
-            for tup in result.sample_node_tuples:
-                lines.append(f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r})")
-        if result.sample_edge_tuples:
-            lines.append("[bold]Sample edge tuples (rel_id, source, target, label, props):[/bold]")
-            for tup in result.sample_edge_tuples:
-                lines.append(f"  ({tup[0]!r}, {tup[1]!r}, {tup[2]!r}, {tup[3]!r}, {tup[4]!r})")
-        console.print(Panel("\n".join(lines), title="Samples", border_style="dim", expand=False))
 
 
 __all__ = ["map_group"]

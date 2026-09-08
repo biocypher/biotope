@@ -127,9 +127,11 @@ class CroissantFieldSource(ConfiguredBaseModel):
 class CroissantFieldModel(ConfiguredBaseModel):
     """A field within a Croissant record set."""
 
-    name: str
+    # Baker can omit a display name for an unnamed source column.
+    name: str = Field(validation_alias=AliasChoices("name", "@id"))
     description: str | None = None
     data_type: str | None = None
+    array_shape: str | None = Field(default=None, validation_alias=AliasChoices("arrayShape", "cr:arrayShape"))
     repeated: bool = Field(
         default=False,
         validation_alias=AliasChoices("repeated", "isArray", "cr:isArray"),
@@ -216,11 +218,12 @@ class CroissantDatasetModel(ConfiguredBaseModel):
     distribution: list[CroissantFileSetModel | CroissantFileObjectModel] = Field(default_factory=list)
 
     def record_set_by_name(self, name: str) -> CroissantRecordSetModel | None:
-        """Return the record set with the given name, or ``None`` if absent."""
+        """Resolve an ID, or an unambiguous display name."""
         for rs in self.record_set:
-            if rs.name == name:
+            if rs.id == name:
                 return rs
-        return None
+        matches = [rs for rs in self.record_set if rs.name == name]
+        return matches[0] if len(matches) == 1 else None
 
 
 CroissantFieldModel.model_rebuild()

@@ -1,16 +1,7 @@
-"""Croissant-driven knowledge-graph construction for biotope.
+"""Croissant metadata models, mapping definitions and structural validation.
 
-Layers, lowest first:
-
-* :mod:`biotope.croissant.spec` — typed Pydantic models for Croissant 1.1 JSON-LD
-* :mod:`biotope.croissant.codegen` — Jinja schema codegen from a Croissant model
-* :mod:`biotope.croissant.acquisition` — DuckDB-backed record streaming + transforms
-* :mod:`biotope.croissant.mapping` — declarative ``mapping.yaml`` and its compiler
-* :mod:`biotope.croissant.alignment` — cross-Croissant alignment (``alignment.yaml``)
-* :mod:`biotope.croissant.scaffold` — write a runnable BioCypher project from mappings
-* :mod:`biotope.croissant.registry` — pluggable BioCypher-adapter registry clients
-
-The agent surface is the biotope CLI; there is no separate MCP server.
+Source-format parsing belongs to croissant-baker. Downstream graph modules are
+currently unsupported and are not imported by the metadata workflow.
 """
 
 from biotope.croissant.spec import (

@@ -1,13 +1,5 @@
-"""Layer 3: declarative semantic ``mapping.yaml`` and its compiler."""
+"""Layer 3: declarative semantic ``mapping.yaml`` definitions and metadata checks."""
 
-from biotope.croissant.mapping.compile import (
-    CompiledAdapter,
-    compile_mapping,
-    derive_namespace,
-    derive_schema_term,
-    iter_entity_tuples,
-    iter_relation_tuples,
-)
 from biotope.croissant.mapping.defaults import intent_comment, unresolved_scaffold
 from biotope.croissant.mapping.inspector import (
     DatasetInspection,
@@ -45,7 +37,6 @@ from biotope.croissant.mapping.render import (
 __all__ = [
     "AggregatedEntity",
     "AggregatedRelation",
-    "CompiledAdapter",
     "DatasetInspection",
     "Endpoint",
     "EntityMapping",
@@ -61,14 +52,9 @@ __all__ = [
     "Selector",
     "aggregate_previews",
     "build_inspector_appendix",
-    "compile_mapping",
-    "derive_namespace",
-    "derive_schema_term",
     "dump_mapping",
     "inspect_dataset",
     "intent_comment",
-    "iter_entity_tuples",
-    "iter_relation_tuples",
     "load_mapping",
     "preview_mapping",
     "render_inspection_text",

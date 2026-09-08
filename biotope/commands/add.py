@@ -7,6 +7,7 @@ import logging
 import subprocess
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from glob import escape as escape_glob
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +61,10 @@ from biotope.utils import (
     "status_override",
     type=click.Choice(["raw", "processed"]),
     default=None,
-    help="Override pipeline state. Default: 'processed' if baker produced a " "complete record set, 'raw' otherwise.",
+    help=(
+        "Override workflow state. Default: 'processed' when fields are described, "
+        "'raw' otherwise. This does not validate values."
+    ),
 )
 @click.option(
     "--derived-from",
@@ -198,7 +202,7 @@ def add(
             for source_dir, _metadata_dict in baked_dirs:
                 click.echo(f"  • Review {source_dir / SCAFFOLD_FILENAME}")
                 click.echo(f"    Then: biotope annotate apply {source_dir}")
-            click.echo("  • Map data into the knowledge graph: biotope map")
+            click.echo("  • Define mappings from the described fields: biotope map")
             click.echo('  • Finally: biotope commit -m "message"')
         else:
             click.echo("  1. Run 'biotope status' to see staged files")
@@ -240,6 +244,17 @@ def _add_file(
     )
 
     _enrich_with_baker(metadata, abs_file)
+    # Baker's single-file assembly is rooted at the file's parent. File tracking
+    # in a single-file manifest uses project-relative paths.
+    parent = abs_file.parent.relative_to(biotope_root)
+    for distribution in metadata.get("distribution", []):
+        if distribution.get("contentUrl"):
+            distribution["contentUrl"] = str(parent / distribution["contentUrl"])
+        if distribution.get("includes"):
+            includes = distribution["includes"]
+            distribution["includes"] = (
+                str(parent / includes) if isinstance(includes, str) else [str(parent / pattern) for pattern in includes]
+            )
     _apply_dataset_metadata(metadata, defaults, overrides, biotope_root)
     _apply_pipeline_state(metadata, overrides)
 
@@ -252,46 +267,31 @@ def _add_file(
 
 
 def _enrich_with_baker(metadata: dict[str, Any], file_path: Path) -> None:
-    """Attach baker-derived structural metadata under ``recordSet``."""
-    from croissant_baker.handlers.registry import extract as baker_extract
-    from croissant_baker.handlers.registry import select_handler
+    """Use baker's full assembly, scoped to exactly this file."""
+    with _bake_progress(f"Baking {file_path.name}") as report:
+        from croissant_baker.metadata_generator import MetadataGenerator
 
-    # Resolves the compression wrapper first, so x.parquet.gz describes as x.parquet.
-    selection = select_handler(file_path)
-    if selection.handler is None:
-        click.echo(f"ℹ️  {file_path.name} not described: {selection.refusal}")
-        return
-
-    try:
-        extracted = baker_extract(selection.handler, selection.source, file_path)
-    except Exception as exc:  # noqa: BLE001
-        click.echo(f"⚠️  baker could not extract from {file_path.name}: {exc}")
-        return
-
-    record_set: dict[str, Any] = {
-        "@type": "cr:RecordSet",
-        "name": file_path.stem,
-        "field": [],
-    }
-    column_types = extracted.get("column_types") or {}
-    file_object_id = metadata["distribution"][0]["@id"]
-    for column_name, column_type in column_types.items():
-        record_set["field"].append(
-            {
-                "@type": "cr:Field",
-                "name": column_name,
-                "dataType": str(column_type),
-                "source": {
-                    "fileObject": {"@id": file_object_id},
-                    "extract": {"column": column_name},
-                },
-            }
+        pattern = escape_glob(file_path.name)
+        generator = MetadataGenerator(
+            dataset_path=str(file_path.parent),
+            name=metadata.get("name") or file_path.name,
+            includes=[pattern],
+            excludes=[f"*/{pattern}"],
         )
-    for stat_key in ("num_rows", "num_columns"):
-        if stat_key in extracted:
-            record_set[f"cr:{stat_key}"] = extracted[stat_key]
-
-    metadata.setdefault("recordSet", []).append(record_set)
+        try:
+            baked = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
+        except ValueError as exc:
+            _echo_scan_coverage(generator)
+            if str(exc) != "No supported files found in the dataset":
+                raise
+            # Keep the original file-tracking pointer, without claiming structure.
+            # The caller roots successful baker paths separately.
+            metadata["distribution"][0]["contentUrl"] = file_path.name
+        else:
+            _echo_scan_coverage(generator, baked)
+            for key, value in baked.items():
+                if key not in {"name", "description", "dateCreated"}:
+                    metadata[key] = value
 
 
 def _git_user_identity(cwd: Path) -> tuple[str | None, str | None]:
@@ -413,11 +413,19 @@ class _BakerWarnings(logging.Handler):
         super().__init__(logging.WARNING)
         self._progress = progress
 
+    #: Level name -> the word and colour it is announced with.
+    _LEVELS = {"WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"}
+
     def emit(self, record: logging.LogRecord) -> None:
         # A message naming a file is data: unescaped, "[/]" in a path raises and
         # "[dim]" silently eats the characters around it. soft_wrap keeps a long
         # diagnostic on one line, where it can be grepped.
-        self._progress.console.print(f"  [yellow]![/yellow] {escape(record.getMessage())}", soft_wrap=True)
+        level = record.levelname.lower()
+        colour = self._LEVELS.get(record.levelname, "yellow")
+        self._progress.console.print(
+            f"[{colour}]{level}:[/{colour}] {escape(record.getMessage())}",
+            soft_wrap=True,
+        )
 
 
 @contextmanager
@@ -427,16 +435,20 @@ def _bake_progress(label: str):
     The baker names each file it cannot describe through its own logger; without
     a handler those are swallowed and only the closing summary survives.
     """
+    click.echo(
+        f"{label}: preparing croissant-baker and scanning input files. "
+        "File counts appear after the first file finishes."
+    )
     progress = Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        TextColumn("{task.completed}/{task.total}"),
+        TextColumn("{task.fields[count]}"),
         TextColumn("[dim]{task.fields[file]}"),
         console=Console(),
         transient=True,
     )
-    task = progress.add_task(label, total=None, file="")
+    task = progress.add_task(label, total=None, file="", count="count pending")
     handler = _BakerWarnings(progress)
     baker_log = logging.getLogger("croissant_baker")
     baker_log.addHandler(handler)
@@ -444,17 +456,25 @@ def _bake_progress(label: str):
         with progress:
 
             def report(done: int, total: int, path: str) -> None:
-                progress.update(task, completed=done, total=total, file=Path(path).name)
+                progress.update(task, completed=done, total=total, file=Path(path).name, count=f"{done}/{total}")
 
             yield report
     finally:
         baker_log.removeHandler(handler)
 
 
-def _echo_scan_coverage(generator: Any) -> None:
+def _echo_scan_coverage(generator: Any, metadata: dict[str, Any] | None = None) -> None:
     """Forward the baker's coverage summary: what it could not describe, and why."""
     for line in generator.scan_report.summary_lines():
         click.echo(f"  {line}")
+    for entry in generator.scan_report.undescribed:
+        click.echo(f"  {entry.outcome.value}: {entry.path} — {entry.detail or entry.reason}")
+    # Forward descriptions verbatim: partial parses and layout omissions are
+    # evidence from baker, not something Biotope can infer from field counts.
+    for record_set in (metadata or {}).get("recordSet", []):
+        if record_set.get("description"):
+            click.echo(f"  {record_set.get('@id', record_set.get('name'))}: {record_set['description']}")
+    click.echo("  Structural descriptions may be partial; completeness and source values are not validated.")
 
 
 def _bake_directory(
@@ -464,12 +484,6 @@ def _bake_directory(
 ) -> tuple[dict[str, Any], int] | None:
     """Run croissant-baker over ``directory`` and write one directory-level JSON-LD."""
     overrides = overrides or _default_overrides()
-    try:
-        from croissant_baker.metadata_generator import MetadataGenerator
-    except ImportError:
-        click.echo("❌ croissant-baker is not installed. Install with `uv pip install croissant-baker`.")
-        return None
-
     abs_dir = directory.resolve()
     try:
         rel_dir = abs_dir.relative_to(biotope_root)
@@ -481,39 +495,45 @@ def _bake_directory(
     defaults = load_project_metadata(biotope_root)
     now = datetime.now(tz=timezone.utc).isoformat()
 
-    generator = MetadataGenerator(
-        dataset_path=str(abs_dir),
-        name=overrides.get("name") or str(rel_dir),
-        description=overrides.get("description") or defaults.get("description"),
-        url=overrides.get("url") or defaults.get("url"),
-        license=overrides.get("license") or defaults.get("license"),
-        citation=overrides.get("citation") or defaults.get("citation"),
-        version=overrides.get("version"),
-        date_created=now,
-        creators=_creator_for_baker(defaults, overrides, biotope_root),
-        keywords=list(overrides.get("keywords") or []) or None,
-        excludes=[
-            SCAFFOLD_FILENAME,
-            f"**/{SCAFFOLD_FILENAME}",
-            ".biotope/**",
-            "**/.biotope/**",
-            ".git/**",
-            "**/.git/**",
-        ],
-        rai_fields=overrides.get("rai_fields") or None,
-    )
-
-    try:
-        with _bake_progress(f"Baking {rel_dir}") as report:
-            metadata_dict = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
-    except ValueError as exc:
-        _echo_scan_coverage(generator)
-        if str(exc) != "No supported files found in the dataset":
-            click.echo(f"⚠️  Could not bake {rel_dir}: {exc}")
+    with _bake_progress(f"Baking {rel_dir}") as report:
+        try:
+            from croissant_baker.metadata_generator import MetadataGenerator
+        except ImportError:
+            click.echo("❌ croissant-baker is not installed. Install with `uv pip install croissant-baker`.")
             return None
-        metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
-    else:
-        _echo_scan_coverage(generator)
+
+        generator = MetadataGenerator(
+            dataset_path=str(abs_dir),
+            name=overrides.get("name") or str(rel_dir),
+            description=overrides.get("description") or defaults.get("description"),
+            url=overrides.get("url") or defaults.get("url"),
+            license=overrides.get("license") or defaults.get("license"),
+            citation=overrides.get("citation") or defaults.get("citation"),
+            version=overrides.get("version"),
+            date_created=now,
+            creators=_creator_for_baker(defaults, overrides, biotope_root),
+            keywords=list(overrides.get("keywords") or []) or None,
+            excludes=[
+                SCAFFOLD_FILENAME,
+                f"**/{SCAFFOLD_FILENAME}",
+                ".biotope/**",
+                "**/.biotope/**",
+                ".git/**",
+                "**/.git/**",
+            ],
+            rai_fields=overrides.get("rai_fields") or None,
+        )
+
+        try:
+            metadata_dict = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
+        except ValueError as exc:
+            _echo_scan_coverage(generator)
+            if str(exc) != "No supported files found in the dataset":
+                click.echo(f"⚠️  Could not bake {rel_dir}: {exc}")
+                return None
+            metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
+        else:
+            _echo_scan_coverage(generator, metadata_dict)
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
