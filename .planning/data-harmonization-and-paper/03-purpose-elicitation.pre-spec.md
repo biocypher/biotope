@@ -33,7 +33,7 @@ Explore a compact, versioned **purpose record** with an adaptive interview aroun
 
 These are candidate areas, not mandatory fields. Separate inspectable facts from researcher decisions. Ask in dependency order, use small source examples, stop when the task is actionable, and reopen relevant choices after new evidence or needs. Define those rules during detailed design.
 
-Keep scientific requirements distinguishable from topology and bindings. The [typed-engine work](/Users/vlad/.codex/worktrees/8199/biotope/.planning/data-harmonization-and-paper/02-typed-graph-engine.spec.md) can check implementation contracts; the purpose record explains why a contract is appropriate. The [format work](/Users/vlad/Projects/virtual-human-dev/biotope/.planning/data-harmonization-and-paper/01-croissant-baker-update.spec.md) supplies evidence about available fields and extraction limits. A missing field should trigger an explicit limitation or a research decision, not an unrecorded change in purpose.
+Keep scientific requirements distinguishable from topology and bindings. The [typed-engine work](02-typed-graph-engine.spec.md) can check implementation contracts; the purpose record explains why a contract is appropriate. The [format work](/Users/vlad/Projects/virtual-human-dev/biotope/.planning/data-harmonization-and-paper/01-croissant-baker-update.spec.md) supplies evidence about available fields and extraction limits. A missing field should trigger an explicit limitation or a research decision, not an unrecorded change in purpose.
 
 ## Foundation for later experiments
 
