@@ -46,14 +46,22 @@ root with the intended environment activated.
   and no JSON on stdout.
 - `source register <authored.jsonld> --name <dataset> --reason <review>` registers
   effective curated metadata. `--replace` explicitly replaces an existing description.
-- `source generate <manifest> --out graph/sources/study/schema.py` generates source
-  dataclasses, `RECORDS` and the `SourceRow` type union without payloads. It creates
-  missing sibling `SOURCE` registration and loader files, preserving existing ones.
-  `--check` verifies contract freshness without writing. Use a separate source
-  directory for each generated module.
+- `source generate <manifest> --out graph/sources` generates one package per
+  top-level record set at `graph/sources/<manifest>/<record-set>/`, each holding a
+  single generated dataclass, its `RECORDS` tuple and `SourceRow` alias, without
+  payloads. It creates missing sibling `SOURCE` registration and loader files,
+  preserving existing ones, and writes the manifest's generated `CONTRACTS`
+  inventory. `--package` overrides the manifest-derived folder name. `--check`
+  reports each package's freshness without writing; a record set removed from the
+  manifest leaves an orphaned package, which is reported and never deleted.
 - `annotate` and `config` maintain descriptive annotations and validation settings.
 
 ## Define and build
+
+All graph commands accept `--graph <folder>` (default `graph/`) and `--json`.
+They load `topology/__init__.py:TOPOLOGY` and the single
+`pipelines/build_graph.py:PIPELINE` in that workspace. Project input paths resolve
+relative to its parent; use package-relative imports for portable workspaces.
 
 - `graph scaffold [--json]` creates `graph/` in the current directory with topology,
   source and mapping registrations, inactive typed examples, a pipeline entry point,
@@ -66,14 +74,30 @@ root with the intended environment activated.
 - `map --purpose ... --entity ... --relation ...` captures research requirements.
   `map --show` prints existing intent. Bare `map` shows help.
 - Author topology, source-local loaders, mappings and pipeline registration in
-  Python under `graph/`. Run from the project root; use imports starting with `graph.`
-  or package-relative imports. See the [typed project guide](mapping.md) and [example](tutorial.md).
-- `graph check graph.pipelines.build_graph:PIPELINE [--json]` checks definitions, source freshness,
+  Python under the selected workspace. See the [typed project guide](mapping.md) and [example](tutorial.md).
+- `graph check [--json]` checks definitions, source freshness,
   requirement bindings and Python types. No loaders or mappings are invoked.
   Warnings identify absent intent, missing purpose/requirements and registered
   `example:` concepts; a successful definition check is not scientific acceptance.
-- `graph build graph.pipelines.build_graph:PIPELINE --out graph/build/<run>` checks, executes the selected
-  project pipeline and writes BioCypher files, provenance and `run.json`.
+- `graph quality [--json]` executes the declared pipeline scope once, measures
+  its validated Python graph objects, and saves `graph/reports/quality.json`.
+  It does not export. Warnings are advisory; definition, execution and integrity
+  failures exit nonzero and leave subsequent measurements explicitly not run.
+- `graph metagraph [--json] [--report <json>]` inspects topology without importing
+  the pipeline. Default output is offline `graph/reports/metagraph.html`;
+  `--out <html>` selects another file. JSON writes no HTML and excludes `--out`.
+  An optional quality report or build `run.json` adds matching-topology observations.
+  Authored files and symlinks are never replaced.
+- `graph build --out graph/build/<run> [--json]` performs the same assessment once,
+  then writes BioCypher files, provenance and the assessment in `run.json`.
+  Running quality and build separately executes the pipeline twice; no caching
+  or automatic sampling is performed.
+
+Graph JSON uses `schema_version: 1` and an operation-specific `report_kind`.
+Operational failures also produce one document; incidental output goes to stderr.
+Human output groups checks and observations, preserves full references and shows
+live diagnostics above terminal-only progress. Reports are derived artifacts;
+older reports without measurements remain unmeasured.
 
 YAML mappings, their wizard/scaffolds/preview, `propose-mapping`, automatic
 alignment proposals and the legacy graph engine are retired. No automatic

@@ -31,15 +31,24 @@ CLI commands from the project root.
 
 ## Keep the authorities separate
 
-| Artifact                           | Owner and purpose                                           |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `.biotope/datasets/*.jsonld`       | Effective, curated source descriptions                      |
-| `graph/sources/<source>/schema.py` | Generated dataclasses; regenerate rather than edit          |
-| `graph/sources/<source>/loader.py` | Authored physical access using established format libraries |
-| `graph/topology/<node>/`           | Authored node and outgoing relation dataclasses             |
-| `graph/mappings/<source>.py`       | Pure transformations of typed inputs                        |
-| `graph/pipelines/build_graph.py`   | Source selection, joins, exclusions and execution           |
-| `graph/build/<run>/`               | Derived schema, BioCypher files, provenance and run record  |
+One record set of one manifest becomes one source package, so adding, removing
+or re-encoding an upstream file touches one folder.
+
+| Artifact                                            | Owner and purpose                                           |
+| --------------------------------------------------- | ----------------------------------------------------------- |
+| `.biotope/datasets/<manifest>.jsonld`               | Effective, curated source descriptions                      |
+| `graph/sources/<manifest>/__init__.py`              | Generated `CONTRACTS` inventory of that manifest's packages |
+| `graph/sources/<manifest>/<record-set>/schema.py`   | Generated dataclass; regenerate rather than edit            |
+| `graph/sources/<manifest>/<record-set>/__init__.py` | Authored `SOURCE` registration; created when absent         |
+| `graph/sources/<manifest>/<record-set>/loader.py`   | Authored physical access using established format libraries |
+| `graph/sources/__init__.py`                         | Authored `SOURCES` selection                                |
+| `graph/topology/<node>/`                            | Authored node and outgoing relation dataclasses             |
+| `graph/mappings/`                                   | Pure transformations of typed inputs                        |
+| `graph/pipelines/build_graph.py`                    | Source selection, joins, exclusions and execution           |
+| `graph/build/<run>/`                                | Derived schema, BioCypher files, provenance and run record  |
+
+Organise mappings by source and group them only where a transformation is
+genuinely shared; nothing in the engine depends on their file layout.
 
 Existing YAML mappings and the interactive mapping wizard are retired. There is
 no automatic migration. Keep old mappings as reference while authoring Python;
@@ -54,9 +63,9 @@ structure established by evidence; include unresolved gaps in the review reason.
 Register it as the effective description:
 
 ```bash
-biotope source register graph/metadata/study.jsonld --name raw/study \
+biotope source register graph/metadata/study.jsonld --name study \
   --reason "Reviewed sheet headers; the image matrix remains opaque" --replace
-biotope source generate .biotope/datasets/raw/study.jsonld --out graph/sources/study/schema.py
+biotope source generate .biotope/datasets/study.jsonld --out graph/sources
 ```
 
 Omit `--replace` when adding a new description. Before replacement, the command
@@ -96,26 +105,40 @@ records can proceed independently, and unused opaque fields can be `None`.
 This is a defined subset of Croissant, not a JSON-LD reasoner or universal matrix
 representation.
 
-`source generate` also creates missing sibling `__init__.py` and `loader.py`
-files. The registration defines `SOURCE` using the generated `RECORDS` tuple of
-all top-level record classes. The loader stub uses their `SourceRow` union;
-nested field classes are not separate records. A project may explicitly select
-a subset in `SOURCE.records`. Add participating sources to the `SOURCES`
-registry; generation does not choose pipeline scope. Existing authored siblings
-are preserved. `--check` verifies only the generated contract and writes nothing.
-The Python API `generate_source` still writes one module; the CLI uses
-`generate_source_package` for this additional setup.
+`--out` is the sources root. Generation is exhaustive: every top-level record
+set of the manifest becomes `graph/sources/<manifest>/<record-set>/`, holding one
+generated `schema.py` with a single record class, a one-element `RECORDS` tuple
+and a `SourceRow` alias for it. `<manifest>` follows the manifest filename unless
+`--package` overrides it. Missing sibling `__init__.py` and `loader.py` files are
+created and existing authored ones are preserved.
 
-Python names replace punctuation with underscores, protect keywords and numeric
-prefixes, and add ordered suffixes for collisions. `Row.__field_refs__` maps Python
-attribute names to original field `@id` values, or JSON pointers when IDs are
-absent. `Row.__record_set__` identifies the record set in the same way. These are
+`graph/sources/<manifest>/__init__.py` is generated and exports `CONTRACTS`, every
+package's `SOURCE`. Select from it into the authored `SOURCES` registry;
+generation does not choose pipeline scope. Because Python imports a parent package
+first, importing one package of a manifest imports them all; the modules are
+declaration-only, so this reads no payload.
+
+`--check` writes nothing and reports each package as current, missing, stale,
+authored, conflict, orphan or renamed. A record set removed from the manifest
+leaves an orphaned package: generation reports it and never deletes it, because
+its loader is authored work. Removing the package is a project decision;
+`graph check` fails only while it remains registered in `SOURCES`.
+
+Package and class names derive from the record set `@id`, falling back to `name`
+and then to a JSON pointer. Punctuation becomes underscores, keywords and numeric
+prefixes are protected, long names are truncated, and a collision suffixes every
+member of the colliding group with a digest of its identity, so reordering a
+manifest never renames an unrelated package. `Row.__field_refs__` maps Python
+attribute names to original field `@id` values, or a reference under the record
+set's own identity when IDs are absent — never a manifest position, so inserting
+or removing a record set leaves unrelated packages byte-identical. `Row.__record_set__` identifies the record set in the same way. These are
 references to the authoritative Croissant file registered in `SOURCE.metadata`.
 Descriptions, extraction rules, distributions and extensions stay there;
 generated Python contains no embedded metadata document or metadata-loading code.
 
-Generation is deterministic for the same record-set descriptions, interpretation
-context and generator version. The generated declarations carry a freshness hash
+Generation is deterministic for the same record-set description, interpretation
+context and generator version. Each package carries a freshness digest over its
+own record set alone, so editing one record set rewrites one `schema.py`. The generated declarations carry a freshness hash
 and import without reading Croissant or source payloads.
 Generation writes only the designated module and refuses to overwrite authored Python.
 Changes to record-set descriptions, context or generated code fail freshness checks.
@@ -202,9 +225,17 @@ this iteration has no disk-backed state engine or object-per-pixel requirement.
 Run from the parent project root with the intended environment activated:
 
 ```bash
-biotope graph check graph.pipelines.build_graph:PIPELINE --json
-biotope graph build graph.pipelines.build_graph:PIPELINE --out graph/build/review-1
+biotope graph check --json
+biotope graph metagraph
+# To assess data without export:
+biotope graph quality --json
+# Or assess and export in one execution:
+biotope graph build --out graph/build/review-1
 ```
+
+All graph commands accept `--graph <folder>`. They use its conventional
+`TOPOLOGY` and `PIPELINE` registrations, with relative inputs anchored to the
+workspace parent. Prefer package-relative imports so renaming the folder works.
 
 Checking imports project declarations, verifies generated contracts, derives
 topology, checks requirement bindings, and runs Pyright in strict mode over
@@ -214,11 +245,43 @@ shared helpers and pipeline modules. Directory enumeration ignores `.venv`, `ven
 mapping execution at module scope. This boundary is a project contract, not a
 sandbox for arbitrary Python. Definition checks work without source payloads.
 
-Build repeats the checks, then explicitly invokes the pipeline. Invalid values,
+Quality and build both check definitions, execute the declared pipeline scope
+once and assess the final deduplicated graph objects. No automatic sampling,
+export-file reading or persisted object cache is involved. Running both commands
+executes twice; choose quality when export is unnecessary.
+
+Measurements cover every concept's count; null, whitespace-only and empty-list
+properties; isolates and weak components; the three most frequent endpoints per
+relation; and actual self-loops. Zero and `False` are usable values. Empty
+populations have unmeasured rates. Required empty concepts, wholly missing
+properties and self-loops warn without failing the operation; the other rates
+are observations. Examples are illustrative: up to three distinct non-null
+values in encounter order, strings limited to 160 characters, lists to five
+items. Truncation is explicit. Findings retain bounded record and provenance
+references. These checks do not establish biological validity.
+
+Quality saves its latest assessment, including failures, to
+`<graph>/reports/quality.json`; it stops before export. Build records the same
+assessment in its run record and then exports. Invalid values,
 conflicts or unresolved endpoints fail the build; `run.json` records failure.
 Identical nodes/edges combine evidence. Edges without an explicit ID use a stable
 hash of concept/source/target, so parallel edges with different properties need
 explicit project IDs. Existing output directories are never overwritten.
+
+For short diagram labels, add `display_name: ClassVar[str] = "Gene expression"`
+beside a concept's `schema_id`. Without it, the viewer uses the Python class name
+split into words. Labels are presentation metadata: they do not change IDs,
+exported properties or the topology digest. Full IDs remain in the detail panel
+and JSON. Relation labels appear on selection/hover; the toolbar can show all.
+
+`graph metagraph` writes a self-contained offline topology viewer to
+`<graph>/reports/metagraph.html`, independently of the pipeline. `--out <html>`
+changes that location. `--json` emits its description without creating HTML;
+it cannot be combined with `--out`. Use `--report <quality.json-or-run.json>` to
+add counts, property examples, findings and mapping references. The topology
+digest must match. The viewer displays the run scope and completion state;
+missing measurements stay unmeasured, and loading a report never reruns data.
+Only recognized generated reports may be replaced; authored files are preserved.
 
 `run.json` records scope, source metadata and available versions, code/topology
 revisions, settings, dependencies, exclusions, completion and output locations.

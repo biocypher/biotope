@@ -10,4 +10,5 @@ CollectionId = NewType("CollectionId", str)
 @dataclass(frozen=True)
 class Collection:
     schema_id: ClassVar[str] = "example:collection"
+    display_name: ClassVar[str] = "Collection"
     id: CollectionId

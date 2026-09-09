@@ -4,9 +4,14 @@
     "cr": "http://mlcommons.org/croissant/",
     "biotope": "https://biocypher.org/biotope/"
   },
-  "name": "samples",
+  "name": "study",
   "version": "fixture-v1",
   "distribution": [
+    {
+      "@id": "people-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/people.csv"
+    },
     {
       "@id": "samples-file",
       "@type": "cr:FileObject",
@@ -14,6 +19,40 @@
     }
   ],
   "recordSet": [
+    {
+      "@id": "people",
+      "name": "people",
+      "field": [
+        {
+          "@id": "people/person_id",
+          "name": "person_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "people-file"
+            },
+            "extract": {
+              "column": "person_id"
+            }
+          }
+        },
+        {
+          "@id": "people/name",
+          "name": "name",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "people-file"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        }
+      ]
+    },
     {
       "@id": "samples",
       "name": "samples",

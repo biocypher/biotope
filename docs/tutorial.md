@@ -39,17 +39,19 @@ The pipeline references that file explicitly. Do not replace its contents.
 The example supplies reviewed Croissant descriptions so the types are predictable:
 
 ```bash
-biotope source register graph/metadata/people.jsonld --name people --reason "Reviewed synthetic fixture-v1"
-biotope source register graph/metadata/samples.jsonld --name samples --reason "Reviewed synthetic fixture-v1"
-biotope source generate .biotope/datasets/people.jsonld --out graph/sources/people/schema.py
-biotope source generate .biotope/datasets/samples.jsonld --out graph/sources/samples/schema.py
-biotope map inspect .biotope/datasets/samples.jsonld
+biotope source register graph/metadata/study.jsonld --name study --reason "Reviewed synthetic fixture-v1"
+biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+biotope map inspect .biotope/datasets/study.jsonld
 ```
 
-Read `graph/sources/samples/schema.py`, then its sibling `loader.py`. The generated
-class contains declarations; `RECORDS` supplies the inventory used by each
-source's `SOURCE` registration. Generation preserves the example's authored
-registrations and loaders. For a new source, it creates those files when absent.
+One Croissant description covers both record sets, and generation gives each its
+own package: `graph/sources/study/people/` and `graph/sources/study/samples/`.
+Read `graph/sources/study/samples/schema.py`, then its sibling `loader.py`. The
+generated class contains declarations; `RECORDS` supplies the inventory used by
+that package's `SOURCE` registration, and `graph/sources/study/__init__.py`
+collects both into `CONTRACTS` for the authored `SOURCES` to select from.
+Generation preserves the example's authored registrations and loaders. For a new
+source, it creates those files when absent.
 The loader uses Python's CSV library and explicitly
 decodes the score to `float`. `graph/mappings/samples.py` doubles that score and mints
 namespaced identifiers. `graph/pipelines/build_graph.py` states the join and exclusions.
@@ -57,9 +59,9 @@ namespaced identifiers. `graph/pipelines/build_graph.py` states the join and exc
 ## Check and build
 
 ```bash
-biotope graph check graph.pipelines.build_graph:PIPELINE
-biotope graph build graph.pipelines.build_graph:PIPELINE --out graph/build/first
-biotope graph build graph.pipelines.build_graph:PIPELINE --out graph/build/second
+biotope graph check
+biotope graph build --out graph/build/first
+biotope graph build --out graph/build/second
 ```
 
 Expect **three nodes and two edges**: Ada, samples s1 and s2, and their relations.
@@ -77,9 +79,13 @@ values in `run.json`; they should match.
 
 In `graph/mappings/samples.py`, rename a source-property access or swap the relation's
 endpoint IDs. `graph check` should fail with a useful Pyright diagnostic. Repair
-it before building. Change a curated field description, run `source generate`
-again, then repair affected loader/mapping code. Authored files are never
-regenerated. See [typed projects](mapping.md) for the validation boundaries.
+it before building. Then change a field description in
+`graph/metadata/study.jsonld`, re-register it with
+`source register graph/metadata/study.jsonld --name study --reason "..." --replace`,
+run `source generate` again and repair affected loader/mapping code. Generation
+reads the managed description, so the re-registration is what carries the edit.
+Only the edited record set's `schema.py` is rewritten, and authored files are
+never regenerated. See [typed projects](mapping.md) for the validation boundaries.
 
 ## Clean up
 

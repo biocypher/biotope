@@ -10,5 +10,6 @@ from .node import RecordId
 @dataclass(frozen=True)
 class InCollection:
     schema_id: ClassVar[str] = "example:in-collection"
+    display_name: ClassVar[str] = "In collection"
     source: RecordId
     target: CollectionId

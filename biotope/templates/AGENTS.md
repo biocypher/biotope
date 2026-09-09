@@ -23,10 +23,18 @@ for mechanics; use the purpose and evidence to choose topology and transformatio
 Read `graph/README.md` for the inactive `_example` patterns. Generate actual source
 contracts separately; do not register illustrative metadata as project data.
 
-Generate `graph/sources/<source>/schema.py` with `biotope source generate`; do not edit
-it. The command creates missing sibling registration and loader files; generated
-`RECORDS` keeps the class inventory current. Implement the loader with established
-format libraries; regeneration preserves authored siblings.
+Generate source contracts with `biotope source generate <manifest> --out graph/sources`,
+where `<manifest>` is the registered `.biotope/datasets/<name>.jsonld`, never a
+draft under `graph/metadata/`; do not edit generated modules. **One record set
+becomes one source package**, at `graph/sources/<name>/<record-set>/`, the folder
+named for the manifest's filename. One manifest describing a whole directory
+still yields one folder per record set, so one upstream file can be added,
+removed or re-encoded on its own. A directory-level bake is expected;
+do not split the Croissant to get separate packages. The command creates missing
+sibling registration and loader files and a generated `CONTRACTS` inventory per
+manifest; select from it into `SOURCES`. Implement each loader with established
+format libraries, sharing a helper only where decoding genuinely repeats;
+regeneration preserves authored siblings and never deletes an orphaned package.
 Python dataclasses define the topology; stable `schema_id` values identify concepts
 independently of module names. Each node uses a separate identifier NewType, and
 edge endpoints use the corresponding node ID types. Python mappings transform
@@ -38,12 +46,22 @@ identity rules, join cardinality, unmatched policies, output grain and expected
 spot checks. Keep source evidence alongside records. Current intent lists are
 requirements; bind them to concepts or explicitly defer with reasons.
 
-`biotope graph check graph.pipelines.build_graph:PIPELINE --json` checks definitions and Python types.
-Imports must not open payloads or execute loaders/mappings. When the task includes
-construction, `biotope graph build graph.pipelines.build_graph:PIPELINE --out graph/build/<run>` invokes
+`biotope graph check --json` checks definitions and Python types.
+Use `--graph <folder>` to select another workspace and package-relative imports
+for portability. Inputs resolve relative to its parent. Imports must not open
+payloads or execute loaders/mappings. When the task includes
+construction, `biotope graph build --out graph/build/<run>` invokes
 project loaders and uses Biotope's exporter to write BioCypher files, provenance
 and a run record. No project-specific BioCypher adapter is needed. Inspect
 values and source traces before claiming acceptance. Failed runs are incomplete.
+
+`biotope graph quality --json` executes the declared scope once without export;
+its latest assessment is in `graph/reports/quality.json`. Review advisory counts,
+missing properties, connectivity, endpoint concentration and self-loops without
+claiming scientific acceptance. Quality and build each execute the pipeline.
+`biotope graph metagraph` views topology independently; `--json` writes no HTML.
+Add `--report <quality.json-or-run.json>` for matching-topology observations.
+Unrun measurements remain unmeasured; illustrative examples are bounded.
 
 Use normal Git to version authored Python. Biotope's status/annotation/tracking
 commands remain available; queue states do not certify graph validity. Preserve

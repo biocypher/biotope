@@ -7,35 +7,40 @@ the skill is copied into a data project.
 
 ## File ownership and registration
 
-| Location                             | Responsibility                                                     |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| `.biotope/datasets/`                 | Effective source metadata, managed outside the graph workspace     |
-| `graph/sources/<source>/schema.py`   | Generated source dataclasses and references to Croissant fields    |
-| `graph/sources/<source>/__init__.py` | Authored `SOURCE` registration; created when absent                |
-| `graph/sources/<source>/loader.py`   | Authored physical decoding; unimplemented stub created when absent |
-| `graph/sources/__init__.py`          | Selected `SOURCES`                                                 |
-| `graph/topology/<concept>/`          | Node dataclass, identifier type and outgoing relation modules      |
-| `graph/topology/__init__.py`         | `TOPOLOGY` registry                                                |
-| `graph/mappings/`                    | Typed transformation functions and `MAPPINGS` in `__init__.py`     |
-| `graph/pipelines/build_graph.py`     | `PIPELINE` importing those registries and composing execution      |
-| `graph/pyproject.toml`               | Graph dependencies, including project reader libraries             |
-| `graph/build/<run>/`                 | Derived export files and run evidence                              |
+| Location                                     | Responsibility                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `.biotope/datasets/`                         | Effective source metadata, managed outside the graph workspace     |
+| `graph/sources/<m>/<record-set>/schema.py`   | Generated source dataclass and references to Croissant fields      |
+| `graph/sources/<m>/<record-set>/__init__.py` | Authored `SOURCE` registration; created when absent                |
+| `graph/sources/<m>/<record-set>/loader.py`   | Authored physical decoding; unimplemented stub created when absent |
+| `graph/sources/<m>/__init__.py`              | Generated `CONTRACTS` inventory of one manifest's packages         |
+| `graph/sources/__init__.py`                  | Authored, selected `SOURCES`                                       |
+| `graph/topology/<concept>/`                  | Node dataclass, identifier type and outgoing relation modules      |
+| `graph/topology/__init__.py`                 | `TOPOLOGY` registry                                                |
+| `graph/mappings/`                            | Typed transformation functions and `MAPPINGS` in `__init__.py`     |
+| `graph/pipelines/build_graph.py`             | `PIPELINE` importing those registries and composing execution      |
+| `graph/pyproject.toml`                       | Graph dependencies, including project reader libraries             |
+| `graph/build/<run>/`                         | Derived export files and run evidence                              |
 
-Use `graph.paths.PROJECT_ROOT` for existing inputs and managed metadata, and
-`GRAPH_ROOT` for graph artifacts. Use `graph.` or package-relative imports;
-keep payload access inside loader/pipeline calls.
+Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and managed metadata, and
+`GRAPH_ROOT` for graph artifacts. Use package-relative imports;
+keep payload access inside loader/pipeline calls. The CLI selects `TOPOLOGY` and
+`PIPELINE` from these conventional locations, with `--graph` selecting the folder.
 
-Each source package uses an importable Python name. Generation replaces only its
-generated module and creates missing authored siblings. Existing loaders and
-registrations are not migrated or overwritten. `source generate ... --check`
-verifies module freshness without creating any files.
+One record set becomes one source package, named by an importable form of its
+`@id`, under a folder named for its manifest. Generation is exhaustive over the
+manifest, replaces only generated modules, and creates missing authored siblings.
+Existing loaders and registrations are not migrated or overwritten. A record set
+removed from the manifest leaves an orphaned package, reported and never deleted.
+`source generate ... --check` reports each package's freshness without creating
+any files.
 
-Generated `RECORDS` contains all top-level record classes, excluding nested field
-classes; `SourceRow` is their union for loader annotations. `SOURCE.records`
-defaults to `RECORDS`. This is a contract inventory, not a request to load every
-record set. Choose participating contracts in `SOURCES` and concrete input classes
-in each `Mapping.inputs`. If narrowing `SOURCE.records` itself, review that
-authored subset after regeneration. Do not replace typed inputs with `Any`.
+Generated `RECORDS` holds that package's single record class, excluding nested
+field classes; `SourceRow` aliases it for loader annotations. `SOURCE.records`
+defaults to `RECORDS`. The manifest's `CONTRACTS` inventory is a contract listing,
+not a request to load every record set. Choose participating contracts in
+`SOURCES` and concrete input classes in each `Mapping.inputs`. Do not replace
+typed inputs with `Any`.
 
 ## Source and topology contracts
 
@@ -53,6 +58,10 @@ Import the public contracts from `biotope.graph`:
   edges use the corresponding types for `source` and `target`.
 
 Use keyword arguments in graph constructors so property changes fail clearly.
+Use optional `display_name: ClassVar[str]` for short, purpose-appropriate diagram
+labels. Keep stable `schema_id` identities separate; labels do not change exports
+or topology revisions. Python class names provide fallback labels.
+
 Mint namespaced identifiers explicitly; use source-specific namespaces where
 cross-source identity is unresolved. Reuse a node type for same-type relation
 endpoints rather than inventing a second concept.
@@ -61,8 +70,8 @@ Generated fields default to nullable. Curated `biotope:nullable: false` asserts
 non-nullability. Known scalars, nested records and repeated fields are supported;
 unknown types and `arrayShape` fields use `UnknownValue`. Refine their metadata
 before loading non-null values; an unused nullable opaque field can remain `None`.
-`Row.__field_refs__` maps attribute names to Croissant field IDs, or JSON pointers
-when IDs are absent. Extraction rules, descriptions and other metadata stay in
+`Row.__field_refs__` maps attribute names to Croissant field IDs, or a reference
+under the record set's own identity when IDs are absent. Extraction rules, descriptions and other metadata stay in
 the Croissant file registered by `SOURCE.metadata`; do not copy them into Python.
 
 Graph export supports nullable scalars and string lists without nulls or `|`.

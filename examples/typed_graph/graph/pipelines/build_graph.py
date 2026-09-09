@@ -6,9 +6,9 @@ from ..mappings import MAPPINGS
 from ..mappings.samples import IDENTITY_SCOPE, MAPPING, SCORE_MULTIPLIER
 from ..paths import GRAPH_ROOT, PROJECT_ROOT
 from ..sources import PEOPLE, SAMPLES, SOURCES
-from ..sources.people.loader import load as load_people
-from ..sources.people.schema import People
-from ..sources.samples.loader import load as load_samples
+from ..sources.study.people.loader import load as load_people
+from ..sources.study.people.schema import People
+from ..sources.study.samples.loader import load as load_samples
 from ..topology import TOPOLOGY
 
 

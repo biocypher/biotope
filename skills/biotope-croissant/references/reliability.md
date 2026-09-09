@@ -15,7 +15,16 @@ Runtime checks validate loaded values without coercion, graph conflicts and
 endpoint resolution. Project code still owns transformations, joins and filtering.
 A failed build is not a completed graph, even if some files were written.
 
-For an executed build, inspect `run.json`, exported headers/data and
+Quality measures validated Python graph objects before export; it neither reads
+BioCypher files nor samples source data. Empty required concepts, wholly missing
+properties and actual self-loops warn. Connectivity and endpoint concentration
+are observations, not scientific failure criteria. Empty denominators stay
+unmeasured; zero and `False` are valid property values. Illustrative examples and
+bounded provenance references are not exhaustive. Failed execution prevents
+subsequent measurement, even when some objects were already emitted.
+
+Inspect `graph/reports/quality.json` for an assessment without export. A complete
+quality report does not mean a graph was exported. For an executed build, inspect `run.json`, exported headers/data and
 `provenance.jsonl`. Compare known values, counts, identities and relations against
 the research purpose and selected scope. Trace representative outputs to their
 sources; report exclusions, deferred requirements and unverified decisions.

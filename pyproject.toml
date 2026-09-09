@@ -74,7 +74,7 @@ testpaths = ["tests"]
 markers = ["raises"]
 
 [tool.pyright]
-include = ["biotope/graph", "biotope/commands/graph.py", "biotope/commands/source.py"]
+include = ["biotope/graph", "biotope/commands/graph.py", "biotope/commands/_graph_output.py", "biotope/commands/source.py"]
 typeCheckingMode = "strict"
 reportMissingTypeStubs = "none"
 
@@ -95,7 +95,10 @@ precision = 2
 [tool.ruff]
 line-length = 120
 # Preserve the generated template contract byte-for-byte; freshness is tested.
-extend-exclude = ["biotope/templates/graph/sources/_example/schema.py"]
+extend-exclude = [
+    "biotope/templates/graph/sources/_example/__init__.py",
+    "biotope/templates/graph/sources/_example/example_rows/schema.py",
+]
 force-exclude = true
 
 [tool.ruff.lint]

@@ -14,7 +14,7 @@ from PIL import Image
 from biotope.commands.add import _add_file, _bake_directory
 from biotope.croissant.inspector import inspect_dataset
 from biotope.croissant.spec import load_from_path
-from biotope.graph.sources import generate_source
+from biotope.graph.sources import generate_source_packages
 
 
 def _workbook(path, column="gene_id"):
@@ -62,13 +62,17 @@ def test_directory_workbook_ids_disambiguate_source_contracts(tmp_path):
         selected = inspection.by_name(record_set.id)
         assert selected is not None
         assert selected.id == record_set.id
-        assert selected.source in {"a.xlsx", "b.xlsx"}
+        assert selected.source_ids and len(set(selected.source_ids)) == 1
+    origins = [inspection.by_name(rs.id).source_ids[0] for rs in repeated]
+    assert len(set(origins)) == 2  # One workbook each, so the shared sheet name is disambiguated.
     assert inspection.by_name("Measurements") is None
     manifest = tmp_path / ".biotope/datasets/raw.jsonld"
-    generate_source(manifest, tmp_path / "schema.py")
-    code = (tmp_path / "schema.py").read_text()
-    assert all(repr(rs.id) in code for rs in repeated)
-    assert "class Measurements:" in code and "class Measurements_2:" in code
+    generate_source_packages(manifest, tmp_path / "sources")
+    modules = {p.parent.name: p.read_text() for p in (tmp_path / "sources/raw").glob("*/schema.py")}
+    assert len(modules) == len(dataset.record_set)
+    # Two workbooks sharing a sheet name become two packages named by their ids, never Foo and Foo_2.
+    holders = {name for name, code in modules.items() if any(repr(rs.id) in code for rs in repeated)}
+    assert len(holders) == 2
 
 
 def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
@@ -138,5 +142,5 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     dataset = load_from_path(manifest)
     inspection = inspect_dataset(dataset)
     assert {f.name for f in inspection.record_sets[0].fields} == {"indexed/", "gene_id", "score"}
-    generate_source(manifest, tmp_path / "schema.py")
-    assert "indexed/" in (tmp_path / "schema.py").read_text()
+    generate_source_packages(manifest, tmp_path / "sources")
+    assert "indexed/" in (tmp_path / "sources/indexed/indexed/schema.py").read_text()

@@ -12,8 +12,10 @@ Python: identity choices, decoding, transformations, joins and graph composition
 Initialization, baking, scaffolding, source generation, checking and building are
 independent steps. Perform the steps needed for the user's request; a metadata or
 mapping task does not imply graph execution. Reuse existing purpose, metadata and
-code. Preserve the requested source scope, including full-directory scans. If
-execution needs a smaller scope, agree on it rather than silently sampling.
+code. Preserve the requested source scope, including full-directory scans; a
+directory-level description still yields one source package per record set, so
+never split a Croissant file to shape the generated layout. If execution needs a
+smaller scope, agree on it rather than silently sampling.
 
 ## Environment and purpose
 
@@ -71,34 +73,58 @@ working graph. Adapt them to the purpose and remove unused examples. Generate
 actual source types separately from reviewed metadata:
 
 ```bash
-biotope source generate <manifest> --out graph/sources/<source>/schema.py
+biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources
 ```
 
-This generates `schema.py` and creates missing sibling `SOURCE` registration and
-loader files. It preserves authored siblings. Do not edit or format generated
-modules, copy boilerplate by hand, or transcribe the generated record inventory.
-Review new record sets, opaque shapes and nullability when regenerating.
+Generate from the registered managed description, never from a draft under
+`graph/metadata/`. **One record set becomes one source package**, at
+`graph/sources/<name>/<record-set>/`, the folder named for the manifest's
+filename. Generation is exhaustive over the
+manifest and writes each package's `schema.py`, missing sibling `SOURCE`
+registration and loader files, and a generated `CONTRACTS` inventory per manifest.
+It preserves authored siblings and never deletes an orphaned package. Do not edit
+or format generated modules, copy boilerplate by hand, or transcribe the generated
+record inventory. Review new record sets, opaque shapes and nullability when
+regenerating.
 
 Author topology, loaders, mappings and pipeline composition using the public
-`biotope.graph` contracts. Loaders use established format libraries; mappings
-transform typed values without opening files. Register selected `SOURCES`,
-`TOPOLOGY` and `MAPPINGS` in their folders' `__init__.py` files. Complete the
+`biotope.graph` contracts. Each package's loader decodes one record set with
+established format libraries; share a helper only where decoding genuinely
+repeats. Mappings transform typed values without opening files; organise them by
+source and group them only where a transformation is genuinely shared. Select
+`SOURCES` from each manifest's `CONTRACTS`, and register `TOPOLOGY` and
+`MAPPINGS` in their folders' `__init__.py` files. Complete the
 pipeline's scope, settings, policies and requirement bindings or deferrals.
 Python definitions are authoritative; YAML mappings and the old wizard are retired.
 
-## Check and build
+## Check, inspect and execute
 
-Run `biotope graph check graph.pipelines.build_graph:PIPELINE --json`. Include all
+Use `--graph <folder>` on any graph command for an alternate workspace. Prefer
+package-relative imports; inputs resolve relative to its parent.
+
+Run `biotope graph check --json`. Include all
 relevant generated and authored Python in `Pipeline.code_paths`. Checks import
 declarations, so imports must not open payloads or execute pipelines. Resolve
 diagnostics and review purpose/placeholder warnings; do not suppress them with
 `Any`, blanket ignores or invented metadata.
 
+Use `biotope graph metagraph --json` to inspect registered topology without
+importing the pipeline. Human mode generates an offline viewer. After an
+assessment, `--report <quality.json-or-run.json>` adds observations only when
+the topology digest matches. It never executes data to fill missing measurements.
+
+For execution without export, use `biotope graph quality --json`. It runs the
+pipeline once and saves `graph/reports/quality.json`, including failures. Review
+counts, missing properties, connectivity, endpoint concentration and self-loops.
+Warnings are advisory; unrun measurements and bounded illustrative examples
+must not be presented as complete data validation. Quality and build each run
+the pipeline; do not run both unless the extra execution serves the request.
+
 When graph execution is requested, state the selected inputs, output grain,
 identity decisions and expected spot checks, then build into a new run directory:
 
 ```bash
-biotope graph build graph.pipelines.build_graph:PIPELINE --out graph/build/review-1
+biotope graph build --out graph/build/review-1
 ```
 
 Biotope supplies the BioCypher file exporter and derives its schema from topology.

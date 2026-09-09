@@ -88,3 +88,12 @@ class Pipeline:
     intent: Path | None = None
     dependencies: tuple[str, ...] = ()
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."
+
+
+@dataclass
+class GraphRecord:
+    """One validated graph object with combined evidence and mapping references."""
+
+    value: object
+    evidence: set[Evidence] = field(default_factory=set[Evidence])
+    mappings: set[str] = field(default_factory=set[str])

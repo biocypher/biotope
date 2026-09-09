@@ -7,22 +7,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TypeVar
 
-from biotope.graph.contracts import Evidence, Loader, Mapping, Pipeline, SourceContract, SourceRecord
+from biotope.graph.contracts import Evidence, GraphRecord, Loader, Mapping, Pipeline, SourceContract, SourceRecord
 from biotope.graph.sources import digest
 from biotope.graph.topology import concept_id, identifier, validate_value
 
 
 C = TypeVar("C")
 T = TypeVar("T")
-
-
-@dataclass
-class GraphRecord:
-    """One validated graph object with combined evidence and mapping references."""
-
-    value: object
-    evidence: set[Evidence] = field(default_factory=set[Evidence])
-    mappings: set[str] = field(default_factory=set[str])
 
 
 @dataclass

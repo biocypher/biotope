@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Biotope metagraph</title>
+<style>
+:root{color-scheme:dark;--canvas:#10141a;--muted:#93a0b4;--line:#2a3240}
+*{box-sizing:border-box}body{margin:0;display:flex;flex-direction:column;height:100vh;overflow:hidden;font:14px/1.5 system-ui,sans-serif;background:var(--canvas);color:#e6e9ef}
+header{padding:12px 18px;border-bottom:1px solid var(--line);display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+h1{font-size:16px;margin:0}h2{font-size:17px;margin:0;overflow-wrap:anywhere}h3{font-size:12px;text-transform:uppercase;color:var(--muted);margin:20px 0 6px}
+#totals,#run,.muted{color:var(--muted)}#run{padding:0 18px 8px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+main{display:flex;flex:1;min-height:0}#graph{flex:1;min-width:0}svg{width:100%;height:100%;display:block}
+aside{width:360px;flex:0 0 360px;overflow:auto;padding:18px;border-left:1px solid var(--line)}
+input,button{background:#1a212c;color:inherit;border:1px solid #3b475a;border-radius:5px;padding:6px 10px;font:inherit}
+input{width:240px;max-width:100%}button{cursor:pointer}#results{display:flex;flex-direction:column;gap:5px}#results button{text-align:left;overflow-wrap:anywhere}
+.node,.edge{cursor:pointer}.node circle{fill:#4ea1ff;stroke:#0b0f14;stroke-width:2px}.node text{fill:#e6e9ef;font-size:12px;font-weight:600;paint-order:stroke;stroke:var(--canvas);stroke-width:3px;stroke-linejoin:round}
+.edge path.line{fill:none;stroke:#6ee7b7;stroke-width:1.7;opacity:.8}.edge path.hit{fill:none;stroke:transparent;stroke-width:16}
+.edge text{display:none;fill:#8ea3bf;font:italic 10px ui-monospace,monospace;paint-order:stroke;stroke:var(--canvas);stroke-width:3px;stroke-linejoin:round}
+details{margin:8px 0;overflow-wrap:anywhere}details details{margin-left:12px}summary{cursor:pointer;color:var(--muted)}
+.show-relations .edge text,.edge.selected text,.edge:hover text,.edge.incident text{display:block}
+.dim{opacity:.13}.selected circle,.selected path.line{stroke:#ffd166;stroke-width:3px}.node:hover circle,.edge:hover path.line{stroke:#fff;stroke-width:3px}
+code{font:12px ui-monospace,monospace;background:#1a212c;padding:2px 4px;border-radius:3px;overflow-wrap:anywhere;white-space:pre-wrap}
+p{white-space:pre-wrap;overflow-wrap:anywhere}.property{padding:12px 0;border-top:1px solid var(--line)}.property-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.type{font:11px ui-monospace,monospace;border:1px solid #3b475a;border-radius:4px;padding:2px 6px;color:#8ab4ff}.type.str{color:#7dd3a0}.type.bool{color:#dfa6ff}.type.array{color:#f0b866}
+.nullable{color:var(--muted);font-size:11px;border:1px dashed #3b475a;border-radius:3px;padding:2px 5px}.finding{border-left:2px solid #ffd166;padding-left:10px}
+dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 12px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:850px){body{height:auto;overflow:auto}main{height:auto;flex-direction:column}#graph{height:60vh;min-height:360px;flex:none}aside{width:100%;flex:auto;border-left:0;border-top:1px solid var(--line)}}
+</style>
+</head><body>
+<header><h1>Biotope metagraph</h1><span id="totals"></span><input id="search" aria-label="Search concepts" placeholder="Search concepts"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="reset">Fit graph</button><label><input id="relation-labels" type="checkbox" style="width:auto"> Relation labels</label></header>
+<div id="run"></div>
+<main><div id="graph"><svg id="svg" aria-label="Declared graph topology"><title>Drag to pan. Ctrl or Command + scroll to zoom.</title></svg></div><aside id="panel"><p class="muted">Select a node or relation to inspect its definition.</p><div id="results"></div></aside></main>
+<script id="meta-graph-data" type="application/json">%%DATA%%</script>
+<script>%%D3%%</script>
+<script>
+// Layout and interactions adapted from Paul Ka Po To's kg-build-system metagraph.
+// All content from the graph document is inserted with textContent, never as HTML.
+const data = JSON.parse(document.getElementById('meta-graph-data').textContent);
+const all = [...data.nodes, ...data.edges],
+  panel = document.getElementById('panel');
+const nodes = data.nodes.map(component => ({
+  id: component.id,
+  component,
+  radius: 12
+}));
+const links = data.edges.map(component => ({
+  source: component.source,
+  target: component.target,
+  component
+}));
+let box = document.getElementById('graph').getBoundingClientRect();
+const svg = d3.select('#svg'),
+  root = svg.append('g');
+let scale = 1;
+const zoom = d3.zoom().filter(e => e.type === 'wheel' ? (e.ctrlKey || e.metaKey) : !e.button).scaleExtent([
+  .04, 4
+]).on('zoom', e => {
+  scale = e.transform.k;
+  root.attr('transform', e.transform);
+  vertices.select('circle').attr('r', 8 / scale);
+  vertices.select('text').style('font-size', 12 / scale + 'px').style('stroke-width', 3 / scale + 'px')
+    .attr('y', 20 / scale);
+  vertices.selectAll('tspan').attr('dy', (d, i) => i ? 14 / scale : 0);
+  edges.select('text').style('font-size', 11 / scale + 'px').style('stroke-width', 3 / scale + 'px');
+  draw();
+});
+svg.call(zoom);
+document.getElementById('totals').textContent = `${nodes.length} node types · ${links.length} relation types`;
+document.getElementById('run').textContent = data.report ?
+  `${data.report.operation||'Run'}: ${data.report.state} · measurements: ${data.report.quality_state}\n${data.report.scope||''}${data.report.error?'\n'+data.report.error:''}` :
+  'Topology only · record counts and values unmeasured';
+svg.append('defs').append('marker').attr('id', 'arrow').attr('viewBox', '0 -4 9 8').attr('refX', 8).attr(
+    'markerWidth', 8).attr('markerHeight', 8).attr('orient', 'auto').append('path').attr('d', 'M0,-4L9,0L0,4')
+  .attr('fill', '#6ee7b7');
+// Fan out parallel and reverse relations; keep multiple self-loops separately selectable.
+const groups = new Map();
+links.forEach(link => {
+  const key = JSON.stringify([link.source, link.target].sort());
+  if (!groups.has(key)) groups.set(key, []);
+  groups.get(key).push(link);
+});
+groups.forEach(group => group.forEach((link, i) => {
+  link.offset = (i - (group.length - 1) / 2) * 38;
+  link.loop = i;
+}));
+const simulation = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(links).id(d => d.id).distance(210).strength(.18))
+  .force('charge', d3.forceManyBody().strength(-850).distanceMax(1400))
+  .force('x', d3.forceX(box.width / 2).strength(.035)).force('y', d3.forceY(box.height / 2).strength(.035))
+  .force('collide', d3.forceCollide(55)).stop();
+const edges = root.append('g').selectAll('g').data(links).join('g').attr('class', 'edge').attr('tabindex', 0)
+  .attr('role', 'button').attr('aria-label', d => d.component.id).on('click', (e, d) => {
+    e.stopPropagation();
+    select(d.component);
+  })
+  .on('keydown', (e, d) => {
+    if (e.key === 'Enter') select(d.component);
+  });
+edges.append('path').attr('class', 'hit');
+edges.append('path').attr('class', 'line').attr('vector-effect', 'non-scaling-stroke').attr('marker-end',
+  'url(#arrow)');
+edges.append('text').attr('text-anchor', 'middle').text(d => d.component.label);
+edges.append('title').text(d => d.component.id);
+const vertices = root.append('g').selectAll('g').data(nodes).join('g').attr('class', 'node').attr('tabindex',
+    0).attr('role', 'button')
+  .attr('aria-label', d => d.id).on('click', (e, d) => {
+    e.stopPropagation();
+    select(d.component);
+  })
+  .on('keydown', (e, d) => {
+    if (e.key === 'Enter') select(d.component);
+  })
+  .call(d3.drag().on('start', (e, d) => {
+      if (!e.active) simulation.alphaTarget(.2).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    })
+    .on('drag', (e, d) => {
+      d.fx = e.x;
+      d.fy = e.y;
+    }).on('end', (e, d) => {
+      if (!e.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }));
+vertices.append('circle').attr('r', 8);
+vertices.append('text').attr('y', 20).attr('text-anchor', 'middle').each(function(d) {
+  const words = d.component.label.split(/\s+/),
+    lines = [''];
+  words.forEach(word => {
+    const i = lines.length - 1;
+    if (lines[i] && lines[i].length + word.length > 22) lines.push(word);
+    else lines[i] += (lines[i] ? ' ' : '') + word;
+  });
+  d3.select(this).selectAll('tspan').data(lines).join('tspan').attr('x', 0).attr('dy', (d, i) => i ? 14 :
+    0).text(d => d);
+});
+vertices.append('title').text(d => d.component.label + '\n' + d.id);
+
+function geometry(link) {
+  const s = link.source,
+    t = link.target;
+  if (s === t) {
+    const r = 40 + link.loop * 25;
+    return {
+      path: `M${s.x-8},${s.y-10}C${s.x-r*2},${s.y-r*2} ${s.x+r*2},${s.y-r*2} ${s.x+8},${s.y-10}`,
+      x: s.x,
+      y: s.y - r * 1.5
+    };
+  }
+  const dx = t.x - s.x,
+    dy = t.y - s.y,
+    l = Math.hypot(dx, dy) || 1,
+    ux = dx / l,
+    uy = dy / l;
+  const bend = link.offset * (s.id < t.id ? 1 : -1),
+    cx = (s.x + t.x) / 2 - uy * bend,
+    cy = (s.y + t.y) / 2 + ux * bend;
+  const sl = Math.hypot(cx - s.x, cy - s.y) || 1,
+    tl = Math.hypot(t.x - cx, t.y - cy) || 1;
+  const ax = s.x + (cx - s.x) * 10 / scale / sl,
+    ay = s.y + (cy - s.y) * 10 / scale / sl,
+    bx = t.x - (t.x - cx) * 12 / scale / tl,
+    by = t.y - (t.y - cy) * 12 / scale / tl;
+  return {
+    path: `M${ax},${ay}Q${cx},${cy} ${bx},${by}`,
+    x: (ax + 2 * cx + bx) / 4,
+    y: (ay + 2 * cy + by) / 4
+  };
+}
+
+function draw() {
+  vertices.attr('transform', d => `translate(${d.x},${d.y})`);
+  edges.selectAll('path').attr('d', d => geometry(d).path);
+  edges.select('text').attr('transform', d => {
+    const p = geometry(d);
+    return `translate(${p.x},${p.y-5/scale})`;
+  });
+}
+simulation.on('tick', draw);
+
+function el(tag, text, parent, cls) {
+  const n = document.createElement(tag);
+  if (text !== undefined) n.textContent = String(text);
+  if (cls) n.className = cls;
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+function entry(list, name, value) {
+  el('dt', name, list);
+  el('code', value, el('dd', undefined, list));
+}
+
+function measurement(parent, name, value) {
+  if (value === null || typeof value !== 'object') {
+    const dl = el('dl', undefined, parent);
+    entry(dl, name, value === null ? 'Unmeasured' : value);
+    return;
+  }
+  const section = el('details', undefined, parent);
+  el('summary', name, section);
+  Object.entries(value).forEach(([key, item]) => measurement(section, key, item));
+}
+
+function show(component) {
+  panel.replaceChildren();
+  el('h2', component.label, panel);
+  el('p', component.kind + ' · ' + component.name, panel, 'muted');
+  el('code', component.id, panel);
+  if (component.description) el('p', component.description, panel);
+  const dl = el('dl', undefined, panel);
+  entry(dl, 'Records', component.count === null ? 'Unmeasured' : component.count);
+  entry(dl, 'Declaration',
+    `${component.declaration.path||component.declaration.module}${component.declaration.line?':'+component.declaration.line:''}`
+    );
+  if (component.source) {
+    entry(dl, 'Source', component.source);
+    entry(dl, 'Target', component.target);
+  }
+  if (component.mappings.length) entry(dl, 'Mappings', component.mappings.join(', '));
+  if (component.findings.length) {
+    el('h3', 'Findings', panel);
+    component.findings.forEach(f => {
+      const block = el('div', undefined, panel, 'finding');
+      el('p', f.message, block);
+      (f.examples || []).forEach(x => {
+        el('code', x.id, block);
+        (x.evidence || []).forEach(e => el('p', `${e.artifact} · ${e.record_set} · ${e.location}`,
+          block, 'muted'));
+      });
+    });
+  }
+  Object.entries(component.observations).forEach(([name, value]) => measurement(panel, name, value));
+  el('h3', 'Properties', panel);
+  if (!component.properties.length) el('p', 'No declared properties.', panel, 'muted');
+  component.properties.forEach(p => {
+    const section = el('section', undefined, panel, 'property'),
+      head = el('div', undefined, section, 'property-head');
+    el('strong', p.name, head);
+    el('span', p.type, head, 'type ' + (p.type.endsWith('[]') ? 'array' : p.type));
+    if (p.nullable) el('span', 'nullable', head, 'nullable');
+    if (p.description) el('p', p.description, section);
+    const s = p.statistics;
+    if (!s) {
+      el('p', 'Values unmeasured.', section, 'muted');
+      return;
+    }
+    el('p', s.total ?
+      `${s.null} null · ${s.blank} blank · ${s.empty_list} empty list / ${s.total} records` :
+      'No records; missing-value rates unmeasured.', section, 'muted');
+    if (s.examples.length) {
+      el('p', 'Illustrative examples (up to 3)', section, 'muted');
+      s.examples.forEach(x => el('code', JSON.stringify(x.value) + (x.truncated ? ' … [truncated]' : ''),
+        el('p', undefined, section)));
+    }
+  });
+}
+
+function select(component) {
+  const focus = new Set([component.id]);
+  if (component.source) {
+    focus.add(component.source);
+    focus.add(component.target);
+  } else links.forEach(l => {
+    if (l.source.id === component.id || l.target.id === component.id) {
+      focus.add(l.source.id);
+      focus.add(l.target.id);
+    }
+  });
+  vertices.classed('dim', d => !focus.has(d.id)).classed('selected', d => d.id === component.id);
+  edges.classed('dim', d => component.kind === 'edge' ? d.component.id !== component.id : !(d.source.id ===
+      component.id || d.target.id === component.id)).classed('selected', d => d.component.id === component.id)
+    .classed('incident', d => component.kind === 'node' && (d.source.id === component.id || d.target.id ===
+      component.id));
+  show(component);
+}
+
+function reset() {
+  vertices.classed('dim', false).classed('selected', false);
+  edges.classed('dim', false).classed('selected', false).classed('incident', false);
+  panel.replaceChildren();
+  el('p', 'Select a node or relation to inspect its definition.', panel, 'muted');
+  Object.entries(data.measurements).filter(([k]) => !['population', 'properties'].includes(k)).forEach(([k,
+    v]) => measurement(panel, k, v));
+}
+
+function fit() {
+  if (!nodes.length) return;
+  box = document.getElementById('graph').getBoundingClientRect();
+  // Fit layout coordinates, never scaled text bounds: otherwise repeated fits shrink the graph.
+  const xs = nodes.map(n => n.x),
+    ys = nodes.map(n => n.y);
+  links.filter(l => l.source === l.target).forEach(l => {
+    const r = 40 + l.loop * 25;
+    xs.push(l.source.x - r * 2, l.source.x + r * 2);
+    ys.push(l.source.y - r * 2);
+  });
+  const [left, right] = d3.extent(xs), [top, bottom] = d3.extent(ys);
+  const fitted = Math.max(.04, Math.min(1, (box.width - 120) / Math.max(1, right - left), (box.height - 90) /
+    Math.max(1, bottom - top)));
+  svg.call(zoom.transform, d3.zoomIdentity.translate(box.width / 2 - fitted * (left + right) / 2, box.height /
+    2 - fitted * (top + bottom) / 2).scale(fitted));
+}
+// Settle and fit before the first paint; selection never changes the user's zoom.
+simulation.tick(220);
+draw();
+fit();
+window.addEventListener('resize', () => {
+  box = document.getElementById('graph').getBoundingClientRect();
+  fit();
+});
+document.getElementById('reset').onclick = () => {
+  document.getElementById('search').value = '';
+  reset();
+  fit();
+};
+svg.on('click', reset);
+document.getElementById('zoom-in').onclick = () => svg.call(zoom.scaleBy, 1.25);
+document.getElementById('zoom-out').onclick = () => svg.call(zoom.scaleBy, .8);
+document.getElementById('relation-labels').onchange = e => svg.classed('show-relations', e.target.checked);
+document.getElementById('search').oninput = e => {
+  const query = e.target.value.trim().toLowerCase();
+  if (!query) {
+    reset();
+    return;
+  }
+  const matches = all.filter(c => (c.id + ' ' + c.name + ' ' + c.label).toLowerCase().includes(query));
+  panel.replaceChildren();
+  el('h2', `${matches.length} matches`, panel);
+  const results = el('div', undefined, panel);
+  results.id = 'results';
+  matches.forEach(c => {
+    const button = el('button', c.label, results);
+    el('div', c.id, button, 'muted');
+    button.onclick = () => select(c);
+  });
+  const ids = new Set(matches.map(c => c.id));
+  vertices.classed('dim', d => !ids.has(d.id));
+  edges.classed('dim', d => !ids.has(d.component.id));
+};
+reset();
+if (!nodes.length) {
+  panel.replaceChildren();
+  el('p', 'No node types registered in this topology.', panel, 'muted');
+}
+</script></body></html>

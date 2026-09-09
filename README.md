@@ -61,9 +61,9 @@ uv add biotope              # inside a uv-managed project
 Graph authoring starts with `biotope graph scaffold`, which creates `graph/`.
 Initialization and baking do not create or execute a graph.
 
-Typical flow: `init` → `add` → `graph scaffold` → `source generate` → Python authoring → `graph check` → `graph build`. Command overview: [docs/commands.md](docs/commands.md).
+Typical flow: `init` → `add` → `graph scaffold` → `source generate` → Python authoring → `graph check` → `graph build`. Use `graph metagraph` to view topology independently, or `graph quality` to execute and assess without export. Command overview: [docs/commands.md](docs/commands.md).
 
-**Worked example:** [tutorial](docs/tutorial.md) — a two-source join with typed mappings, provenance and BioCypher output.
+**Worked example:** [tutorial](docs/tutorial.md) — one Croissant description, one source package per record set, joined with typed mappings, provenance and BioCypher output.
 
 ## For developers
 

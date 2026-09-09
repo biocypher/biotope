@@ -2,8 +2,8 @@
 
 from biotope.graph import Mapping
 
-from ..sources.people.schema import People
-from ..sources.samples.schema import Samples
+from ..sources.study.people.schema import People
+from ..sources.study.samples.schema import Samples
 from ..topology.person.node import Person, PersonId
 from ..topology.sample.from_person import FromPerson
 from ..topology.sample.node import Sample, SampleId

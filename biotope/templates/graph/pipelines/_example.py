@@ -3,8 +3,8 @@
 from biotope.graph import RunContext
 
 from ..mappings._example import MAPPING
-from ..sources._example import SOURCE
-from ..sources._example.loader import Config, load
+from ..sources._example.example_rows import SOURCE
+from ..sources._example.example_rows.loader import Config, load
 
 
 def map_records(context: RunContext, config: Config) -> None:

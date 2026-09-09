@@ -2,13 +2,13 @@
 
 from biotope.graph import Mapping
 
-from ..sources._example.schema import ExampleRow
+from ..sources._example.example_rows.schema import ExampleRows
 from ..topology._example_collection.node import Collection, CollectionId
 from ..topology._example_record.in_collection import InCollection
 from ..topology._example_record.node import Record, RecordId
 
 
-def map_record(row: ExampleRow) -> tuple[Record, Collection, InCollection]:
+def map_record(row: ExampleRows) -> tuple[Record, Collection, InCollection]:
     """Show typed field access, explicit identity and nullable property handling."""
     if not row.record_id or not row.collection_id:
         raise ValueError("Example mapping requires both identifiers; define a project policy for missing IDs")
@@ -24,7 +24,7 @@ def map_record(row: ExampleRow) -> tuple[Record, Collection, InCollection]:
 MAPPING = Mapping(
     name="example:record-collection",
     function=map_record,
-    inputs=(ExampleRow,),
+    inputs=(ExampleRows,),
     outputs=(Record, Collection, InCollection),
     evidence=("Illustrative wiring only; replace with the rationale for the actual mapping.",),
 )

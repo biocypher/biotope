@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from biotope.graph.sources import generate_source, register_metadata
+from biotope.graph.sources import generate_source_packages, register_metadata
 
 
 EXAMPLE = Path(__file__).resolve().parents[2] / "examples/typed_graph"
@@ -17,11 +17,10 @@ def prepare(tmp_path):
     root = tmp_path / "project"
     shutil.copytree(EXAMPLE, root, ignore=shutil.ignore_patterns("__pycache__", ".biotope", "build"))
     (root / ".biotope").mkdir(exist_ok=True)
-    for name in ("samples", "people"):
-        manifest = register_metadata(
-            root, root / f"graph/metadata/{name}.jsonld", name, reason="Reviewed synthetic fixture-v1"
-        )
-        generate_source(manifest, root / f"graph/sources/{name}/schema.py")
+    manifest = register_metadata(
+        root, root / "graph/metadata/study.jsonld", "study", reason="Reviewed synthetic fixture-v1"
+    )
+    generate_source_packages(manifest, root / "graph/sources")
     registered = subprocess.run(
         [
             sys.executable,
@@ -45,7 +44,7 @@ assert PIPELINE.topology is TOPOLOGY
 
 
 def run(root, action="check", output=None):
-    command = [sys.executable, "-m", "biotope.cli", "graph", action, "graph.pipelines.build_graph:PIPELINE"]
+    command = [sys.executable, "-m", "biotope.cli", "graph", action]
     if output:
         command += ["--out", "graph/build/" + output]
     return subprocess.run(command, cwd=root, text=True, capture_output=True)
@@ -109,12 +108,14 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     raw_text = raw.read_text()
     raw.write_text(raw_text.replace("1.5", "bad"))
     failed = run(root, "build", "invalid-values")
-    assert failed.returncode != 0 and "line:2" in failed.stderr
+    assert failed.returncode != 0 and "line:2" in "".join(line.strip() for line in failed.stderr.splitlines())
     assert json.loads((root / "graph/build/invalid-values/run.json").read_text())["state"] == "failed"
     raw.write_text(raw_text)
-    manifest = root / ".biotope/datasets/samples.jsonld"
+    manifest = root / ".biotope/datasets/study.jsonld"
     data = json.loads(manifest.read_text())
-    data["recordSet"][0]["field"][3]["name"] = "new_score"
+    people_before = (root / "graph/sources/study/people/schema.py").read_text()
+    # recordSet[0] is people, recordSet[1] is samples; field 3 of samples is score.
+    data["recordSet"][1]["field"][3]["name"] = "new_score"
     manifest.write_text(json.dumps(data))
     result = run(root, "build", "failed")
     assert result.returncode != 0 and "stale" in result.stderr
@@ -122,10 +123,12 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     assert not (root / "graph/build/failed/biocypher").exists()
     assert mapping.read_text() == good
 
-    generate_source(manifest, root / "graph/sources/samples/schema.py")
+    generate_source_packages(manifest, root / "graph/sources")
+    # One record set changed, so only its package is rewritten.
+    assert (root / "graph/sources/study/people/schema.py").read_text() == people_before
     result = run(root)
     assert result.returncode != 0 and "score" in result.stderr
-    loader = root / "graph/sources/samples/loader.py"
+    loader = root / "graph/sources/study/samples/loader.py"
     loader.write_text(loader.read_text().replace("score=float", "new_score=float"))
     mapping.write_text(good.replace("sample.score", "sample.new_score"))
     node = root / "graph/topology/sample/node.py"
