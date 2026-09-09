@@ -1,120 +1,118 @@
 ---
 name: biotope-croissant
-description: Describe local datasets with croissant-baker, capture research purpose and target entities/relations, and author structurally checked mappings with the Biotope CLI. Use for Biotope, Croissant metadata, source-field mapping, or preparing mixed-format data for a knowledge graph. The supported workflow stops at mapping; it does not load values, transform data, build graphs, or query databases.
+description: Describe and curate local data with Croissant, capture research purpose, and author typed graph projects with Biotope. Use for Biotope ingestion, generated source contracts, Python topology and mappings, project-owned loaders, and BioCypher file builds. Database import and querying are separate workflows.
 ---
 
-# Biotope: describe data and define mappings
+# Biotope graph projects
 
-Use the Biotope CLI, its help and errors. Do not import Biotope internals or edit
-managed `.biotope/` files. Author mapping YAML under `mappings/`.
+Use Biotope commands for scanning, scaffolding, source generation, checks and
+export. The agent owns purpose alignment, metadata curation and project-specific
+Python: identity choices, decoding, transformations, joins and graph composition.
 
-## Environment and project
+Initialization, baking, scaffolding, source generation, checking and building are
+independent steps. Perform the steps needed for the user's request; a metadata or
+mapping task does not imply graph execution. Reuse existing purpose, metadata and
+code. Preserve the requested source scope, including full-directory scans. If
+execution needs a smaller scope, agree on it rather than silently sampling.
 
-Use the environment the user installed. For this unreleased integration, both
-Biotope and the merged croissant-baker must be installed from their local
-checkouts in that environment; `uvx` or an unqualified package install may use an
-older release. Verify `biotope --version` and the Python package locations.
+## Environment and purpose
 
-```bash
-uv pip install --python .venv/bin/python -e /path/to/croissant-baker -e /path/to/biotope
-.venv/bin/biotope --version
-```
+Use the project's installed environment and CLI help. Verify package locations
+when commands differ from this workflow. For local development, use the requested
+Biotope and croissant-baker checkouts. Graph checks and builds need `biotope[graph]`;
+Pyright needs Node.js on PATH or `pyright[nodejs]`.
 
-Choose the project root from the user's intent. `biotope init . --no-prompt`
-initializes the current directory; `biotope init my-project --no-prompt` creates
-a subdirectory, which you must enter before continuing. Keep Git enabled for a
-new project: tracking commands locate `.biotope/` together with `.git/`.
-Do not overwrite an existing project. Reuse its configured purpose and scope.
+Run commands from the project root. Initialize metadata tracking only when needed
+with `biotope init . --no-prompt`; `--no-git` is supported. Scaffolding alone needs
+no initialization. Keep raw data and existing purpose files in place.
 
-## Workflow
+Read existing purpose files and `biotope map --show` in an initialized project.
+Capture agreed intent with `biotope map --purpose "..." --entity "..." --relation "..."`:
+purpose replaces the statement; entity/relation flags append and are repeatable.
+Update only what changed. Source structure cannot establish research purpose;
+ask about missing scientific decisions and resolve routine engineering choices.
 
-```text
-local files → add → inspect → purpose and target schema → mapping → structural checks
-```
+## Describe and curate
 
-### 1. Orient
+Reuse completed scans. Run `biotope add <data-path> --json` for new inputs and
+review its per-file outcomes, warnings and failures. Baking reads payload bytes,
+including checksums; avoid scanning environments or previous outputs. Inspect
+declared fields and exact IDs with `biotope map inspect <manifest> --json`.
+Inspection reads metadata only and provides no value preview.
 
-Establish what the researcher wants to answer and which entities and relations
-matter. Use answers already provided. Ask about missing choices or conflicts;
-file shapes alone do not establish research intent. Read existing intent with
-`biotope map --show`. Do not silently replace it or clear declared schema slots.
-
-### 2. Describe selected local data
-
-Data must be inside the project root. Honor the user's chosen input scope,
-including a full-directory scan when requested. If scope is unspecified, start
-with a small useful subset and report that selection. Do not scan environments, copied skills,
-logs or previous outputs. Biotope does not download or discover datasets.
+Keep unsupported inputs and partial descriptions visible. When evidence supports
+a correction or authored description, save it under `graph/metadata/` if a graph
+workspace exists, or `.biotope/reviews/` for metadata-only work. Register it with:
 
 ```bash
-biotope add data/study --description "..."
-biotope queue --json
+biotope source register <file> --name <managed-name> --reason "<evidence and gaps>"
 ```
 
-Baker writes structural descriptions; Biotope writes them under
-`.biotope/datasets/`. A directory produces one manifest for its subtree and an
-annotation sidecar; a single file may contain multiple record sets such as
-workbook sheets. Choose granularity deliberately. Supply provenance, creator or
-license only when known. Checksums read file bytes, so large files can be costly.
+Use `--replace` only after comparing against the current managed description,
+including curation notes. The command reports removed structure but replaces the
+file without merging or pausing; changed values also need review. Never invent
+fields to satisfy a mapping or infer a working loader from metadata.
 
-Read coverage and per-file diagnostics. Distinguish described fields, partial
-structure, unsupported inputs and parse failures. Do not manufacture fields for
-files baker cannot describe. Record these gaps; manual format descriptions,
-extracting text and preprocessing raw inputs are outside this integration workflow.
+Curated and annotated descriptions block rebaking. Use
+`biotope add <data-path> --bake-to <new-review-file.jsonld>` to inspect a fresh bake
+before reconciling it. Put the new file in the review location above, outside the
+input and managed `.biotope/datasets/` directories. Preserve curation protection.
 
-Queue status is coarse: `raw` means no field description, `processed` means
-fields were described, and `mapped` means a mapping was marked defined. These
-states do not certify complete metadata, correct values or an executable graph.
+## Scaffold and author
 
-Regenerate directory metadata with `biotope add <directory> --rebake`; for an
-individual file use `biotope add <file> --force`. Review mapping references. Do not alter source payloads to make a mapping pass.
+For graph work, run `biotope graph scaffold` from the project root, or reuse an
+existing `graph/`. Read its `README.md` and the
+[typed authoring reference](references/mapping.md). Keep graph code, dependencies,
+curation drafts, notes, helpers and outputs inside `graph/`; create extra files
+only as needed. Effective managed metadata stays in `.biotope/datasets/`.
 
-### 3. Capture intent and author mappings
-
-Use flags for intent; bare `biotope map` opens the human wizard.
+The scaffold's `_example` files are inactive patterns, not project data or a
+working graph. Adapt them to the purpose and remove unused examples. Generate
+actual source types separately from reviewed metadata:
 
 ```bash
-biotope map --purpose "The agreed research question" --entity gene --entity disease \
-  --relation gene_associated_with_disease
-biotope map inspect .biotope/datasets/data/study.jsonld --json
-biotope map scaffold .biotope/datasets/data/study.jsonld
-# Edit mappings/study.mapping.yaml.
-biotope map preview --json
+biotope source generate <manifest> --out graph/sources/<source>/schema.py
 ```
 
-Read [mapping.md](references/mapping.md) for the existing mapping grammar.
-Bind only declared record sets and fields. Prefer each record set's `id` over its
-display name; names may collide across sheets or files. Nested fields, container
-paths, shapes and descriptions are metadata, not evidence about source values.
-Inspection has no row samples.
+This generates `schema.py` and creates missing sibling `SOURCE` registration and
+loader files. It preserves authored siblings. Do not edit or format generated
+modules, copy boilerplate by hand, or transcribe the generated record inventory.
+Review new record sets, opaque shapes and nullability when regenerating.
 
-Preserve the user's purpose and schema. Ask about ambiguous identifiers or
-unsupported relations. Defer a relation with `map defer-relation` when that
-reflects an agreed gap; do not erase a requirement to make checks pass.
+Author topology, loaders, mappings and pipeline composition using the public
+`biotope.graph` contracts. Loaders use established format libraries; mappings
+transform typed values without opening files. Register selected `SOURCES`,
+`TOPOLOGY` and `MAPPINGS` in their folders' `__init__.py` files. Complete the
+pipeline's scope, settings, policies and requirement bindings or deferrals.
+Python definitions are authoritative; YAML mappings and the old wizard are retired.
 
-### 4. Check and report, then stop
+## Check and build
 
-`biotope map preview --json` checks all project mappings; an explicit mapping
-path checks one. Read `unresolved_slots`, `deferred_slots`, `findings`, and the
-proposed schema. Deferred relations are acknowledged gaps, not resolved bindings;
-they do not fail structural checks on their own.
-Errors or partially filled bindings return exit code 1. Empty stubs are inactive
-in the existing model and can pass with no schema. Compare resolved slots with
-project intent; review warnings too.
+Run `biotope graph check graph.pipelines.build_graph:PIPELINE --json`. Include all
+relevant generated and authored Python in `Pipeline.code_paths`. Checks import
+declarations, so imports must not open payloads or execute pipelines. Resolve
+diagnostics and review purpose/placeholder warnings; do not suppress them with
+`Any`, blanket ignores or invented metadata.
 
-A passing result covers metadata and definitions only. It does not validate
-source values, transform execution, joins or scientific correctness. Record unresolved
-choices and limitations alongside the mapping artifacts. Project-owned loading
-and graph construction are later work; do not run build/view or create loaders.
+When graph execution is requested, state the selected inputs, output grain,
+identity decisions and expected spot checks, then build into a new run directory:
 
-Read [reliability.md](references/reliability.md) for identity and evidence limits.
+```bash
+biotope graph build graph.pipelines.build_graph:PIPELINE --out graph/build/review-1
+```
 
-## Supporting commands
+Biotope supplies the BioCypher file exporter and derives its schema from topology.
+Do not add a project adapter or hand-written export schema. Review output values,
+counts and provenance using the [reliability boundaries](references/reliability.md)
+before reporting acceptance. Scientific graph acceptance is manual; keep any
+automated checks focused on project behavior that needs protection.
 
-- `status`, `queue`, `mark`: metadata and workflow state.
-- `annotate`, `config`: annotations and metadata validation configuration.
-- `add`, `mv`, `rm`, `check-data`: tracking and checksum checks.
-- `commit`, `log`, `push`, `pull`: metadata version control. Publish only when authorized.
+After metadata changes, regenerate affected contracts and repair authored code;
+after code changes, rerun relevant checks. Build again only within the requested
+execution scope. During requested cleanup, remove or archive disposable run
+outputs; preserve raw data, curated metadata and authored code. Do not use
+`biotope rm raw` for test cleanup.
 
-Use CLI commands to maintain managed metadata and provenance. Keep mapping YAML
-and notes understandable to the researcher who will review them.
+Queue states do not certify graph validity. Use normal Git to version authored
+Python alongside metadata. New Baker handlers, database import/querying and paper
+evaluation remain separate tasks.

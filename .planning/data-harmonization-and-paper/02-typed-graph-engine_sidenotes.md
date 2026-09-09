@@ -8,23 +8,27 @@ Supporting material for [spec 2](02-typed-graph-engine.spec.md). Examples illust
 .biotope/datasets/
   study_a.jsonld                # Effective curated source description
 
-sources/study_a/
-  schema.py                    # Generated record declarations
-  loader.py                    # Authored physical access and decoding
-
-topology/
-  sample/
-    node.py
-    from_patient.py
-  patient/
-    node.py
-
-mappings/study_a/
-  samples.py                   # Authored mapping and local transforms
-  patients.py
-
-pipelines/
-  build_graph.py               # Explicit project composition
+graph/
+  sources/
+    __init__.py                # SOURCES registry
+    study_a/
+      __init__.py              # SOURCE, initially created by source generate
+      schema.py                # Generated records and inventory
+      loader.py                # Authored access/decoding; starts as a stub
+  topology/
+    __init__.py                # TOPOLOGY registry
+    sample/
+      __init__.py
+      node.py
+      from_patient.py
+    patient/
+      __init__.py
+      node.py
+  mappings/
+    __init__.py                # MAPPINGS registry
+    study_a.py                 # Authored transformations
+  pipelines/
+    build_graph.py             # Imports registries; explicit composition
 ```
 
 Source classes follow metadata; topology follows graph concepts. Outgoing edges live beside their source node. Stable schema identifiers establish graph identity independently of import paths. Generated files are replaceable; authored loaders, mappings, topology, and pipelines are preserved.
@@ -102,7 +106,7 @@ The writer separately derives BioCypher configuration from topology and translat
 
 ## Generation and validation considerations
 
-Croissant carries source extraction, references, semantic types, and structural descriptions as well as row fields. Preserve these through descriptors where needed. Known scalars and nested records can be generated mechanically; unknown semantic types and arbitrary matrix layouts need explicit representation policies.
+Croissant carries source extraction, references, semantic types, and structural descriptions as well as row fields. Keep that metadata in Croissant; generated types retain only compact references to its fields. Known scalars and nested records can be generated mechanically; unknown semantic types and arbitrary matrix layouts need explicit representation policies.
 
 Pydantic is already a dependency in the inspected Biotope baseline. It can validate configurations and source contracts, including dataclasses. Choose coercion deliberately: accepting a converted value differs from proving the original value matched its declaration. Make intended source decoding explicit and use strict validation where appropriate.
 
@@ -112,11 +116,11 @@ Pydantic is already a dependency in the inspected Biotope baseline. It can valid
 
 ## Manual test context
 
-The existing [spec 1 runbook](01-croissant-baker-update.runbook.md) uses:
+The existing [spec 1 runbook](old/01-croissant-baker-update.runbook.md) uses:
 
 - Daria project: `/Users/vlad/Projects/virtual-human-dev/daria_mvp/data`.
 - INTRAC project: `/Users/vlad/Projects/virtual-human-dev/biotope-bench/data/intrac_260731/workspace`.
-- Openrouter data: /Users/vlad/Projects/virtual-human-dev/usecases/opentarget/opentargets-25.12 . It has an `output` for raw data and a manually written `meta/croissant.json` that we can use for comparison, but not as a golden standard (it's not perfect)
+- Opentargets data: /Users/vlad/Projects/virtual-human-dev/usecases/opentarget/opentargets-25.12 . It has an `output` for raw data and a manually written `meta/croissant.json` that we can use for comparison, but not as a golden standard (it's not perfect)
 - Local Biotope and baker installed together in each project's environment, currently using Python 3.12.
 - Metadata for the full `raw` directory, plus Daria's `context/darias_input.xlsx`, followed by spot checks and Claude Code review.
 
@@ -140,22 +144,22 @@ His component-scoped keys, scalar graph properties, native CSV/JSON/Parquet inpu
 
 Reviewed the spec, code and runbook on 8 September 2026. At initial review, the integration branch and the detached authoring worktree shared `9465817` but had different uncommitted changes. Before this document handoff, spec 1 was committed on `feat/dataset_harmonization` at `2242c62`, including the Daria mapping feedback fixes. That commit is the implementation base. Full-directory/INTRAC review and the published-baker release gate remain pending. The findings below describe the review snapshot; refresh them when implementation begins.
 
-| Area | Observed handoff / review finding | Resulting instruction |
-| --- | --- | --- |
-| Engine transition | [CLI](../../biotope/cli.py) no longer registers build. The old build module still imports removed API functionality. | Treat old construction as detached code; do not reattach it wholesale or repair all legacy graph commands. |
-| Source contracts | The [Croissant model](../../biotope/croissant/spec.py) and [inspector](../../biotope/croissant/mapping/inspector.py) retain richer descriptions, but display summaries are not full source contracts. | Reuse retained parsing/metadata fidelity while preserving field identities and descriptors in generation. |
-| Curated metadata | [Ingestion](../../biotope/commands/add.py) rewrites manifests; [skill guidance](../../skills/biotope-croissant/SKILL.md) prohibits managed-file editing and stops before value loading. | Add a supported authoring/preservation route and update the workflow; do not assume existing annotations preserve arbitrary structural corrections. |
-| Retained behavior | Spec 1 keeps purpose, metadata and YAML mapping tools; spec 2 makes Python authoritative. | Preserve purpose/metadata outcomes and replace affected authoring/checking paths without maintaining a second engine. |
-| Dataset evidence | Spec 1 records Daria subset feedback; its corrections are now committed. Full-directory review and INTRAC agent acceptance remain incomplete. | Reuse actual evidence and coordinate inherited blockers; runbook instructions alone do not prove coverage. |
-| Completion and scope | The earlier checklist allowed outstanding in-scope defects and lacked evidence/status fields. | B1–B8 define readiness; B9 defines manual acceptance. Required failures block their criteria. Bounded examples and manual checks remain the default. |
-| Long implementation | The earlier checkpoint omitted ownership, revisions and decisions; delegation had no contract. | Keep one resume record and concise log; delegate independent slices with explicit ownership and proportionate verification. |
+| Area                 | Observed handoff / review finding                                                                                                                                                             | Resulting instruction                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Engine transition    | [CLI](../../biotope/cli.py) no longer registers build. The old build module still imports removed API functionality.                                                                          | Treat old construction as detached code; do not reattach it wholesale or repair all legacy graph commands.                                           |
+| Source contracts     | The [Croissant model](../../biotope/croissant/spec.py) and [inspector](../../biotope/croissant/inspector.py) retain richer descriptions, but display summaries are not full source contracts. | Generate types from Croissant and retain field references; keep descriptive metadata in the authoritative manifest.                                  |
+| Curated metadata     | [Ingestion](../../biotope/commands/add.py) rewrites manifests; [skill guidance](../../skills/biotope-croissant/SKILL.md) prohibits managed-file editing and stops before value loading.       | Add a supported authoring/preservation route and update the workflow; do not assume existing annotations preserve arbitrary structural corrections.  |
+| Retained behavior    | Spec 1 keeps purpose, metadata and YAML mapping tools; spec 2 makes Python authoritative.                                                                                                     | Preserve purpose/metadata outcomes and replace affected authoring/checking paths without maintaining a second engine.                                |
+| Dataset evidence     | Spec 1 records Daria subset feedback; its corrections are now committed. Full-directory review and INTRAC agent acceptance remain incomplete.                                                 | Reuse actual evidence and coordinate inherited blockers; runbook instructions alone do not prove coverage.                                           |
+| Completion and scope | The earlier checklist allowed outstanding in-scope defects and lacked evidence/status fields.                                                                                                 | B1–B8 define readiness; B9 defines manual acceptance. Required failures block their criteria. Bounded examples and manual checks remain the default. |
+| Long implementation  | The earlier checkpoint omitted ownership, revisions and decisions; delegation had no contract.                                                                                                | Keep one resume record and concise log; delegate independent slices with explicit ownership and proportionate verification.                          |
 
 The review also bounded unknown-type handling, joins, provenance storage, fingerprinting, metadata preservation and obsolete-code cleanup. Their required outcomes remain; universal engines, extra backend implementations and broad audits are excluded. No application tests or dataset scans were run for this document review.
 
 ### Local source references
 
-- [Biotope dependencies](../../pyproject.toml), [source generation](../../biotope/croissant/codegen/schema.py), [mapping model](../../biotope/croissant/mapping/model.py), [schema generation and adapter templates](../../biotope/croissant/scaffold/materialize.py).
+- Current implementation: [dependencies](../../pyproject.toml), [source generation](../../biotope/graph/sources.py), [contracts](../../biotope/graph/contracts.py), [topology](../../biotope/graph/topology.py) and [output](../../biotope/graph/output.py). The baseline YAML generator and adapter templates were retired.
 - [Baker format limitations](/Users/vlad/Projects/virtual-human-dev/croissant-baker/docs/user-guide/supported-formats.md), including workbook and HDF5 descriptions without executable extraction instructions.
 - [Paul's package metadata](/Users/vlad/Projects/kg-build-system/pyproject.toml), [license](/Users/vlad/Projects/kg-build-system/LICENSE), [topology](/Users/vlad/Projects/kg-build-system/kg_build_system/topology/models.py), [binding factories](/Users/vlad/Projects/kg-build-system/kg_build_system/binding/factories.py), [compiler symbols](/Users/vlad/Projects/kg-build-system/kg_build_system/compile/compiler.py).
 - [Reference build](/Users/vlad/Projects/kg-build-system/reference_project/build.py), [module interface](/Users/vlad/Projects/kg-build-system/kg_build_system/modules/interfaces.py), [type fixtures](/Users/vlad/Projects/kg-build-system/tests/typecheck_graph_bindings.py), [hierarchy limitations](/Users/vlad/Projects/kg-build-system/NODE_EDGE_HIERARCHY_SPEC.md).
-- [Source trust and nullability](/Users/vlad/Projects/kg-build-system/SOURCE_SCHEMA_TRUST_AND_NULLABILITY_SPEC.md), [legacy Biotope alignment semantics](../../biotope/croissant/alignment/merge.py).
+- [Source trust and nullability](/Users/vlad/Projects/kg-build-system/SOURCE_SCHEMA_TRUST_AND_NULLABILITY_SPEC.md), legacy Biotope alignment semantics (retired; see baseline commit `2c3676a`).

@@ -1,6 +1,6 @@
 # Plugin and skills
 
-The biotope plugin teaches coding agents how to describe data and author mappings. The agent uses the same `biotope` CLI as a human; no separate agent
+The biotope plugin teaches coding agents how to curate source descriptions and author typed graph projects. The agent uses the same `biotope` CLI as a human; no separate agent
 API or MCP server is involved.
 
 ## Install
@@ -34,14 +34,13 @@ agent's skills directory, such as `.cursor/skills/` or `.claude/skills/`.
 
 ## Choose a skill
 
-| Skill               | Use it for                                                |
-| ------------------- | --------------------------------------------------------- |
-| `biotope-croissant` | Describe data and author mappings: `init` → `add` → `map` |
-| `biocypher`         | Configure export backends, schemas, and Neo4j import      |
-| `biochatter`        | Query a loaded graph in natural language                  |
+| Skill               | Use it for                                                     |
+| ------------------- | -------------------------------------------------------------- |
+| `biotope-croissant` | Curated sources, typed mappings and selected graph file builds |
+| `biocypher`         | Configure export backends, schemas, and Neo4j import           |
+| `biochatter`        | Query a loaded graph in natural language                       |
 
-Start with `biotope-croissant`. This iteration stops at mapping. The other skills
-are for separately managed downstream work.
+Start with `biotope-croissant`. It continues through project-owned loading and selected BioCypher file output. Database import and querying are separately managed work.
 
 ## Work with the agent
 
@@ -57,14 +56,16 @@ The skill drives the CLI for you. During a typical session:
    from file shapes.
 1. It brings your data into the project and runs `add`, which creates a
    Croissant manifest for each dataset.
-1. It writes mappings against declared fields and checks their structure.
-1. It reports mappings, unresolved decisions and baker limitations. No source
-   values, transformations or graph results are validated.
+1. For graph work, it runs `graph scaffold` to create `graph/`, then generates source
+   classes and authors Python topology, loaders and mappings there. It checks
+   definitions and runs the selected pipeline when requested.
+1. It reports graph outputs, exclusions and provenance, then asks you to review
+   known values and relations against the research purpose.
 
 The agent asks about missing purpose or schema decisions and unresolved
 scientific choices. It reuses choices already supplied by the user.
 
-Graph construction, export and querying are outside the supported Biotope workflow.
+Database import and querying are outside this selected file-build workflow.
 
 To write mappings yourself, see the [mapping reference](mapping.md). For a full
 worked example, follow the [tutorial](tutorial.md).

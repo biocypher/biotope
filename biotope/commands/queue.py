@@ -2,7 +2,7 @@
 
 A derived view over every manifest under ``.biotope/datasets/``. Groups them
 by ``biotope:status`` so an agent (or human) resuming a session can see, in
-one shot, what lacks field descriptions, what has described fields, and what has a mapping.
+one shot, what lacks field descriptions, what has described fields, and what has been manually marked as mapped.
 
 The "raw" section automatically hides any dataset that something else already
 ``prov:wasDerivedFrom`` — those have been consumed by a downstream artifact
@@ -152,7 +152,7 @@ def _render(
     sections = (
         ("RAW", "no field description", raw_active, "yellow"),
         ("PROCESSED", "fields described", processed, "cyan"),
-        ("MAPPED", "mapping defined", mapped, "green"),
+        ("MAPPED", "manually marked; graph checks are separate", mapped, "green"),
     )
     any_emitted = False
     for label, hint, bucket, colour in sections:

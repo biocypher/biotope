@@ -1,189 +1,104 @@
-# Mapping grammar
+# Typed authoring reference
 
-A mapping file binds the slots you declared (`biotope map --entity/--relation`) to real record sets and fields in one dataset's Croissant manifest. One file per logical dataset, under `mappings/<stem>.mapping.yaml`. Mappings are definitions; this iteration does not execute them.
+Read the generated `graph/README.md` for scaffold examples. If a Biotope checkout
+is available, `examples/typed_graph/` demonstrates a working two-source join and
+`docs/mapping.md` describes the API. This reference supplies the essentials when
+the skill is copied into a data project.
 
-biotope does **not** infer which record set is which entity or which field is the id — you decide that and write it. Ground every pick in the field catalogue from `biotope map inspect <croissant> --json` or the scaffold's comment appendix; never invent a CURIE prefix, field, or entity type that the data doesn't have.
+## File ownership and registration
 
-## Contents
+| Location                             | Responsibility                                                     |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `.biotope/datasets/`                 | Effective source metadata, managed outside the graph workspace     |
+| `graph/sources/<source>/schema.py`   | Generated source dataclasses and references to Croissant fields    |
+| `graph/sources/<source>/__init__.py` | Authored `SOURCE` registration; created when absent                |
+| `graph/sources/<source>/loader.py`   | Authored physical decoding; unimplemented stub created when absent |
+| `graph/sources/__init__.py`          | Selected `SOURCES`                                                 |
+| `graph/topology/<concept>/`          | Node dataclass, identifier type and outgoing relation modules      |
+| `graph/topology/__init__.py`         | `TOPOLOGY` registry                                                |
+| `graph/mappings/`                    | Typed transformation functions and `MAPPINGS` in `__init__.py`     |
+| `graph/pipelines/build_graph.py`     | `PIPELINE` importing those registries and composing execution      |
+| `graph/pyproject.toml`               | Graph dependencies, including project reader libraries             |
+| `graph/build/<run>/`                 | Derived export files and run evidence                              |
 
-- [File shape](#file-shape)
-- [Entities](#entities)
-- [Id selectors and transforms](#id-selectors-and-transforms)
-- [Scans: row, explode, multi-axis](#scans)
-- [Relations](#relations)
-- [Reusable id selectors](#reusable-id-selectors)
-- [Minimal vs rich bindings of the same entity](#minimal-vs-rich)
-- [Validate](#validate)
+Use `graph.paths.PROJECT_ROOT` for existing inputs and managed metadata, and
+`GRAPH_ROOT` for graph artifacts. Use `graph.` or package-relative imports;
+keep payload access inside loader/pipeline calls.
 
-Unnamed fields appear under their declared field ID. Do not infer their meaning
-from that ID; record any unresolved interpretation.
+Each source package uses an importable Python name. Generation replaces only its
+generated module and creates missing authored siblings. Existing loaders and
+registrations are not migrated or overwritten. `source generate ... --check`
+verifies module freshness without creating any files.
 
-## File shape
+Generated `RECORDS` contains all top-level record classes, excluding nested field
+classes; `SourceRow` is their union for loader annotations. `SOURCE.records`
+defaults to `RECORDS`. This is a contract inventory, not a request to load every
+record set. Choose participating contracts in `SOURCES` and concrete input classes
+in each `Mapping.inputs`. If narrowing `SOURCE.records` itself, review that
+authored subset after regeneration. Do not replace typed inputs with `Any`.
 
-```yaml
-croissant: .biotope/datasets/data/flights.jsonld
-entities:
-  <entity_name>: { ... }
-relations:
-  <relation_name>: { ... }
-ids:                       # optional, reusable selectors
-  <selector_name>: { ... }
-```
+## Source and topology contracts
 
-## Entities
+Import the public contracts from `biotope.graph`:
 
-Use the inspected record-set `id` for `record_set`; names are accepted only when unambiguous. Each entity slot needs a `record_set`, a `scan`, and an `id`; `properties` is an optional map of `graph_property: source_field`.
+- `SourceContract(name, metadata, generated, records)` links effective metadata,
+  its generated module and participating record classes.
+- `Evidence(artifact, version, record_set, location)` identifies a contributor.
+  `SourceRecord(value, evidence)` carries a typed value and a tuple of references.
+- `Loader[Config, Row]` accepts explicit configuration and yields source records.
+  Implement it beside the generated classes using established parsing libraries.
+  Biotope and its templates contain no source-format readers.
+- `Topology(nodes=(...), edges=(...))` registers dataclasses. Each declares
+  `schema_id: ClassVar[str]`. Nodes have distinct `NewType(..., str)` identifiers;
+  edges use the corresponding types for `source` and `target`.
 
-```yaml
-entities:
-  book:
-    record_set: books
-    scan: row
-    id:
-      field: isbn
-      transform: as_curie
-      args: { prefix: isbn }
-    properties:
-      title: title
-      year: year
-```
+Use keyword arguments in graph constructors so property changes fail clearly.
+Mint namespaced identifiers explicitly; use source-specific namespaces where
+cross-source identity is unresolved. Reuse a node type for same-type relation
+endpoints rather than inventing a second concept.
 
-A `properties` value is normally a column name (`title: title`). For a constant that's the same for every row — e.g. a fixed ontology id or a provenance tag — use a `value:` literal instead of inventing a column:
+Generated fields default to nullable. Curated `biotope:nullable: false` asserts
+non-nullability. Known scalars, nested records and repeated fields are supported;
+unknown types and `arrayShape` fields use `UnknownValue`. Refine their metadata
+before loading non-null values; an unused nullable opaque field can remain `None`.
+`Row.__field_refs__` maps attribute names to Croissant field IDs, or JSON pointers
+when IDs are absent. Extraction rules, descriptions and other metadata stay in
+the Croissant file registered by `SOURCE.metadata`; do not copy them into Python.
 
-```yaml
-    properties:
-      title: title
-      source_db: { value: "SourceDB" }
-```
+Graph export supports nullable scalars and string lists without nulls or `|`.
+Other property shapes need an explicit project representation.
 
-## Id selectors and transforms
+## Mappings and composition
 
-A selector picks a value from a row in one of three mutually exclusive ways — `field` (read a column), `use` (a reusable named selector), or `value` (a literal constant) — plus an optional `transform`:
+`Mapping(name, function, inputs, outputs, requirements=(), evidence=())` registers
+an annotated function returning an iterable of typed objects. Inputs and outputs
+are tuples of classes. Functions may take several inputs and emit several
+outputs; keep scientific rationale and evidence near the code.
 
-- `passthrough` (default) — use the field value as-is.
-- `as_curie` — prefix the value into a CURIE: `args: { prefix: iata }` turns `ABE` into `iata:ABE`. Use this to put every source's ids into one namespace.
-- `hash_id` — declare a synthetic id from an ordered list of fields:
-  `id: {transform: hash_id, args: {fields: [sample_id, gene_id], prefix: measurement}}`.
-  `args.fields` is required, even for one field. `prefix` and a positive integer
-  `length` are optional. Biotope checks the declaration; it does not execute the hash.
+`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares
+composition. Optional fields include `settings`, `policies`, `intent`,
+`requirements`, `deferrals`, `dependencies` and `variability`. Its `run` receives
+a `RunContext`:
 
-`passthrough` accepts no arguments. `as_curie` requires a non-empty string
-`prefix` and accepts an optional string `separator`. Unknown argument names and
-undeclared fields in `args.fields` are errors.
+- `context.load(contract, loader, config)` invokes a registered loader and checks
+  its returned records without coercion.
+- `context.map(mapping, *records)` applies a mapping and collects graph objects.
+- `context.apply(mapping, *records)` returns evidence-bearing outputs for further
+  project processing.
+- `context.emit(value, evidence, mapping=<id>)` collects a declared graph output
+  with explicitly supplied contributors.
+- `context.exclude(policy_key, evidence, count=1)` records exclusions against a
+  declared pipeline policy.
 
-The id is what makes two emissions the same node. If the same real-world entity appears in several sources, mint its id **identically** everywhere (same field semantics, same transform, same prefix) for consistent identity in later project code. Mismatched id construction is the most common cause of dropped edges and duplicate nodes — see `reliability.md`.
+Joins, filtering, aggregation and conflict resolution are project Python.
+Declare keys, cardinality, unmatched behavior and output grain. Exact duplicates
+combine evidence; conflicting values for an ID fail. Edges without an explicit
+ID use concept/source/target identity; parallel edges need explicit IDs.
+The engine retains graph objects and evidence in memory; project joins may also
+retain state. Assess feasibility against the requested execution scope.
 
-## Scans
-
-`scan` declares intended row or array handling for future project-owned loaders.
-
-- `scan: row` — one element per row (the common case).
-- `scan: {explode: <field>}` — one element per item of an array-valued field. The exploded element is referenced as `field: "$item"`, **not** the array's name. The field name selects the array; `$item` names each element inside the scan. Sibling row columns are still addressed by their plain names.
-- `scan: {explode: {<axis>: <field>, ...}}` — multi-axis explode. Each element is exposed as `field: "$<axis>"` (e.g. axis `author` → `field: "$author"`).
-
-```yaml
-entities:
-  topic:
-    record_set: services
-    scan: { explode: edam_topics }              # array of scalar strings
-    id: { field: "$item", transform: as_curie, args: { prefix: edam } }
-```
-
-### Array of structs — reach inside each element with `$item.<subfield>`
-
-When the exploded array holds **objects, not scalars** (the common shape in nested JSON — e.g. a `node` record with `events: [{id: ...}, ...]`), `$item` is the whole struct. Address a field on it with a dot path: `field: "$item.id"`. This is the single most-missed piece of the grammar; without it you can't build a relation off a nested array of objects.
-
-```yaml
-# node records each carry events: [{id, role}, ...]
-relations:
-  node_organizes_event:
-    record_set: nodes
-    scan: { explode: events }                   # array of {id, role} structs
-    source: { entity: node,  field: node_id,      transform: as_curie, args: { prefix: node } }
-    target: { entity: event, field: "$item.id",   transform: as_curie, args: { prefix: event } }
-    properties:
-      role: "$item.role"                         # sibling sub-fields of the same element
-```
-
-For multi-axis explode the same dotting applies per axis: `field: "$<axis>.<sub>"` (e.g. `field: "$event.id"` for axis `event`). `biotope map preview` resolves the real type of each named sub-field. One constraint: `$item` (and `$item.<sub>`) is **not** valid inside a `where:` clause; filter on plain row columns instead.
-
-## Relations
-
-A relation names its `source` and `target` endpoints; each endpoint names the referenced `entity` and a selector that mints the **same id** that entity uses elsewhere. Optional `properties` attach edge attributes.
-
-```yaml
-relations:
-  book_written_by_author:
-    record_set: authorships
-    scan: row
-    source: { entity: book,   field: isbn,        transform: as_curie, args: { prefix: isbn } }
-    target: { entity: author, field: author_id,   transform: as_curie, args: { prefix: orcid } }
-    properties:
-      role: contribution_role
-```
-
-Edge-level facts that aren't nodes (a tissue, a species, a comparison label) are best kept as relation `properties`, not promoted to entities — promoting them creates orphan nodes unless every value is independently sourced and linked.
-
-If a relation you declared has no supporting field in the data, mark it deferred rather than faking a binding: `biotope map defer-relation <mapping> <relation>`. `undefer-relation` reverses the declaration when the data supports it. Preview reports these under `deferred_slots`; they are known gaps, not completed bindings or structural errors.
-
-For a constant endpoint, define `ids: {sample_id: {value: "geo:GSM1"}}`, then
-use `target: {entity: sample, use: sample_id}` inside the relation. Endpoints
-accept `field:` or `use:`, not a direct `value:`. Preview recognizes the literal
-ID's `geo` namespace; an explicit entity namespace takes precedence.
-
-## Reusable id selectors
-
-Define a selector once under top-level `ids:` and reference it with `use:` so an entity and the relations that point at it stay in lockstep:
-
-```yaml
-ids:
-  author_curie: { field: author_id, transform: as_curie, args: { prefix: orcid } }
-
-entities:
-  author:
-    record_set: authors
-    scan: row
-    id: { use: author_curie }
-relations:
-  book_written_by_author:
-    record_set: authorships
-    source: { entity: book,   use: isbn_curie }
-    target: { entity: author, use: author_curie }
-```
-
-## Minimal vs rich
-
-Same entity: rich binding in one mapping (full properties), minimal in another (id only). Both mint the id identically. Their intended identity must agree.
-
-**Per-file rule:** every relation endpoint's `entity` must appear under `entities:` in **that same file** — add a minimal stub if needed.
-
-Both endpoints of a relation between instances of the same type use the same
-entity key: a mouse-gene to human-gene relation uses `entity: gene` on both sides,
-with separate ID selectors. An extra entity key declares a separate target type.
-
-## Shared entities
-
-The same entity type may appear in several mapping files. Use consistent identity
-semantics and review any distinct namespaces shown by the project preview.
-An unknown namespace is left unset; Biotope does not infer it from source values.
-
-Pick the record set with the richest linkage when one source embeds references another only holds a summary table.
-
-## Validate
-
-```bash
-biotope map preview --json
-```
-
-This checks metadata and mapping definitions. Inspect `unresolved_slots`,
-`deferred_slots`, `findings`, and the proposed schema. Errors or partially filled bindings produce exit
-code 1; warnings still need review. Empty stubs are inactive in this model and
-can pass without producing any schema. Compare the resolved slots with project
-intent; a passing result alone does not establish purpose coverage. A passing check does not validate source
-values, identifier equality, joins, filters or transform execution. Biotope provides no row
-samples and does not execute these definitions. Stop here for this iteration.
-
-Record unsupported fields and scientific choices explicitly. Do not manufacture
-columns or change the user's schema just to make validation pass. For an unbound
-relation, add `<relation>: {deferred: true}` under `relations:`; project intent alone
-does not create that entry. The deferral command updates entries already in the file.
+Intent is discovered from project metadata or selected with `Pipeline.intent`.
+Requirement keys are `entity:<exact intent text>` or `relation:<exact intent text>`;
+values are topology concept IDs. Deferrals use the same keys with a reason as
+value. Missing bindings or deferrals fail checks. Preserve the requirements;
+deferral records a limitation rather than resolving it.

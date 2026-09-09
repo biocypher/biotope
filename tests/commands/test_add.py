@@ -378,7 +378,6 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
 
         third = runner.invoke(add, ["--rebake", str(data_dir)])
         assert third.exit_code == 0
-        assert "Re-baked" in third.output
         assert mock_bake.call_count == 2
 
 
@@ -475,9 +474,13 @@ def test_bake_directory_reports_coverage(mixed_dataset, capsys):
 
     _bake_directory(data_dir, project_root, {})
 
-    out = capsys.readouterr().out
-    assert "Scanned 2 file(s): 1 described, 1 not described." in out
-    assert "no handler: 1" in out
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    text = "\n".join(line.rstrip() for line in captured.err.splitlines())
+    assert "2 scanned · 1 described · 1 not described" in text
+    assert "SKIP   README.md\n       No handler" in text
+    assert "OK     expression.csv.gz" in text
+    assert "\x1b" not in captured.out + captured.err
     metadata = json.loads((project_root / ".biotope" / "datasets" / "data" / "mixed.jsonld").read_text())
     assert metadata["recordSet"]
     objects = [d for d in metadata["distribution"] if d["@type"] == "cr:FileObject"]
@@ -490,12 +493,12 @@ def test_baker_warnings_survive_markup_in_a_filename(monkeypatch):
 
     from rich.console import Console
 
-    from biotope.commands.add import _bake_progress
+    from biotope.commands._add_output import AddOutput
 
     monkeypatch.setenv("TERM", "xterm-256color")
     output = StringIO()
-    monkeypatch.setattr("biotope.commands.add.Console", lambda: Console(file=output, force_terminal=True, width=140))
-    with _bake_progress("t") as report:
+    presenter = AddOutput(console=Console(file=output, force_terminal=True, width=140))
+    with presenter.scan(Path("t"), Path("t")) as report:
         report(1, 2, "report.csv")
         logging.getLogger("croissant_baker").warning("report[/].csv: [dim]failed")
 
@@ -503,7 +506,6 @@ def test_baker_warnings_survive_markup_in_a_filename(monkeypatch):
 
     text = Text.from_ansi(output.getvalue()).plain
     assert "report[/].csv: [dim]failed" in text
-    assert "count pending" in output.getvalue()
     assert "1/2" in text
     assert "None" not in output.getvalue()
 
@@ -522,7 +524,9 @@ def test_baker_setup_is_visible_before_import_and_handler_initialization(tmp_pat
     source = source_dir / "genes.csv"
     source.write_text("gene_id,score\nG1,2.5\n")
     monkeypatch.setenv("TERM", "xterm-256color")
-    monkeypatch.setattr("biotope.commands.add.Console", lambda: Console(force_terminal=True, width=160))
+    monkeypatch.setattr(
+        "biotope.commands._add_output.Console", lambda **kwargs: Console(force_terminal=True, width=160, **kwargs)
+    )
     original_import = builtins.__import__
     original_generator = metadata_generator.MetadataGenerator
     output = ""
@@ -530,9 +534,11 @@ def test_baker_setup_is_visible_before_import_and_handler_initialization(tmp_pat
 
     def assert_visible(stage):
         nonlocal output
-        output += capsys.readouterr().out
-        assert "preparing croissant-baker" in output, stage
-        assert "count pending" in output, stage
+        captured = capsys.readouterr()
+        output += captured.err
+        assert "Baking" in output, stage
+        assert "preparing croissant-baker" not in captured.out + output, stage
+        assert "\x1b[?25l" in output, stage  # The live display already hides the cursor.
         stages.append(stage)
 
     def checked_import(name, *args, **kwargs):
@@ -553,4 +559,8 @@ def test_baker_setup_is_visible_before_import_and_handler_initialization(tmp_pat
         metadata = {"name": "genes", "distribution": []}
         _enrich_with_baker(metadata, source)
     assert stages == ["import", "handler initialization"]
+    captured = capsys.readouterr()
+    assert "\x1b[?25h" in captured.err  # Progress has restored the terminal.
+    assert captured.out == ""
+    assert "1 scanned · 1 described" in captured.err
     assert [f["name"] for f in metadata["recordSet"][0]["field"]] == ["gene_id", "score"]

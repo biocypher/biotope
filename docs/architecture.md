@@ -1,67 +1,64 @@
-# How Biotope works
+# Architecture
 
-Croissant-baker parses source formats and assembles structural metadata. Biotope
-tracks that metadata, captures research intent, and checks mapping definitions.
-It does not implement source readers or execute mappings in the supported
-workflow. Project-specific loading and transformation are later work.
-
-## Project layout
+Biotope connects curated source descriptions to typed, project-owned graph
+construction. Croissant-baker describes formats. Generated dataclasses describe
+source values. Authored Python defines topology, mappings and pipeline composition.
+Biotope checks those definitions and integrates validated outputs with BioCypher.
 
 ```text
-project/
-├── .biotope/
-│   ├── project.yaml       purpose and required entities/relations
-│   ├── config.yaml        metadata validation settings
-│   ├── datasets/          tracked Croissant metadata
-│   └── workflows/         reserved
-├── data/                  conventional local data directory
-├── mappings/              authored mapping YAML
-├── alignment.yaml         optional mapping equivalence suggestions
-├── pyproject.toml
-└── .gitignore
+raw sources ── baker ── curated Croissant ── generated source classes
+    │                                               │
+    └── project loaders ── typed records ── mappings ── graph objects
+                                              │           │
+                                       Python topology    └── BioCypher files
 ```
 
-`init --visible` puts `project.yaml` at the root. Other managed files stay under
-`.biotope/`. Tracking commands locate a project by walking upward to `.biotope/`
-and `.git/`. Data paths must stay within the project.
+Generation and definition checking read metadata and Python only. Explicit
+baking/file-integrity commands and project pipeline execution read source bytes.
+Loaders, joins, identity decisions and scientific transformations live in the
+graph project. Biotope has no format-reader framework or expression compiler.
 
-## Data flow
+`graph scaffold` copies the packaged boilerplate into `graph/`. Initialization,
+baking and execution remain separate commands. CLI code owns mechanical setup;
+the agent adapts topology, loaders and transformations to purpose and evidence.
 
-```text
-local files → add (baker) → Croissant manifests → inspect/scaffold
-                                                     ↓
-map --purpose/--entity/--relation → project.yaml → mapping YAML → preview
-```
+The [typed project guide](mapping.md) describes layouts, interfaces, supported
+values, provenance, failure behavior and memory assumptions. `biotope.graph`
+exports the project contracts; `biotope.graph.sources`, `.check` and `.build`
+provide generation, definition checks and explicit execution. `biotope.croissant`
+retains metadata models and inspection. `biotope.commands` provides CLI wrappers
+and the existing metadata/Git workflow.
 
-Directory and single-file ingestion use baker's assembly. A file can describe
-multiple record sets. Distinct IDs preserve identities when display names
-collide. Unsupported files can be tracked without invented field descriptions.
+## Authority and revisions
 
-Inspection, scaffolding, the wizard and structural checks use manifests and
-mapping definitions. They work without source payloads. File tracking may read
-checksums or timestamps; it does not inspect data values.
+Curated Croissant is the source-contract authority. Python topology is the only
+target-schema authority. Python functions are the mappings. YAML used for intent,
+annotations and derived BioCypher configuration does not define a second graph.
+Semantic concept IDs are independent of module names. Regeneration replaces only
+generated modules; metadata corrections and authored code survive.
 
-Purpose and entity/relation lists stay in project metadata. Detailed schema and
-selector choices stay in mapping YAML. This iteration preserves that model.
+Definitions must be safe to import. Python can have arbitrary side effects, so
+Biotope does not claim to sandbox project code or infer its complete lineage.
+Runtime validation, static checking and scientific review establish different
+things. Passing one does not establish the others.
 
-## Configuration
+## Design credit
 
-Settings resolve from lowest to highest priority:
+Paul Ka Po To's `kg-build-system` informed typed authoring, topology organization
+and modular construction. Biotope implements these ideas independently using
+ordinary Python dataclasses and mapping functions; it does not vendor or depend
+on that engine. No code from it was copied. A bounded future contribution can
+improve this foundation without gating Biotope's implementation or release.
 
-```text
-~/.config/biotope/config.yaml → .biotope/config.yaml → project.yaml → CLI flags
-```
+## Contributor checks
 
-Inspect intent with `biotope map --show`. Dataset state lives in each manifest:
-`raw`, `processed` or `mapped`. State and passing structural checks do not prove
-value validity, transform correctness or graph readiness.
+Install the graph and development extras (`uv sync --extra dev --extra graph`)
+and make Node.js available on PATH. Run `uv run python -m pyright --version` to
+verify the checker installation, then `uv run pyright` and `uv run pytest tests/`. The integration
+suite exercises real Pyright and BioCypher; missing dependencies are setup failures,
+not skipped acceptance checks. The locked Pyright wheel bundles its JavaScript
+checker. Runtime downloads may be needed if Node is missing or its bundled checker
+is explicitly overridden.
 
-## Agent interface
-
-The `biotope-croissant` skill guides agents through the same CLI workflow.
-`init --agents-md` optionally writes project guidance for other agents. See
-[Plugin and skills](plugin.md). Python integrations can use the metadata and
-mapping functions in `biotope.croissant.api`.
-
-Downstream graph modules remain in the repository but are unsupported and
-detached from CLI registration. They are not part of this integration's tests.
+The current local baker override expects `../croissant-baker`; replacing that
+with the published dependency remains the shared release gate.

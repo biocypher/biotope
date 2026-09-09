@@ -26,25 +26,15 @@ def test_init_default_layout(tmp_path: Path) -> None:
     assert "biotope get" not in result.output
     assert "biotope add" in result.output
     root = tmp_path / "myproj"
-    assert (root / ".biotope" / "datasets").is_dir()
-    assert (root / ".biotope" / "workflows").is_dir()
-    assert (root / "data").is_dir()
-    assert (root / "mappings").is_dir()
+    for directory in ("data", "mappings", "graph", ".biotope/datasets", ".biotope/workflows"):
+        assert not (root / directory).exists()
     assert (root / ".biotope" / "config.yaml").is_file()
     assert (root / ".biotope" / "project.yaml").is_file()
     # The agent contract lives in the biotope plugin skills, not a
     # per-project root AGENTS.md, so init must NOT emit one by default.
     assert not (root / "AGENTS.md").exists()
     assert (root / ".gitignore").is_file()
-    assert (root / "pyproject.toml").is_file()
-    pyproject = (root / "pyproject.toml").read_text()
-    assert 'name = "myproj"' in pyproject
-    assert "biotope>=" in pyproject
-    assert "biocypher>=0.15.0" in pyproject
-    assert "requires-python" in pyproject
-    assert 'build-backend = "hatchling.build"' in pyproject
-    assert "[tool.hatch.build.targets.wheel]" in pyproject
-    assert "bypass-selection = true" in pyproject
+    assert not (root / "pyproject.toml").exists()
     config = yaml.safe_load((root / ".biotope" / "config.yaml").read_text())
     assert config["croissant_schema_version"] == "1.1"
     assert config["annotation_validation"]["enabled"] is True

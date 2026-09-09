@@ -1,15 +1,15 @@
 """Typed Croissant 1.1 metadata models.
 
 Ported and generalised from open-targets/open_targets/data/metadata/model.py.
-This layer is the *only* one that touches raw Croissant JSON-LD. Every higher
-layer consumes the typed model.
+These models support metadata inspection. Typed source generation separately
+retains raw Croissant descriptors and extension fields in biotope.graph.sources.
 """
 
 from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.request import urlopen
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
@@ -94,12 +94,12 @@ SCALAR_KIND_MAP: dict[str, FieldKind] = {
 
 
 class ConfiguredBaseModel(BaseModel):
-    """Base model with camelCase ↔ snake_case alias generation."""
+    """Metadata model with camelCase aliases and retained extension attributes."""
 
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
-        extra="ignore",
+        extra="allow",
         frozen=True,
     )
 
@@ -127,6 +127,7 @@ class CroissantFieldSource(ConfiguredBaseModel):
 class CroissantFieldModel(ConfiguredBaseModel):
     """A field within a Croissant record set."""
 
+    id: str | None = Field(default=None, alias=Key.ID.value)
     # Baker can omit a display name for an unnamed source column.
     name: str = Field(validation_alias=AliasChoices("name", "@id"))
     description: str | None = None
@@ -212,6 +213,8 @@ class CroissantFileObjectModel(ConfiguredBaseModel):
 class CroissantDatasetModel(ConfiguredBaseModel):
     """Top-level Croissant dataset."""
 
+    id: str | None = Field(default=None, alias=Key.ID.value)
+    context: Any = Field(default=None, alias="@context")
     name: str | None = None
     description: str | None = None
     record_set: list[CroissantRecordSetModel] = Field(default_factory=list)

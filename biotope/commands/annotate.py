@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from biotope.graph.sources import CURATION, write_text_atomic
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     SCAFFOLD_FILENAME,
@@ -32,7 +33,7 @@ from biotope.metadata import (
 from biotope.metadata import (
     merge_metadata as shared_merge_metadata,
 )
-from biotope.utils import find_biotope_root
+from biotope.utils import find_biotope_root, stage_git_changes
 
 
 def get_standard_context() -> dict:
@@ -110,11 +111,7 @@ def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
 
     updated = _apply_scaffold(console, scaffold_path, target, overrides, biotope_root)
     if updated:
-        try:
-            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-            console.print("\n✅ Staged metadata changes in Git")
-        except subprocess.CalledProcessError as exc:
-            console.print(f"⚠️  Warning: Could not stage changes in Git: {exc}")
+        stage_git_changes(biotope_root)
 
 
 @annotate.command()
@@ -822,19 +819,12 @@ def edit(
     output_path = click.prompt("Output file path", default=default_filename)
 
     metadata = normalize_metadata_shape(metadata)
-    with open(output_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    _save_annotations(Path(output_path), metadata)
 
     # Stage the changes in Git if we're in a biotope project
-    try:
-        biotope_root = find_biotope_root()
-        if biotope_root:
-            import subprocess
-
-            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-            console.print("✅ Staged changes in Git")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass  # Not in a biotope project or Git not available
+    biotope_root = find_biotope_root()
+    if biotope_root:
+        stage_git_changes(biotope_root)
 
     # Final success message with rich formatting
     console.print()
@@ -1093,19 +1083,11 @@ def _run_interactive_annotation(
         output_path = datasets_dir / f"{dataset_name}.jsonld"
 
     metadata = normalize_metadata_shape(metadata)
-    with open(output_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    _save_annotations(Path(output_path), metadata)
 
     # Stage the changes in Git
-    try:
-        import subprocess
-
-        subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-        console.print(f"✅ Created metadata: {output_path}")
-        console.print("✅ Staged changes in Git")
-    except subprocess.CalledProcessError as e:
-        console.print(f"✅ Created metadata: {output_path}")
-        console.print(f"⚠️  Warning: Could not stage changes in Git: {e}")
+    stage_git_changes(biotope_root)
+    console.print(f"✅ Created metadata: {output_path}")
 
 
 DATASET_ROW_FIELDS = {
@@ -1209,8 +1191,7 @@ def _apply_scaffold(
         console.print("ℹ️ Metadata unchanged")
         return False
 
-    with open(target.metadata_path, "w", encoding="utf-8") as handle:
-        json.dump(updated_metadata, handle, indent=2)
+    _save_annotations(target.metadata_path, updated_metadata)
 
     console.print(f"✅ Updated {target.metadata_path.relative_to(biotope_root)}")
     return True
@@ -1381,3 +1362,15 @@ def get_staged_files(biotope_root: Path) -> list:
         pass
 
     return staged_files
+
+
+def _save_annotations(path: Path, metadata: dict[str, Any]) -> None:
+    """Keep authored annotations visible to rebake protection."""
+    metadata.setdefault(CURATION, {})["annotation_review"] = "Edited with biotope annotate; reconcile before rebaking."
+    context = metadata.setdefault("@context", {})
+    namespace = {"biotope": "https://biocypher.org/biotope/"}
+    if isinstance(context, dict):
+        context.update(namespace)
+    elif namespace not in (context if isinstance(context, list) else []):
+        metadata["@context"] = [*context, namespace] if isinstance(context, list) else [context, namespace]
+    write_text_atomic(path, json.dumps(metadata, indent=2) + "\n")

@@ -1,8 +1,4 @@
-"""Croissant metadata models, mapping definitions and structural validation.
-
-Source-format parsing belongs to croissant-baker. Downstream graph modules are
-currently unsupported and are not imported by the metadata workflow.
-"""
+"""Croissant metadata models and inspection; typed execution lives in biotope.graph."""
 
 from biotope.croissant.spec import (
     CroissantDatasetModel,

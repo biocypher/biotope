@@ -21,8 +21,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra graph
+
+      - name: Verify graph checker installation
+        run: uv run python -m pyright --version
+
+      - name: Check typed engine
+        run: uv run pyright
 
       - name: Run tests
         run: uv run pytest tests/ -v

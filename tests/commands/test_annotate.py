@@ -220,6 +220,10 @@ def test_apply_directory_updates_dataset_and_record_sets(runner, annotated_proje
 
     assert result.exit_code == 0, result.output
     updated = json.loads(metadata_path.read_text())
+    from biotope.graph.sources import protect_curated
+
+    with pytest.raises(ValueError, match="curated"):
+        protect_curated(metadata_path)
     assert updated["description"] == "OT v3"
     assert updated["keywords"] == ["gene", "disease"]
     assert updated["recordSet"][0]["description"] == "Gene table"

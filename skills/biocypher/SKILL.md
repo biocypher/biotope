@@ -14,6 +14,11 @@ pip install "biocypher[neo4j]"   # only if using Neo4j online mode
 
 Project template: https://github.com/biocypher/project-template
 
+For a typed Biotope project, Python topology and mappings are authoritative.
+Use the biotope-croissant skill for its file build; do not edit generated
+`schema_config.yaml` as a second schema or add a separate adapter engine. The
+standalone workflow below applies to separately managed BioCypher projects.
+
 ## Workflow
 
 ```

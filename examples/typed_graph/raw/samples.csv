@@ -1,0 +1,4 @@
+sample_id,person_id,tissue,score
+s1,p1,liver,1.5
+s2,p1,blood,2.5
+s3,p_missing,lung,3.5

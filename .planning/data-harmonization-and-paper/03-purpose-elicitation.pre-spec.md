@@ -22,14 +22,14 @@ The consulting brief supplies choices beyond entity lists: metadata/raw-data acc
 
 Explore a compact, versioned **purpose record** with an adaptive interview around it. Possible contents are:
 
-| Area | What shared understanding should capture |
-| --- | --- |
-| Research use | The decision/comparison, intended user, deliverable, and boundaries of the task |
-| Questions | Concrete questions and examples of useful answers; priorities and dependencies |
-| Scientific scope | Population, tissue, observation unit, source scope, inclusion/comparison/aggregation rules where relevant |
-| Evidence and uncertainty | Supporting sources, known limitations, disagreements, assumptions, and choices awaiting the researcher |
-| Acceptance | Observable checks, review criteria, critical errors, and what would justify an evidence-limited answer |
-| Revision | What changed, who settled it, why, and which questions, mappings, or checks are affected |
+| Area                     | What shared understanding should capture                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Research use             | The decision/comparison, intended user, deliverable, and boundaries of the task                           |
+| Questions                | Concrete questions and examples of useful answers; priorities and dependencies                            |
+| Scientific scope         | Population, tissue, observation unit, source scope, inclusion/comparison/aggregation rules where relevant |
+| Evidence and uncertainty | Supporting sources, known limitations, disagreements, assumptions, and choices awaiting the researcher    |
+| Acceptance               | Observable checks, review criteria, critical errors, and what would justify an evidence-limited answer    |
+| Revision                 | What changed, who settled it, why, and which questions, mappings, or checks are affected                  |
 
 These are candidate areas, not mandatory fields. Separate inspectable facts from researcher decisions. Ask in dependency order, use small source examples, stop when the task is actionable, and reopen relevant choices after new evidence or needs. Define those rules during detailed design.
 
@@ -40,6 +40,13 @@ Keep scientific requirements distinguishable from topology and bindings. The [ty
 The draft's ordinary-agent/Biotope comparison tests the whole workflow; replaying elicited records into an identical builder could help isolate elicitation. Preserve records, source references, revisions, and role-specific effort information to enable such experiments. The full experiment ladder and sample counts remain tentative.
 
 Keep researcher-visible construction questions separate from hidden evaluation answers. Candidate outcomes are deliverable correctness/usefulness, justified evidence limitations, researcher/specialist effort, and successful revisions without regressions. Question count, agreement, and graph validity alone do not establish value.
+
+## Handoff from the typed engine
+
+Part 2 currently binds requirements by `entity:<exact intent text>` and
+`relation:<exact intent text>`. Rewording a requirement requires updating the
+binding; checks report the mismatch. Give requirements stable IDs in the purpose
+record and adapt these bindings there, keeping one requirement-reference scheme.
 
 ## Questions for the detailed specification
 

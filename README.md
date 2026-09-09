@@ -1,6 +1,6 @@
 # biotope
 
-Describe local data with croissant-baker, define a purpose and target schema, and author validated mappings with version-controlled metadata. This iteration stops at mapping; graph execution is unsupported. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
+Describe local data with croissant-baker, define a purpose and target schema, and maintain typed Python mappings and project-owned graph pipelines with version-controlled metadata. Biotope validates selected builds and writes BioCypher files. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
 
 |         |                                                                                                                                                                                                                                                                                                                                              |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -23,13 +23,13 @@ Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope]
 
 ## Use it
 
-The plugin ships a mapping skill and separate downstream skills:
+The plugin ships a graph-authoring skill and separate database skills:
 
-| Skill                 | Use when                                                        |
-| --------------------- | --------------------------------------------------------------- |
-| **biotope-croissant** | Describing data and authoring mappings (`init` → `add` → `map`) |
-| **biocypher**         | Tuning export backends, schema config, Neo4j import             |
-| **biochatter**        | Natural-language queries over a loaded graph                    |
+| Skill                 | Use when                                                            |
+| --------------------- | ------------------------------------------------------------------- |
+| **biotope-croissant** | Curated sources, Python mappings and selected BioCypher file builds |
+| **biocypher**         | Tuning export backends, schema config, Neo4j import                 |
+| **biochatter**        | Natural-language queries over a loaded graph                        |
 
 You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-croissant`) or just ask:
 
@@ -46,7 +46,7 @@ For this unreleased integration, use both local checkouts in the same environmen
 
 ```bash
 uv venv .venv
-uv pip install --python .venv/bin/python -e ../croissant-baker -e .
+uv pip install --python .venv/bin/python -e ../croissant-baker -e '.[graph]'
 source .venv/bin/activate
 ```
 
@@ -58,26 +58,34 @@ pipx install biotope      # global install
 uv add biotope              # inside a uv-managed project
 ```
 
-Typical flow: `init` → `add` → `map inspect/scaffold/preview`. Command overview: [docs/commands.md](docs/commands.md).
+Graph authoring starts with `biotope graph scaffold`, which creates `graph/`.
+Initialization and baking do not create or execute a graph.
 
-**Worked example:** [tutorial](docs/tutorial.md) — local data to a gene mapping, step by step in the terminal.
+Typical flow: `init` → `add` → `graph scaffold` → `source generate` → Python authoring → `graph check` → `graph build`. Command overview: [docs/commands.md](docs/commands.md).
+
+**Worked example:** [tutorial](docs/tutorial.md) — a two-source join with typed mappings, provenance and BioCypher output.
 
 ## For developers
 
-biotope is a CLI for the [BioCypher](https://biocypher.org/) ecosystem: Croissant metadata → purpose and mapping definitions, with git-like metadata version control.
+biotope is a CLI for the [BioCypher](https://biocypher.org/) ecosystem: curated Croissant → typed Python graph projects, with metadata version control.
 
-| Layer                | Module                | Role                                                                         |
-| -------------------- | --------------------- | ---------------------------------------------------------------------------- |
-| Project & VCS        | `biotope.commands.*`  | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` — metadata workflow |
-| Metadata and mapping | `biotope.croissant.*` | Inspection, mapping definitions, structural checks and alignment suggestions |
+| Layer           | Module                | Role                                                                         |
+| --------------- | --------------------- | ---------------------------------------------------------------------------- |
+| Project & VCS   | `biotope.commands.*`  | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` — metadata workflow |
+| Source metadata | `biotope.croissant.*` | Metadata models and payload-free inspection                                  |
 
-Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.croissant.api` exposes pure functions; CLI verbs are thin wrappers. See [how biotope works](https://biocypher.github.io/biotope/architecture/) and the [command overview](https://biocypher.github.io/biotope/commands/).
+Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.graph` exposes the typed contracts; CLI verbs wrap generation, checking and explicit execution. See [how biotope works](https://biocypher.github.io/biotope/architecture/) and the [command overview](https://biocypher.github.io/biotope/commands/).
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra graph
+node --version
+uv run python -m pyright --version
+uv run pyright
 uv run pytest
 uv run ruff check biotope tests
 ```
+
+Typed authoring, topology organization and modular construction were informed by Paul Ka Po To's `kg-build-system`. This implementation uses ordinary Python and does not copy, vendor or depend on that engine.
 
 ## Copyright
 

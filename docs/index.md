@@ -1,7 +1,7 @@
 # biotope
 
 Describe local data, define a purpose and target schema, and author mappings
-with version-controlled metadata. This iteration stops at mapping.
+and selected graph pipelines in typed Python, with version-controlled metadata.
 
 !!! warning "Pre-alpha"
 
@@ -18,11 +18,13 @@ Install the [biotope plugin](plugin.md), then invoke `/biotope-croissant` or ask
 The agent asks what the graph should answer and runs the pipeline:
 
 ```text
-init → add → map inspect/scaffold/preview
+init → add → graph scaffold → source generate → Python authoring → graph check → graph build
 ```
 
-Semantic choices stay with you or your agent. Biotope inspects, validates, and
-summarizes mapping definitions; it never guesses the best record set or field mapping.
+Graph authoring starts with `biotope graph scaffold`, which creates `graph/`.
+Initialization and baking do not create or execute a graph.
+
+Semantic choices stay with you or your agent. Biotope generates source types, checks definitions, and validates graph output; it never guesses the best record set or field mapping.
 
 ## Use the CLI
 
@@ -56,7 +58,7 @@ uv add "biotope>=0.8.0"
 
 Next:
 
-- [Map a small local gene table](tutorial.md).
+- [Build the small typed example](tutorial.md).
 - Use the [command overview](commands.md) for manual work and scripts.
 - Write mappings by hand with the [mapping reference](mapping.md).
 - Read [how biotope works](architecture.md) for project layout and data flow.

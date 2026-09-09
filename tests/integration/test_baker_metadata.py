@@ -12,9 +12,9 @@ import tifffile
 from PIL import Image
 
 from biotope.commands.add import _add_file, _bake_directory
-from biotope.commands.map_wizard import _pick_record_set
-from biotope.croissant.mapping import Mapping, inspect_dataset, preview_mapping
+from biotope.croissant.inspector import inspect_dataset
 from biotope.croissant.spec import load_from_path
+from biotope.graph.sources import generate_source
 
 
 def _workbook(path, column="gene_id"):
@@ -47,7 +47,7 @@ def test_single_workbook_uses_full_assembly_and_only_selected_file(tmp_path):
     assert all(f["source"]["fileObject"]["@id"] == objects[0]["@id"] for rs in data["recordSet"] for f in rs["field"])
 
 
-def test_directory_workbook_ids_disambiguate_mapping_and_wizard(tmp_path, monkeypatch):
+def test_directory_workbook_ids_disambiguate_source_contracts(tmp_path):
     raw = tmp_path / "raw"
     raw.mkdir()
     _workbook(raw / "a.xlsx", "a_id")
@@ -63,26 +63,12 @@ def test_directory_workbook_ids_disambiguate_mapping_and_wizard(tmp_path, monkey
         assert selected is not None
         assert selected.id == record_set.id
         assert selected.source in {"a.xlsx", "b.xlsx"}
-        mapping = Mapping.model_validate(
-            {
-                "croissant": "metadata.jsonld",
-                "entities": {
-                    "gene": {"record_set": record_set.id, "id": record_set.field[0].name},
-                },
-            }
-        )
-        assert preview_mapping(mapping, dataset).findings == []
-    ambiguous = Mapping.model_validate(
-        {
-            "croissant": "metadata.jsonld",
-            "entities": {
-                "gene": {"record_set": "Measurements", "id": "a_id"},
-            },
-        }
-    )
-    assert any("ambiguous" in f.message and f.severity == "error" for f in preview_mapping(ambiguous, dataset).findings)
-    monkeypatch.setattr("biotope.commands.map_wizard.IntPrompt.ask", lambda *a, **k: 2)
-    assert _pick_record_set(inspection, None) == inspection.record_sets[1].id
+    assert inspection.by_name("Measurements") is None
+    manifest = tmp_path / ".biotope/datasets/raw.jsonld"
+    generate_source(manifest, tmp_path / "schema.py")
+    code = (tmp_path / "schema.py").read_text()
+    assert all(repr(rs.id) in code for rs in repeated)
+    assert "class Measurements:" in code and "class Measurements_2:" in code
 
 
 def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
@@ -109,12 +95,12 @@ def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
     objects = [d for d in result["distribution"] if d["@type"] == "cr:FileObject"]
     assert len(objects) == 6
     assert next(d for d in objects if d["name"] == "table.csv.gz")["encodingFormat"] == ["text/csv", "application/gzip"]
-    output = capsys.readouterr().out
-    assert "Scanned 6 file(s): 4 described, 2 not described." in output
-    assert "bad.soft" in output and "extraction failed" in output
-    assert "archive.zarr.zip" in output and "archive" in output
-    assert "Partial parse" in output
-    assert "completeness" in output.lower()
+    output = capsys.readouterr()
+    assert "6 scanned · 4 described · 2 not described" in output.err
+    assert "bad.soft" in output.err and "Extraction failed" in output.err
+    assert "archive.zarr.zip" in output.err and "archive" in output.err
+    assert "parsed as far as it goes" in output.err
+    assert "Records from" not in output.out
 
 
 def test_nested_parquet_json_and_single_ome_preserve_baker_structure(tmp_path):
@@ -152,13 +138,5 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     dataset = load_from_path(manifest)
     inspection = inspect_dataset(dataset)
     assert {f.name for f in inspection.record_sets[0].fields} == {"indexed/", "gene_id", "score"}
-    mapping = Mapping.model_validate(
-        {
-            "croissant": str(manifest),
-            "entities": {"gene": {"record_set": "indexed", "id": "gene_id", "properties": {"score": "score"}}},
-        }
-    )
-    checked = preview_mapping(mapping, dataset)
-    assert checked.findings == []
-    assert checked.unresolved_slots == []
-    assert checked.entities[0].properties["score"] == "float"
+    generate_source(manifest, tmp_path / "schema.py")
+    assert "indexed/" in (tmp_path / "schema.py").read_text()

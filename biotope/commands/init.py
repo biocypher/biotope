@@ -1,6 +1,6 @@
 """``biotope init`` — scaffold a new biotope project.
 
-Default behavior is **pure scaffold**: create the directory layout, write an
+Default behavior is **pure scaffold**: write the project configuration and an
 empty ``project.yaml``, run ``git init``. No content questions. The agent (or
 the user via ``biotope map``) fills in the competence questions afterwards.
 
@@ -26,7 +26,6 @@ import click
 import yaml
 from rich.console import Console
 
-from biotope._version import __version__
 from biotope.project_model import Project, resolve_project_path
 
 
@@ -39,46 +38,6 @@ PURPOSE_PROMPT = (
 console = Console()
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
-
-
-def _installed_biotope_version() -> str:
-    """Version of the running biotope install (from package metadata)."""
-    return __version__
-
-
-def _emit_pyproject(name: str, purpose: str) -> str:
-    """Build the starter ``pyproject.toml`` for a new biotope project.
-
-    Floor-only pin on biotope (per project policy): the project resolves to
-    whatever biotope is on the index at install time, so projects stay
-    current without explicit bumps. The user can tighten to ``==`` later if
-    they want reproducibility.
-    """
-    biotope_floor = _installed_biotope_version()
-    desc = (purpose or f"Biotope knowledge-graph project: {name}").replace('"', '\\"')
-    # Hatchling as the build backend: it doesn't auto-scan the source tree
-    # for packages, so `data/` and `mappings/` won't be mistaken for Python
-    # distributions (which is what setuptools' flat-layout discovery does).
-    # `only-include = []` produces an empty wheel — biotope projects are
-    # workspaces that declare deps, not Python distributions that ship code.
-    return (
-        f"[project]\n"
-        f'name = "{name}"\n'
-        f'version = "0.1.0"\n'
-        f'description = "{desc}"\n'
-        f'requires-python = ">=3.10,<3.13"\n'
-        f"dependencies = [\n"
-        f'    "biotope>={biotope_floor}",\n'
-        f'    "biocypher>=0.15.0",\n'
-        f"]\n"
-        f"\n"
-        f"[build-system]\n"
-        f'requires = ["hatchling"]\n'
-        f'build-backend = "hatchling.build"\n'
-        f"\n"
-        f"[tool.hatch.build.targets.wheel]\n"
-        f"bypass-selection = true\n"
-    )
 
 
 DEFAULT_BIOTOPE_CONFIG: dict = {
@@ -167,8 +126,9 @@ def init(
     """Scaffold a new biotope project.
 
     Default invocation: ``biotope init my-project``. Creates ``my-project/`` with
-    ``.biotope/``, ``data/``, ``mappings/``, and an empty ``project.yaml``. Runs
-    ``git init`` unless ``--no-git`` is set.
+    configuration in ``.biotope/`` and starter project files. Data, mapping and
+    metadata directories are created only when needed. Runs ``git init`` unless
+    ``--no-git`` is set.
     """
     if name is None:
         name = click.prompt("Project name", type=str)
@@ -190,10 +150,7 @@ def init(
         raise click.Abort
 
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / ".biotope" / "datasets").mkdir(parents=True, exist_ok=True)
-    (project_dir / ".biotope" / "workflows").mkdir(parents=True, exist_ok=True)
-    (project_dir / "data").mkdir(parents=True, exist_ok=True)
-    (project_dir / "mappings").mkdir(exist_ok=True)
+    (project_dir / ".biotope").mkdir(exist_ok=True)
 
     config_path = project_dir / ".biotope" / "config.yaml"
     config_path.write_text(yaml.safe_dump(DEFAULT_BIOTOPE_CONFIG, sort_keys=False))
@@ -212,17 +169,6 @@ def init(
     if not gitignore.exists():
         gitignore.write_text("data/\n__pycache__/\n*.pyc\n.venv/\n")
 
-    # A starter pyproject so the project is self-contained: each biotope
-    # project owns its dependency set and can be reproduced with
-    # `uv sync` / `pip install -e .` without relying on whichever env
-    # happened to run `biotope init`. Skip if the user already has one
-    # (e.g. they're initialising inside an existing Python project).
-    pyproject_path = project_dir / "pyproject.toml"
-    pyproject_was_written = False
-    if not pyproject_path.exists():
-        pyproject_path.write_text(_emit_pyproject(name, purpose))
-        pyproject_was_written = True
-
     if not no_git:
         try:
             subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
@@ -232,8 +178,6 @@ def init(
             scaffold_paths = [".gitignore", ".biotope/"]
             if agents_md:
                 scaffold_paths.append("AGENTS.md")
-            if pyproject_was_written:
-                scaffold_paths.append("pyproject.toml")
             if visible:
                 scaffold_paths.append(project_yaml_path.relative_to(project_dir).as_posix())
             try:
@@ -243,7 +187,7 @@ def init(
             else:
                 # Commit the scaffold so `biotope status` starts clean — otherwise
                 # init artefacts sit in the index and confuse new users into thinking
-                # they themselves staged config.yaml, pyproject.toml, etc. Falls back to
+                # they themselves staged config.yaml and project.yaml Falls back to
                 # leaving the scaffold staged if git identity isn't configured.
                 try:
                     subprocess.run(
@@ -273,15 +217,6 @@ def init(
     console.print(f"   project.yaml: [dim]{project_yaml_path.relative_to(project_dir)}[/dim]")
     if purpose:
         console.print(f"   purpose: [dim]{purpose}[/dim]")
-    if pyproject_was_written:
-        cd_clause = "" if in_place else f"[bold]cd {project_dir.name}[/bold] and "
-        console.print(
-            f"   Next: {cd_clause}install deps:\n"
-            "         [bold]uv sync[/bold]   (or: pip install -e .)\n"
-            "         then [bold]biotope add <data>[/bold]"
-            " to describe local data."
-        )
-    else:
-        console.print(
-            "   Next: describe local data with [bold]biotope add <data>[/bold], then [bold]biotope map[/bold].",
-        )
+    console.print(
+        "   Next: describe local data with [bold]biotope add <data>[/bold], then [bold]biotope map[/bold].",
+    )

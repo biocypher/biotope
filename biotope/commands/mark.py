@@ -1,11 +1,4 @@
-"""``biotope mark`` — set a dataset's biotope:status (and optional provenance).
-
-The happy path is automatic: `biotope add` classifies raw vs. processed from
-the baked Croissant, and the map wizard flips to `mapped` on resolved save.
-`mark` is the explicit override — useful when the heuristic is wrong, when an
-agent finishes processing a raw input without going through the wizard, or
-when status needs to be rolled back after a de-resolve.
-"""
+"""Change coarse dataset workflow state explicitly, without certifying a graph build."""
 
 from __future__ import annotations
 

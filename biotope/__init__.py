@@ -1,6 +1,6 @@
-"""Provide top level symbols."""
+"""Biotope package version; import CLI and graph APIs explicitly."""
 
 from biotope._version import __version__
-from biotope.cli import cli
 
-__all__ = ["__version__", "cli"]
+
+__all__ = ["__version__"]
