@@ -24,6 +24,7 @@ from biotope.graph.reports import (
     Phase,
     PythonCheckFailed,
 )
+from biotope.graph.signatures import MappingContract, SignatureError, contract
 from biotope.graph.sources import UnknownValue, check_generated, contract_digests, digest, read_metadata
 from biotope.project_model import Project, find_project
 
@@ -150,8 +151,8 @@ def check_pipeline(
         report.checks.append(CheckResult(name, "failed" if failed else "passed"))
         return value
 
-    def error(code: str, subject: str, message: str, path: Path | None = None) -> None:
-        add_finding(Finding(code, "error", subject, message, Location(str(path)) if path else None))
+    def error(code: str, subject: str, message: str, path: Path | None = None, line: int | None = None) -> None:
+        add_finding(Finding(code, "error", subject, message, Location(str(path), line) if path else None))
 
     def warning(code: str, subject: str, message: str) -> None:
         add_finding(Finding(code, "warning", subject, message))
@@ -238,50 +239,62 @@ def check_pipeline(
 
     stage("sources", sources)
 
+    resolved: dict[str, MappingContract] = {}
+
     def mappings() -> None:
         seen: set[str] = set()
-        for mapping in pipeline.mappings:
+        graph = (*pipeline.topology.nodes, *pipeline.topology.edges)
+        for entry in pipeline.mappings:
             try:
-                if not mapping.name.strip() or mapping.name in seen:
-                    raise ValueError(f"Empty or duplicate mapping identity {mapping.name!r}")
-                seen.add(mapping.name)
-                params = list(inspect.signature(mapping.function).parameters.values())
-                annotations = get_type_hints(mapping.function)
-                if len(params) != len(mapping.inputs) or any(
-                    annotations.get(p.name) is not expected for p, expected in zip(params, mapping.inputs)
-                ):
-                    raise ValueError("Function annotations must match registered input contracts")
-                if "return" not in annotations or not mapping.outputs:
-                    raise ValueError("Annotate the iterable return type and declare output contracts")
-                report.data["mappings"][mapping.name] = {
-                    "inputs": [t.__name__ for t in mapping.inputs],
-                    "outputs": [t.__name__ for t in mapping.outputs],
-                    "concepts": [
-                        getattr(t, "schema_id")
-                        for t in mapping.outputs
-                        if t in (*pipeline.topology.nodes, *pipeline.topology.edges)
-                    ],
-                    "requirements": mapping.requirements,
-                    "evidence": mapping.evidence,
+                if not entry.name.strip() or entry.name in seen:
+                    raise ValueError(f"Empty or duplicate mapping identity {entry.name!r}")
+                seen.add(entry.name)
+                derived = contract(entry)
+                # A class declaring graph identity must be part of the selected topology;
+                # an output without one is an intermediate and needs no registration.
+                absent = [
+                    cls.__name__
+                    for cls in derived.outputs
+                    if getattr(cls, "schema_id", None) is not None and cls not in graph
+                ]
+                if absent:
+                    raise SignatureError(
+                        entry.name,
+                        (("return", "register these graph outputs in the topology: " + ", ".join(absent)),),
+                        derived.path,
+                        derived.line,
+                    )
+                resolved[entry.name] = derived
+                report.data["mappings"][entry.name] = {
+                    "inputs": {p.name: [t.__name__ for t in p.accepts] for p in derived.parameters},
+                    "outputs": [t.__name__ for t in derived.outputs],
+                    "concepts": [getattr(t, "schema_id") for t in derived.outputs if t in graph],
+                    "requirements": entry.requirements,
+                    "evidence": entry.evidence,
                 }
+            except SignatureError as exc:
+                for subject, message in exc.problems:
+                    where = Path(exc.path) if exc.path else None
+                    error("mapping.contract", entry.name, f"{subject}: {message}", where, exc.line)
             except Exception as exc:
-                error("mapping.contract", mapping.name, str(exc))
+                error("mapping.contract", entry.name, str(exc))
 
     stage("mappings", mappings)
 
     def declarations() -> None:
-        for item in (
-            *pipeline.topology.nodes,
-            *pipeline.topology.edges,
-            pipeline.run,
-            *(m.function for m in pipeline.mappings),
-        ):
+        for item in (*pipeline.topology.nodes, *pipeline.topology.edges, pipeline.run):
             try:
                 path = Path(inspect.getfile(item)).resolve()
                 if path not in declared:
                     error("code.declaration", str(item), "Include its authored module in code_paths", path)
             except (TypeError, OSError) as exc:
                 error("code.declaration", str(item), str(exc))
+        for name, derived in resolved.items():
+            authored = Path(derived.path).resolve() if derived.path else None
+            if authored is None:
+                error("code.declaration", name, "Could not locate this mapping's authored module")
+            elif authored not in declared:
+                error("code.declaration", name, "Include its authored module in code_paths", authored)
 
     stage("declarations", declarations, blocked="Code paths are invalid" if files is None else "")
 

@@ -3,7 +3,7 @@
 from biotope.graph import Pipeline, RunContext, SourceRecord
 
 from ..mappings import MAPPINGS
-from ..mappings.samples import IDENTITY_SCOPE, MAPPING, SCORE_MULTIPLIER
+from ..mappings.samples import IDENTITY_SCOPE, MAPPING, NORMALISE, SCORE_MULTIPLIER
 from ..paths import GRAPH_ROOT, PROJECT_ROOT
 from ..sources import PEOPLE, SAMPLES, SOURCES
 from ..sources.study.people.loader import load as load_people
@@ -20,12 +20,14 @@ def build(context: RunContext) -> None:
         people[person.value.person_id] = person
     matched: set[str] = set()
     for sample in context.load(SAMPLES, load_samples, PROJECT_ROOT / "raw/samples.csv"):
-        person = people.get(sample.value.person_id)
-        if person is None:
-            context.exclude("unmatched_sample", sample.evidence)
-            continue
-        matched.add(person.value.person_id)
-        context.map(MAPPING, sample, person)
+        # Normalization first; the intermediate keeps its type through the join.
+        for measurement in context.apply(NORMALISE, sample):
+            person = people.get(measurement.value.person_id)
+            if person is None:
+                context.exclude("unmatched_sample", measurement.evidence)
+                continue
+            matched.add(person.value.person_id)
+            context.map(MAPPING, measurement, person)
     for key, person in people.items():
         if key not in matched:
             context.exclude("unused_person", person.evidence)

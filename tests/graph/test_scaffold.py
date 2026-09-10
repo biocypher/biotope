@@ -32,7 +32,7 @@ def test_scaffold_is_independent_import_safe_and_refuses_existing_work(tmp_path,
 from dataclasses import replace
 from biotope.graph import Topology
 from biotope.graph.check import check_pipeline
-from graph.mappings._example import MAPPING
+from graph.mappings._example import MAPPING, NORMALISE
 from graph.pipelines.build_graph import PIPELINE
 from graph.pipelines._example import map_records
 from graph.paths import GRAPH_ROOT, PROJECT_ROOT
@@ -49,7 +49,7 @@ report = check_pipeline(replace(
     name='scaffold-contracts',
     scope='Illustrative declarations only; no research graph execution',
     sources=(SOURCE,),
-    mappings=(MAPPING,),
+    mappings=(NORMALISE, MAPPING),
     topology=Topology(nodes=(Record, Collection), edges=(InCollection,)),
 ))
 assert any(f['code'] == 'topology.examples' for f in report['findings'])

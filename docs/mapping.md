@@ -190,11 +190,64 @@ such as Python's `csv`, PyArrow or h5py; Biotope provides no format readers or
 file-dispatch framework. Source-contract validation is strict and performs no
 coercion. A loader must report decoding failures with the source location.
 
-Mapping functions accept annotated source or intermediate dataclasses and return
-an iterable of typed outputs. They do not open files. They may produce several
-nodes/edges, transform properties or mint identifiers. `Mapping` registers a
-stable ID, function, input/output types, requirement references and evidence notes.
-Keep transforms beside the mapping until reuse warrants a shared module.
+A mapping's signature is its whole contract. Each parameter is an explicitly
+named `SourceRecord[...]`, so contributors travel with the value, and the return
+annotation declares what the mapping produces. `Mapping` registers a stable ID,
+that function, requirement references and evidence notes; there is no second
+input/output declaration to keep in step.
+
+```python
+def normalise_sample(sample: SourceRecord[Samples]) -> Iterator[Measurement]:
+    row = sample.value
+    yield Measurement(sample_id=row.sample_id, tissue=row.tissue.lower())
+
+
+NORMALISE = Mapping(
+    name="example:normalise-sample",
+    function=normalise_sample,
+    evidence=("Why this transformation is the right one for the purpose.",),
+)
+```
+
+Mappings do not open files. They may take several inputs, produce several
+nodes/edges, transform properties or mint identifiers. Keep transforms beside the
+mapping until reuse warrants a shared module.
+
+A mapping may go straight from a source row to topology objects; that is the
+normal shape and needs no intermediate. Split normalization from graph
+construction when the split does work: a normalizer resolves source decisions —
+units, casing, null policy, parsing — into an intermediate dataclass that
+declares no graph identity, and a graph mapping then mints namespaced identifiers
+and builds topology objects from it. An intermediate earns its place when several sources must converge on one
+shape, when a stage has to be buffered or aggregated before a join, or when one
+normalization feeds more than one graph mapping. A single source that
+maps cleanly onto its concepts should stay one mapping. Either way both steps are
+registered mappings, so both are checked and both propagate evidence.
+
+Parameters must be required and annotated: no `*args`, `**kwargs`, defaults or
+missing annotations. Input and output types are concrete dataclasses, or finite
+unions of them. Returns are parameterized `Iterable`, `Iterator`, `Generator`,
+lists or tuples, including a fixed tuple of different output types.
+`Any`, `object`, bare containers and unresolved annotations are rejected at the
+mapping boundary, where they would erase the contract.
+
+**Migrating from separate input/output tuples.** Move the declared types into the
+signature, wrap each input in `SourceRecord[...]`, and read `.value` inside:
+
+```python
+# Before
+def map_sample(sample: Samples, person: People) -> tuple[Sample, Person, FromPerson]: ...
+MAPPING = Mapping("example:sample-person", map_sample, (Samples, People), (Sample, Person, FromPerson))
+
+# After
+def map_sample(
+    sample: SourceRecord[Samples], person: SourceRecord[People]
+) -> tuple[Sample, Person, FromPerson]: ...
+MAPPING = Mapping(name="example:sample-person", function=map_sample)
+```
+
+Registries hold `tuple[MappingEntry, ...]`, a read-only view of identity,
+requirements and evidence. Import the concrete `Mapping` object to call it.
 
 `Pipeline` explicitly registers topology, sources, mappings, code paths, its
 `run` function, scope, settings, policies and optional intent (otherwise the current project intent is used). Its requirement
@@ -204,16 +257,27 @@ A required item must have a binding or a stated deferral; checking does not
 establish scientific purpose coverage. Rewording a requirement currently requires
 updating its binding key. Stable requirement IDs belong to the planned purpose-record work.
 
-In a pipeline, `context.load` validates loaded records; `context.map` calls a
-registered mapping and collects graph outputs. `context.apply` returns outputs
-with the combined evidence when further preparation is needed. Ordinary Python
-owns joins, indexes, aggregation and resource lifetimes. State the inputs, keys,
-cardinality, unmatched policy and output grain. Use `context.exclude` to report
-an exclusion under a declared policy. The run report aggregates counts per policy
-and keeps at most ten evidence references per policy, with an explicit truncation flag.
+In a pipeline, `context.load` validates loaded records. `context.apply(mapping,
+...)` checks the call against the mapping's signature and returns precisely typed
+`SourceRecord` outputs for further preparation. `context.map(mapping, ...)` makes
+the same checks and collects graph objects; it accepts only mappings whose
+outputs declare a `schema_id`, so passing an intermediate-producing mapping fails
+static checking. Both forward the original records, so a wrong record type,
+swapped inputs, a missing argument or an unknown keyword is an error at the call
+site, before any data is read.
+
+Ordinary Python owns joins, indexes, aggregation and resource lifetimes. When a
+stage has to be buffered, buffer the typed intermediate itself — a
+`list[SourceRecord[Measurement]]` keeps its element type, so the later
+`context.map` call is still checked. State the inputs, keys, cardinality,
+unmatched policy and output grain. Use `context.exclude` to report an exclusion
+under a declared policy. The run report aggregates counts per policy and keeps at
+most ten evidence references per policy, with an explicit truncation flag.
 Keep a project-owned contributor artifact when full exclusion details are needed.
-Direct `context.emit` is available for project-authored preparation; supply its
-mapping identity and all contributors.
+
+There is no direct emission API: every graph object reaches the graph through a
+registered mapping, so nothing enters unchecked. Aggregations produce a typed
+intermediate record and pass it through a mapping of their own.
 
 The example holds a people index in memory and streams samples through a
 many-to-one join. Biotope retains emitted objects, IDs and contributor references
@@ -295,8 +359,8 @@ Reproducibility still depends on the project's external state and code policies.
 locations. Each output receives the inputs of the mapping call that produced it,
 including both sides of a join. This does not mean every input determined every
 property: a sample produced by a sample/person mapping also references the person
-row. Identical outputs combine these references. Use smaller mappings or explicit
-`context.emit` evidence where narrower attribution matters. Aggregates may reference
+row. Identical outputs combine these references. Use smaller mappings where
+narrower attribution matters. Aggregates may reference
 a project-maintained contributor artifact; Biotope does not infer field-level lineage.
 
 `schema_config.yaml`, `topology.json` and the minimal local ontology are derived

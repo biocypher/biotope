@@ -39,8 +39,8 @@ Generated `RECORDS` holds that package's single record class, excluding nested
 field classes; `SourceRow` aliases it for loader annotations. `SOURCE.records`
 defaults to `RECORDS`. The manifest's `CONTRACTS` inventory is a contract listing,
 not a request to load every record set. Choose participating contracts in
-`SOURCES` and concrete input classes in each `Mapping.inputs`. Do not replace
-typed inputs with `Any`.
+`SOURCES` and concrete record classes in each mapping's parameter annotations.
+Do not replace typed inputs with `Any`.
 
 ## Source and topology contracts
 
@@ -79,10 +79,41 @@ Other property shapes need an explicit project representation.
 
 ## Mappings and composition
 
-`Mapping(name, function, inputs, outputs, requirements=(), evidence=())` registers
-an annotated function returning an iterable of typed objects. Inputs and outputs
-are tuples of classes. Functions may take several inputs and emit several
-outputs; keep scientific rationale and evidence near the code.
+`Mapping(name=..., function=..., requirements=(), evidence=())` registers an
+authored function whose **signature is the whole contract**. There is no separate
+`inputs`/`outputs` declaration to keep in step:
+
+```python
+def normalise_sample(sample: SourceRecord[Samples]) -> Iterator[Measurement]:
+    row = sample.value
+    yield Measurement(sample_id=row.sample_id, tissue=row.tissue.lower())
+
+
+NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, evidence=("Rationale.",))
+```
+
+Every parameter is an explicitly named `SourceRecord[...]` so contributors travel
+with the value; read the payload through `.value`. Parameters must be required and
+annotated — no `*args`, `**kwargs`, defaults or missing annotations. Input and
+output types are concrete dataclasses or finite unions of them. Returns are
+parameterized `Iterable`, `Iterator`, `Generator`, lists or tuples, including a
+fixed tuple of several output types. `Any`, `object`, bare containers and
+unresolved annotations are rejected at the mapping boundary.
+
+A mapping may take a source row and return topology objects directly; prefer that
+when it reads clearly. Separate the two jobs when the separation does work: a
+**normalizer** resolves source decisions (units, casing, null policy, parsing)
+into an intermediate dataclass that declares no `schema_id`, and a **graph
+mapping** then mints namespaced identifiers and builds topology objects from it.
+An intermediate earns its place when several sources must converge on one
+shape, when a stage has to be buffered or aggregated before a join, or when one
+normalization feeds more than one graph mapping. Do not add an intermediate record, function and registration for a
+single source that already maps cleanly onto its concepts. Either way both steps
+are registered mappings, so both are checked and both propagate evidence. Keep
+scientific rationale near the code.
+
+Registries are `tuple[MappingEntry, ...]`: a read-only view of identity,
+requirements and evidence. Import the concrete `Mapping` object to invoke it.
 
 `Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares
 composition. Optional fields include `settings`, `policies`, `intent`,
@@ -91,13 +122,20 @@ a `RunContext`:
 
 - `context.load(contract, loader, config)` invokes a registered loader and checks
   its returned records without coercion.
-- `context.map(mapping, *records)` applies a mapping and collects graph objects.
-- `context.apply(mapping, *records)` returns evidence-bearing outputs for further
-  project processing.
-- `context.emit(value, evidence, mapping=<id>)` collects a declared graph output
-  with explicitly supplied contributors.
+- `context.apply(mapping, *records, **keywords)` checks the call against the
+  mapping's signature and returns precisely typed evidence-bearing outputs.
+- `context.map(mapping, *records, **keywords)` makes the same checks and collects
+  graph objects. It accepts only mappings whose outputs declare a `schema_id`, so
+  handing it an intermediate-producing mapping fails static checking.
 - `context.exclude(policy_key, evidence, count=1)` records exclusions against a
   declared pipeline policy.
+
+There is no direct emission call: every graph object arrives through a registered
+mapping. A wrong record type, swapped inputs, a missing argument or an unknown
+keyword is an error at the call site, before any data is read. When a stage must
+be buffered, buffer the typed intermediate — a `list[SourceRecord[Measurement]]`
+keeps its element type, so the later `context.map` stays checked. Never buffer
+untyped mapping/record pairs and recover them with casts.
 
 Joins, filtering, aggregation and conflict resolution are project Python.
 Declare keys, cardinality, unmatched behavior and output grain. Exact duplicates

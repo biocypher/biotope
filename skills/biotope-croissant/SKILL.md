@@ -90,8 +90,13 @@ regenerating.
 Author topology, loaders, mappings and pipeline composition using the public
 `biotope.graph` contracts. Each package's loader decodes one record set with
 established format libraries; share a helper only where decoding genuinely
-repeats. Mappings transform typed values without opening files; organise them by
-source and group them only where a transformation is genuinely shared. Select
+repeats. Mappings transform typed values without opening files; a mapping's
+signature is its contract, and mapping a source row straight to topology objects
+is the normal shape. Introduce an intermediate dataclass and a separate
+normalization mapping only where it does work: several sources converging on one
+shape, buffering or aggregation before a join, or one normalization feeding
+several graph mappings. Organise them by source and group them only where a
+transformation is genuinely shared. Select
 `SOURCES` from each manifest's `CONTRACTS`, and register `TOPOLOGY` and
 `MAPPINGS` in their folders' `__init__.py` files. Complete the
 pipeline's scope, settings, policies and requirement bindings or deferrals.

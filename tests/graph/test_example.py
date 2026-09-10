@@ -59,8 +59,8 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     mapping = root / "graph/mappings/samples.py"
     good = mapping.read_text()
     mapping.write_text(
-        good.replace("sample.score", "sample.renamed_score")
-        .replace("sample.tissue.lower()", "5")
+        good.replace("row.score", "row.renamed_score")
+        .replace("row.tissue.lower()", "5")
         .replace("FromPerson(source=sample_id, target=person_id)", "FromPerson(source=person_id, target=sample_id)")
     )
     result = run(root)
@@ -130,7 +130,7 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     assert result.returncode != 0 and "score" in result.stderr
     loader = root / "graph/sources/study/samples/loader.py"
     loader.write_text(loader.read_text().replace("score=float", "new_score=float"))
-    mapping.write_text(good.replace("sample.score", "sample.new_score"))
+    mapping.write_text(good.replace("row.score", "row.new_score"))
     node = root / "graph/topology/sample/node.py"
     node.write_text(node.read_text().replace("doubled_score:", "adjusted_score:"))
     result = run(root)

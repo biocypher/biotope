@@ -40,9 +40,23 @@ extraction rules stay in the Croissant file registered by `SOURCE.metadata`.
 
 ## Author the graph
 
-The `_example` files illustrate one source row mapping to two nodes and a relation.
-They are unregistered, describe no project data, and contain no working reader.
-Adapt the patterns below to the research purpose, then remove unused examples.
+The `_example` files illustrate one source row normalized into an intermediate
+and then built into two nodes and a relation. They are unregistered, describe no
+project data, and contain no working reader. Adapt the patterns below to the
+research purpose, then remove unused examples.
+
+A mapping's signature is its whole contract. Each parameter is an explicitly
+named `SourceRecord[...]`, read through `.value`, and the return annotation
+declares what the mapping produces; there is no separate `inputs`/`outputs`
+registration. A mapping may take a source row and return topology objects
+directly; the `_example` files show the two-step form instead, because that is the
+one worth seeing written down. Keep normalization (units, casing, null policy,
+parsing, into an intermediate dataclass with no `schema_id`) separate from graph
+construction (minting namespaced identifiers and building topology objects) when
+the split does work: sources converging on one shape, buffering or aggregation
+before a join, or one normalization feeding several graph mappings. Otherwise use
+one mapping. Both forms are registered mappings, checked and carrying evidence
+forward.
 
 | Example                                                      | Adaptation                                                                                                                      |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -51,8 +65,8 @@ Adapt the patterns below to the research purpose, then remove unused examples.
 | `sources/_example/example_rows/__init__.py`                  | Review the `SOURCE` registration created by generation.                                                                         |
 | `sources/_example/__init__.py`                               | Generated `CONTRACTS` inventory; select from it rather than editing it.                                                         |
 | `topology/_example_record/`, `topology/_example_collection/` | Define node dataclasses, distinct ID NewTypes and outgoing relations with typed endpoints.                                      |
-| `mappings/_example.py`                                       | Define identity, null handling and transformations using typed source fields; keep file access in loaders.                      |
-| `pipelines/_example.py`                                      | Wire explicit loader configuration through `context.load` and `context.map`; adapt joins and policies for the selected scope.   |
+| `mappings/_example.py`                                       | Normalize typed source fields into an intermediate, then mint identities and build graph objects; keep file access in loaders.  |
+| `pipelines/_example.py`                                      | Wire loader configuration through `context.load`, `context.apply` and `context.map`; adapt joins and policies to the scope.     |
 
 Each node/relation may declare `display_name: ClassVar[str]` for a short diagram
 label, alongside its stable `schema_id`. Choose readable names such as "Sample"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, ParamSpec, Protocol, TypeVar
 
 from biotope.graph.topology import Topology
 
@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", covariant=True)
 C = TypeVar("C", contravariant=True)
+P = ParamSpec("P")
+E = TypeVar("E")
 
 
 @dataclass(frozen=True, order=True)
@@ -53,14 +55,55 @@ class SourceContract:
     records: tuple[type, ...]
 
 
+class GraphObject(Protocol):
+    """A topology declaration, recognized by the semantic identity it declares.
+
+    Structural on purpose: node and relation dataclasses already declare
+    ``schema_id`` and need no Biotope base class. Membership in the selected
+    topology stays a definition and runtime check.
+    """
+
+    schema_id: ClassVar[str]
+
+
+G = TypeVar("G", bound=GraphObject)
+
+
+class MappingEntry(Protocol):
+    """One registration's identity and report metadata, deliberately not callable.
+
+    ``Pipeline.mappings`` holds registrations with unrelated signatures, so it
+    exposes this read-only view. Import the concrete ``Mapping`` object to invoke
+    it through ``RunContext``; a registry entry offers no dispatch route.
+    """
+
+    @property
+    def name(self) -> str:
+        """Stable project-wide mapping identity."""
+        ...
+
+    @property
+    def requirements(self) -> tuple[str, ...]:
+        """Purpose requirement keys this mapping contributes to."""
+        ...
+
+    @property
+    def evidence(self) -> tuple[str, ...]:
+        """Authored rationale, kept beside the transformation it explains."""
+        ...
+
+
 @dataclass(frozen=True)
-class Mapping:
-    """An authored function and explicit input/output contracts, registered by ID."""
+class Mapping(Generic[P, E]):
+    """An authored function whose signature is the whole mapping contract.
+
+    The parameter specification and the output element type are preserved, so
+    composition is checked statically and the runtime/report contracts derive
+    from the annotations rather than from a second, independent declaration.
+    """
 
     name: str
-    function: Callable[..., Iterable[object]]
-    inputs: tuple[type, ...]
-    outputs: tuple[type, ...]
+    function: Callable[P, Iterable[E]]
     requirements: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
 
@@ -77,7 +120,7 @@ class Pipeline:
     name: str
     topology: Topology
     sources: tuple[SourceContract, ...]
-    mappings: tuple[Mapping, ...]
+    mappings: tuple[MappingEntry, ...]
     run: Callable[[RunContext], None]
     scope: str
     code_paths: tuple[str | Path, ...]

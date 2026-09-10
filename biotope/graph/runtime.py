@@ -5,15 +5,29 @@ from __future__ import annotations
 from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TypeVar
+from typing import ParamSpec, TypeVar, cast
 
-from biotope.graph.contracts import Evidence, GraphRecord, Loader, Mapping, Pipeline, SourceContract, SourceRecord
+from biotope.graph.contracts import (
+    Evidence,
+    GraphObject,
+    GraphRecord,
+    Loader,
+    Mapping,
+    MappingEntry,
+    Pipeline,
+    SourceContract,
+    SourceRecord,
+)
+from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
 from biotope.graph.topology import concept_id, identifier, validate_value
 
 
 C = TypeVar("C")
 T = TypeVar("T")
+E = TypeVar("E")
+G = TypeVar("G", bound=GraphObject)
+P = ParamSpec("P")
 
 
 @dataclass
@@ -61,43 +75,70 @@ class RunContext:
         except Exception as exc:
             raise ValueError(f"{source.name} ({source.metadata}): loader or source contract failed: {exc}") from exc
 
-    def apply(self, mapping: Mapping, *inputs: SourceRecord[object]) -> Iterator[SourceRecord[object]]:
-        """Retain all mapping-call inputs on every output, without inferring field lineage."""
-        if mapping not in self.pipeline.mappings:
-            raise ValueError(f"Unregistered mapping {mapping.name}")
-        if len(inputs) != len(mapping.inputs):
-            raise ValueError(f"{mapping.name}: expected {len(mapping.inputs)} inputs")
-        evidence = tuple(sorted({item for record in inputs for item in record.evidence}))
-        self._evidence(evidence)
-        for i, (record, expected) in enumerate(zip(inputs, mapping.inputs)):
-            validate_value(record.value, expected, f"{mapping.name} input {i} {record.evidence}")
-        for output in mapping.function(*(record.value for record in inputs)):
-            if type(output) not in mapping.outputs:
-                raise ValueError(f"{mapping.name}: undeclared output {type(output)}")
-            validate_value(output, type(output), f"{mapping.name} output {evidence}")
+    # The framework's own parameters are positional-only, so a mapping stays free to
+    # name a keyword-only input "mapping" (or "self") without colliding with the call.
+    def apply(self, mapping: Mapping[P, E], /, *args: P.args, **kwargs: P.kwargs) -> Iterator[SourceRecord[E]]:
+        """Check the call against the mapping's signature; retain all its inputs on every output."""
+        resolved = self._resolve(mapping)
+        evidence = self._bind(resolved, args, kwargs)
+        for output in mapping.function(*args, **kwargs):
+            if type(output) not in resolved.outputs:
+                raise ValueError(f"{resolved.name}: undeclared output {type(output).__name__}")
+            validate_value(output, type(output), f"{resolved.name} output {evidence}")
             yield SourceRecord(output, evidence)
 
-    def map(self, mapping: Mapping, *inputs: SourceRecord[object]) -> None:
+    def map(self, mapping: Mapping[P, G], /, *args: P.args, **kwargs: P.kwargs) -> None:
         """Apply a mapping that produces final graph objects and collect its outputs."""
-        for output in self.apply(mapping, *inputs):
-            self.emit(output.value, output.evidence, mapping=mapping.name)
+        for output in self.apply(mapping, *args, **kwargs):
+            self._collect(output.value, output.evidence, mapping.name)
 
-    def _evidence(self, evidence: tuple[Evidence, ...]) -> None:
+    def _resolve(self, mapping: MappingEntry) -> MappingContract:
+        if mapping not in self.pipeline.mappings:
+            raise ValueError(f"Unregistered mapping {mapping.name}")
+        return contract(mapping)
+
+    def _bind(
+        self, resolved: MappingContract, args: tuple[object, ...], kwargs: dict[str, object]
+    ) -> tuple[Evidence, ...]:
+        """Validate the arguments and their values, then combine their contributors."""
+        try:
+            bound = resolved.signature.bind(*args, **kwargs)
+        except TypeError as exc:
+            raise ValueError(f"{resolved.name}: {exc}") from exc
+        records: list[SourceRecord[object]] = []
+        for parameter in resolved.parameters:
+            given = bound.arguments[parameter.name]
+            subject = f"{resolved.name} input {parameter.name!r}"
+            if not isinstance(given, SourceRecord):
+                raise ValueError(f"{subject}: expected a SourceRecord, got {type(given).__name__}")
+            record = cast("SourceRecord[object]", given)
+            # Per input: one contributor-bearing record must never cover for another.
+            self._evidence(record.evidence, subject)
+            location = f"{subject} {record.evidence}"
+            accepted = next((item for item in parameter.accepts if type(record.value) is item), None)
+            if accepted is None:
+                raise ValueError(
+                    f"{location}: expected {' | '.join(item.__name__ for item in parameter.accepts)}, "
+                    f"got {type(record.value).__name__}"
+                )
+            validate_value(record.value, accepted, location)
+            records.append(record)
+        return tuple(sorted({item for record in records for item in record.evidence}))
+
+    def _evidence(self, evidence: tuple[Evidence, ...], subject: str = "") -> None:
         if not evidence or any(
             not all((e.artifact.strip(), e.version.strip(), e.record_set.strip(), e.location.strip())) for e in evidence
         ):
+            prefix = f"{subject}: " if subject else ""
             raise ValueError(
-                "Every graph/source record needs source evidence with artifact, version, record set and location"
+                prefix
+                + "Every graph/source record needs source evidence with artifact, version, record set and location"
             )
 
         self.source_versions.update((item.artifact, item.version) for item in evidence)
 
-    def emit(self, value: object, evidence: tuple[Evidence, ...], *, mapping: str) -> None:
+    def _collect(self, value: GraphObject, evidence: tuple[Evidence, ...], mapping: str) -> None:
         """Validate and collect a graph object; exact duplicates combine evidence."""
-        declaration = next((item for item in self.pipeline.mappings if item.name == mapping), None)
-        if declaration is None or type(value) not in declaration.outputs:
-            raise ValueError(f"{mapping}: unregistered mapping or undeclared output {type(value)}")
-        self._evidence(evidence)
         cls = type(value)
         if cls not in (*self.pipeline.topology.nodes, *self.pipeline.topology.edges):
             raise ValueError(f"{cls}: output is absent from topology")

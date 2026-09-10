@@ -38,7 +38,12 @@ regeneration preserves authored siblings and never deletes an orphaned package.
 Python dataclasses define the topology; stable `schema_id` values identify concepts
 independently of module names. Each node uses a separate identifier NewType, and
 edge endpoints use the corresponding node ID types. Python mappings transform
-typed values without file access. The old YAML engine and wizard are retired.
+typed values without file access; each takes named `SourceRecord[...]` parameters
+and declares its outputs in the return annotation, so composition is checked
+statically. A source row may map straight to topology objects. Add a separate
+normalization mapping producing an intermediate only when sources must converge,
+a stage needs buffering or aggregation, or one normalization feeds several graph
+mappings. The old YAML engine and wizard are retired.
 
 Fill `TOPOLOGY`, `SOURCES` and `MAPPINGS` in their folders' `__init__.py` files;
 the explicit `Pipeline` imports those registries. State scope,

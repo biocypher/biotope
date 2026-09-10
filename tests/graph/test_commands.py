@@ -35,7 +35,10 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
                 'sources=tuple(SourceContract(n, Path(n + ".jsonld"), Path(n + ".py"), ()) '
                 'for n in ("missing-a", "missing-b"))',
             )
-            .replace("mappings=MAPPINGS", 'mappings=(Mapping("bad-a", build, (), ()), Mapping("bad-b", build, (), ()))')
+            .replace(
+                "mappings=MAPPINGS",
+                'mappings=(Mapping(name="bad-a", function=build), Mapping(name="bad-b", function=build))',
+            )
         )
         result = runner.invoke(cli, ["graph", "check", "--graph", folder, "--json"])
         assert result.exit_code != 0

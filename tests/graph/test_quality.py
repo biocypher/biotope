@@ -1,16 +1,35 @@
 """Measurements of typed outputs and execution without an export dependency."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import ClassVar, NewType
 
 import pytest
 
-from biotope.graph import Evidence, Mapping, Pipeline, Topology
+from biotope.graph import Evidence, Mapping, Pipeline, SourceRecord, Topology
 from biotope.graph.runtime import RunContext
 
 
 NodeId = NewType("NodeId", str)
 UnusedId = NewType("UnusedId", str)
+
+
+@dataclass(frozen=True)
+class NodeRow:
+    """A synthetic source row behind one measured node."""
+
+    index: int
+    name: str | None
+    tags: list[str]
+
+
+@dataclass(frozen=True)
+class LinkRow:
+    """A synthetic source row behind one measured edge."""
+
+    index: int
+    source: int
+    target: int
 
 
 @dataclass(frozen=True)
@@ -38,24 +57,43 @@ class Link:
     target: NodeId
 
 
+def make_node(row: SourceRecord[NodeRow]) -> Iterator[Node]:
+    """Produce one node with the row's own name and tag values."""
+    yield Node(NodeId(f"n:{row.value.index}"), row.value.name, tags=row.value.tags)
+
+
+def make_link(row: SourceRecord[LinkRow]) -> Iterator[Link]:
+    """Produce one edge between two node identifiers."""
+    yield Link(f"e:{row.value.index}", NodeId(f"n:{row.value.source}"), NodeId(f"n:{row.value.target}"))
+
+
+NODES = Mapping(name="nodes", function=make_node)
+EDGES = Mapping(name="edges", function=make_link)
+
+
+def node(index: int, name: str | None, tags: list[str]) -> SourceRecord[NodeRow]:
+    """One evidence-bearing node row."""
+    return SourceRecord(NodeRow(index, name, tags), (Evidence("rows", "v1", "nodes", str(index)),))
+
+
+def link(index: int, source: int, target: int) -> SourceRecord[LinkRow]:
+    """One evidence-bearing edge row."""
+    return SourceRecord(LinkRow(index, source, target), (Evidence("rows", "v1", "edges", str(index)),))
+
+
 def emit_fixture(context: RunContext) -> None:
+    """Build the measured fixture graph through the checked mapping path."""
     for index, name in enumerate((None, "  ", "x" * 200, "fourth")):
-        context.emit(
-            Node(NodeId(f"n:{index}"), name, tags=[]), (Evidence("rows", "v1", "nodes", str(index)),), mapping="nodes"
-        )
+        context.map(NODES, node(index, name, []))
     for index, (source, target) in enumerate(((0, 1), (0, 1), (1, 1))):
-        context.emit(
-            Link(f"e:{index}", NodeId(f"n:{source}"), NodeId(f"n:{target}")),
-            (Evidence("rows", "v1", "edges", str(index)),),
-            mapping="edges",
-        )
+        context.map(EDGES, link(index, source, target))
 
 
 PIPELINE = Pipeline(
     "fixture",
     Topology((Node, Unused), (Link,)),
     (),
-    (Mapping("nodes", lambda: (), (), (Node,)), Mapping("edges", lambda: (), (), (Link,))),
+    (NODES, EDGES),
     emit_fixture,
     scope="four nodes and three edges",
     code_paths=(__file__,),
@@ -92,7 +130,7 @@ def test_quality_counts_evidence_and_empty_denominators():
         f["code"] for f in report["findings"]
     }
 
-    context.emit(Node(NodeId("n:4"), tags=["v" * 200] * 8), (Evidence("rows", "v1", "nodes", "4"),), mapping="nodes")
+    context.map(NODES, node(4, None, ["v" * 200] * 8))
     bounded = analyze_quality(GraphView(context.schema, context.nodes, context.edges, {})).to_json()
     values = bounded["measurements"]["properties"]["test:node"]["tags"]["examples"]
     assert values[-1] == {"value": ["v" * 160] * 5, "truncated": True}
@@ -148,11 +186,7 @@ def test_quality_executes_once_without_export_and_records_failures(tmp_path, mon
     assert json.loads(report_path.read_text())["quality"]["state"] == "not_run"
 
     def dangling(context):
-        context.emit(
-            Link("e:missing", NodeId("n:missing"), NodeId("n:other")),
-            (Evidence("rows", "v1", "edges", "missing"),),
-            mapping="edges",
-        )
+        context.map(EDGES, link(99, 98, 97))
 
     with pytest.raises(ValueError):
         build.assess_pipeline(replace(PIPELINE, run=dangling), report_path)

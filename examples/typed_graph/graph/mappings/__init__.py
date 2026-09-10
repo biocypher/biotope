@@ -1,8 +1,8 @@
 """Mappings selected for the example pipeline."""
 
-from biotope.graph import Mapping
+from biotope.graph import MappingEntry
 
-from .samples import MAPPING
+from .samples import MAPPING, NORMALISE
 
 
-MAPPINGS: tuple[Mapping, ...] = (MAPPING,)
+MAPPINGS: tuple[MappingEntry, ...] = (NORMALISE, MAPPING)
