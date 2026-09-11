@@ -1,2 +1,2 @@
-- graph/sources/data gets accidentaly ignored becase data/ is gitignored
-- mappings are still not type-strict. they still "hope" that the function properly maps source to the topology instead of utilizing the defined signatures.
+- why, to every entity, some kind of cvkg is prepended?
+- csv vs parquet graph build?

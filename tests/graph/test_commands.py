@@ -22,7 +22,7 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
         pipeline.write_text(
             pipeline.read_text()
             .replace("requirements={}", 'requirements={"entity:missing": "test:missing"}')
-            .replace('"pipelines")', '"pipelines", "missing.py")')
+            .replace('"pipelines",', '"pipelines", "missing.py",')
         )
         pipeline.write_text(
             pipeline.read_text()

@@ -3,12 +3,20 @@
 from dataclasses import dataclass
 from typing import ClassVar, NewType
 
+from biotope.graph import described
+
 
 PersonId = NewType("PersonId", str)
 
 
 @dataclass(frozen=True)
 class Person:
+    """One person referenced by at least one selected sample.
+
+    Identity is scoped to this study's person_id. Two people with the same name
+    in different studies are different nodes, and no attempt is made to link them.
+    """
+
     schema_id: ClassVar[str] = "example:person"
     id: PersonId
-    name: str
+    name: str = described("The person's name exactly as the source spells it; not an identifier.")

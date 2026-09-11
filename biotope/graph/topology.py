@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import inspect
 import math
 import re
 import types
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from functools import lru_cache
 from typing import Any, Literal, TypedDict, Union, cast, get_args, get_origin, get_type_hints
 
 from biotope.graph.sources import UnknownValue
+
+
+RESERVED_NAMESPACE = "biotope"
+"""Concept IDs in this namespace belong to Biotope's own export metadata."""
 
 
 @lru_cache(maxsize=None)
@@ -23,6 +28,26 @@ def identifier(value: object) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[^\s:]+:[^\s]+", value):
         raise ValueError(f"Invalid identifier {value!r}; mint an explicit namespace:local-id in project code")
     return value
+
+
+def described(description: str, **kwargs: Any) -> Any:
+    """Declare a topology property together with what its value means.
+
+    The description travels to the query context and the export, so write it
+    for a reader who has only the graph: the unit, the reference group, how the
+    value was computed and what it does not establish.
+    """
+    text = " ".join(description.split())
+    if not text:
+        raise ValueError("A property description must state what the value means")
+    metadata: dict[str, Any] = {**kwargs.pop("metadata", {}), "description": text}
+    return field(metadata=metadata, **kwargs)
+
+
+def concept_description(cls: type) -> str:
+    """Read an authored class description, ignoring the synthesized dataclass signature."""
+    text = cls.__dict__.get("__doc__") or ""
+    return "" if text.startswith(cls.__name__ + "(") else inspect.cleandoc(text)
 
 
 def validate_value(value: object, expected: Any, location: str) -> None:
@@ -82,6 +107,13 @@ def concept_id(cls: type) -> str:
     return identifier(value)
 
 
+class ConceptDescription(TypedDict):
+    """Authored meaning, kept out of the structural digest so wording can improve."""
+
+    description: str
+    properties: dict[str, str]
+
+
 class ConceptSchema(TypedDict):
     """Serialized semantic topology; endpoints are present only for edges."""
 
@@ -117,6 +149,8 @@ class Topology:
             if not is_dataclass(cls):
                 raise ValueError(f"{cls}: graph declarations must be dataclasses")
             semantic = concept_id(cls)
+            if semantic.split(":", 1)[0] == RESERVED_NAMESPACE:
+                raise ValueError(f"{semantic}: the {RESERVED_NAMESPACE}: namespace is reserved for export metadata")
             if semantic in result:
                 raise ValueError(f"duplicate concept ID {semantic}")
             names = {member.name for member in fields(cls)}
@@ -150,3 +184,17 @@ class Topology:
             item["nullable"] = sorted(name for name in item["properties"] if type(None) in get_args(annotations[name]))
             result[semantic] = item
         return dict(sorted(result.items()))
+
+    def descriptions(self) -> dict[str, ConceptDescription]:
+        """Collect authored concept and property descriptions, separate from structure."""
+        return {
+            concept_id(cls): {
+                "description": concept_description(cls),
+                "properties": {
+                    member.name: str(member.metadata.get("description", ""))
+                    for member in fields(cls)
+                    if member.name not in ("id", "source", "target")
+                },
+            }
+            for cls in sorted((*self.nodes, *self.edges), key=concept_id)
+        }

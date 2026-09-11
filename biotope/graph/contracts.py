@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+import collections.abc
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Generic, ParamSpec, Protocol, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, Literal, ParamSpec, Protocol, TypeVar, cast
 
-from biotope.graph.topology import Topology
+from biotope.graph.topology import ConceptSchema, Topology
 
 
 if TYPE_CHECKING:
@@ -109,6 +110,142 @@ class Mapping(Generic[P, E]):
 
 
 @dataclass(frozen=True)
+class Audit:
+    """One stage's own account of what it read, kept and set aside.
+
+    Counts are project-named on purpose. One source row can produce several
+    objects, feed an aggregate or be read twice, and an unavailable join can
+    limit one output while leaving another intact, so no fixed arithmetic
+    relates loaded records to emitted ones. Biotope records and reports the
+    account; project validation checks are what interpret it.
+    """
+
+    stage: str
+    inputs: str
+    outputs: str
+    selection: str
+    counts: dict[str, int]
+    evidence_sample: tuple[Evidence, ...] = ()
+    evidence_truncated: bool = False
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GraphView:
+    """Borrowed read-only stores; analysis never constructs a second object graph."""
+
+    concepts: collections.abc.Mapping[str, ConceptSchema]
+    nodes: collections.abc.Mapping[str, GraphRecord]
+    edges: collections.abc.Mapping[str, GraphRecord]
+    requirements: collections.abc.Mapping[str, str]
+
+    def records(self, concept: type[G]) -> Iterator[G]:
+        """Iterate the collected objects of one declared type, without copying them."""
+        for store in (self.nodes, self.edges):
+            for row in store.values():
+                if type(row.value) is concept:
+                    yield cast(G, row.value)
+
+
+ValidationState = Literal["passed", "failed", "unverified"]
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    """One check's outcome. ``unverified`` records missing knowledge, never a pass."""
+
+    state: ValidationState
+    detail: str
+    measurements: dict[str, object] = field(default_factory=dict[str, object])
+
+    @classmethod
+    def ok(cls, detail: str, **measurements: object) -> ValidationResult:
+        """The expectation was derived independently and the graph met it."""
+        return cls("passed", detail, dict(measurements))
+
+    @classmethod
+    def wrong(cls, detail: str, **measurements: object) -> ValidationResult:
+        """The graph contradicts an expectation the project stands behind; blocks export."""
+        return cls("failed", detail, dict(measurements))
+
+    @classmethod
+    def unknown(cls, detail: str, **measurements: object) -> ValidationResult:
+        """The expectation could not be established; the capability stays unresolved."""
+        return cls("unverified", detail, dict(measurements))
+
+
+@dataclass(frozen=True)
+class ValidationCheck:
+    """A project check of the built graph against an independently derived expectation.
+
+    Runs after reference integrity and before export. Deriving the expectation
+    from the same code that built the graph proves nothing: read the source, a
+    published count or a curated answer instead. A failed check blocks export;
+    an unverified one leaves its capability unresolved and keeps the rest.
+    """
+
+    name: str
+    function: Callable[[GraphView, tuple[Audit, ...]], ValidationResult]
+    capability: str = ""
+    evidence: tuple[str, ...] = ()
+
+
+InterpretationKind = Literal["selection", "statistic", "identity", "qualifier", "uncertainty"]
+
+
+@dataclass(frozen=True)
+class Interpretation:
+    """One rule a reader must apply, bound to the concept or property it governs.
+
+    ``subject`` is a topology concept ID or ``<concept ID>.<property>``. Kinds
+    separate what was admitted (``selection``), what a value measures
+    (``statistic``), when two identifiers may be joined (``identity``), context
+    that changes a claim's meaning (``qualifier``) and what the value does not
+    establish (``uncertainty``).
+    """
+
+    subject: str
+    kind: InterpretationKind
+    statement: str
+    alternatives: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Capability:
+    """One question family the graph is claimed to answer, with its stated limits."""
+
+    key: str
+    question: str
+    concepts: tuple[str, ...] = ()
+    limitations: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class QueryExample:
+    """A query a consumer can run, kept beside the capability it demonstrates."""
+
+    capability: str
+    language: str
+    query: str
+    expectation: str = ""
+
+
+@dataclass(frozen=True)
+class QueryContext:
+    """Interpretation rules delivered with the graph, for a reader who has only the graph.
+
+    The consuming agent receives labels, properties and values, not the
+    builder's reasoning. Whatever it must know to select the right comparison,
+    read a statistic, join identities or decline an unsupported conclusion
+    belongs here, because nothing else travels with the export.
+    """
+
+    interpretations: tuple[Interpretation, ...] = ()
+    capabilities: tuple[Capability, ...] = ()
+    examples: tuple[QueryExample, ...] = ()
+
+
+@dataclass(frozen=True)
 class Pipeline:
     """Explicit project composition; imports must not load data or execute mappings.
 
@@ -131,6 +268,8 @@ class Pipeline:
     intent: Path | None = None
     dependencies: tuple[str, ...] = ()
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."
+    validation_checks: tuple[ValidationCheck, ...] = ()
+    query_context: QueryContext = field(default_factory=QueryContext)
 
 
 @dataclass

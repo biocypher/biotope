@@ -108,13 +108,36 @@ class GraphOutput:
         for check in checks:
             if check["state"] == "skipped":
                 self.row("SKIP", check["name"], check["reason"])
-        findings = [*definitions.get("findings", []), *report.get("quality", {}).get("findings", [])]
+        validation: dict[str, Any] = report.get("validation") or {}
+        findings: list[Any] = [
+            *definitions.get("findings", []),
+            *validation.get("findings", []),
+            *report.get("quality", {}).get("findings", []),
+        ]
         if definitions is not report:
             findings.extend(report.get("findings", []))
         for finding in findings:
             self.finding(finding)
         for key, reason in definitions.get("deferrals", {}).items():
             self.row("Defer", key, reason)
+        if validation.get("state") not in (None, "not_run"):
+            label = {"passed": "OK", "failed": "FAIL", "unverified": "WARN", "absent": "WARN"}
+            self.row(label.get(validation["state"], "INFO"), "Validation", validation.get("reason", ""))
+            for check in validation.get("checks", []):
+                mark = {"passed": "OK", "failed": "FAIL", "unverified": "WARN"}[check["state"]]
+                self.row(mark, check["name"], check["detail"])
+            for key, capability in sorted(validation.get("capabilities", {}).items()):
+                mark = {"supported": "OK", "failed": "FAIL"}.get(capability["state"], "WARN")
+                self.row(mark, f"Capability {key}", f"{capability['state']} · {capability['question']}")
+        elif self.operation in ("quality", "build") and validation:
+            self.row("SKIP", "Validation", validation.get("reason", ""))
+        for audit in report.get("audits", []):
+            counts = " · ".join(f"{k}: {v}" for k, v in sorted(audit["counts"].items()))
+            self.row(
+                "Stage",
+                audit["stage"],
+                f"{audit['inputs']} -> {audit['outputs']}\n{audit['selection']}\n{counts}",
+            )
         measurements = report.get("quality", {}).get("measurements", {})
         if measurements:
             self.quality(measurements)

@@ -13,6 +13,7 @@ from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any, cast, get_args, get_type_hints
 
+from biotope.graph.context import check_query_context
 from biotope.graph.contracts import Pipeline
 from biotope.graph.reports import (
     CheckFailed,
@@ -123,6 +124,11 @@ def check_pipeline(
             "intent": None,
             "requirements": pipeline.requirements,
             "deferrals": pipeline.deferrals,
+            "capabilities": [c.key for c in pipeline.query_context.capabilities],
+            "validation_checks": [
+                {"name": c.name, "capability": c.capability, "evidence": list(c.evidence)}
+                for c in pipeline.validation_checks
+            ],
             "code_digests": {},
         }
     )
@@ -282,7 +288,8 @@ def check_pipeline(
     stage("mappings", mappings)
 
     def declarations() -> None:
-        for item in (*pipeline.topology.nodes, *pipeline.topology.edges, pipeline.run):
+        checks = tuple(check.function for check in pipeline.validation_checks)
+        for item in (*pipeline.topology.nodes, *pipeline.topology.edges, pipeline.run, *checks):
             try:
                 path = Path(inspect.getfile(item)).resolve()
                 if path not in declared:
@@ -346,6 +353,13 @@ def check_pipeline(
         requirements,
         blocked="Topology or intent is invalid" if schema is None or required is None else "",
     )
+
+    def context() -> None:
+        assert schema is not None
+        for finding in check_query_context(pipeline, schema, pipeline.topology.descriptions()):
+            add_finding(finding)
+
+    stage("context", context, blocked="Topology is invalid" if schema is None else "")
     if static:
         summary = stage(
             "python",

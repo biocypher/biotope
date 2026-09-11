@@ -19,17 +19,16 @@ Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope]
 | **Cursor**      | [Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace) → import `biocypher/biotope`                            |
 | **Codex**       | [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli) pointing at this repo |
 
-**Skills only:** copy the folder(s) you need from [`skills/`](skills/) into your project — e.g. `.cursor/skills/`, `.claude/skills/`. Start with `biotope-croissant`; add `biocypher` or `biochatter` when you reach those stages.
+**Skills only:** copy the folder(s) you need from [`skills/`](skills/) into your project — e.g. `.cursor/skills/`, `.claude/skills/`. Start with `biotope-croissant`; add `biocypher` for a standalone BioCypher project.
 
 ## Use it
 
-The plugin ships a graph-authoring skill and separate database skills:
+The plugin ships two skills:
 
-| Skill                 | Use when                                                            |
-| --------------------- | ------------------------------------------------------------------- |
-| **biotope-croissant** | Curated sources, Python mappings and selected BioCypher file builds |
-| **biocypher**         | Tuning export backends, schema config, Neo4j import                 |
-| **biochatter**        | Natural-language queries over a loaded graph                        |
+| Skill                 | Use when                                                              |
+| --------------------- | --------------------------------------------------------------------- |
+| **biotope-croissant** | Curated sources, Python mappings and selected BioCypher file builds   |
+| **biocypher**         | A standalone BioCypher project: adapters, schema config, Neo4j import |
 
 You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-croissant`) or just ask:
 

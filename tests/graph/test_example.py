@@ -136,6 +136,13 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     result = run(root)
     assert result.returncode != 0 and "doubled_score" in result.stderr
     mapping.write_text(mapping.read_text().replace("doubled_score=", "adjusted_score="))
+    # Interpretation rules are checked against the real topology: a renamed property
+    # leaves the shipped context pointing at something the export will not contain.
+    result = run(root)
+    assert result.returncode != 0
+    assert "example:sample has no property 'doubled_score'" in " ".join(result.stderr.split())
+    context = root / "graph/query_context.py"
+    context.write_text(context.read_text().replace("doubled_score", "adjusted_score"))
     result = run(root, "build", "repaired")
     assert result.returncode == 0, result.stdout + result.stderr
     repaired = json.loads((root / "graph/build/repaired/run.json").read_text())

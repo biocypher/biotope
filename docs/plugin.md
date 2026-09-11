@@ -34,11 +34,10 @@ agent's skills directory, such as `.cursor/skills/` or `.claude/skills/`.
 
 ## Choose a skill
 
-| Skill               | Use it for                                                     |
-| ------------------- | -------------------------------------------------------------- |
-| `biotope-croissant` | Curated sources, typed mappings and selected graph file builds |
-| `biocypher`         | Configure export backends, schemas, and Neo4j import           |
-| `biochatter`        | Query a loaded graph in natural language                       |
+| Skill               | Use it for                                                          |
+| ------------------- | ------------------------------------------------------------------- |
+| `biotope-croissant` | Curated sources, typed mappings and selected graph file builds      |
+| `biocypher`         | A standalone BioCypher project: adapters, schemas, and Neo4j import |
 
 Start with `biotope-croissant`. It continues through project-owned loading and selected BioCypher file output. Database import and querying are separately managed work.
 

@@ -170,12 +170,17 @@ def test_quality_executes_once_without_export_and_records_failures(tmp_path, mon
     assert list(report_path.parent.iterdir()) == [report_path]
 
     class Writer:
-        def write(self, context, output):
+        def check_environment(self):
+            calls.append("environment")
+            return {"exporter": "test", "version": "0", "format": "none"}
+
+        def write(self, context, output, *, query_context):
             calls.append("export")
             return []
 
     result = build.run_pipeline(replace(PIPELINE, run=run), tmp_path / "build", writer=Writer())
-    assert calls == ["run", "run", "export"]
+    # The exporter is verified before any project loader runs, not after.
+    assert calls == ["run", "environment", "run", "export"]
     assert result["quality"] == report["quality"]
 
     def bad(context):

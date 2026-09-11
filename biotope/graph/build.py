@@ -12,13 +12,15 @@ from typing import Any
 
 from biotope.graph.artifacts import check_report_destination, save_report
 from biotope.graph.check import check_pipeline
+from biotope.graph.context import build_query_context
 from biotope.graph.contracts import Pipeline
-from biotope.graph.output import BioCypherWriter, GraphWriter
-from biotope.graph.quality import GraphView, analyze_quality
+from biotope.graph.output import BioCypherWriter, GraphWriter, export_labels
+from biotope.graph.quality import analyze_quality
 from biotope.graph.reports import CheckFailed, Finding, FindingSink, Phase
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest
 from biotope.graph.topology import concept_id
+from biotope.graph.validation import run_validation
 
 
 class RunFailed(ValueError):
@@ -75,22 +77,43 @@ def _execute(
         "outputs": [],
         "report_path": str(report_path),
         "findings": [],
+        "audits": [],
+        "validation": {"state": "not_run", "reason": "Pipeline execution and integrity checks have not completed"},
         "quality": {"state": "not_run", "reason": "Pipeline execution and integrity checks have not completed"},
         "dependencies": {
             name: _software(name) for name in ("biotope", "croissant-baker", "pyright", *pipeline.dependencies)
         },
     }
     context: RunContext | None = None
+    exporter = (writer or BioCypherWriter()) if output is not None else None
 
     def save() -> None:
         save_report(
             report_path, json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", "biotope." + operation
         )
 
+    def collect() -> None:
+        """Refresh the run's own evidence; idempotent so the context can be generated from it."""
+        if context is None:
+            return
+        report["audits"] = [asdict(item) for item in context.audits]
+        report["loaded_records"] = context.loaded
+        report["graph_objects"] = {"nodes": len(context.nodes), "edges": len(context.edges)}
+        report["source_versions"] = sorted(context.source_versions)
+        kept: list[Any] = [item for item in report["findings"] if item.get("kind") != "exclusion"]
+        report["findings"] = [*kept, *context.findings]
+
     save()
     stage = "definitions"
     try:
         report["definitions"] = check_pipeline(pipeline, phase=phase, on_finding=on_finding)
+        if exporter is not None:
+            # Before any payload is read: an unsupported writer wastes the run and
+            # can still leave files in a format this package has never tested.
+            stage = "environment"
+            if phase:
+                phase("Checking the exporter")
+            report["exporter"] = exporter.check_environment()
         stage = "execution"
         context = RunContext(pipeline)
         if phase:
@@ -100,18 +123,37 @@ def _execute(
             phase("Checking references")
         stage = "integrity"
         context.validate_references()
+        stage = "validation"
+        collect()
+        report["validation"] = run_validation(
+            pipeline, context.view(), context.audits, phase=phase, on_finding=on_finding
+        )
         stage = "quality"
-        report["quality"] = analyze_quality(
-            GraphView(context.schema, context.nodes, context.edges, pipeline.requirements),
-            phase=phase,
-            on_finding=on_finding,
-        ).to_json()
-        if output is not None:
+        report["quality"] = analyze_quality(context.view(), phase=phase, on_finding=on_finding).to_json()
+        # Measure first, then gate: a blocked export is more useful with its diagnostics.
+        if report["validation"]["state"] == "failed":
+            stage = "validation"
+            raise ValueError(
+                "Declared validation failed: "
+                + "; ".join(
+                    f"{item['name']}: {item['detail']}"
+                    for item in report["validation"]["checks"]
+                    if item["state"] == "failed"
+                )
+            )
+        report["query_context"] = build_query_context(
+            pipeline,
+            schema=context.schema,
+            descriptions=pipeline.topology.descriptions(),
+            labels=export_labels(context.schema),
+            report=report,
+        )
+        if exporter is not None and output is not None:
             stage = "export"
             if phase:
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
-            report["outputs"] = (writer or BioCypherWriter()).write(context, output)
+            report["outputs"] = exporter.write(context, output, query_context=report["query_context"])
             content = [
                 [kind, identity, concept_id(type(row.value)), _payload(row.value)]
                 for kind, records in (("node", context.nodes), ("edge", context.edges))
@@ -124,17 +166,14 @@ def _execute(
             report["definitions"] = exc.report
         else:
             report["findings"].append(Finding(stage + ".failed", "error", pipeline.name, str(exc)).to_json())
-        if report["quality"]["state"] == "not_run":
-            report["quality"].update(blocked_by=stage + ".failed", reason=f"{stage.capitalize()} failed: {exc}")
+        for section in ("validation", "quality"):
+            if report[section]["state"] == "not_run":
+                report[section].update(blocked_by=stage + ".failed", reason=f"{stage.capitalize()} failed: {exc}")
         report.update(state="failed", error=str(exc))
         raise RunFailed(report) from exc
     finally:
         report["finished"] = datetime.now(timezone.utc).isoformat()
-        if context is not None:
-            report["loaded_records"] = context.loaded
-            report["graph_objects"] = {"nodes": len(context.nodes), "edges": len(context.edges)}
-            report["findings"].extend(context.findings)
-            report["source_versions"] = sorted(context.source_versions)
+        collect()
         save()
     return report
 

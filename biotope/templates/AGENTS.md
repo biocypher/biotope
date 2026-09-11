@@ -51,6 +51,18 @@ identity rules, join cardinality, unmatched policies, output grain and expected
 spot checks. Keep source evidence alongside records. Current intent lists are
 requirements; bind them to concepts or explicitly defer with reasons.
 
+Describe every concept and property where it is declared: whoever queries the
+finished graph receives labels and values and nothing else. Declare in
+`graph/query_context.py` the question families this graph claims to answer and
+every rule needed to filter, join or compare — selection, statistic definitions,
+identity conditions, qualifiers and stated uncertainty. Declare in
+`graph/checks.py` the validation checks that decide whether those claims hold,
+each with an expectation read from the source rather than recomputed from the
+pipeline. Record an audit in every stage that selects, joins or aggregates, and
+never let a record be dropped by a bare `continue`: report it through
+`context.exclude(...)` or account for it in an audit. A build with no checks is
+reported as unverified, and that is the honest description of it.
+
 `biotope graph check --json` checks definitions and Python types.
 Use `--graph <folder>` to select another workspace and package-relative imports
 for portability. Inputs resolve relative to its parent. Imports must not open
@@ -67,6 +79,11 @@ claiming scientific acceptance. Quality and build each execute the pipeline.
 `biotope graph metagraph` views topology independently; `--json` writes no HTML.
 Add `--report <quality.json-or-run.json>` for matching-topology observations.
 Unrun measurements remain unmeasured; illustrative examples are bounded.
+
+`run.json` reports `validation` per check and per capability: a failed check
+blocks the export, an unverified one leaves its capability unresolved while the
+rest stays usable. Read the generated `query_context.json` the way its consumer
+will — with the graph and that document alone — before claiming acceptance.
 
 Use normal Git to version authored Python. Biotope's status/annotation/tracking
 commands remain available; queue states do not certify graph validity. Preserve

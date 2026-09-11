@@ -1,149 +1,96 @@
 ---
 name: biotope-croissant
-description: Describe and curate local data with Croissant, capture research purpose, and author typed graph projects with Biotope. Use for Biotope ingestion, generated source contracts, Python topology and mappings, project-owned loaders, and BioCypher file builds. Database import and querying are separate workflows.
+description: Croissant metadata curation and typed Python knowledge-graph construction with Biotope. Source contracts, topology, loaders, mappings, interpretation context, validation checks, BioCypher export.
 ---
 
 # Biotope graph projects
 
-Use Biotope commands for scanning, scaffolding, source generation, checks and
-export. The agent owns purpose alignment, metadata curation and project-specific
-Python: identity choices, decoding, transformations, joins and graph composition.
+**The artifact.** A run directory under `graph/build/<run>/`: BioCypher import files, `provenance.jsonl`, `query_context.json`, and `run.json` whose `validation.state` is `passed` or `unverified`. The consumer receives the graph and `query_context.json`. They do not receive this repository or your reasoning, so a graph without its interpretation context is not a deliverable.
 
-Initialization, baking, scaffolding, source generation, checking and building are
-independent steps. Perform the steps needed for the user's request; a metadata or
-mapping task does not imply graph execution. Reuse existing purpose, metadata and
-code. Preserve the requested source scope, including full-directory scans; a
-directory-level description still yields one source package per record set, so
-never split a Croissant file to shape the generated layout. If execution needs a
-smaller scope, agree on it rather than silently sampling.
+**The unit of work.** One **capability**: a question family the graph is claimed to answer, the interpretations needed to read it correctly, one validation check proving it against the source, and one runnable query example. A capability with no check reports `unchecked`.
 
-## Environment and purpose
+**Ownership.** The user owns scientific decisions. You own engineering ones. Where two readings are both defensible, neither of you decides: admit both and let the query choose.
 
-Use the project's installed environment and CLI help. Verify package locations
-when commands differ from this workflow. For local development, use the requested
-Biotope and croissant-baker checkouts. Graph checks and builds need `biotope[graph]`;
-Pyright needs Node.js on PATH or `pyright[nodejs]`.
+Curation, scaffolding and execution are independent. Do the steps the request needs; describing a dataset does not imply building a graph. Database import, querying and new Baker format handlers are separate work.
 
-Run commands from the project root. Initialize metadata tracking only when needed
-with `biotope init . --no-prompt`; `--no-git` is supported. Scaffolding alone needs
-no initialization. Keep raw data and existing purpose files in place.
+**Ask, or push back once.** Ask and wait when the answer changes which records exist or which identities merge. Push back once and then defer when it changes only what is claimed. A weakened claim can be repaired in the interpretation context; a record you never admitted is not recoverable by any query.
 
-Read existing purpose files and `biotope map --show` in an initialized project.
-Capture agreed intent with `biotope map --purpose "..." --entity "..." --relation "..."`:
-purpose replaces the statement; entity/relation flags append and are repeatable.
-Update only what changed. Source structure cannot establish research purpose;
-ask about missing scientific decisions and resolve routine engineering choices.
+## Workflow
 
-## Describe and curate
+Copy this checklist and track progress.
 
-Reuse completed scans. Run `biotope add <data-path> --json` for new inputs and
-review its per-file outcomes, warnings and failures. Baking reads payload bytes,
-including checksums; avoid scanning environments or previous outputs. Inspect
-declared fields and exact IDs with `biotope map inspect <manifest> --json`.
-Inspection reads metadata only and provides no value preview.
-
-Keep unsupported inputs and partial descriptions visible. When evidence supports
-a correction or authored description, save it under `graph/metadata/` if a graph
-workspace exists, or `.biotope/reviews/` for metadata-only work. Register it with:
-
-```bash
-biotope source register <file> --name <managed-name> --reason "<evidence and gaps>"
+```
+Biotope graph project:
+- [ ] Step 1: Read the purpose, the inputs and the existing project
+- [ ] Step 2: Name the capabilities and agree them with the user
+- [ ] Step 3: Curate and register the source metadata
+- [ ] Step 4: Declare the topology and the interpretation context
+- [ ] Step 5: Author loaders, mappings, pipeline and validation checks
+- [ ] Step 6: Check, run and read the reports
+- [ ] Step 7: Prove every capability, then hand over
 ```
 
-Use `--replace` only after comparing against the current managed description,
-including curation notes. The command reports removed structure but replaces the
-file without merging or pausing; changed values also need review. Never invent
-fields to satisfy a mapping or infer a working loader from metadata.
+**Step 1: Read the purpose, the inputs and the existing project.** Run commands from the project root. Read existing purpose files, `biotope map --show`, and `graph/README.md` if a workspace exists — it documents the scaffold you will edit. Reuse existing purpose, metadata and code. Graph checks and builds need `biotope[graph]`; Pyright needs Node.js on PATH or `pyright[nodejs]`. Initialize only if metadata tracking is missing: `biotope init . --no-prompt`. Scaffolding alone needs no initialization. Reconnaissance only — write no project code yet.
 
-Curated and annotated descriptions block rebaking. Use
-`biotope add <data-path> --bake-to <new-review-file.jsonld>` to inspect a fresh bake
-before reconciling it. Put the new file in the review location above, outside the
-input and managed `.biotope/datasets/` directories. Preserve curation protection.
+**Step 2: Name the capabilities and agree them with the user.** A purpose and its example questions are evidence of intent, not a specification. Derive the adjacent questions: the neighbouring comparison, evidence that would contradict the expected answer, a second defensible reading of the same statistic, the context needed to interpret a result, and the case where a well-founded "no such record" is the answer. For each candidate capability, name the evidence and the distinctions it needs; that list decides what Step 4 must admit. Capture the agreed purpose with `biotope map --purpose "..." --entity "..." --relation "..."`. Propose adjacent capabilities once with what each costs; if declined, record them as out of scope and move on. **Present the capability list and get explicit confirmation before Step 3.**
 
-## Scaffold and author
+**Step 3: Curate and register the source metadata.** Run `biotope add <data-path> --json` for new inputs and review its per-file outcomes, warnings and failures; do not scan environments or previous outputs. Inspect declared fields and exact IDs with `biotope map inspect <manifest> --json`, which reads metadata only and gives no value preview. Preserve the requested source scope, including full-directory scans: one record set becomes one source package, so never split a Croissant file to shape the generated layout. Keep unsupported inputs and partial descriptions visible rather than inventing structure to make a mapping work. Register an evidence-backed correction with `biotope source register <file> --name <managed-name> --reason "<evidence and gaps>"`. Metadata-only work ends here.
 
-For graph work, run `biotope graph scaffold` from the project root, or reuse an
-existing `graph/`. Read its `README.md` and the
-[typed authoring reference](references/mapping.md). Keep graph code, dependencies,
-curation drafts, notes, helpers and outputs inside `graph/`; create extra files
-only as needed. Effective managed metadata stays in `.biotope/datasets/`.
+**Step 4: Declare the topology and the interpretation context.** Write `graph/topology/` and `graph/query_context.py` before any pipeline code: `biotope graph check` never executes `run`, so it validates both against a stub body and is a real gate at this point. Give every concept a class docstring and every property a `described(...)` field. Declare one `Capability` per agreed capability, and one `Interpretation` per admission rule, statistic definition, identity condition, qualifier and stated uncertainty. **Stop and ask** when two readings of a statistic are both defensible and change which records exist: present both and the record cost of admitting the union, which is the default. **Stop and ask** before merging identities across sources that do not jointly establish the match; the default is separate nodes in source-specific namespaces.
 
-The scaffold's `_example` files are inactive patterns, not project data or a
-working graph. Adapt them to the purpose and remove unused examples. Generate
-actual source types separately from reviewed metadata:
+**Step 5: Author loaders, mappings, pipeline and validation checks.** Generate contracts with `biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources`. Resolve identity in a first pass over every participating source, then emit: an unambiguous resolution must not depend on the order sources were read. Send every record you do not emit through `context.exclude(...)` against a declared policy, and put aggregate losses in `record_audit(...)` counts. Then check yourself — every hit below must sit beside an `exclude` call or increment a recorded count:
 
 ```bash
-biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources
+grep -rn --include='*.py' -e '\bcontinue\b' -e '^\s*pass$' graph/pipelines graph/mappings
 ```
 
-Generate from the registered managed description, never from a draft under
-`graph/metadata/`. **One record set becomes one source package**, at
-`graph/sources/<name>/<record-set>/`, the folder named for the manifest's
-filename. Generation is exhaustive over the
-manifest and writes each package's `schema.py`, missing sibling `SOURCE`
-registration and loader files, and a generated `CONTRACTS` inventory per manifest.
-It preserves authored siblings and never deletes an orphaned package. Do not edit
-or format generated modules, copy boilerplate by hand, or transcribe the generated
-record inventory. Review new record sets, opaque shapes and nullability when
-regenerating.
+Write one `ValidationCheck` per capability in `graph/checks.py`, each deriving its expectation from the source with a plain reader rather than the project loader. List `graph/checks.py` and `graph/query_context.py` in `Pipeline.code_paths`.
 
-Author topology, loaders, mappings and pipeline composition using the public
-`biotope.graph` contracts. Each package's loader decodes one record set with
-established format libraries; share a helper only where decoding genuinely
-repeats. Mappings transform typed values without opening files; a mapping's
-signature is its contract, and mapping a source row straight to topology objects
-is the normal shape. Introduce an intermediate dataclass and a separate
-normalization mapping only where it does work: several sources converging on one
-shape, buffering or aggregation before a join, or one normalization feeding
-several graph mappings. Organise them by source and group them only where a
-transformation is genuinely shared. Select
-`SOURCES` from each manifest's `CONTRACTS`, and register `TOPOLOGY` and
-`MAPPINGS` in their folders' `__init__.py` files. Complete the
-pipeline's scope, settings, policies and requirement bindings or deferrals.
-Python definitions are authoritative; YAML mappings and the old wizard are retired.
+**Step 6: Check, run and read the reports.** Run `biotope graph check --json`. Stdout carries exactly one report and every diagnostic goes to stderr; parse the streams separately. Resolve findings rather than suppressing them with `Any`, blanket ignores or invented metadata.
 
-## Check, inspect and execute
+| Finding                                               | Meaning                                                                         | Return to |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- | --------- |
+| `context.invalid`                                     | An interpretation or capability points at something the export will not contain | Step 4    |
+| `context.undescribed`, `context.undescribed_property` | A consumer would see only the label                                             | Step 4    |
+| `context.no_capabilities`                             | Nothing states what the graph answers                                           | Step 2    |
+| `context.unvalidated`, `validation.absent`            | Nothing tests what the graph answers                                            | Step 5    |
+| `validation.unchecked_capability`                     | One capability is claimed and untested                                          | Step 5    |
+| `validation.failed`                                   | The graph contradicts an expectation; export is blocked                         | Step 5    |
+| `python.*`, `mapping.contract`, `source.contract`     | Authored or generated code is wrong                                             | Step 5    |
 
-Use `--graph <folder>` on any graph command for an alternate workspace. Prefer
-package-relative imports; inputs resolve relative to its parent.
+Then build into a new run directory with `biotope graph build --out graph/build/review-1`. Biotope derives the export schema from topology; add no project adapter or hand-written export schema. **If the agreed scope will not execute, agree a new one** rather than sampling silently.
 
-Run `biotope graph check --json`. Include all
-relevant generated and authored Python in `Pipeline.code_paths`. Checks import
-declarations, so imports must not open payloads or execute pipelines. Resolve
-diagnostics and review purpose/placeholder warnings; do not suppress them with
-`Any`, blanket ignores or invented metadata.
+**Step 7: Prove every capability, then hand over.** Run every declared `QueryExample` against the built graph; a sketch is not evidence that a query works. Then report:
 
-Use `biotope graph metagraph --json` to inspect registered topology without
-importing the pipeline. Human mode generates an offline viewer. After an
-assessment, `--report <quality.json-or-run.json>` adds observations only when
-the topology digest matches. It never executes data to fill missing measurements.
+```
+Build: graph/build/<run>
+Validation: <state>   Capabilities: <n> supported / <n> unverified / <n> unchecked
 
-For execution without export, use `biotope graph quality --json`. It runs the
-pipeline once and saves `graph/reports/quality.json`, including failures. Review
-counts, missing properties, connectivity, endpoint concentration and self-loops.
-Warnings are advisory; unrun measurements and bounded illustrative examples
-must not be presented as complete data validation. Quality and build each run
-the pipeline; do not run both unless the extra execution serves the request.
+| Capability | State | Validation check | Expectation derived from | Limitation |
 
-When graph execution is requested, state the selected inputs, output grain,
-identity decisions and expected spot checks, then build into a new run directory:
-
-```bash
-biotope graph build --out graph/build/review-1
+Excluded: <policy> <count>; ...
+Deferred: <requirement key> — <reason>
+Unverified: <capability> — <what could not be established>
+Query examples run: <n>/<n>
 ```
 
-Biotope supplies the BioCypher file exporter and derives its schema from topology.
-Do not add a project adapter or hand-written export schema. Review output values,
-counts and provenance using the [reliability boundaries](references/reliability.md)
-before reporting acceptance. Scientific graph acceptance is manual; keep any
-automated checks focused on project behavior that needs protection.
+Every field is readable from `run.json`. Finally read `graph/build/<run>/query_context.json` as the consumer will, with the graph and that document and nothing else:
 
-After metadata changes, regenerate affected contracts and repair authored code;
-after code changes, rerun relevant checks. Build again only within the requested
-execution scope. During requested cleanup, remove or archive disposable run
-outputs; preserve raw data, curated metadata and authored code. Do not use
-`biotope rm raw` for test cleanup.
+```
+- [ ] A consumer can tell which study and comparison each concept belongs to
+- [ ] Every numeric property states what it measures and against which reference
+- [ ] Every identifier states when it may be joined and when it may not
+- [ ] Every capability states what it does not support
+```
 
-Queue states do not certify graph validity. Use normal Git to version authored
-Python alongside metadata. New Baker handlers, database import/querying and paper
-evaluation remain separate tasks.
+Anything unticked returns to Step 4. Human scientific review stays manual.
+
+After metadata changes, regenerate affected contracts and repair authored code; after code changes, rerun Step 6. During requested cleanup, remove or archive run directories and generated reports; preserve raw data, curated metadata and authored code. Do not use `biotope rm raw` for test cleanup.
+
+### References
+
+- [interpretation.md](./references/interpretation.md) — steps 2 and 7: what a capability declares, and what counts as proof that it holds.
+- [curation.md](./references/curation.md) — step 3: correcting, registering and re-baking a source description without losing curation.
+- [modeling.md](./references/modeling.md) — step 4: which distinction a modeling choice is about to erase, and the shape that preserves it.
+- [authoring.md](./references/authoring.md) — step 5: what the type checker and the runtime require of loaders, mappings and the pipeline.
+- [reports.md](./references/reports.md) — steps 6 and 7: what each check establishes, what it cannot see, and how to read a run.

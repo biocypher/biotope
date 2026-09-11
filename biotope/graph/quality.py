@@ -3,24 +3,17 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import asdict, dataclass
+from collections.abc import Callable, Iterator
+from dataclasses import asdict
 from heapq import nsmallest
 from typing import Any, cast
 
-from biotope.graph.contracts import GraphRecord
+from biotope.graph.contracts import GraphRecord, GraphView
 from biotope.graph.reports import Finding, FindingSink, Phase, QualityReport
-from biotope.graph.topology import ConceptSchema, concept_id
+from biotope.graph.topology import concept_id
 
 
-@dataclass(frozen=True)
-class GraphView:
-    """Borrowed read-only stores; analysis never constructs a second object graph."""
-
-    concepts: Mapping[str, ConceptSchema]
-    nodes: Mapping[str, GraphRecord]
-    edges: Mapping[str, GraphRecord]
-    requirements: Mapping[str, str]
+__all__ = ["CHECKS", "GraphView", "analyze_quality"]
 
 
 def _records(view: GraphView) -> Iterator[tuple[str, GraphRecord]]:

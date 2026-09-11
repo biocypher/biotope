@@ -8,9 +8,11 @@ from dataclasses import dataclass, field
 from typing import ParamSpec, TypeVar, cast
 
 from biotope.graph.contracts import (
+    Audit,
     Evidence,
     GraphObject,
     GraphRecord,
+    GraphView,
     Loader,
     Mapping,
     MappingEntry,
@@ -28,6 +30,9 @@ T = TypeVar("T")
 E = TypeVar("E")
 G = TypeVar("G", bound=GraphObject)
 P = ParamSpec("P")
+
+EVIDENCE_SAMPLE = 10
+"""How many contributor references a bounded report sample keeps."""
 
 
 @dataclass
@@ -53,8 +58,13 @@ class RunContext:
         self.nodes: dict[str, GraphRecord] = {}
         self.edges: dict[str, GraphRecord] = {}
         self._exclusions: dict[str, ExclusionFinding] = {}
+        self._audits: dict[str, Audit] = {}
         self.loaded: dict[str, int] = {}
         self.source_versions: set[tuple[str, str]] = set()
+
+    def view(self) -> GraphView:
+        """Borrow the collected objects for measurement or a project validation check."""
+        return GraphView(self.schema, self.nodes, self.edges, self.pipeline.requirements)
 
     def load(self, source: SourceContract, loader: Loader[C, T], config: C) -> Iterator[SourceRecord[T]]:
         """Invoke a registered source's project loader and validate each result."""
@@ -179,10 +189,54 @@ class RunContext:
         for item in evidence:
             if item in finding.evidence_sample:
                 continue
-            if len(finding.evidence_sample) < 10:
+            if len(finding.evidence_sample) < EVIDENCE_SAMPLE:
                 finding.evidence_sample.append(item)
             else:
                 finding.evidence_truncated = True
+
+    def record_audit(
+        self,
+        stage: str,
+        *,
+        inputs: str,
+        outputs: str,
+        selection: str,
+        counts: dict[str, int],
+        evidence: tuple[Evidence, ...] = (),
+        notes: tuple[str, ...] = (),
+    ) -> None:
+        """Record what one stage read, at what grain, under which selection rule.
+
+        Name every count the stage actually needs to be checkable, including the
+        rows it considered and did not emit. Biotope imposes no arithmetic between
+        them: state the grains and let a validation check compare the counts with
+        an expectation derived from the source.
+        """
+        if stage in self._audits:
+            raise ValueError(f"Stage {stage!r} is already recorded; give each recorded stage its own identity")
+        for label, text in (("stage", stage), ("inputs", inputs), ("outputs", outputs), ("selection", selection)):
+            if not text.strip():
+                raise ValueError(f"An audit needs a non-empty {label}; describe the grain and the selection rule")
+        for key, value in counts.items():
+            if not key.strip() or type(value) is not int or value < 0:
+                raise ValueError(f"Audit count {key!r} must be a named non-negative integer, not {value!r}")
+        if evidence:
+            self._evidence(evidence)
+        self._audits[stage] = Audit(
+            stage=stage,
+            inputs=inputs,
+            outputs=outputs,
+            selection=selection,
+            counts=dict(counts),
+            evidence_sample=tuple(sorted(set(evidence)))[:EVIDENCE_SAMPLE],
+            evidence_truncated=len(set(evidence)) > EVIDENCE_SAMPLE,
+            notes=notes,
+        )
+
+    @property
+    def audits(self) -> tuple[Audit, ...]:
+        """Recorded stage accounts, in the order the pipeline recorded them."""
+        return tuple(self._audits.values())
 
     @property
     def findings(self) -> list[dict[str, object]]:

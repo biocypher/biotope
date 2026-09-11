@@ -157,14 +157,25 @@ file/class renames do not change this concept ID.
 from dataclasses import dataclass
 from typing import ClassVar, NewType
 
+from biotope.graph import described
+
 PersonId = NewType("PersonId", str)
 
 @dataclass(frozen=True)
 class Person:
+    """One person referenced by at least one selected sample."""
+
     schema_id: ClassVar[str] = "study:person"
     id: PersonId
-    name: str
+    name: str = described("The person's name as the source spells it; not an identifier.")
 ```
+
+The class docstring describes the concept and `described(...)` describes a
+property; both reach the exported query context, which is all a consumer of the
+finished graph receives. Descriptions are read separately from
+`Topology.describe()`, so improving the wording does not change the topology
+digest. The `biotope:` namespace is reserved for export metadata and rejected in
+project concept IDs.
 
 Mint namespaced identifiers explicitly in project code. Equal local strings from
 two studies are not evidence of shared identity. A `NewType` conversion gives
@@ -284,6 +295,76 @@ many-to-one join. Biotope retains emitted objects, IDs and contributor reference
 in memory for conflict/deduplication and endpoint checks. Choose a bounded build;
 this iteration has no disk-backed state engine or object-per-pixel requirement.
 
+## Declare what the graph answers, and check it
+
+Structural validity is not answerability. Definition checks, integrity checks
+and quality all measure what the pipeline emitted, so none of them can notice a
+record it never emitted. Two declarations close that gap.
+
+`QueryContext` states what the graph can answer and what a reader must know to
+query it. `Interpretation` binds one rule to a concept ID or
+`<concept ID>.<property>`, under one of five kinds — `selection`, `statistic`,
+`identity`, `qualifier`, `uncertainty`. `Capability` names one question family
+and its limits. `QueryExample` carries a query a consumer can actually run.
+
+```python
+QUERY_CONTEXT = QueryContext(
+    interpretations=(
+        Interpretation(
+            subject="study:measurement.strict_p",
+            kind="selection",
+            statement="Rows were admitted on strict_p < 0.05, which excludes low-count features.",
+            alternatives=("study:measurement.open_p",),
+        ),
+    ),
+    capabilities=(
+        Capability(
+            key="significance",
+            question="Which measurements are significant under either adjustment?",
+            concepts=("study:measurement",),
+            limitations=("Only rows passing the strict adjustment were admitted.",),
+        ),
+    ),
+)
+```
+
+`alternatives` names another property or concept **in this graph**. Checking
+resolves every reference against the real topology, so a reading that would
+require a rebuild is a capability limitation rather than an alternative —
+storing a second column beside rows that were never admitted does not make that
+reading available. Checking also warns about capabilities nothing tests and
+about concepts or properties with no description.
+
+`ValidationCheck` registers a check that runs after reference integrity and
+before export. Its function receives a read-only `GraphView` and the recorded
+audits, and returns a `ValidationResult`:
+
+```python
+def eligible_rows_present(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+    """Compare the graph with an expectation read straight from the source."""
+    expected = {row["id"] for row in read_source_table() if eligible(row)}
+    found = {m.id for m in view.records(Measurement)}
+    if found != expected:
+        return ValidationResult.wrong(f"Missing {sorted(expected - found)}")
+    return ValidationResult.ok(f"All {len(expected)} eligible rows are present.")
+```
+
+`ValidationResult.wrong` blocks the export. `.unknown` records missing
+knowledge: the capability it is bound to becomes unresolved while every other
+capability stays usable. A check that raises is recorded as failed, never as
+passed. Derive expectations from the source, a published figure or a curated
+answer — a check that recomputes the pipeline's logic agrees with it by
+construction and is blind to exactly the rows it exists to find.
+
+`RunContext.record_audit(stage, inputs=..., outputs=..., selection=..., counts=...)`
+records one stage's account: the input and output grain, the rule that selected
+records, and named non-negative counts. Nothing derives totals from those
+counts, because one source row can produce several objects, feed an aggregate or
+be read twice, and a missing join can limit one output while the record itself
+is retained. State the grains and let a validation check do the comparison.
+Every dropped record goes through `context.exclude(...)` against a declared
+policy or is accounted for in an audit; a bare `continue` leaves no trace.
+
 ## Check, execute and inspect
 
 Run from the parent project root with the intended environment activated:
@@ -347,8 +428,16 @@ digest must match. The viewer displays the run scope and completion state;
 missing measurements stay unmeasured, and loading a report never reruns data.
 Only recognized generated reports may be replaced; authored files are preserved.
 
+Before a build reads any payload, the writer verifies the exporter this
+environment will actually use. Escaping, file naming and the physical format are
+properties of one writer release rather than of the BioCypher API, so an
+unsupported version is refused with the install command for the tested one
+instead of producing output that has never been round-tripped. After writing,
+the export directory is checked against the same contract.
+
 `run.json` records scope, source metadata and available versions, code/topology
-revisions, settings, dependencies, exclusions, completion and output locations.
+revisions, settings, dependencies, exclusions, audits, validation results,
+the generated query context, completion and output locations.
 Dependency entries include installed versions and editable/VCS details when available.
 Biotope's Python source digest identifies local edits that a package version cannot.
 Unspecified variability is reported as unreviewed.
@@ -362,6 +451,15 @@ property: a sample produced by a sample/person mapping also references the perso
 row. Identical outputs combine these references. Use smaller mappings where
 narrower attribution matters. Aggregates may reference
 a project-maintained contributor artifact; Biotope does not infer field-level lineage.
+
+`query_context.json` is generated from the same declarations plus the run's own
+evidence: concept and property descriptions with their export labels, the
+interpretation rules, capabilities and their validation states, the selection
+policies, exclusion counts and stage audits, settings, stated variability and
+source versions. Its essential content is also exported as rows under the
+reserved `BiotopeQueryContext` label, so a consumer with only a database session
+can read the same rules with `MATCH (c:BiotopeQueryContext) RETURN c`. Those rows
+carry system metadata and stay out of the project's own population counts.
 
 `schema_config.yaml`, `topology.json` and the minimal local ontology are derived
 from Python. Readable labels use the full namespaced concept ID, for example

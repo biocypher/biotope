@@ -18,6 +18,18 @@ baking/file-integrity commands and project pipeline execution read source bytes.
 Loaders, joins, identity decisions and scientific transformations live in the
 graph project. Biotope has no format-reader framework or expression compiler.
 
+Execution runs definition checks, then the exporter environment check, then the
+project pipeline, reference integrity, project validation checks, quality
+measurement and export, in that order. Validation sits there because everything
+above it measures only what the pipeline emitted and therefore cannot see a
+record it never emitted; comparing against an expectation from outside the
+pipeline is the project's job, and Biotope supplies the interface and the
+reporting rather than the expectation. A failed check blocks export; an
+unverified one marks its capability unresolved and lets the rest through.
+Project descriptions, interpretation rules and run evidence are generated into
+one versioned query context that ships with the export, because a consuming
+agent receives the graph and nothing else.
+
 `graph scaffold` copies the packaged boilerplate into `graph/`. Initialization,
 baking and execution remain separate commands. CLI code owns mechanical setup;
 the agent adapts topology, loaders and transformations to purpose and evidence.

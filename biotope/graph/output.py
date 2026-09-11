@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import logging
 import re
@@ -9,24 +10,43 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 import yaml
 
+from biotope.graph.context import CONTEXT_CONCEPT, CONTEXT_LABEL, CONTEXT_PROPERTIES, context_rows
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest, write_text_atomic
 from biotope.graph.topology import concept_id
 
 
+SUPPORTED_BIOCYPHER = "0.9.7"
+"""The one writer version whose CSV quoting and file layout Biotope tests against."""
+
+EXPORT_FORMAT = "neo4j-admin-csv"
+"""The physical output contract: comma-separated Neo4j admin import files."""
+
+EXPORT_SUFFIXES = frozenset({".csv", ".sh"})
+"""What that contract may put in the writer's own output directory."""
+
+
 class GraphWriter(Protocol):
     """An output boundary independent of project source loaders and mappings."""
 
-    def write(self, context: RunContext, directory: Path) -> list[str]:
-        """Write validated graph data and return its artifact paths."""
+    def check_environment(self) -> dict[str, object]:
+        """Verify the exporter this environment will actually use, before any data is read.
+
+        A build that discovers an unsupported writer after loading its sources
+        wastes the run and can still produce files in an untested format.
+        """
+        ...
+
+    def write(self, context: RunContext, directory: Path, *, query_context: dict[str, Any]) -> list[str]:
+        """Write validated graph data with its interpretation context; return artifact paths."""
         ...
 
 
-def _export_labels(concepts: Iterable[str]) -> dict[str, str]:
+def export_labels(concepts: Iterable[str]) -> dict[str, str]:
     # Use readable PascalCase from the complete namespaced ID. Disambiguate only
     # normalization collisions, including the writer's synthetic Entity root.
     bases = {
@@ -35,8 +55,10 @@ def _export_labels(concepts: Iterable[str]) -> dict[str, str]:
     }
     bases = {semantic: base if base and base[0].isalpha() else "Concept" + base for semantic, base in bases.items()}
     counts = Counter(bases.values())
+    # "Entity" is the writer's synthetic root; the context label is Biotope's reserved row store.
+    reserved = {"Entity", CONTEXT_LABEL}
     labels = {
-        semantic: base + "H" + digest(semantic)[:10] if counts[base] > 1 or base == "Entity" else base
+        semantic: base + "H" + digest(semantic)[:10] if counts[base] > 1 or base in reserved else base
         for semantic, base in bases.items()
     }
     if len(set(labels.values())) != len(labels):
@@ -47,8 +69,33 @@ def _export_labels(concepts: Iterable[str]) -> dict[str, str]:
 class BioCypherWriter:
     """Derive a local schema/ontology and write one offline BioCypher format."""
 
-    def write(self, context: RunContext, directory: Path) -> list[str]:
-        """Write Neo4j import files and an identity-keyed provenance sidecar."""
+    def check_environment(self) -> dict[str, object]:
+        """Refuse an untested writer before the pipeline reads a single source byte.
+
+        Escaping, file naming and the physical format are properties of one
+        writer release, not of the BioCypher API. A different version can
+        succeed and still write something this package has never round-tripped.
+        """
+        try:
+            installed = importlib.metadata.version("biocypher")
+        except importlib.metadata.PackageNotFoundError as exc:
+            raise ValueError(
+                "BioCypher is not installed in this environment. Install the supported writer with "
+                f"`pip install 'biocypher=={SUPPORTED_BIOCYPHER}'`, or install biotope[graph]."
+            ) from exc
+        if installed != SUPPORTED_BIOCYPHER:
+            raise ValueError(
+                f"biotope exports through BioCypher {SUPPORTED_BIOCYPHER}, which is the version its "
+                f"{EXPORT_FORMAT} quoting and layout are tested against; this environment has "
+                f"{installed}. Install the supported writer with "
+                f"`pip install 'biocypher=={SUPPORTED_BIOCYPHER}'`, or pass a GraphWriter for the "
+                "version you need and test its output format yourself."
+            )
+        return {"exporter": "biocypher", "version": installed, "format": EXPORT_FORMAT}
+
+    def write(self, context: RunContext, directory: Path, *, query_context: dict[str, Any]) -> list[str]:
+        """Write Neo4j import files, the query context and an identity-keyed provenance sidecar."""
+        environment = self.check_environment()
         # BioCypher configures disk logging during import, before its per-build
         # configuration is applied. Supply stderr logging first; respect existing handlers.
         logger = logging.getLogger("biocypher")
@@ -83,7 +130,8 @@ class BioCypherWriter:
                     any(char in item for char in "|\r\n") for item in cast(list[str], value)
                 ):
                     raise ValueError(f"Unsupported BioCypher string-list separator/newline in {identity}.{name}")
-        labels = _export_labels(context.schema)
+        labels = export_labels(context.schema)
+        rows = context_rows(query_context)
         schema = {
             labels[semantic]: {
                 "represented_as": item["kind"],
@@ -92,6 +140,14 @@ class BioCypherWriter:
                 "properties": item["properties"],
             }
             for semantic, item in context.schema.items()
+        }
+        # System metadata travels in its own reserved label so a database-only
+        # consumer can read the rules, and so it never joins the population counts.
+        schema[CONTEXT_LABEL] = {
+            "represented_as": "node",
+            "input_label": CONTEXT_CONCEPT,
+            "is_a": "entity",
+            "properties": dict(CONTEXT_PROPERTIES),
         }
         for semantic, item in context.schema.items():
             if item["kind"] == "edge":
@@ -104,7 +160,19 @@ class BioCypherWriter:
         write_text_atomic(schema_path, yaml.safe_dump(schema, sort_keys=True))
         write_text_atomic(
             directory / "topology.json",
-            json.dumps({"concepts": context.schema, "export_labels": labels}, indent=2) + "\n",
+            json.dumps(
+                {
+                    "concepts": context.schema,
+                    "export_labels": {**labels, CONTEXT_CONCEPT: CONTEXT_LABEL},
+                    "exporter": environment,
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        write_text_atomic(
+            directory / "query_context.json",
+            json.dumps(query_context, indent=2, sort_keys=True, allow_nan=False) + "\n",
         )
         ontology_path = directory / "ontology.ttl"
         # This local root exists only to satisfy the writer's ontology interface.
@@ -154,9 +222,17 @@ class BioCypherWriter:
 
         # BioCypher 0.9.7 leaves these iterable parameters unannotated. Keep the
         # exception local to its API; our tuples and GraphWriter remain checked.
-        if context.nodes and not writer.write_nodes(  # pyright: ignore[reportUnknownMemberType]
-            (identity, concept_id(type(row.value)), properties(row.value))
-            for identity, row in sorted(context.nodes.items())
+        def escape(value: object) -> object:
+            return value.replace('"', '""') if isinstance(value, str) else value
+
+        if not writer.write_nodes(  # pyright: ignore[reportUnknownMemberType]
+            [
+                *(
+                    (identity, concept_id(type(row.value)), properties(row.value))
+                    for identity, row in sorted(context.nodes.items())
+                ),
+                *((identity, CONTEXT_CONCEPT, {k: escape(v) for k, v in row.items()}) for identity, row in rows),
+            ]
         ):
             raise ValueError("BioCypher node export failed")
         if context.edges and not writer.write_edges(  # pyright: ignore[reportUnknownMemberType]
@@ -170,8 +246,18 @@ class BioCypherWriter:
             for identity, row in sorted(context.edges.items())
         ):
             raise ValueError("BioCypher edge export failed")
-        if context.nodes or context.edges:
-            writer.write_import_call()
+        writer.write_import_call()
+        unexpected = sorted(
+            str(path.relative_to(directory))
+            for path in (directory / "biocypher").rglob("*")
+            if path.is_file() and path.suffix not in EXPORT_SUFFIXES
+        )
+        if unexpected:
+            raise ValueError(
+                f"BioCypher wrote files outside the {EXPORT_FORMAT} contract: {', '.join(unexpected)}. "
+                "Biotope tests one physical format; add compatibility and round-trip tests before "
+                "accepting another."
+            )
         with (directory / "provenance.jsonl").open("w", encoding="utf-8") as output:
             for kind, records in (("node", context.nodes), ("edge", context.edges)):
                 for identity, row in sorted(records.items()):

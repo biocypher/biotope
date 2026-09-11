@@ -67,11 +67,38 @@ forward.
 | `topology/_example_record/`, `topology/_example_collection/` | Define node dataclasses, distinct ID NewTypes and outgoing relations with typed endpoints.                                      |
 | `mappings/_example.py`                                       | Normalize typed source fields into an intermediate, then mint identities and build graph objects; keep file access in loaders.  |
 | `pipelines/_example.py`                                      | Wire loader configuration through `context.load`, `context.apply` and `context.map`; adapt joins and policies to the scope.     |
+| `query_context.py`                                           | Declare what this graph answers and every rule a reader needs; the docstring shows the full form.                               |
+| `checks.py`                                                  | Declare the checks that decide whether those claims hold, with expectations read from the sources.                              |
 
 Each node/relation may declare `display_name: ClassVar[str]` for a short diagram
 label, alongside its stable `schema_id`. Choose readable names such as "Sample"
 or "Measured in". The fallback is the Python class name split into words. Labels
 do not alter identity or exported data; full IDs remain in viewer details and JSON.
+
+Give every concept a class docstring and every property a `described("...")`
+field. Whoever queries the finished graph sees labels, properties and values and
+nothing else, so meaning that lives only in a property name does not survive the
+handoff. Those descriptions, the `QUERY_CONTEXT` declarations and the run's own
+evidence are generated into `query_context.json` beside the export and mirrored
+into the database under the reserved `BiotopeQueryContext` label.
+
+Record an audit in every stage that selects, joins or aggregates:
+
+```python
+context.record_audit(
+    "join:samples-to-people",
+    inputs="one row per sample_id",
+    outputs="one Sample and one FromPerson per matched sample",
+    selection="Keep a sample when its person_id has a row in people.csv.",
+    counts={"samples_read": read, "samples_kept": kept, "people_matched": len(matched)},
+)
+```
+
+Nothing derives totals from those counts — one row can yield several objects or
+be read twice — so name whatever a reader would need in order to notice a
+record that was dropped without being reported. A bare `continue` past a
+skipped record leaves no trace anywhere: use `context.exclude(...)` against a
+declared policy, or account for it in an audit.
 
 Register the actual definitions in `TOPOLOGY`, `SOURCES` and `MAPPINGS` in their
 folders' `__init__.py` files. Complete `pipelines/build_graph.py`: name, selected
@@ -91,13 +118,23 @@ biotope graph quality --json
 biotope graph build --out graph/build/review-1
 ```
 
-Checks inspect definitions and Python types without invoking loaders. Metagraph
-reads `TOPOLOGY` independently and writes offline `reports/metagraph.html`.
-Quality executes loaders and mappings, checks graph objects, and saves
-`reports/quality.json` without export. It reports counts, missing properties,
-connectivity, endpoint concentration and self-loops. Warnings need interpretation;
-failed execution leaves measurements unrun. Running quality and build separately
-executes twice; choose only what is needed.
+Checks inspect definitions and Python types without invoking loaders, including
+that every interpretation rule points at a concept or property the export will
+actually contain. Metagraph reads `TOPOLOGY` independently and writes offline
+`reports/metagraph.html`. Quality executes loaders and mappings, checks graph
+objects, and saves `reports/quality.json` without export. It reports counts,
+missing properties, connectivity, endpoint concentration and self-loops.
+Warnings need interpretation; failed execution leaves measurements unrun.
+Running quality and build separately executes twice; choose only what is needed.
+
+Declared validation checks run after reference integrity and before export.
+`run.json` reports them under `validation`, per check and per capability: a
+failed check blocks the export, an unverified one leaves its capability
+unresolved while the rest of the graph stays usable, and a build with no checks
+at all is reported as `absent` rather than clean. Nothing above that layer can
+notice a record the pipeline never emitted, which is what these checks are for,
+so derive each expectation from the source rather than from the build's own
+logic.
 
 Builds
 read selected data and use Biotope's BioCypher exporter, included in
@@ -114,6 +151,8 @@ for matching-topology observations. JSON mode writes no HTML; old reports withou
 measurements stay unmeasured.
 
 Review the resulting research graph manually against its purpose and source
-evidence. During cleanup, archive or remove run directories under `graph/build/`;
+evidence, and read `query_context.json` the way its eventual consumer will:
+with the graph and that document alone, is every statistic, selection rule and
+identity condition recoverable? During cleanup, archive or remove run directories under `graph/build/`;
 generated reports under `graph/reports/` can also be regenerated. Preserve raw
 data, metadata and authored code.
