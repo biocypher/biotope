@@ -6,7 +6,7 @@ import inspect
 import math
 import re
 import types
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
 from typing import Any, Literal, TypedDict, Union, cast, get_args, get_origin, get_type_hints
 
@@ -28,20 +28,6 @@ def identifier(value: object) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[^\s:]+:[^\s]+", value):
         raise ValueError(f"Invalid identifier {value!r}; mint an explicit namespace:local-id in project code")
     return value
-
-
-def described(description: str, **kwargs: Any) -> Any:
-    """Declare a topology property together with what its value means.
-
-    The description travels to the query context and the export, so write it
-    for a reader who has only the graph: the unit, the reference group, how the
-    value was computed and what it does not establish.
-    """
-    text = " ".join(description.split())
-    if not text:
-        raise ValueError("A property description must state what the value means")
-    metadata: dict[str, Any] = {**kwargs.pop("metadata", {}), "description": text}
-    return field(metadata=metadata, **kwargs)
 
 
 def concept_description(cls: type) -> str:
@@ -148,6 +134,8 @@ class Topology:
         for cls in (*self.nodes, *self.edges):
             if not is_dataclass(cls):
                 raise ValueError(f"{cls}: graph declarations must be dataclasses")
+            if not bool(getattr(getattr(cls, "__dataclass_params__", None), "frozen", False)):
+                raise ValueError(f"{cls}: graph declarations must be frozen dataclasses")
             semantic = concept_id(cls)
             if semantic.split(":", 1)[0] == RESERVED_NAMESPACE:
                 raise ValueError(f"{semantic}: the {RESERVED_NAMESPACE}: namespace is reserved for export metadata")
@@ -191,7 +179,7 @@ class Topology:
             concept_id(cls): {
                 "description": concept_description(cls),
                 "properties": {
-                    member.name: str(member.metadata.get("description", ""))
+                    member.name: " ".join(str(member.metadata.get("description", "")).split())
                     for member in fields(cls)
                     if member.name not in ("id", "source", "target")
                 },

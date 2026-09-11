@@ -1,84 +1,89 @@
-"""Executable acceptance: does this graph answer what it claims to answer?
-
-Each check derives its expectation from the source, not from the pipeline. A
-check that recomputes the build's own logic proves the code is self-consistent
-and nothing else; it cannot notice a row the pipeline never emitted, which is
-exactly the failure these checks exist to catch. So the readers here are plain
-``csv`` calls, deliberately independent of ``graph/sources``.
-"""
+"""Executable acceptance for the capabilities this graph claims."""
 
 import csv
 
 from biotope.graph import Audit, GraphView, ValidationCheck, ValidationResult
 
 from .paths import PROJECT_ROOT
-from .topology.person.node import Person
 from .topology.sample.from_person import FromPerson
 from .topology.sample.node import Sample
 
 
+DECLARED_MULTIPLIER = 2.0
+"""The factor query_context.py publishes, deliberately not the pipeline's constant."""
+
+
 def _rows(name: str) -> list[dict[str, str]]:
-    """Read one raw table with a reader the pipeline does not use."""
     with (PROJECT_ROOT / "raw" / name).open(encoding="utf-8", newline="") as stream:
         return list(csv.DictReader(stream))
 
 
-def matched_samples_are_complete(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
-    """Every source sample with a known person must be present, and no others."""
+def _source_key(identity: str) -> str:
+    return identity.rsplit(":", 1)[-1]
+
+
+def sample_ownership_matches_source(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+    """Every sample must reach the person the source assigned it, and no other."""
     people = {row["person_id"] for row in _rows("people.csv")}
-    expected = {row["sample_id"] for row in _rows("samples.csv") if row["person_id"] in people}
-    found = {sample.id.split(":")[-1] for sample in view.records(Sample)}
+    expected = {(row["sample_id"], row["person_id"]) for row in _rows("samples.csv") if row["person_id"] in people}
+    found = {(_source_key(edge.source), _source_key(edge.target)) for edge in view.records(FromPerson)}
     if found != expected:
         return ValidationResult.wrong(
-            f"Matched samples differ from the source: {sorted(expected - found)} missing, "
-            f"{sorted(found - expected)} unexpected.",
+            f"Ownership differs from the source: missing {sorted(expected - found)}, "
+            f"unexpected {sorted(found - expected)}.",
             expected=len(expected),
             found=len(found),
         )
-    return ValidationResult.ok(f"All {len(expected)} matched source samples are present.", samples=len(expected))
+    return ValidationResult.ok(f"All {len(expected)} source sample-person pairs are present.", pairs=len(expected))
 
 
-def every_sample_reaches_its_person(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
-    """The documented join must actually traverse: no sample may be stranded."""
-    people = {person.id for person in view.records(Person)}
-    edges = {(edge.source, edge.target) for edge in view.records(FromPerson)}
-    stranded = [sample.id for sample in view.records(Sample) if not any(s == sample.id for s, _ in edges)]
-    unresolved = sorted({target for _, target in edges if target not in people})
-    if stranded or unresolved:
+def scores_match_the_published_transform(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+    """Every stored score must equal the source score times the published factor."""
+    expected = {row["sample_id"]: float(row["score"]) * DECLARED_MULTIPLIER for row in _rows("samples.csv")}
+    wrong = {
+        sample.id: (sample.doubled_score, expected[_source_key(sample.id)])
+        for sample in view.records(Sample)
+        if _source_key(sample.id) in expected and sample.doubled_score != expected[_source_key(sample.id)]
+    }
+    if wrong:
         return ValidationResult.wrong(
-            f"Join coverage is incomplete: {len(stranded)} samples without a person edge, "
-            f"{len(unresolved)} edges to an absent person.",
-            stranded=len(stranded),
-            unresolved=len(unresolved),
+            f"Stored scores contradict the published transform of x{DECLARED_MULTIPLIER}: {sorted(wrong)}.",
+            mismatched=len(wrong),
         )
-    return ValidationResult.ok(f"All {len(edges)} sample-person joins resolve.", joins=len(edges))
+    return ValidationResult.ok(f"Every stored score is the source value x{DECLARED_MULTIPLIER}.")
 
 
-def raw_scores_are_recoverable(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
-    """A question about source score magnitude cannot be answered from this graph."""
+def scores_are_comparable_across_tissues(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+    """Comparing scores between tissues needs a scale the source never states."""
+    rows = _rows("samples.csv")
+    declared = sorted(rows[0]) if rows else []
+    scale = [name for name in declared if "unit" in name.lower() or "scale" in name.lower()]
+    if scale:
+        return ValidationResult.ok(f"The source declares a scale in {scale}.")
     return ValidationResult.unknown(
-        "Only doubled_score is stored, so absolute source scores cannot be recovered by any query. "
-        "Comparisons between samples remain valid; statements about raw magnitude do not."
+        f"samples.csv declares {declared} and no unit or scale column, so scores from "
+        "different tissues cannot be shown to share one scale. Comparisons within a tissue "
+        "remain valid."
     )
 
 
 VALIDATION_CHECKS = (
     ValidationCheck(
-        name="example:matched-samples-complete",
-        function=matched_samples_are_complete,
+        name="example:sample-ownership",
+        function=sample_ownership_matches_source,
         capability="samples-per-person",
-        evidence=("Expectation read straight from raw/samples.csv and raw/people.csv.",),
+        evidence=("Pairs read from raw/samples.csv and raw/people.csv.",),
     ),
     ValidationCheck(
-        name="example:join-coverage",
-        function=every_sample_reaches_its_person,
-        capability="samples-per-person",
-        evidence=("Exercises the join the documented query example depends on.",),
-    ),
-    ValidationCheck(
-        name="example:raw-score-recoverable",
-        function=raw_scores_are_recoverable,
+        name="example:published-transform",
+        function=scores_match_the_published_transform,
         capability="score-comparison",
-        evidence=("Records a known gap rather than leaving the limitation to the reader.",),
+        evidence=("Source scores from raw/samples.csv against the factor in query_context.py.",),
+    ),
+    ValidationCheck(
+        name="example:cross-tissue-scale",
+        function=scores_are_comparable_across_tissues,
+        capability="cross-tissue-scores",
+        evidence=("Column names declared by raw/samples.csv.",),
     ),
 )

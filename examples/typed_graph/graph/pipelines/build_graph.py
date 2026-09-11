@@ -36,9 +36,6 @@ def build(context: RunContext) -> None:
     for key, person in people.items():
         if key not in matched:
             context.exclude("unused_person", person.evidence)
-    # Name the counts a reader would need to notice a silent loss. Nothing here
-    # is an equation: one sample row yields three graph objects, and one person
-    # row is reused by every sample that matched it.
     context.record_audit(
         "join:samples-to-people",
         inputs="one row per sample_id in samples.csv",

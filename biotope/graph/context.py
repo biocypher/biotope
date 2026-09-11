@@ -1,18 +1,12 @@
 """The interpretation context that travels with an exported graph.
 
-A graph built for independent agent use is delivered through labels, property
-names and values. The builder's decision notes stay behind unless something
-carries them, so selection rules, statistic definitions, identity conditions and
-stated uncertainty are declared in Python beside the topology and generated into
-one versioned document that ships with the export and, for database-only
-delivery, into rows the consumer can query.
-
-Biotope validates and transports this material. It never invents biomedical
-semantics: every statement here is the project's own.
+Biotope validates and transports this material. Every statement in it is the
+project's own; nothing here invents biomedical semantics.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,11 +28,43 @@ CONTEXT_CONCEPT = "biotope:query-context"
 CONTEXT_LABEL = "BiotopeQueryContext"
 CONTEXT_PROPERTIES = {"entry": "str", "subject": "str", "label": "str", "statement": "str", "detail": "str"}
 
+ENCODING = (
+    r"Text is escaped so a multi-line value survives one CSV cell: \n is a newline, "
+    r"\r a carriage return, \t a tab and \\ a literal backslash. Reverse those four "
+    "to recover the original, and preserve interior spacing exactly."
+)
+_ESCAPED = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
+_UNESCAPED = {"n": "\n", "r": "\r", "t": "\t", "\\": "\\"}
 
-def _split(subject: str) -> tuple[str, str]:
-    """Separate a ``<concept>.<property>`` reference from a bare concept ID."""
-    concept, _, prop = subject.partition(".")
-    return concept, prop
+
+def encode_text(value: str) -> str:
+    """Escape a value so it survives one single-line cell without losing characters."""
+    return "".join(_ESCAPED.get(char, char) for char in value)
+
+
+def decode_text(value: str) -> str:
+    """Reverse :func:`encode_text`."""
+    out: list[str] = []
+    chars = iter(value)
+    for char in chars:
+        if char != "\\":
+            out.append(char)
+            continue
+        following = next(chars, "")
+        out.append(_UNESCAPED.get(following, "\\" + following))
+    return "".join(out)
+
+
+def _reference(subject: str, concepts: Collection[str]) -> tuple[str, str]:
+    """Resolve a reference to a concept and an optional property suffix.
+
+    An exact concept match wins, so a concept ID containing periods stays
+    addressable; otherwise the final period separates the property.
+    """
+    if subject in concepts:
+        return subject, ""
+    concept, _, prop = subject.rpartition(".")
+    return (concept, prop) if concept else (subject, "")
 
 
 def _described(descriptions: dict[str, ConceptDescription], concept: str) -> ConceptDescription:
@@ -49,7 +75,7 @@ def _described(descriptions: dict[str, ConceptDescription], concept: str) -> Con
 
 def _resolve(subject: str, schema: dict[str, ConceptSchema]) -> str:
     """Return an empty string when a reference is valid, else why it is not."""
-    concept, prop = _split(subject)
+    concept, prop = _reference(subject, schema)
     if concept not in schema:
         return f"no topology concept {concept!r}"
     if prop and prop not in schema[concept]["properties"] and prop not in ("id", "source", "target"):
@@ -197,7 +223,7 @@ def build_query_context(
         "interpretations": [
             {
                 "subject": item.subject,
-                "label": labels.get(_split(item.subject)[0], ""),
+                "label": labels.get(_reference(item.subject, schema)[0], ""),
                 "kind": item.kind,
                 "statement": item.statement,
                 "alternatives": list(item.alternatives),
@@ -237,7 +263,8 @@ def build_query_context(
             "state": validation.get("state", "not_run"),
             "reason": validation.get("reason", "Validation did not run"),
             "checks": [
-                {k: item[k] for k in ("name", "capability", "state", "detail")} for item in validation.get("checks", [])
+                {k: item[k] for k in ("name", "capability", "state", "detail", "evidence")}
+                for item in validation.get("checks", [])
             ],
         },
         "settings": pipeline.settings,
@@ -252,68 +279,68 @@ def build_query_context(
 def context_rows(document: dict[str, Any]) -> list[tuple[str, dict[str, object]]]:
     """Flatten the document into uniform rows for database-only delivery.
 
-    One reserved label, one row shape. A consumer with nothing but a Cypher
-    session can select by ``subject`` or by ``entry`` without knowing this
-    module. These rows carry system metadata and are exported outside the
-    project's own concepts, so they never enter its population counts.
+    One reserved label, one row shape, one fact per row, so a consumer with
+    nothing but a Cypher session can select by ``entry`` or ``subject`` and
+    recover every statement the JSON document carries. Text is escaped rather
+    than reflowed: a query returned from here runs unchanged after decoding.
     """
     rows: list[tuple[str, dict[str, object]]] = []
-
     selection: dict[str, Any] = document["selection"]
     policies: dict[str, str] = selection["policies"]
-    validation: dict[str, str] = document["validation"]
+    validation: dict[str, Any] = document["validation"]
 
-    def add(entry: str, subject: str, label: str, statement: str, detail: str = "") -> None:
-        # Rows land in a single-line CSV column, so authored text is flattened here.
-        # The JSON document keeps the original wording.
+    def add(entry: str, subject: str, statement: object, detail: object = "", label: str = "") -> None:
         values = {"entry": entry, "subject": subject, "label": label, "statement": statement, "detail": detail}
         rows.append(
             (
                 f"{CONTEXT_CONCEPT}:{len(rows):05d}",
-                {name: " ".join(str(value).split()) for name, value in values.items()},
+                {name: encode_text(str(value)) for name, value in values.items()},
             )
         )
 
-    add("guidance", document["pipeline"], "", document["guidance"], document["scope"])
+    add("guidance", document["pipeline"], document["guidance"], document["scope"])
+    add("encoding", document["pipeline"], ENCODING)
+    add("variability", document["pipeline"], document["variability"])
+
     for concept, item in document["concepts"].items():
         measured = "unmeasured" if item["count"] is None else item["count"]
-        add("concept", concept, item["label"], item["description"], f"{item['kind']}; records: {measured}")
+        add("concept", concept, item["description"], f"{item['kind']}; records: {measured}", item["label"])
         for name, prop in item["properties"].items():
-            add(
-                "property",
-                f"{concept}.{name}",
-                item["label"],
-                prop["description"],
-                f"{prop['type']}{', nullable' if prop['nullable'] else ''}",
-            )
+            detail = f"{prop['type']}{', nullable' if prop['nullable'] else ''}"
+            add("property", f"{concept}.{name}", prop["description"], detail, item["label"])
+
     for item in document["interpretations"]:
-        add(
-            item["kind"],
-            item["subject"],
-            item["label"],
-            item["statement"],
-            "also queryable: " + ", ".join(item["alternatives"]) if item["alternatives"] else "",
-        )
+        add(item["kind"], item["subject"], item["statement"], label=item["label"])
+        for alternative in item["alternatives"]:
+            add("alternative", item["subject"], alternative, "also queryable")
+
     for item in document["capabilities"]:
-        add(
-            "capability",
-            item["key"],
-            "",
-            f"{item['question']} [{item['state']}]",
-            " ".join(item["limitations"]),
-        )
+        add("capability", item["key"], item["question"], item["state"])
+        for name in item["checks"]:
+            add("capability_check", item["key"], name)
+        for limitation in item["limitations"]:
+            add("capability_limit", item["key"], limitation)
+
     for item in document["examples"]:
-        add("example", item["capability"], "", item["query"], f"{item['language']}: {item['expectation']}")
+        add("example", item["capability"], item["query"], item["expectation"], item["language"])
+
+    add("validation", document["pipeline"], validation["reason"], validation["state"])
+    for item in validation["checks"]:
+        add("check", item["name"], item["detail"], item["state"], item["capability"])
+        for line in item["evidence"]:
+            add("check_evidence", item["name"], line)
+
     for item in selection["exclusions"]:
-        add("selection", item["policy"], "", policies.get(item["policy"], ""), f"{item['count']} records excluded")
+        add("exclusion", item["policy"], policies.get(item["policy"], ""), f"{item['count']} records excluded")
     for item in selection["audits"]:
-        add(
-            "selection",
-            item["stage"],
-            "",
-            item["selection"],
-            f"{item['inputs']} -> {item['outputs']}; "
-            + ", ".join(f"{k}={v}" for k, v in sorted(item["counts"].items())),
-        )
-    add("validation", document["pipeline"], "", validation["reason"], validation["state"])
+        add("audit", item["stage"], item["selection"], f"{item['inputs']} -> {item['outputs']}")
+        for name, count in sorted(item["counts"].items()):
+            add("audit_count", item["stage"], count, label=name)
+        for note in item["notes"]:
+            add("audit_note", item["stage"], note)
+
+    for artifact, version in document["sources"]:
+        add("source", artifact, version)
+    for name, value in sorted(document["settings"].items()):
+        add("setting", name, value)
     return rows

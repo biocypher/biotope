@@ -41,11 +41,13 @@ class Measurement:
 
     schema_id: ClassVar[str] = "study:measurement"
     id: MeasurementId
-    effect: float = described("Log2 fold change, treated over control; the source's sign, not normalized.")
-    note: str | None = described("Free-text source comment, absent for most rows.", default=None)
+    effect: float = field(
+        metadata={"description": "Log2 fold change, treated over control; the source's sign, not normalized."}
+    )
+    note: str | None = field(default=None, metadata={"description": "Free-text source comment."})
 ```
 
-`described(...)` is `dataclasses.field` carrying the text. Descriptions are collected separately from `Topology.describe()`, so improving the wording does not change the topology digest. They reach `query_context.json`, which is the only place a consumer can read them.
+Use `dataclasses.field` rather than a wrapper: a helper returning a value makes a required property look defaulted to the type checker, so a missing argument is only caught at run time. Descriptions are collected separately from `Topology.describe()`, so improving the wording does not change the topology digest. They reach `query_context.json`, which is the only place a consumer can read them.
 
 ## Generated fields are nullable until curation says otherwise
 

@@ -1,9 +1,7 @@
 """People are source-local; no cross-study biological identity is asserted."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, NewType
-
-from biotope.graph import described
 
 
 PersonId = NewType("PersonId", str)
@@ -19,4 +17,4 @@ class Person:
 
     schema_id: ClassVar[str] = "example:person"
     id: PersonId
-    name: str = described("The person's name exactly as the source spells it; not an identifier.")
+    name: str = field(metadata={"description": "The person's name exactly as the source spells it; not an identifier."})

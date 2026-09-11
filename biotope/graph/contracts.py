@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections.abc
 from collections.abc import Callable, Iterable, Iterator
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, Literal, ParamSpec, Protocol, TypeVar, cast
@@ -132,7 +133,13 @@ class Audit:
 
 @dataclass(frozen=True)
 class GraphView:
-    """Borrowed read-only stores; analysis never constructs a second object graph."""
+    """Read-only access to the collected graph, for measurement and project checks.
+
+    The stores arrive as proxies and records are handed out as copies, so a
+    check cannot alter what the build goes on to export. The build seals the
+    graph around the checks as well, and a mutation reached by any other route
+    fails the run rather than reaching the writer.
+    """
 
     concepts: collections.abc.Mapping[str, ConceptSchema]
     nodes: collections.abc.Mapping[str, GraphRecord]
@@ -140,11 +147,16 @@ class GraphView:
     requirements: collections.abc.Mapping[str, str]
 
     def records(self, concept: type[G]) -> Iterator[G]:
-        """Iterate the collected objects of one declared type, without copying them."""
+        """Iterate copies of the collected objects of one declared type."""
         for store in (self.nodes, self.edges):
             for row in store.values():
                 if type(row.value) is concept:
-                    yield cast(G, row.value)
+                    yield deepcopy(cast(G, row.value))
+
+    def evidence(self, identity: str) -> tuple[Evidence, ...]:
+        """Sorted contributor references for one collected identity."""
+        row = self.nodes.get(identity) or self.edges.get(identity)
+        return tuple(sorted(row.evidence)) if row is not None else ()
 
 
 ValidationState = Literal["passed", "failed", "unverified"]

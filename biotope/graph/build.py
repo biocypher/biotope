@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import platform
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,7 +19,6 @@ from biotope.graph.quality import analyze_quality
 from biotope.graph.reports import CheckFailed, Finding, FindingSink, Phase
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest
-from biotope.graph.topology import concept_id
 from biotope.graph.validation import run_validation
 
 
@@ -108,8 +107,6 @@ def _execute(
     try:
         report["definitions"] = check_pipeline(pipeline, phase=phase, on_finding=on_finding)
         if exporter is not None:
-            # Before any payload is read: an unsupported writer wastes the run and
-            # can still leave files in a format this package has never tested.
             stage = "environment"
             if phase:
                 phase("Checking the exporter")
@@ -125,12 +122,17 @@ def _execute(
         context.validate_references()
         stage = "validation"
         collect()
+        sealed = context.content_digest() if pipeline.validation_checks else None
         report["validation"] = run_validation(
             pipeline, context.view(), context.audits, phase=phase, on_finding=on_finding
         )
+        if sealed is not None and context.content_digest() != sealed:
+            raise ValueError(
+                "A validation check modified the graph. Checks inspect the built graph and must "
+                "not change it; the run is abandoned rather than exporting an unchecked graph."
+            )
         stage = "quality"
         report["quality"] = analyze_quality(context.view(), phase=phase, on_finding=on_finding).to_json()
-        # Measure first, then gate: a blocked export is more useful with its diagnostics.
         if report["validation"]["state"] == "failed":
             stage = "validation"
             raise ValueError(
@@ -154,12 +156,7 @@ def _execute(
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
             report["outputs"] = exporter.write(context, output, query_context=report["query_context"])
-            content = [
-                [kind, identity, concept_id(type(row.value)), _payload(row.value)]
-                for kind, records in (("node", context.nodes), ("edge", context.edges))
-                for identity, row in sorted(records.items())
-            ]
-            report["graph_digest"] = digest(content)
+            report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
     except Exception as exc:
         if isinstance(exc, CheckFailed):
@@ -176,12 +173,6 @@ def _execute(
         collect()
         save()
     return report
-
-
-def _payload(value: object) -> dict[str, object]:
-    if not is_dataclass(value) or isinstance(value, type):
-        raise ValueError("Graph outputs must be dataclass instances")
-    return asdict(value)
 
 
 def _version(package: str) -> str:

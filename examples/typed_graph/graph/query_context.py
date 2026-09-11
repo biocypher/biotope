@@ -1,10 +1,4 @@
-"""What a consumer must know to read this graph correctly, written for that consumer.
-
-The person querying this graph gets labels, properties and values. They do not
-get the build log, this repository or the reasoning behind any decision, so
-every rule they need in order to filter, join or compare has to be declared
-here and shipped with the export.
-"""
+"""What a consumer must know to read this graph correctly, written for that consumer."""
 
 from biotope.graph import Capability, Interpretation, QueryContext, QueryExample
 
@@ -23,8 +17,8 @@ QUERY_CONTEXT = QueryContext(
             subject="example:sample.doubled_score",
             kind="statistic",
             statement=(
-                "score x 2.0, applied to every sample by the same fixed multiplier. "
-                "Ratios between samples are unchanged; absolute values are not source values."
+                "The source score multiplied by 2.0, applied to every sample. Ratios between "
+                "samples are unchanged; absolute values are not source values."
             ),
         ),
         Interpretation(
@@ -40,7 +34,8 @@ QUERY_CONTEXT = QueryContext(
             kind="uncertainty",
             statement=(
                 "A free-text source label, lowercased. Equal strings are not evidence of the same "
-                "anatomical site, and different strings are not evidence of different ones."
+                "anatomical site, and the source states no unit or scale, so scores from different "
+                "tissues are not known to be comparable."
             ),
         ),
     ),
@@ -53,12 +48,18 @@ QUERY_CONTEXT = QueryContext(
         ),
         Capability(
             key="score-comparison",
-            question="How do transformed scores compare between samples or between people?",
+            question="How do transformed scores compare between samples of one tissue?",
             concepts=("example:sample.doubled_score",),
             limitations=(
                 "Only the transformed value is stored. A question about raw score magnitude "
-                "needs a rebuild, not a different query.",
+                "divides by 2.0; a question about the untransformed distribution needs a rebuild.",
             ),
+        ),
+        Capability(
+            key="cross-tissue-scores",
+            question="Are scores from different tissues on a comparable scale?",
+            concepts=("example:sample.doubled_score", "example:sample.tissue"),
+            limitations=("The source declares no unit or scale for score.",),
         ),
     ),
     examples=(
@@ -66,8 +67,10 @@ QUERY_CONTEXT = QueryContext(
             capability="samples-per-person",
             language="cypher",
             query=(
-                "MATCH (s:ExampleSample)-[:ExampleFromPerson]->(p:ExamplePerson) "
-                "RETURN p.name, count(s) AS samples ORDER BY samples DESC"
+                "MATCH (s:ExampleSample)-[:ExampleFromPerson]->(p:ExamplePerson)\n"
+                "// one row per person with at least one matched sample\n"
+                "RETURN p.name, count(s) AS samples\n"
+                "ORDER BY samples DESC"
             ),
             expectation="One row per person with at least one matched sample.",
         ),

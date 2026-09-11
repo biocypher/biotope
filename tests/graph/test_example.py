@@ -66,6 +66,16 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     result = run(root)
     assert result.returncode != 0
     assert "renamed_score" in result.stderr and "PersonId" in result.stderr and "SampleId" in result.stderr
+    # A described property carries metadata only; it must stay a required argument.
+    mapping.write_text(
+        good.replace(
+            "Sample(id=sample_id, tissue=measurement.value.tissue, doubled_score=measurement.value.score)",
+            "Sample(id=sample_id)",
+        )
+    )
+    result = run(root)
+    assert result.returncode != 0
+    assert 'Arguments missing for parameters "tissue", "doubled_score"' in " ".join(result.stderr.split())
     mapping.write_text(good)
     shutil.copytree(EXAMPLE / "raw", root / "raw")
     (root / "raw/people.csv").write_text('person_id,name\np1,"Ada ""A"""\np2,Bea\n')
@@ -136,8 +146,8 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     result = run(root)
     assert result.returncode != 0 and "doubled_score" in result.stderr
     mapping.write_text(mapping.read_text().replace("doubled_score=", "adjusted_score="))
-    # Interpretation rules are checked against the real topology: a renamed property
-    # leaves the shipped context pointing at something the export will not contain.
+    checks = root / "graph/checks.py"
+    checks.write_text(checks.read_text().replace("doubled_score", "adjusted_score"))
     result = run(root)
     assert result.returncode != 0
     assert "example:sample has no property 'doubled_score'" in " ".join(result.stderr.split())
@@ -148,3 +158,38 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     repaired = json.loads((root / "graph/build/repaired/run.json").read_text())
     assert repaired["state"] == "complete"
     assert repaired["definitions"]["topology_digest"] != first["definitions"]["topology_digest"]
+    states = {k: v["state"] for k, v in repaired["validation"]["capabilities"].items()}
+    assert states == {
+        "samples-per-person": "supported",
+        "score-comparison": "supported",
+        "cross-tissue-scores": "unverified",
+    }
+
+
+def test_corrupted_ownership_fails_validation_while_every_endpoint_resolves(tmp_path):
+    root = prepare(tmp_path)
+    assert run(root, "build", "honest").returncode == 0
+
+    (root / "raw/samples.csv").write_text(
+        "sample_id,person_id,tissue,score\ns1,p1,liver,1.5\ns2,p2,blood,2.5\ns3,p_missing,lung,3.5\n"
+    )
+    mapping = root / "graph/mappings/samples.py"
+    mapping.write_text(
+        mapping.read_text().replace(
+            'f"{IDENTITY_SCOPE}:person:{person.value.person_id}"',
+            "f\"{IDENTITY_SCOPE}:person:{'p2' if person.value.person_id == 'p1' else 'p1'}\"",
+        )
+    )
+    result = run(root, "build", "swapped")
+    assert result.returncode != 0
+    report = json.loads((root / "graph/build/swapped/run.json").read_text())
+
+    # Both people are emitted and every edge endpoint resolves, so only the
+    # source comparison can notice that the samples reached the wrong owners.
+    assert report["graph_objects"] == {"nodes": 4, "edges": 2}
+    assert [f for f in report["findings"] if f.get("code") == "integrity.failed"] == []
+    ownership = next(c for c in report["validation"]["checks"] if c["name"] == "example:sample-ownership")
+    assert ownership["state"] == "failed"
+    assert "s1" in ownership["detail"] and "s2" in ownership["detail"]
+    assert report["validation"]["capabilities"]["samples-per-person"]["state"] == "failed"
+    assert not (root / "graph/build/swapped/biocypher").exists()

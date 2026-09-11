@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import ClassVar, NewType
 
 import pytest
@@ -44,11 +44,12 @@ class Item:
 
     schema_id: ClassVar[str] = "test:item"
     id: ItemId
+    tags: list[str] = field(default_factory=list[str])
 
 
 def make_item(row: SourceRecord[ItemRow]) -> Iterator[Item]:
     """Carry one row into the graph."""
-    yield Item(ItemId("item:" + row.value.key))
+    yield Item(ItemId("item:" + row.value.key), [row.value.key])
 
 
 ITEMS = Mapping(name="items", function=make_item)
@@ -238,3 +239,39 @@ def test_audits_record_stage_accounting_without_imposing_arithmetic(tmp_path, mo
         context.record_audit("t", inputs="i", outputs="o", selection=" ", counts={})
     with pytest.raises(ValueError, match="non-negative integer"):
         context.record_audit("u", inputs="i", outputs="o", selection="all", counts={"n": -1})
+
+
+def test_a_check_cannot_change_the_graph_that_is_exported(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked"})
+
+    def rewrite_a_record(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+        view.nodes["item:a"].value = Item(ItemId("item:elsewhere"))
+        return ValidationResult.ok("Reported success after rewriting a record.")
+
+    def append_to_a_list(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+        next(iter(view.nodes.values())).value.tags.append("added")
+        return ValidationResult.ok("Reported success after mutating a list property.")
+
+    def copy_then_mutate(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
+        for item in view.records(Item):
+            item.tags.append("harmless")
+        return ValidationResult.ok("Mutated only the copies records() hands out.")
+
+    for name, function in (("test:rewrite", rewrite_a_record), ("test:append", append_to_a_list)):
+        writer = Writer()
+        pipeline = replace(PIPELINE, validation_checks=(ValidationCheck(name, function, "count-items"),))
+        with pytest.raises(build.RunFailed) as failure:
+            build.run_pipeline(pipeline, tmp_path / name.replace(":", "-"), writer=writer)
+        assert not writer.wrote, "a mutated graph must never reach the writer"
+        assert "modified the graph" in failure.value.report["error"]
+
+    # The documented access path hands out copies, so the graph is untouched.
+    writer = Writer()
+    pipeline = replace(PIPELINE, validation_checks=(ValidationCheck("test:copies", copy_then_mutate, "count-items"),))
+    report = build.run_pipeline(pipeline, tmp_path / "copies", writer=writer)
+    assert writer.wrote and report["validation"]["state"] == "passed"
+
+    context = RunContext(PIPELINE)
+    emit(context, ("a",))
+    with pytest.raises(TypeError):
+        context.view().nodes["item:b"] = context.nodes["item:a"]

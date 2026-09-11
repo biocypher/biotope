@@ -154,10 +154,8 @@ beside the source node. Each class has an explicit `schema_id: ClassVar[str]`;
 file/class renames do not change this concept ID.
 
 ```python
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, NewType
-
-from biotope.graph import described
 
 PersonId = NewType("PersonId", str)
 
@@ -167,15 +165,18 @@ class Person:
 
     schema_id: ClassVar[str] = "study:person"
     id: PersonId
-    name: str = described("The person's name as the source spells it; not an identifier.")
+    name: str = field(
+        metadata={"description": "The person's name as the source spells it; not an identifier."}
+    )
 ```
 
-The class docstring describes the concept and `described(...)` describes a
-property; both reach the exported query context, which is all a consumer of the
-finished graph receives. Descriptions are read separately from
-`Topology.describe()`, so improving the wording does not change the topology
-digest. The `biotope:` namespace is reserved for export metadata and rejected in
-project concept IDs.
+The class docstring describes the concept and the field metadata describes a
+property; both reach the exported interpretation context, which is all a
+consumer of the finished graph receives. Use `dataclasses.field` directly: a
+helper returning a value would make a required property look defaulted to the
+type checker. Descriptions are read separately from `Topology.describe()`, so
+improving the wording does not change the topology digest. Topology classes must
+be frozen, and the `biotope:` namespace is reserved for export metadata.
 
 Mint namespaced identifiers explicitly in project code. Equal local strings from
 two studies are not evidence of shared identity. A `NewType` conversion gives

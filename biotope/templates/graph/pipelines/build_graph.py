@@ -13,9 +13,6 @@ from ..topology import TOPOLOGY
 def build(context: RunContext) -> None:
     """Load selected inputs, prepare joins, and call registered mappings."""
     # Adapt pipelines/_example.py after registering the actual sources and mappings.
-    # Biotope exports emitted objects through BioCypher; no project adapter is needed.
-    # Record one audit per stage that selects, joins or aggregates, so that a row
-    # the pipeline silently never emitted is visible as a count rather than absence.
     raise NotImplementedError("Implement the selected pipeline in graph/pipelines/build_graph.py")
 
 
@@ -44,8 +41,6 @@ PIPELINE = Pipeline(
     deferrals={},
     policies={},
     settings={},
-    # What the graph claims to answer, what a reader must know to query it, and
-    # the executable checks that decide whether those claims hold.
     query_context=QUERY_CONTEXT,
     validation_checks=VALIDATION_CHECKS,
 )

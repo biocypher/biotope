@@ -19,7 +19,7 @@ from biotope.graph.contracts import (
     ValidationResult,
 )
 from biotope.graph.runtime import RunContext
-from biotope.graph.topology import Topology, described
+from biotope.graph.topology import Topology
 
 
 __all__ = [
@@ -41,5 +41,4 @@ __all__ = [
     "Topology",
     "ValidationCheck",
     "ValidationResult",
-    "described",
 ]

@@ -1,10 +1,7 @@
 """Project-declared checks of the built graph, run between integrity and export.
 
-Structural validity is not answerability. Reference integrity proves that every
-edge endpoint resolves; quality measures what was emitted. Neither can see
-evidence the project never emitted, so neither can tell whether the graph
-supports the questions it was built for. That comparison needs an expectation
-derived outside the pipeline, which only the project can supply.
+Integrity and quality can only measure what the pipeline emitted. Comparing the
+graph with an expectation from outside it is what these checks add.
 """
 
 from __future__ import annotations

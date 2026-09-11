@@ -75,8 +75,8 @@ label, alongside its stable `schema_id`. Choose readable names such as "Sample"
 or "Measured in". The fallback is the Python class name split into words. Labels
 do not alter identity or exported data; full IDs remain in viewer details and JSON.
 
-Give every concept a class docstring and every property a `described("...")`
-field. Whoever queries the finished graph sees labels, properties and values and
+Give every concept a class docstring and every property a
+`field(metadata={"description": "..."})`. Whoever queries the finished graph sees labels, properties and values and
 nothing else, so meaning that lives only in a property name does not survive the
 handoff. Those descriptions, the `QUERY_CONTEXT` declarations and the run's own
 evidence are generated into `query_context.json` beside the export and mirrored

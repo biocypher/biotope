@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from copy import deepcopy
-from dataclasses import dataclass, field
-from typing import ParamSpec, TypeVar, cast
+from dataclasses import asdict, dataclass, field
+from types import MappingProxyType
+from typing import Any, ParamSpec, TypeVar, cast
 
 from biotope.graph.contracts import (
     Audit,
@@ -63,8 +64,23 @@ class RunContext:
         self.source_versions: set[tuple[str, str]] = set()
 
     def view(self) -> GraphView:
-        """Borrow the collected objects for measurement or a project validation check."""
-        return GraphView(self.schema, self.nodes, self.edges, self.pipeline.requirements)
+        """Expose the collected objects for measurement or a project validation check."""
+        return GraphView(
+            MappingProxyType(self.schema),
+            MappingProxyType(self.nodes),
+            MappingProxyType(self.edges),
+            MappingProxyType(self.pipeline.requirements),
+        )
+
+    def content_digest(self) -> str:
+        """Fingerprint every collected object, so a later pass can prove none changed."""
+        return digest(
+            [
+                [kind, identity, concept_id(type(row.value)), asdict(cast("Any", row.value))]
+                for kind, store in (("node", self.nodes), ("edge", self.edges))
+                for identity, row in sorted(store.items())
+            ]
+        )
 
     def load(self, source: SourceContract, loader: Loader[C, T], config: C) -> Iterator[SourceRecord[T]]:
         """Invoke a registered source's project loader and validate each result."""

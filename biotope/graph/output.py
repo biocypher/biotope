@@ -55,7 +55,6 @@ def export_labels(concepts: Iterable[str]) -> dict[str, str]:
     }
     bases = {semantic: base if base and base[0].isalpha() else "Concept" + base for semantic, base in bases.items()}
     counts = Counter(bases.values())
-    # "Entity" is the writer's synthetic root; the context label is Biotope's reserved row store.
     reserved = {"Entity", CONTEXT_LABEL}
     labels = {
         semantic: base + "H" + digest(semantic)[:10] if counts[base] > 1 or base in reserved else base
@@ -141,8 +140,6 @@ class BioCypherWriter:
             }
             for semantic, item in context.schema.items()
         }
-        # System metadata travels in its own reserved label so a database-only
-        # consumer can read the rules, and so it never joins the population counts.
         schema[CONTEXT_LABEL] = {
             "represented_as": "node",
             "input_label": CONTEXT_CONCEPT,
