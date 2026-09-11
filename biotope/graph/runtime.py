@@ -13,6 +13,7 @@ from biotope.graph.contracts import (
     Evidence,
     GraphObject,
     GraphRecord,
+    GraphStores,
     GraphView,
     Loader,
     Mapping,
@@ -63,22 +64,34 @@ class RunContext:
         self.loaded: dict[str, int] = {}
         self.source_versions: set[tuple[str, str]] = set()
 
-    def view(self) -> GraphView:
-        """Expose the collected objects for measurement or a project validation check."""
-        return GraphView(
+    def stores(self) -> GraphStores:
+        """Borrow the live stores for package measurement."""
+        return GraphStores(
             MappingProxyType(self.schema),
             MappingProxyType(self.nodes),
             MappingProxyType(self.edges),
             MappingProxyType(self.pipeline.requirements),
         )
 
+    def view(self) -> GraphView:
+        """Build an isolated view for a project validation check."""
+        return GraphView(self.stores())
+
+    def snapshot(self) -> tuple[Audit, ...]:
+        """Copy the recorded audits so a project check cannot edit the run's own account."""
+        return deepcopy(self.audits)
+
     def content_digest(self) -> str:
-        """Fingerprint every collected object, so a later pass can prove none changed."""
+        """Fingerprint the schema, the audits and every collected object."""
         return digest(
             [
-                [kind, identity, concept_id(type(row.value)), asdict(cast("Any", row.value))]
-                for kind, store in (("node", self.nodes), ("edge", self.edges))
-                for identity, row in sorted(store.items())
+                self.schema,
+                [asdict(item) for item in self.audits],
+                [
+                    [kind, identity, concept_id(type(row.value)), asdict(cast("Any", row.value))]
+                    for kind, store in (("node", self.nodes), ("edge", self.edges))
+                    for identity, row in sorted(store.items())
+                ],
             ]
         )
 

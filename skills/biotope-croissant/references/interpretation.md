@@ -4,7 +4,9 @@
 
 `Capability(key, question, concepts, limitations)` states a question someone will actually ask. Naming the concepts it touches is not the same claim: a graph can hold every concept a question mentions and still lack the row that answers it.
 
-Each capability needs four things before it counts as supported: the question, the interpretations a reader applies to answer it, one validation check, and one `QueryExample` that has been run. Fewer than four, and the run reports `unchecked` or `unverified` — both accurate, neither a pass.
+`supported` in `run.json` means one thing and only one thing: every validation check bound to that capability returned a pass. It is not a claim that the interpretations are sufficient, that the expectation was truly independent, or that any query was ever run — the package cannot see those. A capability with no check reports `unchecked`; a capability whose check returned `unknown` reports `unverified`.
+
+So declare the rest and check the rest yourself: the interpretations a reader applies, and a `QueryExample` you have executed against the built graph. Running the examples is a step you perform and report; nothing in `run.json` records that it happened.
 
 ## Name the adjacent questions before you fix scope
 

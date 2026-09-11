@@ -79,7 +79,7 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 - `context.map(mapping, *records, **keywords)` makes the same checks and collects graph objects. It accepts only mappings whose outputs declare a `schema_id`.
 - `context.exclude(policy_key, evidence, count=1)` records an excluded record against a declared pipeline policy.
 - `context.record_audit(stage, inputs=..., outputs=..., selection=..., counts=...)` records one stage's grains, its admission rule and named non-negative counts. Stage names are unique and nothing derives totals from the counts, so name whatever a reader needs to spot a silent drop.
-- `context.view()` borrows the collected objects as a `GraphView`; `view.records(Concept)` iterates one declared type without copying the graph.
+- `context.view()` builds an isolated `GraphView` for a validation check. Everything it hands out is a copy — `view.concepts`, `view.records(Concept)`, `view.evidence(id)`, `view.mappings(id)` — so a check cannot alter what the run exports or reports.
 
 ## Buffer the typed intermediate, never untyped pairs
 

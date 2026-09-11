@@ -102,12 +102,12 @@ PIPELINE = Pipeline(
 
 
 def test_quality_counts_evidence_and_empty_denominators():
-    from biotope.graph.quality import GraphView, analyze_quality
+    from biotope.graph.quality import GraphStores, analyze_quality
 
     context = RunContext(PIPELINE)
     emit_fixture(context)
     context.validate_references()
-    report = analyze_quality(GraphView(context.schema, context.nodes, context.edges, PIPELINE.requirements)).to_json()
+    report = analyze_quality(GraphStores(context.schema, context.nodes, context.edges, PIPELINE.requirements)).to_json()
     m = report["measurements"]
     assert m["population"] == {"test:node": 4, "test:unused": 0, "test:link": 3}
     names = m["properties"]["test:node"]["name"]
@@ -131,11 +131,11 @@ def test_quality_counts_evidence_and_empty_denominators():
     }
 
     context.map(NODES, node(4, None, ["v" * 200] * 8))
-    bounded = analyze_quality(GraphView(context.schema, context.nodes, context.edges, {})).to_json()
+    bounded = analyze_quality(GraphStores(context.schema, context.nodes, context.edges, {})).to_json()
     values = bounded["measurements"]["properties"]["test:node"]["tags"]["examples"]
     assert values[-1] == {"value": ["v" * 160] * 5, "truncated": True}
 
-    empty = analyze_quality(GraphView(context.schema, {}, {}, {})).to_json()["measurements"]
+    empty = analyze_quality(GraphStores(context.schema, {}, {}, {})).to_json()["measurements"]
     assert empty["connectivity"]["largest_share"] is None
     assert empty["self_loops"]["test:link"]["rate"] is None
 

@@ -1,2 +1,2 @@
 - why, to every entity, some kind of cvkg is prepended?
-- csv vs parquet graph build?
+- metagraph html includes absolute paths => bad

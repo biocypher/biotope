@@ -10,7 +10,7 @@ import pytest
 
 from biotope.graph import Evidence, Mapping, Pipeline, SourceRecord, Topology
 from biotope.graph.context import build_query_context
-from biotope.graph.output import BioCypherWriter, export_labels
+from biotope.graph.output import ARRAY_DELIMITER, BioCypherWriter, export_labels
 from biotope.graph.runtime import RunContext
 
 
@@ -88,11 +88,12 @@ def test_biocypher_labels_and_string_values_round_trip(tmp_path, monkeypatch):
     with output.open() as stream:
         row = next(csv.DictReader(stream, fieldnames=header))
     assert row["label"] == value.label
-    assert row["aliases:string[]"].split("|") == value.aliases
-    assert set(row[":LABEL"].split("|")) == {"StudyItem", "Entity"}
+    assert row["aliases:string[]"].split(ARRAY_DELIMITER) == value.aliases
+    # labels_order "Leaves" keeps the concept label and drops the synthetic ontology root.
+    assert row[":LABEL"] == "StudyItem"
     # A literal array separator cannot be represented unambiguously; reject it.
     invalid = RunContext(pipeline)
-    invalid.map(ITEMS, SourceRecord(replace(value, aliases=["a|b"]), evidence))
+    invalid.map(ITEMS, SourceRecord(replace(value, aliases=[f"a{ARRAY_DELIMITER}b"]), evidence))
     with pytest.raises(ValueError, match="string-list separator"):
         BioCypherWriter().write(invalid, tmp_path / "invalid", query_context=context_document(invalid))
 
@@ -115,4 +116,4 @@ def test_biocypher_labels_and_string_values_round_trip(tmp_path, monkeypatch):
     for path in (tmp_path / "colliding/biocypher").glob("*-part000.csv"):
         with path.open() as stream:
             actual.update(next(csv.reader(stream))[-1].split("|"))
-    assert actual - {"Entity"} == set(labels.values())
+    assert actual == set(labels.values())

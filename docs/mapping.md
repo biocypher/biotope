@@ -337,8 +337,8 @@ reading available. Checking also warns about capabilities nothing tests and
 about concepts or properties with no description.
 
 `ValidationCheck` registers a check that runs after reference integrity and
-before export. Its function receives a read-only `GraphView` and the recorded
-audits, and returns a `ValidationResult`:
+before export. Its function receives an isolated `GraphView` and a copy of the
+recorded audits, and returns a `ValidationResult`:
 
 ```python
 def eligible_rows_present(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
@@ -349,6 +349,12 @@ def eligible_rows_present(view: GraphView, audits: tuple[Audit, ...]) -> Validat
         return ValidationResult.wrong(f"Missing {sorted(expected - found)}")
     return ValidationResult.ok(f"All {len(expected)} eligible rows are present.")
 ```
+
+Everything the view hands out is a copy — the schema, each record, each
+record's provenance — and the build additionally seals the graph around the
+checks, so a check that reaches past the view fails the run instead of
+exporting. `supported` in the report means every check bound to that capability
+returned a pass, and nothing more.
 
 `ValidationResult.wrong` blocks the export. `.unknown` records missing
 knowledge: the capability it is bound to becomes unresolved while every other
@@ -430,11 +436,13 @@ missing measurements stay unmeasured, and loading a report never reruns data.
 Only recognized generated reports may be replaced; authored files are preserved.
 
 Before a build reads any payload, the writer verifies the exporter this
-environment will actually use. Escaping, file naming and the physical format are
-properties of one writer release rather than of the BioCypher API, so an
-unsupported version is refused with the install command for the tested one
-instead of producing output that has never been round-tripped. After writing,
-the export directory is checked against the same contract.
+environment will actually use. Escaping and file layout are properties of a
+writer release rather than of the BioCypher API, so a version outside the
+tested range is refused with the specifier to install instead of producing
+output that has never been round-tripped. The data format is declared, not
+inherited: `BioCypherWriter("csv")` is the default and `BioCypherWriter("parquet")`
+is also supported, the latter needing a Neo4j release whose import accepts it.
+After writing, the export directory is checked against the declared format.
 
 `run.json` records scope, source metadata and available versions, code/topology
 revisions, settings, dependencies, exclusions, audits, validation results,

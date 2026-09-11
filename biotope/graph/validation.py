@@ -105,7 +105,7 @@ def run_validation(
             )
         )
     reasons = {
-        "passed": "Every declared check compared the graph with an independently derived expectation.",
+        "passed": "Every declared check returned a pass. Nothing else about answerability is established.",
         "failed": "At least one declared expectation is contradicted by the graph; export is blocked.",
         "unverified": "Some expectations could not be established; their capabilities stay unresolved.",
         ABSENT: "No checks were declared; nothing about answerability was established.",

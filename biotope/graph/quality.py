@@ -8,15 +8,15 @@ from dataclasses import asdict
 from heapq import nsmallest
 from typing import Any, cast
 
-from biotope.graph.contracts import GraphRecord, GraphView
+from biotope.graph.contracts import GraphRecord, GraphStores
 from biotope.graph.reports import Finding, FindingSink, Phase, QualityReport
 from biotope.graph.topology import concept_id
 
 
-__all__ = ["CHECKS", "GraphView", "analyze_quality"]
+__all__ = ["CHECKS", "GraphStores", "analyze_quality"]
 
 
-def _records(view: GraphView) -> Iterator[tuple[str, GraphRecord]]:
+def _records(view: GraphStores) -> Iterator[tuple[str, GraphRecord]]:
     yield from view.nodes.items()
     yield from view.edges.items()
 
@@ -44,7 +44,7 @@ def _bounded(value: object) -> dict[str, object]:
     return {"value": value, "truncated": truncated}
 
 
-def population(view: GraphView, report: QualityReport) -> None:
+def population(view: GraphStores, report: QualityReport) -> None:
     counts = dict.fromkeys(view.concepts, 0)
     for _, row in _records(view):
         counts[concept_id(type(row.value))] += 1
@@ -56,7 +56,7 @@ def population(view: GraphView, report: QualityReport) -> None:
             )
 
 
-def properties(view: GraphView, report: QualityReport) -> None:
+def properties(view: GraphStores, report: QualityReport) -> None:
     results: dict[str, Any] = {
         concept: {
             name: {
@@ -117,7 +117,7 @@ def properties(view: GraphView, report: QualityReport) -> None:
     report.measurements["properties"] = results
 
 
-def connectivity(view: GraphView, report: QualityReport) -> None:
+def connectivity(view: GraphStores, report: QualityReport) -> None:
     parent = {key: key for key in view.nodes}
     sizes = dict.fromkeys(view.nodes, 1)
     isolated = set(view.nodes)
@@ -151,7 +151,7 @@ def connectivity(view: GraphView, report: QualityReport) -> None:
     }
 
 
-def concentration(view: GraphView, report: QualityReport) -> None:
+def concentration(view: GraphStores, report: QualityReport) -> None:
     counts: dict[str, dict[str, Counter[str]]] = {
         k: {"source": Counter(), "target": Counter()} for k, s in view.concepts.items() if s["kind"] == "edge"
     }
@@ -174,7 +174,7 @@ def concentration(view: GraphView, report: QualityReport) -> None:
     }
 
 
-def self_loops(view: GraphView, report: QualityReport) -> None:
+def self_loops(view: GraphStores, report: QualityReport) -> None:
     counts = {k: {"count": 0, "total": 0} for k, s in view.concepts.items() if s["kind"] == "edge"}
     examples: dict[str, list[dict[str, object]]] = {}
     for identity, row in view.edges.items():
@@ -201,7 +201,7 @@ def self_loops(view: GraphView, report: QualityReport) -> None:
             )
 
 
-CHECKS: tuple[Callable[[GraphView, QualityReport], None], ...] = (
+CHECKS: tuple[Callable[[GraphStores, QualityReport], None], ...] = (
     population,
     properties,
     connectivity,
@@ -211,7 +211,7 @@ CHECKS: tuple[Callable[[GraphView, QualityReport], None], ...] = (
 
 
 def analyze_quality(
-    view: GraphView, *, phase: Phase | None = None, on_finding: FindingSink | None = None
+    view: GraphStores, *, phase: Phase | None = None, on_finding: FindingSink | None = None
 ) -> QualityReport:
     """Assess final validated objects; scientific thresholds remain project decisions."""
     report = QualityReport()

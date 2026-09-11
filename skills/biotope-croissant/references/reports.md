@@ -40,7 +40,7 @@ It reads validated Python objects before export, never the BioCypher files and n
 
 ## The exporter is verified before any payload is read
 
-Escaping, file naming and the physical format belong to one writer release rather than to the BioCypher API, so an unsupported version is refused up front with the install command for the tested one. After writing, the export directory is checked against the same contract. Install the version the error names.
+Escaping and file layout belong to a writer release rather than to the BioCypher API, so a version outside the tested range is refused up front with the specifier to install. The data format is selected rather than inherited: `BioCypherWriter("csv")` writes CSV data files with CSV headers, `BioCypherWriter("parquet")` writes Parquet and no headers, and Parquet import needs a Neo4j release that accepts it. After writing, the export directory is checked against the format that was declared, so a writer whose default disagrees fails instead of shipping.
 
 ## Bounded samples are not complete lists
 

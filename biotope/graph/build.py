@@ -124,7 +124,7 @@ def _execute(
         collect()
         sealed = context.content_digest() if pipeline.validation_checks else None
         report["validation"] = run_validation(
-            pipeline, context.view(), context.audits, phase=phase, on_finding=on_finding
+            pipeline, context.view(), context.snapshot(), phase=phase, on_finding=on_finding
         )
         if sealed is not None and context.content_digest() != sealed:
             raise ValueError(
@@ -132,7 +132,7 @@ def _execute(
                 "not change it; the run is abandoned rather than exporting an unchecked graph."
             )
         stage = "quality"
-        report["quality"] = analyze_quality(context.view(), phase=phase, on_finding=on_finding).to_json()
+        report["quality"] = analyze_quality(context.stores(), phase=phase, on_finding=on_finding).to_json()
         if report["validation"]["state"] == "failed":
             stage = "validation"
             raise ValueError(

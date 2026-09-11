@@ -13,12 +13,13 @@ from biotope.graph.sources import digest
 
 def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     from biotope.graph.metagraph import describe_metagraph, render_metagraph
-    from biotope.graph.quality import GraphView, analyze_quality
+    from biotope.graph.quality import GraphStores, analyze_quality
     from biotope.graph.runtime import RunContext
 
     context = RunContext(PIPELINE)
     emit_fixture(context)
-    quality = analyze_quality(GraphView(context.schema, context.nodes, context.edges, PIPELINE.requirements)).to_json()
+    stores = GraphStores(context.schema, context.nodes, context.edges, PIPELINE.requirements)
+    quality = analyze_quality(stores).to_json()
     source = {
         "schema_version": 1,
         "report_kind": "biotope.quality",

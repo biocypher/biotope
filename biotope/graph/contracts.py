@@ -132,31 +132,53 @@ class Audit:
 
 
 @dataclass(frozen=True)
-class GraphView:
-    """Read-only access to the collected graph, for measurement and project checks.
-
-    The stores arrive as proxies and records are handed out as copies, so a
-    check cannot alter what the build goes on to export. The build seals the
-    graph around the checks as well, and a mutation reached by any other route
-    fails the run rather than reaching the writer.
-    """
+class GraphStores:
+    """Borrowed live stores, for package measurement only. Never hand this to project code."""
 
     concepts: collections.abc.Mapping[str, ConceptSchema]
     nodes: collections.abc.Mapping[str, GraphRecord]
     edges: collections.abc.Mapping[str, GraphRecord]
     requirements: collections.abc.Mapping[str, str]
 
+
+class GraphView:
+    """Isolated read-only access to the built graph, for a project validation check.
+
+    Everything reachable from here is a copy: the schema, each record, and each
+    record's provenance. A check cannot reach the build's own state, so it
+    cannot change what the export will contain or what the run will report.
+    """
+
+    def __init__(self, stores: GraphStores) -> None:
+        self.concepts: dict[str, ConceptSchema] = deepcopy(dict(stores.concepts))
+        self.requirements: dict[str, str] = dict(stores.requirements)
+        self._stores = stores
+
     def records(self, concept: type[G]) -> Iterator[G]:
         """Iterate copies of the collected objects of one declared type."""
-        for store in (self.nodes, self.edges):
+        for store in (self._stores.nodes, self._stores.edges):
             for row in store.values():
                 if type(row.value) is concept:
                     yield deepcopy(cast(G, row.value))
 
+    def identities(self, concept: type[GraphObject]) -> tuple[str, ...]:
+        """Collected identities of one declared type, in insertion order."""
+        return tuple(
+            identity
+            for store in (self._stores.nodes, self._stores.edges)
+            for identity, row in store.items()
+            if type(row.value) is concept
+        )
+
     def evidence(self, identity: str) -> tuple[Evidence, ...]:
         """Sorted contributor references for one collected identity."""
-        row = self.nodes.get(identity) or self.edges.get(identity)
+        row = self._stores.nodes.get(identity) or self._stores.edges.get(identity)
         return tuple(sorted(row.evidence)) if row is not None else ()
+
+    def mappings(self, identity: str) -> tuple[str, ...]:
+        """Sorted names of the mappings that produced one collected identity."""
+        row = self._stores.nodes.get(identity) or self._stores.edges.get(identity)
+        return tuple(sorted(row.mappings)) if row is not None else ()
 
 
 ValidationState = Literal["passed", "failed", "unverified"]

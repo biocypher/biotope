@@ -15,7 +15,7 @@ biocypher:
     root_node: entity
 ```
 
-DBMS-specific blocks (`neo4j:`, `postgresql:`, …) hold connection settings and import delimiters.
+DBMS-specific blocks (`neo4j:`, `postgresql:`, …) hold connection settings, the data `file_format`, and the import delimiters — `csv_column_delimiter`, `csv_array_delimiter` (default `;`) and `csv_string_quote_character` for Neo4j.
 
 ## Build loop
 
@@ -33,7 +33,7 @@ Repeated `write_nodes` and `write_edges` calls deduplicate within one `BioCypher
 
 ## Neo4j offline import
 
-With `dbms: neo4j` and `offline: true`, the output holds `*-header.csv`, `*-part*.csv` and `neo4j-admin-import-call.sh`. Import against a **stopped** database, and read the generated script for the exact `--nodes` and `--relationships` arguments.
+With `dbms: neo4j` and `offline: true`, the data format follows `neo4j.file_format`, which **defaults to `parquet`**. Set it to `csv` unless the target Neo4j release accepts Parquet import. CSV writes `*-header.csv` and `*-part*.csv`; Parquet writes `*-part*.parquet` and no headers. Either way you get `neo4j-admin-import-call.sh`. Import against a **stopped** database, and read the generated script for the exact `--nodes` and `--relationships` arguments.
 
 ```bash
 docker run --rm \

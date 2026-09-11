@@ -193,3 +193,23 @@ def test_corrupted_ownership_fails_validation_while_every_endpoint_resolves(tmp_
     assert "s1" in ownership["detail"] and "s2" in ownership["detail"]
     assert report["validation"]["capabilities"]["samples-per-person"]["state"] == "failed"
     assert not (root / "graph/build/swapped/biocypher").exists()
+
+
+def test_comparability_is_decided_by_source_values_not_column_names(tmp_path):
+    root = prepare(tmp_path)
+    header = "sample_id,person_id,tissue,score,unit"
+
+    def states(rows: str) -> dict[str, str]:
+        (root / "raw/samples.csv").write_text(f"{header}\n{rows}")
+        run(root, "quality")
+        report = json.loads((root / "graph/reports/quality.json").read_text())
+        return {c["name"]: c["state"] for c in report["validation"]["checks"]}
+
+    # A unit column that is present but empty establishes nothing.
+    assert states("s1,p1,liver,1.5,\ns2,p1,blood,2.5,\n")["example:cross-tissue-scale"] == "unverified"
+
+    # Two different units positively contradict the declared capability.
+    assert states("s1,p1,liver,1.5,ng/mL\ns2,p1,blood,2.5,pmol/L\n")["example:cross-tissue-scale"] == "failed"
+
+    # One unit across every row is the only case that supports the comparison.
+    assert states("s1,p1,liver,1.5,ng/mL\ns2,p1,blood,2.5,ng/mL\n")["example:cross-tissue-scale"] == "passed"

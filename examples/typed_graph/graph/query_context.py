@@ -51,8 +51,8 @@ QUERY_CONTEXT = QueryContext(
             question="How do transformed scores compare between samples of one tissue?",
             concepts=("example:sample.doubled_score",),
             limitations=(
-                "Only the transformed value is stored. A question about raw score magnitude "
-                "divides by 2.0; a question about the untransformed distribution needs a rebuild.",
+                "Only the transformed value is stored; divide by 2.0 to recover a source score. "
+                "The distribution covers matched samples only, so it is not the source's.",
             ),
         ),
         Capability(

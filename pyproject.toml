@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 graph = [
-    "biocypher==0.9.7",  # CSV escaping is verified against this writer version.
+    "biocypher>=0.17,<0.18",
     "pyright>=1.1.400,<2",
 ]
 dev = [

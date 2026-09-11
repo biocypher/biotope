@@ -54,17 +54,33 @@ def scores_match_the_published_transform(view: GraphView, audits: tuple[Audit, .
 
 
 def scores_are_comparable_across_tissues(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
-    """Comparing scores between tissues needs a scale the source never states."""
+    """Comparing scores between tissues needs a scale the source states for every row."""
     rows = _rows("samples.csv")
-    declared = sorted(rows[0]) if rows else []
-    scale = [name for name in declared if "unit" in name.lower() or "scale" in name.lower()]
-    if scale:
-        return ValidationResult.ok(f"The source declares a scale in {scale}.")
-    return ValidationResult.unknown(
-        f"samples.csv declares {declared} and no unit or scale column, so scores from "
-        "different tissues cannot be shown to share one scale. Comparisons within a tissue "
-        "remain valid."
-    )
+    columns = sorted(name for name in (rows[0] if rows else {}) if name.lower() in ("unit", "scale"))
+    if not columns:
+        return ValidationResult.unknown(
+            f"samples.csv declares {sorted(rows[0]) if rows else []} and no unit or scale column, "
+            "so scores from different tissues cannot be shown to share one scale. Comparisons "
+            "within one tissue remain valid."
+        )
+    column = columns[0]
+    declared = [row[column].strip() for row in rows]
+    blank = [row["sample_id"] for row, value in zip(rows, declared) if not value]
+    if blank:
+        return ValidationResult.unknown(
+            f"{len(blank)} of {len(declared)} rows leave {column} empty ({sorted(blank)}), so the "
+            "scale is unknown for part of the data.",
+            rows=len(declared),
+            missing=len(blank),
+        )
+    distinct = sorted(set(declared))
+    if len(distinct) > 1:
+        return ValidationResult.wrong(
+            f"{column} takes {distinct} across the source rows, so the scores are not on one "
+            "scale and this capability cannot be offered as declared.",
+            units=len(distinct),
+        )
+    return ValidationResult.ok(f"Every source row declares {column} {distinct[0]!r}.", unit=distinct[0])
 
 
 VALIDATION_CHECKS = (

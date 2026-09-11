@@ -71,10 +71,11 @@ Validation: <state>   Capabilities: <n> supported / <n> unverified / <n> uncheck
 Excluded: <policy> <count>; ...
 Deferred: <requirement key> — <reason>
 Unverified: <capability> — <what could not be established>
-Query examples run: <n>/<n>
+Query examples run: <n>/<n>   (you ran these; run.json records only the declarations)
 ```
 
-Every field is readable from `run.json`. Finally read `graph/build/<run>/query_context.json` as the consumer will, with the graph and that document and nothing else:
+Every other field is readable from `run.json`. `supported` there means every
+check bound to that capability passed, and nothing more. Finally read `graph/build/<run>/query_context.json` as the consumer will, with the graph and that document and nothing else:
 
 ```
 - [ ] A consumer can tell which study and comparison each concept belongs to

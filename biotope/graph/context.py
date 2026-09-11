@@ -305,6 +305,9 @@ def context_rows(document: dict[str, Any]) -> list[tuple[str, dict[str, object]]
     for concept, item in document["concepts"].items():
         measured = "unmeasured" if item["count"] is None else item["count"]
         add("concept", concept, item["description"], f"{item['kind']}; records: {measured}", item["label"])
+        for endpoint in ("source", "target"):
+            if item[endpoint] is not None:
+                add(f"concept_{endpoint}", concept, item[endpoint])
         for name, prop in item["properties"].items():
             detail = f"{prop['type']}{', nullable' if prop['nullable'] else ''}"
             add("property", f"{concept}.{name}", prop["description"], detail, item["label"])
@@ -316,6 +319,8 @@ def context_rows(document: dict[str, Any]) -> list[tuple[str, dict[str, object]]
 
     for item in document["capabilities"]:
         add("capability", item["key"], item["question"], item["state"])
+        for concept in item["concepts"]:
+            add("capability_concept", item["key"], concept)
         for name in item["checks"]:
             add("capability_check", item["key"], name)
         for limitation in item["limitations"]:
