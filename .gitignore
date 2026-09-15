@@ -254,3 +254,5 @@ cython_debug/
 _version.py
 # keep the version file for the package itself
 !biotope/_version.py
+
+.agents/

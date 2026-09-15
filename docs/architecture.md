@@ -1,116 +1,76 @@
-# How biotope works
+# Architecture
 
-Biotope has two jobs:
-
-1. Track datasets and their Croissant metadata with git-like commands.
-2. Turn Croissant-described data into a runnable BioCypher project.
-
-The installed `biotope` package does not import BioCypher or BioChatter. A
-generated project declares BioCypher as its graph writer; BioChatter can query
-the loaded graph later.
-
-## Project layout
+Biotope connects curated source descriptions to typed, project-owned graph
+construction. Croissant-baker describes formats. Generated dataclasses describe
+source values. Authored Python defines topology, mappings and pipeline composition.
+Biotope checks those definitions and integrates validated outputs with BioCypher.
 
 ```text
-my-kg/
-├── .biotope/
-│   ├── project.yaml       graph purpose and required entities or relations
-│   ├── config.yaml        validation and registry settings
-│   ├── datasets/          Croissant metadata for tracked data
-│   └── workflows/         reserved
-├── data/                  tracked data; ignored by Git
-├── mappings/              semantic mappings
-├── alignment.yaml         optional cross-dataset equivalences
-├── build/                 generated BioCypher project
-├── pyproject.toml         project dependencies
-└── .gitignore
+raw sources ── baker ── curated Croissant ── generated source classes
+    │                                               │
+    └── project loaders ── typed records ── mappings ── graph objects
+                                              │           │
+                                       Python topology    └── BioCypher files
 ```
 
-`biotope init --visible` writes `project.yaml` at the project root. Other
-managed files remain under `.biotope/`. Commands find the nearest project by
-walking upward from the current directory.
+Generation and definition checking read metadata and Python only. Explicit
+baking/file-integrity commands and project pipeline execution read source bytes.
+Loaders, joins, identity decisions and scientific transformations live in the
+graph project. Biotope has no format-reader framework or expression compiler.
 
-Dataset state (`raw`, `processed`, or `mapped`) lives in each Croissant
-manifest, not in the `data/` directory structure.
+Execution runs definition checks, then the exporter environment check, then the
+project pipeline, reference integrity, project validation checks, quality
+measurement and export, in that order. Validation sits there because everything
+above it measures only what the pipeline emitted and therefore cannot see a
+record it never emitted; comparing against an expectation from outside the
+pipeline is the project's job, and Biotope supplies the interface and the
+reporting rather than the expectation. A failed check blocks export; an
+unverified one marks its capability unresolved and lets the rest through.
+Project descriptions, interpretation rules and run evidence are generated into
+one versioned query context that ships with the export, because a consuming
+agent receives the graph and nothing else.
 
-## Data flow
+`graph scaffold` copies the packaged boilerplate into `graph/`. Initialization,
+baking and execution remain separate commands. CLI code owns mechanical setup;
+the agent adapts topology, loaders and transformations to purpose and evidence.
 
-```text
-biotope init
-    │
-    ├─ biotope map --purpose/--entity/--relation
-    │      └─ .biotope/project.yaml
-    │
-data files
-    └─ biotope add
-           └─ .biotope/datasets/*.jsonld
-                    │
-                    └─ biotope map inspect/scaffold/preview
-                           └─ mappings/*.mapping.yaml
-                                    │
-                                    ├─ biotope propose-alignment (optional)
-                                    │      └─ alignment.yaml
-                                    │
-                                    └─ biotope build
-                                           └─ build/
-                                                ├─ config/schema_config.yaml
-                                                ├─ generated/*/adapter.py
-                                                └─ create_knowledge_graph.py
-```
+The [typed project guide](mapping.md) describes layouts, interfaces, supported
+values, provenance, failure behavior and memory assumptions. `biotope.graph`
+exports the project contracts; `biotope.graph.sources`, `.check` and `.build`
+provide generation, definition checks and explicit execution. `biotope.croissant`
+retains metadata models and inspection. `biotope.commands` provides CLI wrappers
+and the existing metadata/Git workflow.
 
-`biotope add` uses
-[croissant-baker](https://github.com/biocypher/croissant-baker) to infer
-structural metadata where possible. Mapping connects Croissant record sets and
-fields to graph entities and relations. `build` compiles resolved mappings into
-BioCypher tuple streams.
+## Authority and revisions
 
-## Semantic decisions and determinism
+Curated Croissant is the source-contract authority. Python topology is the only
+target-schema authority. Python functions are the mappings. YAML used for intent,
+annotations and derived BioCypher configuration does not define a second graph.
+Semantic concept IDs are independent of module names. Regeneration replaces only
+generated modules; metadata corrections and authored code survive.
 
-Biotope catalogs fields, validates mappings, and previews tuples. A human or
-agent chooses record sets, identifiers, transforms, entities, and relations.
-`build` rejects unresolved mapping slots and the removed `nodes`/`edges`
-mapping schema.
+Definitions must be safe to import. Python can have arbitrary side effects, so
+Biotope does not claim to sandbox project code or infer its complete lineage.
+Runtime validation, static checking and scientific review establish different
+things. Passing one does not establish the others.
 
-With the same Croissant manifests, mappings, alignment, and data, compilation
-produces the same generated project. LLMs sit above this deterministic
-boundary:
+## Design credit
 
-```text
-human or agent → biotope CLI → biotope.croissant.api → generated project
-```
+Paul Ka Po To's `kg-build-system` informed typed authoring, topology organization
+and modular construction. Biotope implements these ideas independently using
+ordinary Python dataclasses and mapping functions; it does not vendor or depend
+on that engine. No code from it was copied. A bounded future contribution can
+improve this foundation without gating Biotope's implementation or release.
 
-## Configuration
+## Contributor checks
 
-| File | Purpose |
-| --- | --- |
-| `.biotope/project.yaml` | Graph purpose, entities, relations, and data sources |
-| `.biotope/config.yaml` | Croissant version, validation rules, and registry URLs |
-| `.biotope/datasets/*.jsonld` | Generated and curated Croissant metadata |
-| `mappings/*.mapping.yaml` | Authored entity and relation mappings |
-| `alignment.yaml` | Optional `same_node` equivalences across mappings |
+Install the graph and development extras (`uv sync --extra dev --extra graph`)
+and make Node.js available on PATH. Run `uv run python -m pyright --version` to
+verify the checker installation, then `uv run pyright` and `uv run pytest tests/`. The integration
+suite exercises real Pyright and BioCypher; missing dependencies are setup failures,
+not skipped acceptance checks. The locked Pyright wheel bundles its JavaScript
+checker. Runtime downloads may be needed if Node is missing or its bundled checker
+is explicitly overridden.
 
-Settings resolve from lowest to highest priority:
-
-```text
-~/.config/biotope/config.yaml
-→ .biotope/config.yaml
-→ .biotope/project.yaml
-→ CLI flags
-```
-
-Inspect resolved project intent with `biotope map --show`.
-
-## Agent interface
-
-Plugin skills are the default agent contract:
-
-```text
-biotope-croissant → biocypher → biochatter
-```
-
-Each skill covers one pipeline stage and invokes public CLI commands.
-`biotope init --agents-md` can add a root `AGENTS.md` for agents without skill
-support. See [Plugin and skills](plugin.md) for setup.
-
-For Python integrations, `biotope.croissant.api` exposes the deterministic
-functions used by the CLI.
+The current local baker override expects `../croissant-baker`; replacing that
+with the published dependency remains the shared release gate.

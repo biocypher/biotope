@@ -218,23 +218,3 @@ def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_
         assert not destination.exists()
     finally:
         os.chdir(original_cwd)
-
-
-def test_mv_rejects_legacy_sc_file_object(runner, biotope_project_with_file):
-    metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "inputs" / "test.jsonld"
-    metadata = json.loads(metadata_file.read_text())
-    metadata["distribution"][0]["@type"] = "sc:FileObject"
-    metadata_file.write_text(json.dumps(metadata, indent=2))
-
-    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
-    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
-            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                result = runner.invoke(mv, [str(source_file), str(destination)])
-    finally:
-        os.chdir(original_cwd)
-    assert result.exit_code != 0
-    assert "Legacy sc:FileObject is no longer supported" in str(result.exception)

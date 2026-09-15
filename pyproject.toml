@@ -36,12 +36,14 @@ dependencies = [
     "mlcroissant>=1.0.13,<2",
     "requests>=2.32.0",
     "pydantic>=2.6",
-    "jinja2>=3.1.6",
-    "duckdb>=1.0",
-    "croissant-baker>=0.3,<1"
+    "croissant-baker>=0.5,<1",
 ]
 
 [project.optional-dependencies]
+graph = [
+    "biocypher>=0.17,<0.18",
+    "pyright>=1.1.400,<2",
+]
 dev = [
     "pre-commit>=4.1.0",
     "pytest>=8.3.5,<9.0.0",
@@ -71,6 +73,11 @@ packages = ["biotope"]
 testpaths = ["tests"]
 markers = ["raises"]
 
+[tool.pyright]
+include = ["biotope/graph", "biotope/commands/graph.py", "biotope/commands/_graph_output.py", "biotope/commands/source.py"]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = "none"
+
 [tool.coverage.paths]
 source = [
     "biotope",
@@ -87,6 +94,12 @@ precision = 2
 
 [tool.ruff]
 line-length = 120
+# Preserve the generated template contract byte-for-byte; freshness is tested.
+extend-exclude = [
+    "biotope/templates/graph/sources/_example/__init__.py",
+    "biotope/templates/graph/sources/_example/example_rows/schema.py",
+]
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["ALL"]

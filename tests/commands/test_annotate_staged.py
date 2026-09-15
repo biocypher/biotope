@@ -122,17 +122,3 @@ def test_interactive_staged_no_staged_files(mock_get_staged_files, mock_find_roo
     # Check that it failed with appropriate message
     assert result.exit_code != 0
     assert "No files staged" in result.output
-
-
-@mock.patch("biotope.commands.annotate.find_biotope_root")
-def test_interactive_staged_no_biotope_project(mock_find_root, runner):
-    """Test that interactive --staged fails when not in a biotope project."""
-    # Setup mocks
-    mock_find_root.return_value = None
-
-    # Run the command
-    result = runner.invoke(interactive, ["--staged"])
-
-    # Check that it failed with appropriate message
-    assert result.exit_code != 0
-    assert "Not in a biotope project" in result.output

@@ -1,15 +1,15 @@
 """Typed Croissant 1.1 metadata models.
 
 Ported and generalised from open-targets/open_targets/data/metadata/model.py.
-This layer is the *only* one that touches raw Croissant JSON-LD. Every higher
-layer consumes the typed model.
+These models support metadata inspection. Typed source generation separately
+retains raw Croissant descriptors and extension fields in biotope.graph.sources.
 """
 
 from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.request import urlopen
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
@@ -94,12 +94,12 @@ SCALAR_KIND_MAP: dict[str, FieldKind] = {
 
 
 class ConfiguredBaseModel(BaseModel):
-    """Base model with camelCase ↔ snake_case alias generation."""
+    """Metadata model with camelCase aliases and retained extension attributes."""
 
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
-        extra="ignore",
+        extra="allow",
         frozen=True,
     )
 
@@ -127,9 +127,12 @@ class CroissantFieldSource(ConfiguredBaseModel):
 class CroissantFieldModel(ConfiguredBaseModel):
     """A field within a Croissant record set."""
 
-    name: str
+    id: str | None = Field(default=None, alias=Key.ID.value)
+    # Baker can omit a display name for an unnamed source column.
+    name: str = Field(validation_alias=AliasChoices("name", "@id"))
     description: str | None = None
     data_type: str | None = None
+    array_shape: str | None = Field(default=None, validation_alias=AliasChoices("arrayShape", "cr:arrayShape"))
     repeated: bool = Field(
         default=False,
         validation_alias=AliasChoices("repeated", "isArray", "cr:isArray"),
@@ -191,8 +194,9 @@ class CroissantFileSetModel(ConfiguredBaseModel):
     id: str = Field(alias=Key.ID.value)
     name: str | None = None
     description: str | None = None
-    includes: str
-    encoding_format: str | None = None
+    # A compressed file carries both media types, and one glob per compression.
+    includes: str | list[str]
+    encoding_format: str | list[str] | None = None
 
 
 class CroissantFileObjectModel(ConfiguredBaseModel):
@@ -203,23 +207,26 @@ class CroissantFileObjectModel(ConfiguredBaseModel):
     name: str | None = None
     description: str | None = None
     content_url: str | None = Field(default=None, alias=Key.CONTENT_URL.value)
-    encoding_format: str | None = None
+    encoding_format: str | list[str] | None = None
 
 
 class CroissantDatasetModel(ConfiguredBaseModel):
     """Top-level Croissant dataset."""
 
+    id: str | None = Field(default=None, alias=Key.ID.value)
+    context: Any = Field(default=None, alias="@context")
     name: str | None = None
     description: str | None = None
     record_set: list[CroissantRecordSetModel] = Field(default_factory=list)
     distribution: list[CroissantFileSetModel | CroissantFileObjectModel] = Field(default_factory=list)
 
     def record_set_by_name(self, name: str) -> CroissantRecordSetModel | None:
-        """Return the record set with the given name, or ``None`` if absent."""
+        """Resolve an ID, or an unambiguous display name."""
         for rs in self.record_set:
-            if rs.name == name:
+            if rs.id == name:
                 return rs
-        return None
+        matches = [rs for rs in self.record_set if rs.name == name]
+        return matches[0] if len(matches) == 1 else None
 
 
 CroissantFieldModel.model_rebuild()

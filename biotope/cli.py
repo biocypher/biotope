@@ -2,31 +2,24 @@
 
 import click
 
+from biotope._version import __version__
 from biotope.commands.add import add as add_cmd
 from biotope.commands.annotate import annotate as annotate_cmd
-from biotope.commands.benchmark import benchmark as benchmark_cmd
-from biotope.commands.build import build as build_cmd
 from biotope.commands.check_data import check_data as check_data_cmd
 from biotope.commands.commit import commit as commit_cmd
 from biotope.commands.config import config as config_cmd
-from biotope.commands.discover import discover as discover_cmd
-from biotope.commands.get import get as get_cmd
+from biotope.commands.graph import graph_group
 from biotope.commands.init import init as init_cmd
 from biotope.commands.log import log as log_cmd
 from biotope.commands.map import map_group as map_cmd
 from biotope.commands.mark import mark as mark_cmd
 from biotope.commands.mv import mv as mv_cmd
-from biotope.commands.propose_alignment import propose_alignment as propose_alignment_cmd
-from biotope.commands.propose_mapping import propose_mapping as propose_mapping_cmd
 from biotope.commands.pull import pull as pull_cmd
 from biotope.commands.push import push as push_cmd
 from biotope.commands.queue import queue as queue_cmd
-from biotope.commands.read import read as read_cmd
 from biotope.commands.rm import rm as rm_cmd
-from biotope.commands.search import search as search_cmd
+from biotope.commands.source import source_group
 from biotope.commands.status import status as status_cmd
-from biotope.commands.view import view as view_cmd
-from biotope._version import __version__
 
 
 @click.group()
@@ -41,23 +34,16 @@ def cli(ctx: click.Context) -> None:
 # Project lifecycle
 cli.add_command(init_cmd, "init")
 
-# Semantic mapping (intent capture + wizard + inspect/scaffold/preview)
+# Research intent and metadata inspection
 cli.add_command(map_cmd, "map")
 
 # Content-level workflow
-cli.add_command(discover_cmd, "discover")
-cli.add_command(propose_mapping_cmd, "propose-mapping")
-cli.add_command(propose_alignment_cmd, "propose-alignment")
-cli.add_command(build_cmd, "build")
-cli.add_command(view_cmd, "view")
-cli.add_command(benchmark_cmd, "benchmark")
+cli.add_command(source_group, "source")
+cli.add_command(graph_group, "graph")
 cli.add_command(queue_cmd, "queue")
 cli.add_command(mark_cmd, "mark")
 
-# Ingestion + NLP
-cli.add_command(read_cmd, "read")
-cli.add_command(search_cmd, "search")
-cli.add_command(get_cmd, "get")
+# Metadata annotations
 cli.add_command(annotate_cmd, "annotate")
 
 # Git-inspired version control commands

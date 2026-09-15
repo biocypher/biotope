@@ -26,8 +26,7 @@ Use `biotope queue` as the annotation worklist. Baker-supported files usually
 become `processed`; unsupported or incomplete files remain `raw`.
 `biotope mark <dataset> processed` can override status after manual review.
 
-The graph commands (`map`, `build`, `view`, and `propose-alignment`) are
-optional for compliance-only projects.
+Mapping commands are optional for compliance-only projects.
 
 ## Project boundaries
 
@@ -49,8 +48,8 @@ Each project then has its own owner, validation policy, and compliance result.
 ## Administrator setup
 
 1. Publish a validation document from a stable HTTPS endpoint.
-2. Give users its URL and required validation pattern.
-3. Run the provided compliance checker from cron or CI.
+1. Give users its URL and required validation pattern.
+1. Run the provided compliance checker from cron or CI.
 
 ```bash
 python docs/examples/cluster-compliance-checker.py \

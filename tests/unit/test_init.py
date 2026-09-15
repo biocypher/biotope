@@ -23,18 +23,23 @@ def test_init_default_layout(tmp_path: Path) -> None:
     result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git")
     assert result.exit_code == 0, result.output
 
+    assert "biotope get" not in result.output
+    assert "biotope add" in result.output
     root = tmp_path / "myproj"
-    assert (root / ".biotope" / "datasets").is_dir()
-    assert (root / ".biotope" / "workflows").is_dir()
-    assert (root / "data").is_dir()
-    assert (root / "mappings").is_dir()
+    for directory in ("data", "mappings", "graph", ".biotope/datasets", ".biotope/workflows"):
+        assert not (root / directory).exists()
     assert (root / ".biotope" / "config.yaml").is_file()
     assert (root / ".biotope" / "project.yaml").is_file()
     # The agent contract lives in the biotope plugin skills, not a
     # per-project root AGENTS.md, so init must NOT emit one by default.
     assert not (root / "AGENTS.md").exists()
     assert (root / ".gitignore").is_file()
-    assert (root / "pyproject.toml").is_file()
+    assert not (root / "pyproject.toml").exists()
+    config = yaml.safe_load((root / ".biotope" / "config.yaml").read_text())
+    assert config["croissant_schema_version"] == "1.1"
+    assert config["annotation_validation"]["enabled"] is True
+    assert {"creator", "distribution"} <= set(config["annotation_validation"]["minimum_required_fields"])
+    assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10
 
 
 def test_init_agents_md_flag_opts_in(tmp_path: Path) -> None:
@@ -43,35 +48,6 @@ def test_init_agents_md_flag_opts_in(tmp_path: Path) -> None:
     result = _invoke(runner, "withagents", "--dir", str(tmp_path), "--no-git", "--agents-md")
     assert result.exit_code == 0, result.output
     assert (tmp_path / "withagents" / "AGENTS.md").is_file()
-
-
-def test_init_emits_pyproject_with_biotope_and_biocypher(tmp_path: Path) -> None:
-    """The generated project pyproject must pin biotope and biocypher."""
-    runner = CliRunner()
-    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
-    assert result.exit_code == 0, result.output
-
-    pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
-    assert 'name = "myproj"' in pyproject
-    assert "biotope>=" in pyproject
-    assert "biocypher>=0.15.0" in pyproject
-    assert "requires-python" in pyproject
-
-
-def test_emitted_pyproject_uses_hatchling_and_skips_package_discovery(
-    tmp_path: Path,
-) -> None:
-    """Hatchling is the build backend (no setuptools flat-layout footgun on
-    `data/`/`mappings/`) and the wheel target ships nothing — biotope projects
-    are workspaces that declare deps, not Python distributions."""
-    runner = CliRunner()
-    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git", "--no-prompt")
-    assert result.exit_code == 0, result.output
-
-    pyproject = (tmp_path / "myproj" / "pyproject.toml").read_text()
-    assert 'build-backend = "hatchling.build"' in pyproject
-    assert "[tool.hatch.build.targets.wheel]" in pyproject
-    assert "bypass-selection = true" in pyproject
 
 
 def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
@@ -146,14 +122,3 @@ def test_init_creates_initial_commit_and_leaves_clean_tree(tmp_path: Path, monke
 
     log = subprocess.run(["git", "log", "--oneline"], cwd=root, capture_output=True, text=True, check=True)
     assert "initialize biotope project" in log.stdout
-
-
-def test_init_creates_default_biotope_config(tmp_path: Path) -> None:
-    runner = CliRunner()
-    _invoke(runner, "c", "--dir", str(tmp_path), "--no-git")
-    config = yaml.safe_load((tmp_path / "c" / ".biotope" / "config.yaml").read_text())
-    assert config["croissant_schema_version"] == "1.1"
-    assert config["annotation_validation"]["enabled"] is True
-    assert "creator" in config["annotation_validation"]["minimum_required_fields"]
-    assert "distribution" in config["annotation_validation"]["minimum_required_fields"]
-    assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10

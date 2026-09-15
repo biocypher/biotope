@@ -39,16 +39,6 @@ def test_find_biotope_root(tmp_path):
         result = find_biotope_root()
         assert result is None
 
-    # Test .biotope without .git (should fail)
-    invalid_project_dir = tmp_path / "invalid_project"
-    invalid_project_dir.mkdir()
-    invalid_biotope_dir = invalid_project_dir / ".biotope"
-    invalid_biotope_dir.mkdir()
-
-    with patch("biotope.utils.Path.cwd", return_value=invalid_project_dir):
-        result = find_biotope_root()
-        assert result is None
-
 
 def test_is_git_repo(tmp_path):
     """Test checking if directory is a git repository."""

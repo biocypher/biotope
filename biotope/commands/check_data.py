@@ -9,7 +9,12 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from biotope.metadata import FILE_OBJECT_TYPE, ensure_no_legacy_file_objects
+from biotope.metadata import (
+    FILE_OBJECT_TYPE,
+    dataset_dir_for_manifest,
+    ensure_no_legacy_file_objects,
+    resolve_content_url,
+)
 from biotope.utils import find_biotope_root
 
 
@@ -20,12 +25,7 @@ from biotope.utils import find_biotope_root
     type=click.Path(exists=True, path_type=Path),
     help="Check specific file only",
 )
-@click.option(
-    "--fix",
-    is_flag=True,
-    help="Attempt to fix corrupted files by re-downloading",
-)
-def check_data(file: Optional[Path], fix: bool) -> None:
+def check_data(file: Optional[Path]) -> None:
     """
     Check data integrity against recorded checksums.
 
@@ -34,7 +34,6 @@ def check_data(file: Optional[Path], fix: bool) -> None:
 
     Args:
         file: Check specific file only
-        fix: Attempt to fix corrupted files
     """
     console = Console()
 
@@ -60,7 +59,7 @@ def check_data(file: Optional[Path], fix: bool) -> None:
             raise click.Abort from exc
 
     # Display results
-    _display_check_results(results, console, fix)
+    _display_check_results(results, console)
 
 
 def _check_single_file(file_path: Path, biotope_root: Path) -> Dict:
@@ -96,16 +95,21 @@ def check_all_files(biotope_root: Path) -> List[Dict]:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
                     ensure_no_legacy_file_objects(metadata)
+                    dataset_dir = dataset_dir_for_manifest(dataset_file, biotope_root)
                     for distribution in metadata.get("distribution", []):
                         if distribution.get("@type") == FILE_OBJECT_TYPE:
                             content_url = distribution.get("contentUrl")
                             if content_url:
-                                file_path = biotope_root / content_url
-                                if file_path.exists():
-                                    results.append(_check_single_file(file_path, biotope_root))
+                                resolved = resolve_content_url(content_url, dataset_dir, biotope_root)
+                                if resolved:
+                                    results.append(_check_single_file(resolved, biotope_root))
                                 else:
                                     results.append(
-                                        {"file_path": str(file_path), "status": "missing", "message": "File not found"}
+                                        {
+                                            "file_path": str(biotope_root / content_url),
+                                            "status": "missing",
+                                            "message": "File not found",
+                                        }
                                     )
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -123,10 +127,14 @@ def _get_recorded_checksum(file_path: Path, biotope_root: Path) -> Optional[str]
                 with open(dataset_file) as f:
                     metadata = json.load(f)
                     ensure_no_legacy_file_objects(metadata)
+                    dataset_dir = dataset_dir_for_manifest(dataset_file, biotope_root)
                     for distribution in metadata.get("distribution", []):
                         if distribution.get("@type") == FILE_OBJECT_TYPE:
                             content_url = distribution.get("contentUrl")
-                            if content_url and (biotope_root / content_url) == file_path:
+                            if not content_url:
+                                continue
+                            resolved = resolve_content_url(content_url, dataset_dir, biotope_root)
+                            if resolved and resolved.resolve() == file_path.resolve():
                                 return distribution.get("sha256")
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -143,7 +151,7 @@ def calculate_file_checksum(file_path: Path) -> str:
     return sha256_hash.hexdigest()
 
 
-def _display_check_results(results: List[Dict], console: Console, fix: bool) -> None:
+def _display_check_results(results: List[Dict], console: Console) -> None:
     """Display check results in a table."""
     if not results:
         console.print("No files to check.")
@@ -181,11 +189,7 @@ def _display_check_results(results: List[Dict], console: Console, fix: bool) -> 
     # Recommendations
     if status_counts.get("corrupted", 0) > 0:
         console.print("\n[bold red]⚠️  Corrupted files detected![/]")
-        if fix:
-            console.print("Attempting to fix corrupted files...")
-            # TODO: Implement fix logic
-        else:
-            console.print("Use --fix to attempt automatic repair")
+        console.print("Review changed files and their recorded metadata before re-baking.")
 
     if status_counts.get("missing", 0) > 0:
         console.print("\n[bold yellow]⚠️  Missing files detected![/]")

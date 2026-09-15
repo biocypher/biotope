@@ -2,8 +2,7 @@
 
 This document captures what the user wants the knowledge graph to answer,
 *not* technical configuration. It is the canonical agent surface: an agent
-populates it via ``biotope map`` intent flags, and downstream commands
-(``biotope map``, ``discover``, ``build``) consult it.
+populates it via ``biotope map`` intent flags, and the mapping commands consult it.
 
 Hierarchical config precedence (lower wins, higher overrides):
 
@@ -36,7 +35,7 @@ class Project(BaseModel):
 
     Free text. Typically nouns (``drug``, ``gene``, ``customer``). No
     snake_case enforcement; downstream commands treat these as natural-
-    language hints when matching against schemas and registries.
+    language hints when matching against schemas.
     """
 
     required_relations: list[str] = Field(default_factory=list)
@@ -48,7 +47,7 @@ class Project(BaseModel):
     """
 
     data_sources: list[str] = Field(default_factory=list)
-    """Croissant files, registry IDs, or URLs the user has on hand."""
+    """Croissant files or metadata URLs the user has on hand."""
 
     notes: str = ""
 

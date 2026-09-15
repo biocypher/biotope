@@ -13,8 +13,7 @@ def find_biotope_root(start: Path | None = None) -> Optional[Path]:
     Find the biotope project root directory.
 
     Searches upward from ``start`` (default: current working directory) to find
-    a directory containing a .biotope/ subdirectory. Enforces that .git and
-    .biotope must be in the same directory.
+    a directory containing a .biotope/ subdirectory. Git is optional.
 
     Args:
         start: Directory to begin the upward search from. Defaults to ``Path.cwd()``.
@@ -24,9 +23,7 @@ def find_biotope_root(start: Path | None = None) -> Optional[Path]:
     """
     current = (start if start is not None else Path.cwd()).resolve()
     while current != current.parent:
-        if (current / ".biotope").exists():
-            if not (current / ".git").exists():
-                return None
+        if (current / ".biotope").is_dir():
             return current
         current = current.parent
     return None
@@ -34,7 +31,7 @@ def find_biotope_root(start: Path | None = None) -> Optional[Path]:
 
 def is_git_repo(directory: Path) -> bool:
     """
-    Check if directory is a Git repository.
+    Check if directory owns a Git repository, rather than inheriting a parent's.
 
     Args:
         directory: Path to the directory to check
@@ -42,6 +39,8 @@ def is_git_repo(directory: Path) -> bool:
     Returns:
         True if the directory is a Git repository, False otherwise
     """
+    if not (directory / ".git").exists():
+        return False
     try:
         subprocess.run(
             ["git", "rev-parse", "--git-dir"],
@@ -133,7 +132,9 @@ def is_file_tracked(file_path: Path, biotope_root: Path) -> bool:
 
 
 def stage_git_changes(biotope_root: Path) -> None:
-    """Stage .biotope/ changes in Git."""
+    """Stage .biotope/ changes only in a project-owned Git repository."""
+    if not is_git_repo(biotope_root):
+        return
     try:
         subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
     except subprocess.CalledProcessError as e:

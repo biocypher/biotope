@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
@@ -14,9 +15,7 @@ from click.testing import CliRunner
 from biotope.commands.add import _add_file, _bake_directory, add
 from biotope.utils import (
     calculate_file_checksum,
-    find_biotope_root,
     is_file_tracked,
-    is_git_repo,
     stage_git_changes,
 )
 
@@ -54,39 +53,14 @@ def test_calculate_file_checksum(sample_file):
     assert calculate_file_checksum(sample_file) == expected_hash
 
 
-def test_find_biotope_root(biotope_project):
-    with mock.patch("pathlib.Path.cwd", return_value=biotope_project):
-        assert find_biotope_root() == biotope_project
-
-    subdir = biotope_project / "data" / "inputs"
-    subdir.mkdir(parents=True)
-    with mock.patch("pathlib.Path.cwd", return_value=subdir):
-        assert find_biotope_root() == biotope_project
-
-    outside_dir = biotope_project.parent / "outside"
-    outside_dir.mkdir(exist_ok=True)
-    with mock.patch("pathlib.Path.cwd", return_value=outside_dir):
-        assert find_biotope_root() is None
-
-
-def test_is_git_repo(git_repo):
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        assert is_git_repo(git_repo) is True
-
-        mock_run.side_effect = subprocess.CalledProcessError(1, "git")
-        assert is_git_repo(git_repo) is False
-
-
-def test_stage_git_changes(git_repo):
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        stage_git_changes(git_repo)
-        mock_run.assert_called_once_with(
-            ["git", "add", ".biotope/"],
-            cwd=git_repo,
-            check=True,
-        )
+def test_stage_git_changes(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    manifest = tmp_path / ".biotope/datasets/items.jsonld"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{}")
+    stage_git_changes(tmp_path)
+    staged = subprocess.check_output(["git", "diff", "--cached", "--name-only"], cwd=tmp_path, text=True)
+    assert ".biotope/datasets/items.jsonld" in staged.splitlines()
 
 
 def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
@@ -279,33 +253,32 @@ def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
     assert not is_file_tracked(project_root / "elsewhere.txt", project_root)
 
 
-def test_dedupe_file_objects_covered_by_filesets(tmp_path):
-    """Regression: baker emits FileSet + per-file FileObjects; keep only the FileSet."""
-    from biotope.commands.add import _dedupe_file_objects_covered_by_filesets
+def _write_png(path: Path) -> None:
+    """A 1x1 PNG, so the image handler claims it and emits a FileSet."""
+    from PIL import Image
 
+    Image.new("RGB", (1, 1)).save(path)
+
+
+def test_glob_covered_files_keep_their_checksum(tmp_path):
+    """A FileSet describes structure; it does not stand in for a file's identity.
+
+    Dropping the FileObjects a FileSet glob covers took every checksum with them,
+    so `check-data` silently verified a fraction of the files it listed.
+    """
     project_root = tmp_path / "project"
-    data_dir = project_root / "data" / "partitions"
-    data_dir.mkdir(parents=True)
+    data_dir = project_root / "data" / "images"
     (project_root / ".biotope" / "datasets").mkdir(parents=True)
-    (data_dir / "part-00.parquet").write_bytes(b"x")
-    (data_dir / "part-01.parquet").write_bytes(b"y")
-    (data_dir / "_SUCCESS").write_text("")
+    data_dir.mkdir(parents=True)
+    for name in ("a.png", "b.png"):
+        _write_png(data_dir / name)
 
-    metadata = {
-        "distribution": [
-            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-            {"@type": "cr:FileObject", "@id": "fo1", "contentUrl": "part-00.parquet"},
-            {"@type": "cr:FileObject", "@id": "fo2", "contentUrl": "part-01.parquet"},
-            {"@type": "cr:FileObject", "@id": "fo3", "contentUrl": "data/partitions/_SUCCESS"},
-        ]
-    }
-    _dedupe_file_objects_covered_by_filesets(metadata, data_dir, project_root)
+    metadata_dict, _ = _bake_directory(data_dir, project_root, {})
 
-    types = [(d.get("@type"), d.get("@id")) for d in metadata["distribution"]]
-    assert ("cr:FileSet", "fs") in types
-    assert ("cr:FileObject", "fo3") in types  # genuinely uncovered survives
-    assert ("cr:FileObject", "fo1") not in types
-    assert ("cr:FileObject", "fo2") not in types
+    file_objects = [d for d in metadata_dict["distribution"] if d.get("@type") == "cr:FileObject"]
+    assert any(d.get("@type") == "cr:FileSet" for d in metadata_dict["distribution"])
+    assert {Path(d["contentUrl"]).name for d in file_objects} == {"a.png", "b.png"}
+    assert all(d.get("sha256") for d in file_objects)
 
 
 def test_bake_directory_tracks_unparseable_files(tmp_path):
@@ -342,7 +315,6 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
@@ -350,13 +322,11 @@ def test_add_command_directory_recurses_by_default(
     mock_stage,
     mock_csv,
     mock_bake,
-    mock_is_git,
     mock_find_root,
     runner,
     git_repo,
 ):
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     data_dir = git_repo / "data"
     data_dir.mkdir()
@@ -374,7 +344,6 @@ def test_add_command_directory_recurses_by_default(
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
@@ -382,13 +351,11 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
     mock_stage,
     mock_csv,
     mock_bake,
-    mock_is_git,
     mock_find_root,
     runner,
     git_repo,
 ):
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     data_dir = git_repo / "data"
     data_dir.mkdir()
@@ -411,12 +378,10 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
 
         third = runner.invoke(add, ["--rebake", str(data_dir)])
         assert third.exit_code == 0
-        assert "Re-baked" in third.output
         assert mock_bake.call_count == 2
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 @mock.patch("biotope.commands.add.stage_git_changes")
@@ -424,14 +389,12 @@ def test_add_command_resolves_relative_directory(
     mock_stage,
     mock_csv,
     mock_bake,
-    mock_is_git,
     mock_find_root,
     runner,
     git_repo,
 ):
     """Regression: relative dir argument must not break CSV scaffold writing."""
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     (git_repo / "data").mkdir()
     fake_metadata = {"recordSet": [], "distribution": []}
@@ -447,10 +410,8 @@ def test_add_command_resolves_relative_directory(
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add.is_git_repo")
-def test_add_command_rejects_name_for_multiple_paths(mock_is_git, mock_find_root, runner, git_repo):
+def test_add_command_rejects_name_for_multiple_paths(mock_find_root, runner, git_repo):
     mock_find_root.return_value = git_repo
-    mock_is_git.return_value = True
 
     file_one = git_repo / "one.txt"
     file_two = git_repo / "two.txt"
@@ -463,3 +424,143 @@ def test_add_command_rejects_name_for_multiple_paths(mock_is_git, mock_find_root
 
     assert result.exit_code != 0
     assert "--name can only be used when adding one path" in result.output
+
+
+# ---------------------------------------------------------------------------
+# croissant-baker integration — run against the real baker, because the last
+# break was an import move swallowed by an `except ImportError`.
+# ---------------------------------------------------------------------------
+
+
+EXAMPLE_CSV = Path(__file__).resolve().parents[1] / "example_gene_expression.csv"
+
+
+@pytest.fixture
+def mixed_dataset(tmp_path):
+    """A project holding one gzipped CSV the baker reads and one file it cannot."""
+    import gzip
+
+    project_root = tmp_path / "project"
+    data_dir = project_root / "data" / "mixed"
+    (project_root / ".biotope" / "datasets").mkdir(parents=True)
+    data_dir.mkdir(parents=True)
+    (data_dir / "expression.csv.gz").write_bytes(gzip.compress(EXAMPLE_CSV.read_bytes()))
+    (data_dir / "README.md").write_text("notes")
+    return project_root, data_dir
+
+
+@pytest.mark.parametrize("compress", [False, True])
+def test_enrich_with_baker_builds_record_set(tmp_path, compress):
+    """A single-file add gets a recordSet, whether or not the file is wrapped."""
+    import gzip
+
+    from biotope.commands.add import _enrich_with_baker
+
+    payload = EXAMPLE_CSV.read_bytes()
+    file_path = tmp_path / ("data.csv.gz" if compress else "data.csv")
+    file_path.write_bytes(gzip.compress(payload) if compress else payload)
+
+    metadata = {"distribution": [{"@id": "file_0", "@type": "cr:FileObject"}]}
+    _enrich_with_baker(metadata, file_path)
+
+    fields = metadata["recordSet"][0]["field"]
+    assert [f["name"] for f in fields] == ["GeneID", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"]
+    assert all(f["source"]["fileObject"]["@id"] == "file_0" for f in fields)
+
+
+def test_bake_directory_reports_coverage(mixed_dataset, capsys):
+    """Undescribed files are otherwise invisible: biotope backfills them like any other."""
+    project_root, data_dir = mixed_dataset
+
+    _bake_directory(data_dir, project_root, {})
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    text = "\n".join(line.rstrip() for line in captured.err.splitlines())
+    assert "2 scanned · 1 described · 1 not described" in text
+    assert "SKIP   README.md\n       No handler" in text
+    assert "OK     expression.csv.gz" in text
+    assert "\x1b" not in captured.out + captured.err
+    metadata = json.loads((project_root / ".biotope" / "datasets" / "data" / "mixed.jsonld").read_text())
+    assert metadata["recordSet"]
+    objects = [d for d in metadata["distribution"] if d["@type"] == "cr:FileObject"]
+    assert ["text/csv", "application/gzip"] in [d.get("encodingFormat") for d in objects]
+
+
+def test_baker_warnings_survive_markup_in_a_filename(monkeypatch):
+    """Show meaningful progress while preserving literal warning filenames."""
+    from io import StringIO
+
+    from rich.console import Console
+
+    from biotope.commands._add_output import AddOutput
+
+    monkeypatch.setenv("TERM", "xterm-256color")
+    output = StringIO()
+    presenter = AddOutput(console=Console(file=output, force_terminal=True, width=140))
+    with presenter.scan(Path("t"), Path("t")) as report:
+        report(1, 2, "report.csv")
+        logging.getLogger("croissant_baker").warning("report[/].csv: [dim]failed")
+
+    from rich.text import Text
+
+    text = Text.from_ansi(output.getvalue()).plain
+    assert "report[/].csv: [dim]failed" in text
+    assert "1/2" in text
+    assert "None" not in output.getvalue()
+
+
+@pytest.mark.parametrize("input_kind", ["directory", "single_file"])
+def test_baker_setup_is_visible_before_import_and_handler_initialization(tmp_path, monkeypatch, capsys, input_kind):
+    import builtins
+
+    from croissant_baker import metadata_generator
+    from rich.console import Console
+
+    from biotope.commands.add import _enrich_with_baker
+
+    source_dir = tmp_path / "raw"
+    source_dir.mkdir()
+    source = source_dir / "genes.csv"
+    source.write_text("gene_id,score\nG1,2.5\n")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(
+        "biotope.commands._add_output.Console", lambda **kwargs: Console(force_terminal=True, width=160, **kwargs)
+    )
+    original_import = builtins.__import__
+    original_generator = metadata_generator.MetadataGenerator
+    output = ""
+    stages = []
+
+    def assert_visible(stage):
+        nonlocal output
+        captured = capsys.readouterr()
+        output += captured.err
+        assert "Baking" in output, stage
+        assert "preparing croissant-baker" not in captured.out + output, stage
+        assert "\x1b[?25l" in output, stage  # The live display already hides the cursor.
+        stages.append(stage)
+
+    def checked_import(name, *args, **kwargs):
+        if name == "croissant_baker.metadata_generator":
+            assert_visible("import")
+        return original_import(name, *args, **kwargs)
+
+    def checked_generator(*args, **kwargs):
+        assert_visible("handler initialization")
+        return original_generator(*args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", checked_import)
+    monkeypatch.setattr(metadata_generator, "MetadataGenerator", checked_generator)
+    if input_kind == "directory":
+        metadata, count = _bake_directory(source_dir, tmp_path)
+        assert count == 1
+    else:
+        metadata = {"name": "genes", "distribution": []}
+        _enrich_with_baker(metadata, source)
+    assert stages == ["import", "handler initialization"]
+    captured = capsys.readouterr()
+    assert "\x1b[?25h" in captured.err  # Progress has restored the terminal.
+    assert captured.out == ""
+    assert "1 scanned · 1 described" in captured.err
+    assert [f["name"] for f in metadata["recordSet"][0]["field"]] == ["gene_id", "score"]

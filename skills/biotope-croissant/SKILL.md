@@ -1,176 +1,97 @@
 ---
 name: biotope-croissant
-description: Build a knowledge graph from data files using biotope, the CLI for the BioCypher ecosystem (Croissant-described data → BioCypher graph, with git-like metadata version control). Use this whenever the task is to turn tables, CSVs, JSON, parquet, or mixed/unstructured sources into a queryable knowledge graph or graph database (Neo4j, DuckDB) — including ingesting a dataset into a graph, mapping fields to entities and relations, building a BioCypher project, connecting biomedical/biological data across sources, or grounding data against ontologies. Trigger on mentions of biotope, BioCypher, Croissant, knowledge graph / KG construction, graph ingestion, "turn this data into a graph", entity/relation mapping, or ontology-grounded data integration — even when the user names the goal (a graph) rather than the tool.
+description: Croissant metadata curation and typed Python knowledge-graph construction with Biotope. Source contracts, topology, loaders, mappings, interpretation context, validation checks, BioCypher export.
 ---
 
-# biotope: build a knowledge graph from data
+# Biotope graph projects
 
-biotope is a CLI. Never import its Python modules, browse its source, or hand-edit `.biotope/`. Use commands, flags, `--help`, and error text only. If stuck, ask the user.
+**The artifact.** A run directory under `graph/build/<run>/`: BioCypher import files, `provenance.jsonl`, `query_context.json`, and `run.json` whose `validation.state` is `passed` or `unverified`. The consumer receives the graph and `query_context.json`. They do not receive this repository or your reasoning, so a graph without its interpretation context is not a deliverable.
 
-Project layout: `.biotope/` (manifests + config), `data/`, `mappings/` (one `*.mapping.yaml` per logical dataset). `build` streams all mappings and deduplicates nodes by id.
+**The unit of work.** One **capability**: a question family the graph is claimed to answer, the interpretations needed to read it correctly, one validation check proving it against the source, and one runnable query example. A capability with no check reports `unchecked`.
 
-First of all, ensure biotope>=0.8.0 is installed.
+**Ownership.** The user owns scientific decisions. You own engineering ones. Where two readings are both defensible, neither of you decides: admit both and let the query choose.
+
+Curation, scaffolding and execution are independent. Do the steps the request needs; describing a dataset does not imply building a graph. Database import, querying and new Baker format handlers are separate work.
+
+**Ask, or push back once.** Ask and wait when the answer changes which records exist or which identities merge. Push back once and then defer when it changes only what is claimed. A weakened claim can be repaired in the interpretation context; a record you never admitted is not recoverable by any query.
+
+## Workflow
+
+Copy this checklist and track progress.
+
+```
+Biotope graph project:
+- [ ] Step 1: Read the purpose, the inputs and the existing project
+- [ ] Step 2: Name the capabilities and agree them with the user
+- [ ] Step 3: Curate and register the source metadata
+- [ ] Step 4: Declare the topology and the interpretation context
+- [ ] Step 5: Author loaders, mappings, pipeline and validation checks
+- [ ] Step 6: Check, run and read the reports
+- [ ] Step 7: Prove every capability, then hand over
+```
+
+**Step 1: Read the purpose, the inputs and the existing project.** Run commands from the project root. Read existing purpose files, `biotope map --show`, and `graph/README.md` if a workspace exists — it documents the scaffold you will edit. Reuse existing purpose, metadata and code. Graph checks and builds need `biotope[graph]`; Pyright needs Node.js on PATH or `pyright[nodejs]`. Initialize only if metadata tracking is missing: `biotope init . --no-prompt`. Scaffolding alone needs no initialization. Reconnaissance only — write no project code yet.
+
+**Step 2: Name the capabilities and agree them with the user.** A purpose and its example questions are evidence of intent, not a specification. Derive the adjacent questions: the neighbouring comparison, evidence that would contradict the expected answer, a second defensible reading of the same statistic, the context needed to interpret a result, and the case where a well-founded "no such record" is the answer. For each candidate capability, name the evidence and the distinctions it needs; that list decides what Step 4 must admit. Capture the agreed purpose with `biotope map --purpose "..." --entity "..." --relation "..."`. Propose adjacent capabilities once with what each costs; if declined, record them as out of scope and move on. **Present the capability list and get explicit confirmation before Step 3.**
+
+**Step 3: Curate and register the source metadata.** Run `biotope add <data-path> --json` for new inputs and review its per-file outcomes, warnings and failures; do not scan environments or previous outputs. Inspect declared fields and exact IDs with `biotope map inspect <manifest> --json`, which reads metadata only and gives no value preview. Preserve the requested source scope, including full-directory scans: one record set becomes one source package, so never split a Croissant file to shape the generated layout. Keep unsupported inputs and partial descriptions visible rather than inventing structure to make a mapping work. Register an evidence-backed correction with `biotope source register <file> --name <managed-name> --reason "<evidence and gaps>"`. Metadata-only work ends here.
+
+**Step 4: Declare the topology and the interpretation context.** Write `graph/topology/` and `graph/query_context.py` before any pipeline code: `biotope graph check` never executes `run`, so it validates both against a stub body and is a real gate at this point. Give every concept a class docstring and every property a `field(metadata={"description": ...})`. Declare one `Capability` per agreed capability, and one `Interpretation` per admission rule, statistic definition, identity condition, qualifier and stated uncertainty. **Stop and ask** when two readings of a statistic are both defensible and change which records exist: present both and the record cost of admitting the union, which is the default. **Stop and ask** before merging identities across sources that do not jointly establish the match; the default is separate nodes in source-specific namespaces.
+
+**Step 5: Author loaders, mappings, pipeline and validation checks.** Generate contracts with `biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources`. Resolve identity in a first pass over every participating source, then emit: an unambiguous resolution must not depend on the order sources were read. Send every record you do not emit through `context.exclude(...)` against a declared policy, and put aggregate losses in `record_audit(...)` counts. Then check yourself — every hit below must sit beside an `exclude` call or increment a recorded count:
 
 ```bash
-uvx biotope init ...     # no install: runs the latest biotope in an ephemeral venv (best for init)
-pipx install biotope     # isolated global install you can call as `biotope`
-uv add biotope           # inside an existing uv project
+grep -rn --include='*.py' -e '\bcontinue\b' -e '^\s*pass$' graph/pipelines graph/mappings
 ```
 
-Unreleased checkout: `uv pip install -e /path/to/biotope` (use venv or `--break-system-packages` in containers). Verify with `biotope --version`.
+Write one `ValidationCheck` per capability in `graph/checks.py`, each deriving its expectation from the source with a plain reader rather than the project loader. List `graph/checks.py` and `graph/query_context.py` in `Pipeline.code_paths`.
 
-## Pipeline
+**Step 6: Check, run and read the reports.** Run `biotope graph check --json`. Stdout carries exactly one report and every diagnostic goes to stderr; parse the streams separately. Resolve findings rather than suppressing them with `Any`, blanket ignores or invented metadata.
 
-```
-init  →  add  →  map  →  build  →  verify
-```
+| Finding                                               | Meaning                                                                         | Return to |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- | --------- |
+| `context.invalid`                                     | An interpretation or capability points at something the export will not contain | Step 4    |
+| `context.undescribed`, `context.undescribed_property` | A consumer would see only the label                                             | Step 4    |
+| `context.no_capabilities`                             | Nothing states what the graph answers                                           | Step 2    |
+| `context.unvalidated`, `validation.absent`            | Nothing tests what the graph answers                                            | Step 5    |
+| `validation.unchecked_capability`                     | One capability is claimed and untested                                          | Step 5    |
+| `validation.failed`                                   | The graph contradicts an expectation; export is blocked                         | Step 5    |
+| `python.*`, `mapping.contract`, `source.contract`     | Authored or generated code is wrong                                             | Step 5    |
 
-`biotope status` / `biotope queue` show pipeline state. In uv projects: `uv run biotope ...`.
+Then build into a new run directory with `biotope graph build --out graph/build/review-1`. Biotope derives the export schema from topology; add no project adapter or hand-written export schema. **If the agreed scope will not execute, agree a new one** rather than sampling silently.
 
-## Agent loop — do not skip
-
-Mapping is iterative. A clean `preview` does **not** mean edges resolve — orphans appear only after build.
-
-```
-inspect --json  →  write mapping  →  preview --json  →  build  →  view
-       ↑___________________________________|  (fix mapping, not generated code)
-```
-
-**Before build** — run `biotope map preview --json` and parse the JSON (rich output truncates in agent context). Gate:
-
-- `unresolved_slots` empty; `findings` has no errors
-- Mapping covers every `required_entity` / `required_relation` from `project.yaml`
-- Every relation **target** entity is emitted from **every** record set that references it (see `references/mapping.md`, shared entities)
-- `sample_edge_tuples` target ids use the same id minting as the entity definition
-- Binding still matches the user's stated `purpose` and entities — if not, **ask** (defer unsupported relations, or get explicit consent before changing the schema)
-
-**After build** — `biotope view` and `build/biocypher-out/build_metrics.json`. `orphaned_count` must be 0. Non-zero → fix ids or entity coverage, re-preview, rebuild. Relation with far fewer edges than expected → id-namespace mismatch.
-
-**When to ask the user:** purpose vs mapping mismatch; relation unsupported by data; disagreeing id columns across sources; need `--clear-entities` / `--clear-relations`.
-
-### 1. Orient
-
-Ask the user: what should this graph answer? What entities and relations matter? Answers become `purpose` and `biotope map --entity` / `--relation` flags. Don't infer from file shapes alone. If `project.yaml` already has intent, confirm it's current. Never silently overwrite it (`references/reliability.md`).
-
-### 2. init — scaffold
-
-Pure scaffolder: makes the directory layout, an empty `project.yaml`, and a starter `pyproject.toml`, then `git init`. No content questions. **Pick the target form deliberately** — this is where agents most often fumble:
-
-```bash
-# A) Create a NEW subfolder named my-kg under the current directory:
-biotope init my-kg --purpose "What approved drugs target genes in T2D?" --no-prompt
-cd my-kg && uv sync
-
-# B) Initialise IN the folder you're already in (e.g. an existing repo/workspace):
-biotope init . --no-prompt        # project root is the current directory
-uv sync
-```
-
-Use `.` when the user wants biotope set up inside a folder that already exists; use a name when you're creating a fresh project directory. Don't probe by trial-and-error in `/tmp` — pick the form from the user's intent. **Form A always requires the `cd`** — every command in the rest of this pipeline (`queue`, `add`, `map`, `build`, ...) assumes the working directory is the project root, so running them from the parent directory after `init my-kg` will fail to find the project.
-
-Containers may skip auto-commit (missing git identity) — harmless. **Never `--no-git`** in fresh/ephemeral environments; biotope needs `.biotope` + `.git` to find the project.
-
-### 3. add — bring data under the project
-
-A biotope project **owns its data**: files must live under the project root before they can be described (the manifest addresses paths relative to the project). Copy a local folder in, or fetch a URL with `biotope get`; symlinks out of the tree are rejected.
-
-```bash
-biotope get https://example.org/opentargets.parquet --output-dir data/ot --no-add
-biotope add data/ot --license CC-BY-4.0 --creator "Open Targets" --description "..."
-```
-
-`biotope add <dir>` runs croissant-baker over the directory and writes **one** manifest at `.biotope/datasets/<rel>.jsonld` covering the whole subtree. Pass metadata the baker cannot infer (license, creator, description, access terms) as flags. **One logical dataset → one manifest** — point `add` at the folder that *is* the dataset, never at individual partition files, and don't split one dataset across subdirectory `add`s (it fragments lineage). For genuinely independent datasets under a shared parent, add each as its own path: `biotope add data/study_a data/study_b`.
-
-Stale manifest after preprocessing → `biotope add <dir> --rebake`.
-
-The **queue** tells you each dataset's state:
-
-```bash
-biotope queue          # human-readable; biotope queue --json for machines
-```
-
-- **raw** — baker couldn't structure the file (free-form text, PDF). It needs an extraction step before it can be mapped.
-- **processed** — schema is concrete; ready to map.
-- **mapped** — a resolved mapping exists.
-
-For raw inputs, extract the schema-shaped facts into a structured file and record provenance — this is the one genuinely manual step (see `references/reliability.md`, "extraction is the manual step"):
-
-```bash
-biotope add data/notes/hubs.csv --derived-from data/notes/airports-notes.md
-```
-
-`--derived-from` stamps the lineage and drops the raw source from the active queue without moving it.
-
-### 4. map — declare intent, then bind slots
-
-`map` does two distinct things. First, **capture intent** non-interactively (always use flags as an agent; bare `biotope map` opens a human wizard):
-
-```bash
-biotope map --entity gene --entity disease --entity drug \
-            --relation gene_associated_with_disease
-```
-
-This appends to `required_entities` / `required_relations` in `project.yaml`. Names accept free text and are normalised to `snake_case`. Adding is always safe; `--clear-entities` / `--clear-relations` are destructive and need the user's explicit say-so.
-
-Second, **author mapping YAML** per dataset. Read `references/mapping.md` first. Follow the [agent loop](#agent-loop--do-not-skip):
-
-```bash
-biotope map scaffold .biotope/datasets/data/ot.jsonld
-biotope map inspect  .biotope/datasets/data/ot.jsonld --json
-# edit mappings/ot.mapping.yaml
-biotope map preview --json
-```
-
-Cross-file identity = matching ids (same field semantics, transform, prefix). `biotope propose-alignment mappings/*.mapping.yaml` proposes only — audit each (`references/reliability.md`).
-
-### 5. build — choose the output target, materialise, then run
-
-**Decide the output format with the user first** — don't default silently. `biotope build --target {csv,neo4j}` (default `csv`). See `references/output-targets.md` for what biotope covers vs optional downstream steps.
-
-```bash
-biotope build --target neo4j        # strict: refuses any unresolved slot
-uv run python build/create_knowledge_graph.py
-```
-
-`build` writes plain, committable Python + YAML under `build/` (`config/schema_config.yaml`, an adapter per mapping, and `create_knowledge_graph.py`) and prints the resolved `target (dbms)`. The entry point regenerates `build/biocypher-out/` from scratch each run (so re-running after a target change is clean) and writes `build_metrics.json` (orphaned edges + compile drops).
-
-### 6. Verify
-
-```bash
-biotope view      # counts, orphaned edges, schema diff
-biotope status
-```
-
-See [agent loop](#agent-loop--do-not-skip). Never claim success without `biotope view` showing non-empty output and stating the reported target.
-
-## Reliability
-
-`references/reliability.md` — canonical ids, edge survival, honest schema, audited alignments. Read on non-trivial graphs.
-
-## House rules
-
-- Flags only, no interactive prompts. Wrong output → fix purpose/mapping/data, re-run. Only editable generated file: `build/config/biocypher_config.yaml`.
-- Metadata moves via `biotope add` / `commit` / `mv`, not raw file moves.
-- Keep `purpose:` honest.
-
-## Command reference
+**Step 7: Prove every capability, then hand over.** Run every declared `QueryExample` against the built graph; a sketch is not evidence that a query works. Then report:
 
 ```
-init                              project scaffolding
-get add mv rm                     acquisition + tracking (baker writes croissants)
-queue mark                        pipeline-state dashboard + manual transitions
-map (inspect|scaffold|preview)    semantic mapping (intent + wizard + agent path)
-propose-alignment                 cross-mapping same_node equivalences
-build view                        build + inspect a graph
-status commit log push pull       git-like metadata version control
-check-data                        checksum verification
-annotate config                   field-level annotation + project config
-discover                          find candidate datasets for declared entities
+Build: graph/build/<run>
+Validation: <state>   Capabilities: <n> supported / <n> unverified / <n> unchecked
+
+| Capability | State | Validation check | Expectation derived from | Limitation |
+
+Excluded: <policy> <count>; ...
+Deferred: <requirement key> — <reason>
+Unverified: <capability> — <what could not be established>
+Query examples run: <n>/<n>   (you ran these; run.json records only the declarations)
 ```
 
-## Optional next steps
+Every other field is readable from `run.json`. `supported` there means every
+check bound to that capability passed, and nothing more. Finally read `graph/build/<run>/query_context.json` as the consumer will, with the graph and that document and nothing else:
 
-Ask before Neo4j import, BioCypher tuning, or NL querying. CSV-only may be the end state.
+```
+- [ ] A consumer can tell which study and comparison each concept belongs to
+- [ ] Every numeric property states what it measures and against which reference
+- [ ] Every identifier states when it may be joined and when it may not
+- [ ] Every capability states what it does not support
+```
 
-- Neo4j / BioCypher outputs → **biocypher** skill
-- NL querying → **biochatter** skill (needs loaded graph + `schema_info.yaml`)
+Anything unticked returns to Step 4. Human scientific review stays manual.
+
+After metadata changes, regenerate affected contracts and repair authored code; after code changes, rerun Step 6. During requested cleanup, remove or archive run directories and generated reports; preserve raw data, curated metadata and authored code. Do not use `biotope rm raw` for test cleanup.
+
+### References
+
+- [interpretation.md](./references/interpretation.md) — steps 2 and 7: what a capability declares, and what counts as proof that it holds.
+- [curation.md](./references/curation.md) — step 3: correcting, registering and re-baking a source description without losing curation.
+- [modeling.md](./references/modeling.md) — step 4: which distinction a modeling choice is about to erase, and the shape that preserves it.
+- [authoring.md](./references/authoring.md) — step 5: what the type checker and the runtime require of loaders, mappings and the pipeline.
+- [reports.md](./references/reports.md) — steps 6 and 7: what each check establishes, what it cannot see, and how to read a run.

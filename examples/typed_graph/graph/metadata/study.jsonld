@@ -1,0 +1,119 @@
+{
+  "@context": {
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "biotope": "https://biocypher.org/biotope/"
+  },
+  "name": "study",
+  "version": "fixture-v1",
+  "distribution": [
+    {
+      "@id": "people-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/people.csv"
+    },
+    {
+      "@id": "samples-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/samples.csv"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "people",
+      "name": "people",
+      "field": [
+        {
+          "@id": "people/person_id",
+          "name": "person_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "people-file"
+            },
+            "extract": {
+              "column": "person_id"
+            }
+          }
+        },
+        {
+          "@id": "people/name",
+          "name": "name",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "people-file"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "@id": "samples",
+      "name": "samples",
+      "field": [
+        {
+          "@id": "samples/sample_id",
+          "name": "sample_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "samples-file"
+            },
+            "extract": {
+              "column": "sample_id"
+            }
+          }
+        },
+        {
+          "@id": "samples/person_id",
+          "name": "person_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "samples-file"
+            },
+            "extract": {
+              "column": "person_id"
+            }
+          }
+        },
+        {
+          "@id": "samples/tissue",
+          "name": "tissue",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "samples-file"
+            },
+            "extract": {
+              "column": "tissue"
+            }
+          }
+        },
+        {
+          "@id": "samples/score",
+          "name": "score",
+          "dataType": "sc:Float",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "samples-file"
+            },
+            "extract": {
+              "column": "score"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -29,7 +29,9 @@ def _write_metadata(git_repo, name: str, *, complete: bool):
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "Dataset",
         "name": name,
-        "description": "Dataset for experiment3.csv" if not complete else "Dataset for experiment3.csv with complete annotation",
+        "description": "Dataset for experiment3.csv"
+        if not complete
+        else "Dataset for experiment3.csv with complete annotation",
         "distribution": [
             {
                 "@type": "cr:FileObject",
@@ -128,7 +130,8 @@ def test_status_detailed_shows_validation_errors(runner, git_repo):
             os.chdir(git_repo)
             result = runner.invoke(status, ["--detailed"])
     assert result.exit_code == 0
-    assert "Validation Issues" in result.output or "creator" in result.output.lower()
+    assert "Validation Issues" in result.output
+    assert "creator" in result.output.lower()
 
 
 def test_status_skips_validation_when_disabled(runner, git_repo):

@@ -1,11 +1,13 @@
 ---
 name: biocypher
-description: Build knowledge graphs with BioCypher — adapters, schema_config.yaml, biocypher_config.yaml, and multi-backend export (Neo4j, CSV, PostgreSQL, RDF). Use for standalone KG ETL pipelines, writing schema_info.yaml, Neo4j bulk import, or tuning dbms/output settings. Trigger on BioCypher, schema_config, biocypher_config, write_nodes, write_edges, knowledge graph construction, Biolink schema, or graph database export.
+description: Standalone BioCypher knowledge-graph ETL — adapters, schema_config.yaml, biocypher_config.yaml, Neo4j/CSV/PostgreSQL/RDF export, write_schema_info. Not for typed Biotope projects, which own their schema in Python.
 ---
 
 # BioCypher: build a knowledge graph
 
 BioCypher is a Python library for ontology-grounded KG construction. Three pieces: **adapters** (data in), **schema_config.yaml** (what the graph means), **biocypher_config.yaml** (where it goes).
+
+**Check which project this is first.** If the repository has a `graph/` workspace with `topology/` and `pipelines/build_graph.py`, it is a typed Biotope project: Python topology is the schema authority, Biotope generates `schema_config.yaml` and drives the exporter, and the work belongs to the biotope-croissant skill. Writing an adapter or hand-editing the generated schema there creates a second, conflicting schema. Everything below applies to separately managed BioCypher projects.
 
 ```bash
 pip install biocypher
@@ -24,11 +26,11 @@ Project template: https://github.com/biocypher/project-template
 5. BioCypher().write_nodes / write_edges → export
 ```
 
-Read `references/schema-config.md` before authoring schema. Read `references/outputs.md` for dbms choice, import scripts, and `write_schema_info()`.
+Read [schema-config.md](./references/schema-config.md) before step 3. Read [outputs.md](./references/outputs.md) for step 4, import scripts and `write_schema_info()`.
 
 ## Adapters
 
-Yield tuples — BioCypher maps `_type` via `input_label` in schema:
+Yield tuples — BioCypher maps `_type` via `input_label` in the schema:
 
 ```python
 def node_generator():
@@ -54,7 +56,7 @@ bc.write_import_call()
 bc.write_schema_info()   # optional — for NL query tools
 ```
 
-`BioCypher()` reads `biocypher_config.yaml` from cwd or `config/`. Override paths via constructor args if needed.
+`BioCypher()` reads `biocypher_config.yaml` from the working directory or `config/`. Override paths through constructor arguments.
 
 ## Config essentials
 
@@ -78,14 +80,10 @@ protein:
   input_label: protein
 ```
 
-## Small graphs / agent prototyping
+## Small graphs and agent prototyping
 
-`create_workflow()` — in-memory, JSON export, no DBMS. See `references/outputs.md` "Agent API". Not for large ETL.
+`create_workflow()` builds an in-memory graph with JSON export and no DBMS. See [outputs.md](./references/outputs.md). Not for large ETL.
 
 ## Verify
 
-After export, check file counts and spot-read CSVs or run import dry-run. For Neo4j, compare expected vs actual edge counts — silent drops often mean id namespace mismatches at the adapter layer.
-
-## Optional next step
-
-With `schema_info.yaml` and a loaded graph database, **ask the user** before loading the **biochatter** skill for natural-language querying.
+After export, check file counts and read a sample of the CSVs, or run an import dry-run. **Compare expected against actual edge counts.** A silent drop usually means an id-namespace mismatch at the adapter layer, where the endpoint an edge names was never written as a node.

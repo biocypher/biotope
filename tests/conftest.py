@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import yaml
 import pytest
+
 
 ANNOTATION_VALIDATION_CONFIG = {
     "annotation_validation": {
@@ -29,39 +29,6 @@ def biotope_project(tmp_path):
     (biotope_dir / "datasets").mkdir()
     (biotope_dir / "cache").mkdir(parents=True, exist_ok=True)
     return tmp_path
-
-
-@pytest.fixture
-def biotope_project_with_registry(biotope_project):
-    """Biotope project with MCP registry config."""
-    config = {
-        "version": "1.0",
-        "registries": {"mcp": {"url": "https://biocontext.ai/registry.json", "cache_duration": 3600}},
-        **ANNOTATION_VALIDATION_CONFIG,
-    }
-    config_file = biotope_project / ".biotope" / "config.yaml"
-    config_file.write_text(yaml.dump(config))
-    return biotope_project
-
-
-@pytest.fixture
-def mock_mcp_registry_data():
-    return [
-        {
-            "name": "BioMCP",
-            "identifier": "genomoncology/biomcp",
-            "description": "A Model Context Protocol server for bioinformatics",
-            "keywords": ["PubMed", "ClinicalTrials", "MyVariant", "python"],
-            "codeRepository": "https://github.com/genomoncology/biomcp",
-        },
-        {
-            "name": "AACT MCP",
-            "identifier": "navisbio/AACT_MCP",
-            "description": "Clinical trials data access",
-            "keywords": ["AACT", "python"],
-            "codeRepository": "https://github.com/navisbio/AACT_MCP",
-        },
-    ]
 
 
 @pytest.fixture

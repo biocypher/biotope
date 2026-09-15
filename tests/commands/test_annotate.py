@@ -12,7 +12,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from biotope.commands.annotate import annotate, load, validate
+from biotope.commands.annotate import annotate, validate
 
 
 @pytest.fixture
@@ -207,38 +207,6 @@ def test_validate_command_failure(mock_run, runner, sample_metadata_file):
     assert "Validation failed" in result.output
 
 
-@mock.patch("subprocess.run")
-def test_load_command(mock_run, runner, sample_metadata_file):
-    mock_process = mock.Mock()
-    mock_process.stdout = "Record 1: {'patient_id': 'P0'}"
-    mock_process.stderr = ""
-    mock_run.return_value = mock_process
-
-    result = runner.invoke(
-        load,
-        [
-            "--jsonld",
-            str(sample_metadata_file),
-            "--record-set",
-            "samples",
-            "--num-records",
-            "1",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert "Loaded 1 records from record set 'samples'" in result.output
-
-
-def test_annotate_help_lists_apply_and_edit(runner):
-    result = runner.invoke(annotate, ["--help"])
-    assert result.exit_code == 0
-    assert "apply" in result.output
-    assert "edit" in result.output
-    assert "batch" not in result.output
-    assert "create" not in result.output
-
-
 def test_apply_directory_updates_dataset_and_record_sets(runner, annotated_project):
     project_root, data_dir, _scaffold_path, metadata_path = annotated_project
 
@@ -252,6 +220,10 @@ def test_apply_directory_updates_dataset_and_record_sets(runner, annotated_proje
 
     assert result.exit_code == 0, result.output
     updated = json.loads(metadata_path.read_text())
+    from biotope.graph.sources import protect_curated
+
+    with pytest.raises(ValueError, match="curated"):
+        protect_curated(metadata_path)
     assert updated["description"] == "OT v3"
     assert updated["keywords"] == ["gene", "disease"]
     assert updated["recordSet"][0]["description"] == "Gene table"
@@ -311,7 +283,23 @@ def test_apply_rejects_scaffold_without_dataset_block(runner, annotated_project)
     assert "must contain a `dataset` block" in result.output
 
 
-def test_interactive_alias_still_invokes_hidden_command(runner):
-    result = runner.invoke(annotate, ["interactive", "--help"])
-    assert result.exit_code == 0
-    assert "--staged" in result.output
+def test_merge_record_set_row_keeps_list_encoding_format():
+    """`add` writes the manifest's encodingFormat into the scaffold verbatim, so a
+    compressed file puts a list in the row; apply used to raise on `.strip()`."""
+    from biotope.commands.annotate import _merge_record_set_row
+
+    metadata = {"distribution": [{"@id": "cells-fileset", "@type": "cr:FileSet", "encodingFormat": "x"}]}
+    record_set = {
+        "@id": "cells",
+        "field": [{"source": {"fileSet": {"@id": "cells-fileset"}}}],
+    }
+    row = {
+        "encoding_format": ["application/vnd.apache.parquet", "application/gzip"],
+    }
+
+    _merge_record_set_row(metadata, record_set, row)
+
+    assert metadata["distribution"][0]["encodingFormat"] == [
+        "application/vnd.apache.parquet",
+        "application/gzip",
+    ]

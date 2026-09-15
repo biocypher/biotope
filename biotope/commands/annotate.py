@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from biotope.graph.sources import CURATION, write_text_atomic
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     SCAFFOLD_FILENAME,
@@ -32,7 +33,7 @@ from biotope.metadata import (
 from biotope.metadata import (
     merge_metadata as shared_merge_metadata,
 )
-from biotope.utils import find_biotope_root
+from biotope.utils import find_biotope_root, stage_git_changes
 
 
 def get_standard_context() -> dict:
@@ -43,6 +44,13 @@ def get_standard_context() -> dict:
 def merge_metadata(dynamic_metadata: dict) -> dict:
     """Merge dynamic metadata with standard context and structure."""
     return shared_merge_metadata(dynamic_metadata)
+
+
+def _encoding_format_text(value: Any) -> str:
+    """Render an ``encodingFormat``, which is a list for a compressed file."""
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    return str(value or "")
 
 
 @click.group(invoke_without_command=True)
@@ -103,11 +111,7 @@ def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
 
     updated = _apply_scaffold(console, scaffold_path, target, overrides, biotope_root)
     if updated:
-        try:
-            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-            console.print("\n✅ Staged metadata changes in Git")
-        except subprocess.CalledProcessError as exc:
-            console.print(f"⚠️  Warning: Could not stage changes in Git: {exc}")
+        stage_git_changes(biotope_root)
 
 
 @annotate.command()
@@ -148,60 +152,6 @@ def validate(jsonld):
         exit(1)
     except Exception as e:
         click.echo(f"Error running validation: {e!s}", err=True)
-        exit(1)
-
-
-@annotate.command()
-@click.option(
-    "--jsonld",
-    "-j",
-    type=click.Path(exists=True),
-    required=True,
-    help="Path to the JSON-LD metadata file.",
-)
-@click.option(
-    "--record-set",
-    "-r",
-    required=True,
-    help="Name of the record set to load.",
-)
-@click.option(
-    "--num-records",
-    "-n",
-    type=int,
-    default=10,
-    help="Number of records to load.",
-)
-def load(jsonld, record_set, num_records):
-    """Load records from a dataset using its Croissant metadata."""
-    try:
-        # Use mlcroissant CLI to load the dataset
-        result = subprocess.run(
-            [
-                "mlcroissant",
-                "load",
-                "--jsonld",
-                jsonld,
-                "--record_set",
-                record_set,
-                "--num_records",
-                str(num_records),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        # Display the output
-        if result.stdout:
-            click.echo(result.stdout)
-
-        click.echo(f"Loaded {num_records} records from record set '{record_set}'")
-    except subprocess.CalledProcessError as e:
-        click.echo(f"Error loading dataset: {e.stderr}", err=True)
-        exit(1)
-    except Exception as e:
-        click.echo(f"Error running load command: {e!s}", err=True)
         exit(1)
 
 
@@ -292,7 +242,7 @@ def edit(
 
         for i, file_info in enumerate(staged_files):
             file_path = biotope_root / file_info["file_path"]
-            console.print(f"\n[bold green]File {i+1}/{len(staged_files)}: {file_path.name}[/]")
+            console.print(f"\n[bold green]File {i + 1}/{len(staged_files)}: {file_path.name}[/]")
 
             # Find the existing metadata file for this data file
             datasets_dir = biotope_root / ".biotope" / "datasets"
@@ -382,7 +332,7 @@ def edit(
 
         for i, file_path in enumerate(incomplete_files):
             metadata_file = biotope_root / file_path
-            console.print(f"\n[bold green]File {i+1}/{len(incomplete_files)}: {metadata_file.stem}[/]")
+            console.print(f"\n[bold green]File {i + 1}/{len(incomplete_files)}: {metadata_file.stem}[/]")
 
             # Load existing metadata to pre-fill
             try:
@@ -535,7 +485,7 @@ def edit(
     default_format = ""
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
-        default_format = distribution[0].get("encodingFormat", "")
+        default_format = _encoding_format_text(distribution[0].get("encodingFormat"))
 
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
@@ -634,7 +584,7 @@ def edit(
         for resource in dynamic_metadata["distribution"]:
             resource_type = resource.get("@type", "").replace("sc:", "").replace("cr:", "")
             name = resource.get("name", "")
-            format = resource.get("encodingFormat", "")
+            format = _encoding_format_text(resource.get("encodingFormat"))
             hash = resource.get("sha256", "")[:8] + "..." if resource.get("sha256") else ""
 
             table.add_row(resource_type, name, format, hash)
@@ -869,19 +819,12 @@ def edit(
     output_path = click.prompt("Output file path", default=default_filename)
 
     metadata = normalize_metadata_shape(metadata)
-    with open(output_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    _save_annotations(Path(output_path), metadata)
 
     # Stage the changes in Git if we're in a biotope project
-    try:
-        biotope_root = find_biotope_root()
-        if biotope_root:
-            import subprocess
-
-            subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-            console.print("✅ Staged changes in Git")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass  # Not in a biotope project or Git not available
+    biotope_root = find_biotope_root()
+    if biotope_root:
+        stage_git_changes(biotope_root)
 
     # Final success message with rich formatting
     console.print()
@@ -1039,7 +982,7 @@ def _run_interactive_annotation(
     default_format = ""
     distribution = metadata.get("distribution", [])
     if distribution and len(distribution) > 0:
-        default_format = distribution[0].get("encodingFormat", "")
+        default_format = _encoding_format_text(distribution[0].get("encodingFormat"))
 
     format = click.prompt(
         "File format (MIME type, e.g., text/csv, application/json, application/x-hdf5, application/fastq)",
@@ -1140,19 +1083,11 @@ def _run_interactive_annotation(
         output_path = datasets_dir / f"{dataset_name}.jsonld"
 
     metadata = normalize_metadata_shape(metadata)
-    with open(output_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    _save_annotations(Path(output_path), metadata)
 
     # Stage the changes in Git
-    try:
-        import subprocess
-
-        subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-        console.print(f"✅ Created metadata: {output_path}")
-        console.print("✅ Staged changes in Git")
-    except subprocess.CalledProcessError as e:
-        console.print(f"✅ Created metadata: {output_path}")
-        console.print(f"⚠️  Warning: Could not stage changes in Git: {e}")
+    stage_git_changes(biotope_root)
+    console.print(f"✅ Created metadata: {output_path}")
 
 
 DATASET_ROW_FIELDS = {
@@ -1256,8 +1191,7 @@ def _apply_scaffold(
         console.print("ℹ️ Metadata unchanged")
         return False
 
-    with open(target.metadata_path, "w", encoding="utf-8") as handle:
-        json.dump(updated_metadata, handle, indent=2)
+    _save_annotations(target.metadata_path, updated_metadata)
 
     console.print(f"✅ Updated {target.metadata_path.relative_to(biotope_root)}")
     return True
@@ -1341,7 +1275,12 @@ def _merge_record_set_row(
         if value:
             record_set[field_name] = value
 
-    encoding_format = (row.get("encoding_format") or "").strip()
+    # A compressed file's format is a list; the round-trip must not flatten it.
+    raw_encoding = row.get("encoding_format")
+    if isinstance(raw_encoding, list):
+        encoding_format: str | list[str] = [str(item).strip() for item in raw_encoding]
+    else:
+        encoding_format = (raw_encoding or "").strip()
     if encoding_format:
         source_id = _record_set_source_id(record_set)
         if source_id:
@@ -1423,3 +1362,15 @@ def get_staged_files(biotope_root: Path) -> list:
         pass
 
     return staged_files
+
+
+def _save_annotations(path: Path, metadata: dict[str, Any]) -> None:
+    """Keep authored annotations visible to rebake protection."""
+    metadata.setdefault(CURATION, {})["annotation_review"] = "Edited with biotope annotate; reconcile before rebaking."
+    context = metadata.setdefault("@context", {})
+    namespace = {"biotope": "https://biocypher.org/biotope/"}
+    if isinstance(context, dict):
+        context.update(namespace)
+    elif namespace not in (context if isinstance(context, list) else []):
+        metadata["@context"] = [*context, namespace] if isinstance(context, list) else [context, namespace]
+    write_text_atomic(path, json.dumps(metadata, indent=2) + "\n")

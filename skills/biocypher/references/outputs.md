@@ -1,6 +1,8 @@
 # Output formats and finalisation
 
-Configure via `biocypher_config.yaml` (project root or `config/`). Core keys under `biocypher:`:
+Read this when choosing a backend, configuring `biocypher_config.yaml`, or importing an offline export.
+
+Configuration lives in `biocypher_config.yaml` in the project root or `config/`. Core keys under `biocypher:`:
 
 ```yaml
 biocypher:
@@ -13,7 +15,7 @@ biocypher:
     root_node: entity
 ```
 
-DBMS-specific blocks (`neo4j:`, `postgresql:`, …) hold connection and import delimiter settings.
+DBMS-specific blocks (`neo4j:`, `postgresql:`, …) hold connection settings, the data `file_format`, and the import delimiters — `csv_column_delimiter`, `csv_array_delimiter` (default `;`) and `csv_string_quote_character` for Neo4j.
 
 ## Build loop
 
@@ -27,13 +29,11 @@ bc.write_import_call()      # offline: neo4j-admin script, etc.
 bc.write_schema_info()      # optional: schema_info.yaml for NL query tools
 ```
 
-- Multiple `write_nodes` / `write_edges` calls deduplicate within one `BioCypher` instance.
-- `write_schema_info()` must run **after** all nodes and edges are written (offline or in-memory backends only).
-- Online Neo4j: `pip install "biocypher[neo4j]"`, set `offline: false`, use `add_*` or driver-backed writes per docs.
+Repeated `write_nodes` and `write_edges` calls deduplicate within one `BioCypher` instance. `write_schema_info()` runs **after** all nodes and edges are written, and only on offline or in-memory backends. For online Neo4j, install `biocypher[neo4j]`, set `offline: false`, and use `add_*` or driver-backed writes.
 
 ## Neo4j offline import
 
-With `dbms: neo4j` and `offline: true`, output includes `*-header.csv`, `*-part*.csv`, and `neo4j-admin-import-call.sh`. Run import against a **stopped** database; read the generated script for exact `--nodes` / `--relationships` args.
+With `dbms: neo4j` and `offline: true`, the data format follows `neo4j.file_format`, which **defaults to `parquet`**. Set it to `csv` unless the target Neo4j release accepts Parquet import. CSV writes `*-header.csv` and `*-part*.csv`; Parquet writes `*-part*.parquet` and no headers. Either way you get `neo4j-admin-import-call.sh`. Import against a **stopped** database, and read the generated script for the exact `--nodes` and `--relationships` arguments.
 
 ```bash
 docker run --rm \
@@ -47,16 +47,15 @@ docker run --rm \
     /import/<files from script>
 ```
 
-`--skip-bad-relationships` drops edges with missing endpoints — convenient but masks id-namespace bugs. Verify edge counts after import.
+**`--skip-bad-relationships` hides id-namespace bugs.** It drops every edge whose endpoint was never written, so the import succeeds and the graph is quietly incomplete. Compare edge counts after importing with it on.
 
 ## Other backends
 
-- **csv / tabular** — plain files for DuckDB, pandas, custom loaders.
-- **postgresql / sqlite / arangodb / rdf** — see https://biocypher.org/reference/outputs/
+`csv` and tabular output produce plain files for DuckDB, pandas or a custom loader. For `postgresql`, `sqlite`, `arangodb` and `rdf`, see https://biocypher.org/reference/outputs/
 
-## Agent API (small in-memory graphs)
+## Agent API for small in-memory graphs
 
-For prototyping (<100k nodes), `create_workflow()` offers a simpler API without database export:
+Under roughly 100k nodes, `create_workflow()` offers a simpler API with no database export:
 
 ```python
 from biocypher import create_workflow
@@ -67,8 +66,4 @@ kg.add_edge("i1", "interaction", "TP53", "BRAF", confidence=0.8)
 kg.save("graph.json")
 ```
 
-No Neo4j/PostgreSQL export, no streaming ETL — use legacy `BioCypher()` for production pipelines.
-
-## Optional next step
-
-With `schema_info.yaml` and a loaded graph DB, natural-language querying is the **biochatter** skill — ask the user before loading it.
+No Neo4j or PostgreSQL export and no streaming ETL. Use `BioCypher()` for production pipelines.

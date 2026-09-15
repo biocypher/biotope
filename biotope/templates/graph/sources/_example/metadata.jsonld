@@ -1,0 +1,47 @@
+{
+  "@context": {
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/"
+  },
+  "@type": "sc:Dataset",
+  "name": "Illustrative source contract",
+  "description": "Template example only. This describes no project data; the referenced file does not exist.",
+  "distribution": [
+    {
+      "@id": "example-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "illustrative.csv",
+      "encodingFormat": "text/csv"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "example-rows",
+      "@type": "cr:RecordSet",
+      "name": "ExampleRow",
+      "field": [
+        {
+          "@id": "example-rows/record_id",
+          "@type": "cr:Field",
+          "name": "record_id",
+          "dataType": "sc:Text",
+          "source": {"fileObject": {"@id": "example-file"}, "extract": {"column": "record_id"}}
+        },
+        {
+          "@id": "example-rows/collection_id",
+          "@type": "cr:Field",
+          "name": "collection_id",
+          "dataType": "sc:Text",
+          "source": {"fileObject": {"@id": "example-file"}, "extract": {"column": "collection_id"}}
+        },
+        {
+          "@id": "example-rows/value",
+          "@type": "cr:Field",
+          "name": "value",
+          "dataType": "cr:Float64",
+          "source": {"fileObject": {"@id": "example-file"}, "extract": {"column": "value"}}
+        }
+      ]
+    }
+  ]
+}

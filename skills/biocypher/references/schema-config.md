@@ -1,6 +1,6 @@
 # Schema configuration essentials
 
-`schema_config.yaml` defines which entities and relationships enter the graph and how adapter `input_label` values map to ontology-grounded types.
+Read this before authoring `schema_config.yaml`, which decides which entities and relationships enter the graph and how adapter `input_label` values map to ontology-grounded types.
 
 ## Adapter tuple contract
 
@@ -10,7 +10,7 @@
 yield ("P04637", "protein", {"name": "TP53", "function": "tumor_suppressor"})
 ```
 
-**Edges** — yield `(_id, _source, _target, _type, _props)` (`_id` may be `None`):
+**Edges** — yield `(_id, _source, _target, _type, _props)`, where `_id` may be `None`:
 
 ```python
 yield (None, "P04637", "P15056", "interaction", {"score": 0.9})
@@ -43,11 +43,20 @@ protein protein interaction:
     score: float
 ```
 
-## Rules
+## Top-level keys are lower sentence case
 
-- Top-level keys: lower sentence case (`protein`, `small molecule`). File/Neo4j labels become PascalCase automatically.
-- `source` / `target` on edges pin direction — critical for downstream Cypher generation (BioChatter uses these).
-- Omit `preferred_id` when no suitable namespace exists; a generic `id` property is created.
-- `label_as_edge: PERTURBS` overrides the default edge label in property-graph outputs.
+Write `protein`, `small molecule`. File and Neo4j labels become PascalCase automatically.
+
+## `source` and `target` pin edge direction
+
+Without them, downstream query generation has nothing to constrain direction against and will reverse edges.
+
+## Omit `preferred_id` when no namespace fits
+
+A generic `id` property is created instead. Inventing a namespace to fill the field asserts an identity the data does not carry.
+
+## `label_as_edge` overrides the property-graph edge label
+
+For example `label_as_edge: PERTURBS`. It changes the exported label only, not the schema entry's identity.
 
 Full reference: https://biocypher.org/reference/schema-config/

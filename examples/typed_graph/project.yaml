@@ -1,0 +1,4 @@
+name: typed-graph-example
+purpose: Link synthetic samples to their known people and inspect transformed scores.
+required_entities: [sample, person]
+required_relations: [from_person]

@@ -16,8 +16,6 @@ def _project(runner: CliRunner, tmp_path: Path) -> Path:
     r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-git", "--no-prompt"])
     assert r.exit_code == 0, r.output
     project_dir = tmp_path / "proj"
-    # `find_biotope_root` requires .git alongside .biotope; --no-git skipped it.
-    (project_dir / ".git").mkdir(exist_ok=True)
     return project_dir
 
 
@@ -56,12 +54,15 @@ def test_mark_sets_status(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     project_dir = _project(runner, tmp_path)
     monkeypatch.chdir(project_dir)
-    _write_manifest(project_dir, "data/ot/target", status="processed")
+    _write_manifest(project_dir, "data/ot/target with spaces [dim] and brackets", status="processed")
 
-    r = runner.invoke(mark, ["data/ot/target", "mapped"])
+    r = runner.invoke(mark, ["data/ot/target with spaces [dim] and brackets", "mapped"])
     assert r.exit_code == 0, r.output
+    assert "data/ot/target with spaces [dim] and brackets" in r.output
 
-    with open(project_dir / ".biotope" / "datasets" / "data" / "ot" / "target.jsonld") as f:
+    with open(
+        project_dir / ".biotope" / "datasets" / "data" / "ot" / "target with spaces [dim] and brackets.jsonld"
+    ) as f:
         metadata = json.load(f)
     assert metadata["biotope:status"] == "mapped"
 
@@ -121,6 +122,8 @@ def test_queue_groups_by_status(tmp_path: Path, monkeypatch) -> None:
     assert "RAW" in r.output and "raw_doc" in r.output
     assert "PROCESSED" in r.output and "structured" in r.output
     assert "MAPPED" in r.output and "in_kg" in r.output
+    assert "manually marked" in r.output
+    assert "in the KG" not in r.output
 
 
 def test_queue_hides_consumed_raw_from_active_section(tmp_path: Path, monkeypatch) -> None:
