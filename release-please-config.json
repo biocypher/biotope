@@ -4,6 +4,13 @@
       "release-type": "python",
       "package-name": "biotope",
       "version-file": "pyproject.toml",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='biotope')].version"
+        }
+      ],
       "changelog-sections": [
         {"type": "feat", "section": "Features"},
         {"type": "fix", "section": "Bug Fixes"},

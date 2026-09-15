@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.9.0](https://github.com/biocypher/biotope/compare/biotope-v0.8.0...biotope-v0.9.0) (2026-09-15)
+
+
+### Features
+
+* add typed Python graph pipelines and update croissant-baker ([7c0b564](https://github.com/biocypher/biotope/commit/7c0b5646b4a94dc9a79b8ae083f27cf7b3493fbe))
+* show bake progress, stream the baker's warnings, keep every checksum ([0360e5f](https://github.com/biocypher/biotope/commit/0360e5fa26af00843c2f0299ec321ffb782189d4))
+
+
+### Bug Fixes
+
+* **ci:** install published baker and honor Python matrix ([c758287](https://github.com/biocypher/biotope/commit/c75828733b7fc6e5a7e47d8f85218fa5f4fe292e))
+* work with croissant-baker's compression-decoupling refactor ([73975fd](https://github.com/biocypher/biotope/commit/73975fd3b8e41ca4237463378a8fe443019b4ef2))
+
+
+### Documentation
+
+* finalize typed graph engine specification ([7a3614a](https://github.com/biocypher/biotope/commit/7a3614ac15b07fbaf5b82939dbd8723da84569c5))
+* note the claims() refusal channel as deferred ([9465817](https://github.com/biocypher/biotope/commit/94658175a519362ef437c1db96783320e83cd0be))
+
 ## [0.8.0](https://github.com/biocypher/biotope/compare/biotope-v0.7.1...biotope-v0.8.0) (2026-06-29)
 
 
