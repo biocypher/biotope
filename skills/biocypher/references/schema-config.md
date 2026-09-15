@@ -23,7 +23,7 @@ yield (None, "P04637", "P15056", "interaction", {"score": 0.9})
 ```yaml
 protein:
   represented_as: node
-  preferred_id: uniprot
+  namespace: uniprot
   input_label: protein
   properties:
     name: str
@@ -49,14 +49,16 @@ Write `protein`, `small molecule`. File and Neo4j labels become PascalCase autom
 
 ## `source` and `target` pin edge direction
 
-Without them, downstream query generation has nothing to constrain direction against and will reverse edges.
+They declare the source and destination concept types for consumers and query tools. The adapter tuple still supplies the actual endpoint IDs and their order.
 
-## Omit `preferred_id` when no namespace fits
+## Declare a supported namespace
 
-A generic `id` property is created instead. Inventing a namespace to fill the field asserts an identity the data does not carry.
+BioCypher 0.17 uses `namespace`; `preferred_id` remains accepted but is deprecated.
+If neither is supplied, it uses the generic `id` fallback. Choose a namespace
+only when source evidence supports that identifier system.
 
 ## `label_as_edge` overrides the property-graph edge label
 
 For example `label_as_edge: PERTURBS`. It changes the exported label only, not the schema entry's identity.
 
-Full reference: https://biocypher.org/reference/schema-config/
+See the [schema reference](https://biocypher.org/BioCypher/reference/schema-config/).

@@ -2,11 +2,11 @@
 """
 Example Flask server for serving remote validation configurations.
 
-This demonstrates how to set up a simple HTTP server to provide
-validation configurations for biotope projects.
+Serve illustrative metadata field requirements on localhost. These field sets
+do not certify compliance with an external standard.
 
 Usage:
-    python remote-validation-server.py
+    uv run --with flask python docs/examples/remote-validation-server.py
 
 Then in your biotope project:
     biotope config set-remote-validation --url http://localhost:5000/validation.yaml
@@ -28,7 +28,7 @@ VALIDATION_CONFIGS = {
                 "name": {"type": "string", "min_length": 1},
                 "description": {"type": "string", "min_length": 10},
                 "creator": {"type": "object", "required_keys": ["name"]},
-                "dateCreated": {"type": "string", "format": "date"},
+                "dateCreated": {"type": "string"},
                 "distribution": {"type": "array", "min_length": 1},
             },
         }
@@ -50,7 +50,7 @@ VALIDATION_CONFIGS = {
                 "name": {"type": "string", "min_length": 1},
                 "description": {"type": "string", "min_length": 20},
                 "creator": {"type": "object", "required_keys": ["name"]},
-                "dateCreated": {"type": "string", "format": "date"},
+                "dateCreated": {"type": "string"},
                 "distribution": {"type": "array", "min_length": 1},
                 "license": {"type": "string", "min_length": 5},
                 "version": {"type": "string", "min_length": 1},
@@ -75,7 +75,7 @@ VALIDATION_CONFIGS = {
                 "name": {"type": "string", "min_length": 1},
                 "description": {"type": "string", "min_length": 50},
                 "creator": {"type": "object", "required_keys": ["name", "institution"]},
-                "dateCreated": {"type": "string", "format": "date"},
+                "dateCreated": {"type": "string"},
                 "distribution": {"type": "array", "min_length": 1},
                 "license": {"type": "string", "min_length": 5},
                 "ethics_approval": {"type": "string", "min_length": 1},
@@ -107,7 +107,11 @@ def index():
 @app.route("/validation.yaml")
 def default_validation():
     """Serve the default validation configuration."""
-    return yaml.dump(VALIDATION_CONFIGS["basic"], default_flow_style=False), 200, {"Content-Type": "application/x-yaml"}
+    return (
+        yaml.safe_dump(VALIDATION_CONFIGS["basic"]["annotation_validation"], sort_keys=False),
+        200,
+        {"Content-Type": "application/x-yaml"},
+    )
 
 
 @app.route("/<config_type>/validation.yaml")
@@ -117,7 +121,7 @@ def specific_validation(config_type):
         return f"Configuration '{config_type}' not found", 404
 
     return (
-        yaml.dump(VALIDATION_CONFIGS[config_type], default_flow_style=False),
+        yaml.safe_dump(VALIDATION_CONFIGS[config_type]["annotation_validation"], sort_keys=False),
         200,
         {"Content-Type": "application/x-yaml"},
     )
@@ -137,4 +141,4 @@ if __name__ == "__main__":
     print("\nUsage in biotope project:")
     print("  biotope config set-remote-validation --url http://localhost:5000/validation.yaml")
     print("\nServer starting on http://localhost:5000")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(host="127.0.0.1", port=5000)

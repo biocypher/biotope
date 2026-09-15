@@ -4,7 +4,7 @@
     "plugins": [{
         "name": "biotope",
         "source": ".",
-        "description": "Croissant-driven knowledge-graph construction (BioCypher ecosystem)."
+        "description": "Source curation and typed Python graph construction with Biotope and BioCypher."
       }
     ]
 }

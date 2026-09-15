@@ -1,14 +1,21 @@
 site_name: Biotope
 
-# Mirror of the `nav:` block in mkdocs.yml. Consumed by the monorepo
-# documentation aggregator, which composes the org-wide nav from each
-# submodule's local nav. Keep this file in sync with mkdocs.yml.
+# Mirror of mkdocs.yml's navigation for the organization documentation aggregator.
 
 nav:
   - Home: index.md
+  - Installation: installation.md
   - Tutorial: tutorial.md
-  - Plugin & Skills: plugin.md
-  - Commands: commands.md
-  - Mapping: mapping.md
-  - How it works: architecture.md
-  - Cluster compliance: cluster-compliance.md
+  - Agent setup: plugin.md
+  - Commands:
+      - Overview: commands.md
+      - Report formats: commands_sidenotes.md
+  - Typed graph projects:
+      - Authoring: mapping.md
+      - Technical notes: mapping_sidenotes.md
+  - Architecture: architecture.md
+  - Annotation policies:
+      - Configuration: cluster-compliance.md
+      - Administration examples: cluster-compliance_sidenotes.md
+  - Migration to 0.9: migration.md
+  - Development ideas: ideas.md

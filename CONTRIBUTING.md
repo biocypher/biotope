@@ -1,109 +1,81 @@
 # Contributing
 
-Contributions are welcome, and they are greatly appreciated! Every little bit
-helps, and credit will always be given.
+Use [GitHub issues](https://github.com/biocypher/biotope/issues) for reproducible
+bugs, documentation corrections and proposed features. For a larger change,
+describe the problem and intended behavior before starting implementation.
 
-## Example Contributions
+## Development setup
 
-You can contribute in many ways, for example:
+Clone the repository or your fork, then create a branch from `main`. Install
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and Node.js, and use
+Python 3.10–3.12:
 
-- [Report bugs](#report-bugs)
-- [Fix Bugs](#fix-bugs)
-- [Implement Features](#implement-features)
-- [Write Documentation](#write-documentation)
-- [Submit Feedback](#submit-feedback)
+```bash
+git clone https://github.com/biocypher/biotope.git
+cd biotope
+git switch -c docs/describe-your-change
+uv sync --locked --extra dev --extra graph
+uv run python -m pyright --version
+```
 
-### Report Bugs
+The lockfile resolves published dependencies, including croissant-baker. No local
+sibling package is required. If Node.js is unavailable, install `pyright[nodejs]`
+in the environment as described in the [installation guide](docs/installation.md).
 
-Report bugs at https://github.com/biocypher/biotope/issues.
+## Checks
 
-**If you are reporting a bug, please follow the template guidelines. The more
-detailed your report, the easier and thus faster we can help you.**
+Run the checks relevant to your change:
 
-### Fix Bugs
+```bash
+uv run pyright
+uv run pytest
+uv run pre-commit run --all-files
+```
 
-Look through the GitHub issues for bugs. Anything labelled with `bug` and
-`help wanted` is open to whoever wants to implement it. When you decide to work on such
-an issue, please assign yourself to it and add a comment that you'll be working on that,
-too. If you see another issue without the `help wanted` label, just post a comment, the
-maintainers are usually happy for any support that they can get.
+Pre-commit manages formatting, linting and configuration checks in its own
+environments. Its first run downloads those tools. The GitHub test matrix covers
+Python 3.10 and 3.12 on Linux and macOS.
 
-### Implement Features
+Add focused tests for changed behavior. For documentation-only changes, verify the
+commands and examples you alter and build the documentation.
 
-Look through the GitHub issues for features. Anything labelled with
-`enhancement` and `help wanted` is open to whoever wants to implement it. As
-for [fixing bugs](#fix-bugs), please assign yourself to the issue and add a comment that
-you'll be working on that, too. If another enhancement catches your fancy, but it
-doesn't have the `help wanted` label, just post a comment, the maintainers are usually
-happy for any support that they can get.
+## Documentation
 
-### Write Documentation
+```bash
+uv run mkdocs serve
+uv run mkdocs build --strict
+```
 
-biotope could always use more documentation, whether as
-part of the official documentation, in docstrings, or even on the web in blog
-posts, articles, and such. Just \[open an issue\](https://github.com/biocypher/
-biotope/issues) to let us know what you will be working on
-so that we can provide you with guidance.
+Keep `mkdocs.nav.yml` synchronized with the `nav` block in `mkdocs.yml`. Write
+examples for a public installation unless the page explicitly covers development.
+Keep a guide's main workflow short; link detailed contracts or secondary examples
+from a companion notes page.
 
-### Submit Feedback
+## Pull requests and releases
 
-The best way to send feedback is to file an issue at https://github.com/
-biocypher/biotope/issues. If your feedback fits the format of one of
-the issue templates, please use that. Remember that this is a volunteer-driven
-project and everybody has limited time.
+A pull request should explain the problem, resulting behavior and validation.
+Include relevant documentation updates and identify any known limitation.
 
-## Get Started!
+Use [Conventional Commits](https://www.conventionalcommits.org/) for commit subjects
+and PR titles. Examples:
 
-Ready to contribute? Here's how to set up biotope for
-local development.
+- `fix: preserve annotations when refreshing source metadata`
+- `feat: add a typed graph command`
+- `docs: update public installation instructions`
 
-1. Fork the https://github.com/biocypher/biotope
-   repository on GitHub.
+When squash-merging, keep the final commit subject conventional; GitHub usually
+starts it from the PR title. With a merge commit, release-please can inspect the
+conventional commits in the merged history. A PR title alone does not rewrite them.
 
-1. Clone your fork locally
+The release-please workflow runs after changes reach `main`. `fix` and `feat`
+commits contribute patch and minor changes respectively. This repository also
+includes `docs`, `build` and `refactor` in visible changelog sections, so those
+changes can produce a patch release. `chore` is hidden unless it marks a breaking
+change. Mark a breaking change with `!` and explain it in the commit
+body. Maintainers review the resulting release PR before publishing.
 
-   ```shell
-   git clone git@github.com:your_name_here/biotope.git
-   ```
+Do not hand-edit version numbers or add a changelog entry for ordinary PRs.
+Release-please maintains `CHANGELOG.md`, the package version and configured extra
+files, including the root package entry in `uv.lock`.
 
-1. [Install hatch](https://hatch.pypa.io/latest/install/).
-
-1. Create a branch for local development using the default branch (typically `main`)
-   as a starting
-   point. Use `fix` or `feat` as a prefix for your branch name.
-
-   ```shell
-   git checkout main
-   git checkout -b fix-name-of-your-bugfix
-   ```
-
-   Now you can make your changes locally.
-
-1. When you're done making changes, apply the quality assurance tools and check
-   that your changes pass our test suite. This is all included with tox
-
-   ```shell
-   hatch run test:run
-   ```
-
-1. Commit your changes and push your branch to GitHub. Please use [semantic
-   commit messages](https://www.conventionalcommits.org/).
-
-   ```shell
-   git add .
-   git commit -m "fix: summarize your changes"
-   git push -u origin fix-name-of-your-bugfix
-   ```
-
-1. Open the link displayed in the message when pushing your new branch in order
-   to submit a pull request.
-
-### Pull Request Guidelines
-
-Before you submit a pull request, check that it meets these guidelines:
-
-1. The pull request should include tests.
-1. If the pull request adds functionality, the docs should be updated. Put your
-   new functionality into a function with a docstring.
-1. Your pull request will automatically be checked by the full test suite.
-   It needs to pass all of them before it can be considered for merging.
+Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in project discussions and reviews.

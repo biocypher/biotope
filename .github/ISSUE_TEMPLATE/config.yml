@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Community Support
-    url: https://github.com/biocypher/biotope/discussions
-    about: Please ask and answer questions here.
+  - name: Documentation
+    url: https://biocypher.github.io/biotope/
+    about: Installation, tutorials and command reference.

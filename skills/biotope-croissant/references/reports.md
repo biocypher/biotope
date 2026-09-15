@@ -1,49 +1,63 @@
-# Reading the checks and the run
+# Reading checks and run reports
 
-Read this at step 6 while resolving findings, and at step 7 before claiming a capability holds.
+Use this reference while resolving findings and reviewing a build's claims.
 
-## Each layer establishes one thing
+## Validation boundaries
 
-| Layer             | Establishes                                                                                       | Cannot see                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Source metadata   | The structure a description declares                                                              | Whether it is complete, correct, or loadable   |
-| Definition check  | Contracts, topology, requirement bindings, interpretation references, Pyright over `code_paths`   | Anything about values; it never executes `run` |
-| Runtime integrity | Loaded values validated without coercion, conflicting IDs rejected, every edge endpoint resolved  | Whether the right records were loaded          |
-| Quality           | Counts, missing properties, connectivity, endpoint concentration, self-loops over emitted objects | Any record the pipeline never emitted          |
-| Validation check  | The graph against an expectation derived outside the pipeline                                     | Only what the project chose to check           |
+| Layer               | Establishes                                                                           | Limitation                                            |
+| ------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Source metadata     | The structure declared by a description                                               | Does not establish completeness or loadability        |
+| Definition check    | Contracts, topology, requirement bindings, interpretation references and Python types | Does not execute loaders or inspect source values     |
+| Runtime integrity   | Loaded types, object consistency and resolved endpoints                               | Does not decide which records should have been loaded |
+| Quality             | Counts, missing properties, connectivity, endpoint concentration and self-loops       | Measures only emitted objects                         |
+| Declared validation | Agreement with the project's stated expectation                                       | Covers only the cases the check implements            |
 
-A green definition check does not establish uniqueness, namespace compatibility or biological equivalence. A type conversion and a shared column name are not scientific evidence. A failed build is not a completed graph, even when files were written.
+Static types do not establish biological equivalence. A failed build remains
+incomplete even if it produced some files. Use expectations derived independently
+of the pipeline to detect eligible records that were omitted.
 
-## Only validation checks compare the graph with anything outside it
+## Read the run record
 
-Every layer above them measures what was emitted, so none can notice a record the pipeline never produced. A run with no validation checks reports `validation.state: "absent"`. That is a finding about the build, not a formality.
+| Field in `run.json`             | Review it for                                                            |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| Completion and findings         | Whether the operation finished and which steps failed                    |
+| `validation.state`              | `passed`, `failed`, `unverified` or `absent`                             |
+| `validation.capabilities`       | Per-capability `supported`, `unverified`, `failed` or `unchecked` states |
+| `validation.checks[].evidence`  | The source of each expectation                                           |
+| `audits`                        | Stage input/output grains, selection rules and named counts              |
+| Findings with `kind: exclusion` | Policy counts and bounded evidence                                       |
+| `exporter`                      | Verified writer version and physical format                              |
+| `query_context`                 | Interpretation guidance accompanying the graph                           |
 
-## Read a run in this order
+`failed` blocks export. `unverified` leaves the associated capability unresolved.
+`unchecked` means a capability has no bound check; `absent` means no validation
+checks were declared. `supported` means the bound checks passed, within their
+stated scope.
 
-| Field in `run.json`               | Read it for                                                          |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `validation.state`                | `passed`, `failed`, `unverified` or `absent` — `absent` is not clean |
-| `validation.capabilities`         | Per capability: `supported`, `unverified`, `failed`, `unchecked`     |
-| `validation.checks[].evidence`    | Where each expectation came from                                     |
-| `audits`                          | Each stage's grains, admission rule and counts                       |
-| `findings` with `kind: exclusion` | Declared policy counts and bounded evidence                          |
-| `exporter`                        | The writer version and physical format actually verified             |
-| `query_context`                   | Exactly what a consumer with only the graph receives                 |
+## Quality observations
 
-`failed` blocks the export. `unverified` records missing knowledge: that capability stays unresolved while the rest of the graph remains usable. `unchecked` means a capability was claimed and nothing tests it.
+Quality reads validated Python objects before export. Empty required concepts,
+wholly missing properties and self-loops warn. Connectivity and endpoint
+concentration are observations. Empty denominators remain unmeasured; zero and
+`False` are usable values. Failed execution leaves later measurements unrun.
 
-## Quality measures what was emitted, not what should have been
+`biotope graph quality --json` saves the latest assessment, including failures,
+to `graph/reports/quality.json` without exporting. Quality and build each execute
+the pipeline once; running both executes twice.
 
-It reads validated Python objects before export, never the BioCypher files and never the sources. Empty required concepts, wholly missing properties and actual self-loops warn. Connectivity and endpoint concentration are observations, not failure criteria. Empty denominators stay unmeasured, and zero and `False` are valid values. Failed execution leaves every later measurement unrun.
+## Export and provenance
 
-`biotope graph quality --json` saves the latest assessment, including failures, to `graph/reports/quality.json` and stops before export. A complete quality report does not mean a graph was exported. Quality and build each execute the pipeline once, so run both only when the second execution serves the request.
+The exporter checks the installed BioCypher version before reading payloads.
+`BioCypherWriter("csv")` writes data and header CSVs; `BioCypherWriter("parquet")`
+writes Parquet without CSV headers and requires a compatible database importer.
+Biotope checks the output against the declared format after writing.
 
-## The exporter is verified before any payload is read
+Each mapping call attaches its input contributors to its outputs. This is
+record-level attribution, not per-property lineage. Exclusions retain counts and
+at most ten evidence references per policy, with a truncation flag. Audits retain
+stage descriptions and named counts; they do not hold that evidence sample.
+Property examples contain up to three distinct non-null values in encounter order.
+Keep these limits visible when summarizing a report.
 
-Escaping and file layout belong to a writer release rather than to the BioCypher API, so a version outside the tested range is refused up front with the specifier to install. The data format is selected rather than inherited: `BioCypherWriter("csv")` writes CSV data files with CSV headers, `BioCypherWriter("parquet")` writes Parquet and no headers, and Parquet import needs a Neo4j release that accepts it. After writing, the export directory is checked against the format that was declared, so a writer whose default disagrees fails instead of shipping.
-
-## Bounded samples are not complete lists
-
-Mapping calls attach every input contributor to each output; that is not per-property lineage. Exclusions and audits keep counts plus at most ten evidence references, with a truncation flag. Illustrative property examples are up to three distinct non-null values in encounter order. Do not present any of these as exhaustive.
-
-`biotope graph metagraph` inspects registered topology without importing the pipeline, and with `--report` overlays a matching assessment.
+`biotope graph metagraph` loads topology independently of the pipeline.
+`--report <file>` overlays observations from a matching assessment without rerunning it.

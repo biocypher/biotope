@@ -1,5 +1,5 @@
 site_name: Biotope
-site_description: Turn biomedical data into a queryable knowledge graph — agent-first, with version-controlled metadata.
+site_description: Build typed Python knowledge graphs from reviewed Croissant metadata, with provenance and validation.
 site_author: BioCypher Team
 site_url: https://biocypher.github.io/biotope/
 
@@ -44,12 +44,25 @@ theme:
 
 nav:
   - Home: index.md
+  - Installation: installation.md
   - Tutorial: tutorial.md
-  - Plugin & Skills: plugin.md
-  - Commands: commands.md
-  - Mapping: mapping.md
-  - How it works: architecture.md
-  - Cluster compliance: cluster-compliance.md
+  - Agent setup: plugin.md
+  - Commands:
+      - Overview: commands.md
+      - Report formats: commands_sidenotes.md
+  - Typed graph projects:
+      - Authoring: mapping.md
+      - Technical notes: mapping_sidenotes.md
+  - Architecture: architecture.md
+  - Annotation policies:
+      - Configuration: cluster-compliance.md
+      - Administration examples: cluster-compliance_sidenotes.md
+  - Migration to 0.9: migration.md
+  - Development ideas: ideas.md
+
+validation:
+  links:
+    anchors: warn
 
 plugins:
   - search
@@ -63,7 +76,7 @@ extra:
 extra_css:
   - stylesheets/extra.css
 
-copyright: Copyright &copy 2025–2026 BioCypher Team
+copyright: Copyright &copy; 2025–2026 BioCypher Team
 
 repo_url: https://github.com/biocypher/biotope
 repo_name: biocypher/biotope

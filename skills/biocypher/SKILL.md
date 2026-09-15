@@ -10,11 +10,11 @@ BioCypher is a Python library for ontology-grounded KG construction. Three piece
 **Check which project this is first.** If the repository has a `graph/` workspace with `topology/` and `pipelines/build_graph.py`, it is a typed Biotope project: Python topology is the schema authority, Biotope generates `schema_config.yaml` and drives the exporter, and the work belongs to the biotope-croissant skill. Writing an adapter or hand-editing the generated schema there creates a second, conflicting schema. Everything below applies to separately managed BioCypher projects.
 
 ```bash
-pip install biocypher
-pip install "biocypher[neo4j]"   # only if using Neo4j online mode
+python -m pip install 'biocypher>=0.17,<0.18'
+python -m pip install "biocypher[neo4j]>=0.17,<0.18"   # only if using Neo4j online mode
 ```
 
-Project template: https://github.com/biocypher/project-template
+These examples target BioCypher 0.17. [Project template](https://github.com/biocypher/project-template).
 
 ## Workflow
 
@@ -76,14 +76,14 @@ biocypher:
 # schema_config.yaml (minimal)
 protein:
   represented_as: node
-  preferred_id: uniprot
+  namespace: uniprot
   input_label: protein
 ```
 
 ## Small graphs and agent prototyping
 
-`create_workflow()` builds an in-memory graph with JSON export and no DBMS. See [outputs.md](./references/outputs.md). Not for large ETL.
+`create_workflow()` builds an in-memory graph with JSON export and no DBMS. See [outputs.md](./references/outputs.md). Assess memory use before choosing the build scope.
 
 ## Verify
 
-After export, check file counts and read a sample of the CSVs, or run an import dry-run. **Compare expected against actual edge counts.** A silent drop usually means an id-namespace mismatch at the adapter layer, where the endpoint an edge names was never written as a node.
+After export, check file counts and read a sample of the CSVs, or run an import dry-run. Compare expected and actual node and edge counts. If edges are missing, check adapter selection, identifier namespaces and whether every endpoint was written.

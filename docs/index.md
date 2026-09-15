@@ -1,64 +1,47 @@
-# biotope
+# Biotope
 
-Describe local data, define a purpose and target schema, and author mappings
-and selected graph pipelines in typed Python, with version-controlled metadata.
+Biotope turns reviewed descriptions of local data into typed Python graph projects.
+You define the research purpose, source readers, identities and transformations;
+Biotope checks the definitions and exports BioCypher files with provenance.
 
-!!! warning "Pre-alpha"
+## Start here
 
-```
-CLI flags and APIs will change. The plugin skills are the most stable onboarding path.
-```
+- [Install Biotope](installation.md) from PyPI, including its published croissant-baker dependency.
+- [Run the tutorial](tutorial.md) to build a small graph from synthetic CSV data.
+- [Author a graph](mapping.md) from your own curated source descriptions.
+- [Set up a coding agent](plugin.md) to use the same workflow with repository skills.
 
-## Start with a coding agent
-
-Install the [biotope plugin](plugin.md), then invoke `/biotope-croissant` or ask:
-
-> What does biotope do? I want to build a graph from my data.
-
-The agent asks what the graph should answer and runs the pipeline:
+## Workflow
 
 ```text
-init → add → graph scaffold → source generate → Python authoring → graph check → graph build
+Local data → Croissant metadata → Review → Generated source records
+                                                ↓
+                           Python loaders, topology and mappings
+                                                ↓
+                              Check → Build → Review graph output
 ```
 
-Graph authoring starts with `biotope graph scaffold`, which creates `graph/`.
-Initialization and baking do not create or execute a graph.
+`biotope add` reads local data and describes it with croissant-baker. Review those
+metadata before generating source classes: a successful scan does not establish
+that every field or file was described completely.
 
-Semantic choices stay with you or your agent. Biotope generates source types, checks definitions, and validates graph output; it never guesses the best record set or field mapping.
+`biotope graph scaffold` creates a workspace with examples to adapt. Project
+Python code then loads selected data, transforms typed records and constructs the
+graph. `biotope graph check` checks declarations and types; `biotope graph build`
+executes the pipeline, validates its objects and writes the export.
 
-## Use the CLI
+A build includes source references, exclusions, declared validation checks and
+interpretation guidance. Use these to assess whether the graph supports its
+intended questions. Structural checks alone cannot establish scientific validity.
 
-For manual or scripted use, install Biotope and the updated baker in the same
-environment. During this unreleased integration, use editable installs of both
-local checkouts. The following options apply to published releases:
+## Reference
 
-=== "Try without installing"
+- [Commands](commands.md)
+- [Architecture](architecture.md)
+- [Technical notes for typed graphs](mapping_sidenotes.md)
+- [Shared annotation policies](cluster-compliance.md)
+- [Migrating to 0.9](migration.md)
 
-````
-```bash
-uvx biotope init my-kg
-```
-````
-
-=== "Install globally"
-
-````
-```bash
-pipx install "biotope>=0.8.0"
-```
-````
-
-=== "Add to a uv project"
-
-````
-```bash
-uv add "biotope>=0.8.0"
-```
-````
-
-Next:
-
-- [Build the small typed example](tutorial.md).
-- Use the [command overview](commands.md) for manual work and scripts.
-- Write mappings by hand with the [mapping reference](mapping.md).
-- Read [how biotope works](architecture.md) for project layout and data flow.
+Biotope 0.9 supports Python 3.10–3.12. APIs may change while the project is under
+active development. Source code and issue reporting are on
+[GitHub](https://github.com/biocypher/biotope).

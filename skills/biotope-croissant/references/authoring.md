@@ -1,6 +1,6 @@
 # Typed authoring
 
-`graph/README.md` in the workspace covers the scaffold itself: the `_example` patterns, source generation semantics, `display_name`, the `--graph` flag and the two-step normalizer. This file covers what the type checker and the runtime require. Do not restate one in the other.
+`graph/README.md` covers the scaffold layout and workflow. This reference describes the type and runtime contracts.
 
 ## Every file has one owner
 
@@ -16,7 +16,7 @@
 | `graph/topology/__init__.py`                 | `TOPOLOGY` registry                                            |
 | `graph/mappings/`                            | Typed transformation functions and `MAPPINGS`                  |
 | `graph/query_context.py`                     | `QUERY_CONTEXT`: what the graph answers and how to read it     |
-| `graph/checks.py`                            | `VALIDATION_CHECKS`: proof that it does                        |
+| `graph/checks.py`                            | `VALIDATION_CHECKS`: checks of the declared capabilities       |
 | `graph/pipelines/build_graph.py`             | `PIPELINE`, importing those registries and composing execution |
 | `graph/pyproject.toml`                       | Graph dependencies, including project reader libraries         |
 | `graph/build/<run>/`                         | Run directory: export files and run evidence                   |
@@ -47,20 +47,23 @@ class Measurement:
     note: str | None = field(default=None, metadata={"description": "Free-text source comment."})
 ```
 
-Use `dataclasses.field` rather than a wrapper: a helper returning a value makes a required property look defaulted to the type checker, so a missing argument is only caught at run time. Descriptions are collected separately from `Topology.describe()`, so improving the wording does not change the topology digest. They reach `query_context.json`, which is the only place a consumer can read them.
+Use `dataclasses.field` rather than a wrapper: a helper returning a value makes a required property look defaulted to the type checker, so a missing argument is only caught at run time. Descriptions are collected separately from `Topology.describe()`, so improving the wording does not change the topology digest. They reach `query_context.json` and the exported `BiotopeQueryContext` system rows.
 
 ## Generated fields are nullable until curation says otherwise
 
-Curated `biotope:nullable: false` asserts non-nullability. Known scalars, nested records and repeated fields are supported; unknown types and `arrayShape` fields become `UnknownValue`. Refine that metadata before loading non-null values; an unused nullable opaque field can stay `None`. `Row.__field_refs__` maps attribute names to Croissant field IDs. Extraction rules and descriptions stay in the Croissant file registered by `SOURCE.metadata`; do not copy them into Python.
+Curated `biotope:nullable: false` asserts non-nullability. Known scalars, nested records and repeated fields are supported; unknown types and `arrayShape` fields are opaque and nullable by default (`UnknownValue | None`). Refine that metadata before loading non-null values; an unused nullable opaque field can stay `None`. `Row.__field_refs__` maps attribute names to Croissant field IDs. Extraction rules and descriptions stay in the Croissant file registered by `SOURCE.metadata`; do not copy them into Python.
 
 Export supports nullable scalars and string lists without nulls or `|`. Any other property shape needs an explicit project representation.
 
-## A mapping's signature is its whole contract
+## Mapping signatures
+
+For source and intermediate dataclasses defined by the project, with non-null
+`sample_id` and `tissue` fields, the transformation can have this shape:
 
 ```python
-def normalise_sample(sample: SourceRecord[Samples]) -> Iterator[Measurement]:
+def normalise_sample(sample: SourceRecord[Samples]) -> Iterator[NormalizedSample]:
     row = sample.value
-    yield Measurement(sample_id=row.sample_id, tissue=row.tissue.lower())
+    yield NormalizedSample(sample_id=row.sample_id, tissue=row.tissue.lower())
 
 
 NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, evidence=("Rationale.",))
@@ -78,12 +81,12 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 - `context.apply(mapping, *records, **keywords)` checks the call against the mapping's signature and returns typed, evidence-bearing outputs.
 - `context.map(mapping, *records, **keywords)` makes the same checks and collects graph objects. It accepts only mappings whose outputs declare a `schema_id`.
 - `context.exclude(policy_key, evidence, count=1)` records an excluded record against a declared pipeline policy.
-- `context.record_audit(stage, inputs=..., outputs=..., selection=..., counts=...)` records one stage's grains, its admission rule and named non-negative counts. Stage names are unique and nothing derives totals from the counts, so name whatever a reader needs to spot a silent drop.
+- `context.record_audit(stage, inputs=..., outputs=..., selection=..., counts=...)` records one stage's grains, its admission rule and named non-negative counts. Stage names are unique and counts are project-defined, so name them by the source and population they measure.
 - `context.view()` builds an isolated `GraphView` for a validation check. Everything it hands out is a copy — `view.concepts`, `view.records(Concept)`, `view.evidence(id)`, `view.mappings(id)` — so a check cannot alter what the run exports or reports.
 
-## Buffer the typed intermediate, never untyped pairs
+## Preserve types while buffering
 
-A `list[SourceRecord[Measurement]]` keeps its element type, so the later `context.map` stays checked. A buffer of untyped mapping and record pairs has to be recovered with casts and checks nothing.
+A `list[SourceRecord[Measurement]]` keeps its element type, so the later `context.map` stays checked. Untyped buffers lose this static information and may require casts at later calls.
 
 ## Joins and conflicts are project Python
 

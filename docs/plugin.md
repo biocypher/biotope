@@ -1,75 +1,75 @@
-# Plugin and skills
+# Agent setup
 
-The biotope plugin teaches coding agents how to curate source descriptions and author typed graph projects. The agent uses the same `biotope` CLI as a human; no separate agent
-API or MCP server is involved.
+Repository skills guide a coding agent through the same Biotope CLI used in the
+terminal. Install the [Python package](installation.md) in the project environment
+as well; installing a skill does not install its dependencies.
 
-## Install
+## Choose a skill
 
-=== "Claude Code"
+| Skill               | Use it for                                                        |
+| ------------------- | ----------------------------------------------------------------- |
+| `biotope-croissant` | Source curation, typed Python mappings and Biotope graph builds   |
+| `biocypher`         | Standalone BioCypher adapters, export schemas and database import |
 
-````
+Start with `biotope-croissant` for a Biotope project. Its reference files document
+source generation, graph authoring and interpretation. Copy the entire skill
+folder, including those references, when installing it manually.
+
+## Claude Code
+
+Add this repository as a marketplace and install its plugin:
+
 ```text
 /plugin marketplace add biocypher/biotope
 /plugin install biotope@biotope
 ```
-````
 
-=== "Cursor"
+Alternatively, copy the selected folders from the repository's `skills/` directory
+into your project's `.claude/skills/`. See
+[Claude Code's plugin guide](https://code.claude.com/docs/en/discover-plugins).
 
+## Cursor
+
+For a project-local installation, copy the selected skill folders into
+`.cursor/skills/`.
+
+Teams and Enterprise workspaces can use a team marketplace: open the Cursor
+Dashboard, go to **Plugins → Team Marketplaces**, choose **Add Marketplace**, and
+import `biocypher/biotope` from GitHub. See [Cursor's plugin guide](https://cursor.com/docs/plugins)
+for access and installation settings.
+
+## Codex
+
+From the target project, with a clone of Biotope available at `../biotope`:
+
+```bash
+mkdir -p .agents/skills
+cp -R ../biotope/skills/biotope-croissant .agents/skills/
 ```
-[Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace)
-and import `biocypher/biotope`.
-```
 
-=== "Codex"
-
-```
-[Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli)
-using `https://github.com/biocypher/biotope`.
-```
-
-To install skills without the plugin, copy the folders you need from
-[`skills/`](https://github.com/biocypher/biotope/tree/main/skills) into your
-agent's skills directory, such as `.cursor/skills/` or `.claude/skills/`.
-
-## Choose a skill
-
-| Skill               | Use it for                                                          |
-| ------------------- | ------------------------------------------------------------------- |
-| `biotope-croissant` | Curated sources, typed mappings and selected graph file builds      |
-| `biocypher`         | A standalone BioCypher project: adapters, schemas, and Neo4j import |
-
-Start with `biotope-croissant`. It continues through project-owned loading and selected BioCypher file output. Database import and querying are separately managed work.
+Adjust the clone path to your checkout. Copy `skills/biocypher` in the same way
+when working on a standalone BioCypher project. User-wide skills can be placed in
+`~/.agents/skills/`. See the [Codex skills documentation](https://learn.chatgpt.com/docs/build-skills)
+for discovery and scope.
 
 ## Work with the agent
 
-Invoke `/biotope-croissant` to load the skill, or just describe the goal and
-let the agent trigger it:
+Ask the agent to use the `biotope-croissant` skill and describe the intended graph,
+for example:
 
-> Turn the CSVs in `data/` into a knowledge graph of genes and diseases.
+> Use biotope-croissant to build a graph from the CSVs in `data/`. It should connect
+> samples to donors so I can compare measurements by donor. Review the source
+> metadata and explain any missing scientific decisions before choosing a mapping.
 
-The skill drives the CLI for you. During a typical session:
+The agent records the purpose, reviews source descriptions, generates records and
+authors the graph workspace. When construction is requested, it checks and runs
+the selected pipeline, then reports outputs, exclusions and validation results.
+Existing scientific choices remain part of the project; unresolved choices need
+input from someone who knows the data.
 
-1. The agent asks what the graph should answer and which entities and relations
-   matter. It records your answers as the project purpose instead of guessing
-   from file shapes.
-1. It brings your data into the project and runs `add`, which creates a
-   Croissant manifest for each dataset.
-1. For graph work, it runs `graph scaffold` to create `graph/`, then generates source
-   classes and authors Python topology, loaders and mappings there. It checks
-   definitions and runs the selected pipeline when requested.
-1. It reports graph outputs, exclusions and provenance, then asks you to review
-   known values and relations against the research purpose.
+Database import and querying require a separate task and environment. The
+[tutorial](tutorial.md) covers file output, while the [authoring guide](mapping.md)
+explains the Python contracts.
 
-The agent asks about missing purpose or schema decisions and unresolved
-scientific choices. It reuses choices already supplied by the user.
-
-Database import and querying are outside this selected file-build workflow.
-
-To write mappings yourself, see the [mapping reference](mapping.md). For a full
-worked example, follow the [tutorial](tutorial.md).
-
-## Agents without skills
-
-`biotope init --agents-md` adds a project-local `AGENTS.md` fallback. Use it
-only when your agent cannot load skills.
+For an agent without skill support, `biotope init --agents-md` can add project-local
+`AGENTS.md` instructions during initialization.

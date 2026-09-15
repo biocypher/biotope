@@ -1,6 +1,8 @@
 {
   "name": "biotope",
-  "version": "0.8.0",
-  "description": "Croissant-driven knowledge-graph construction (BioCypher ecosystem).",
-  "author": { "name": "BioCypher Team" }
+  "version": "0.9.0",
+  "description": "Source curation and typed Python graph construction with Biotope and BioCypher.",
+  "author": {
+    "name": "BioCypher Team"
+  }
 }

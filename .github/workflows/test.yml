@@ -36,3 +36,17 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests/ -v
+
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Install documentation dependencies
+        run: uv sync --locked --extra dev
+      - name: Check documentation
+        run: uv run mkdocs build --strict
