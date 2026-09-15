@@ -48,8 +48,8 @@ body:
     attributes:
       label: Environment
       description: >
-        Please paste the output of running `depinfo --markdown biotope`
-        in your environment between the `details` tags below.
+        Include the output of `biotope --version` and `python --version`, your
+        operating system, and how you installed Biotope.
       value: |
         <details>
 

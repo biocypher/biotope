@@ -1,91 +1,65 @@
-# biotope
+# Biotope
 
-Describe local data with croissant-baker, define a purpose and target schema, and maintain typed Python mappings and project-owned graph pipelines with version-controlled metadata. Biotope validates selected builds and writes BioCypher files. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
+Biotope builds knowledge graphs from local data. It uses [croissant-baker](https://pypi.org/project/croissant-baker/)
+to describe sources, generates typed Python records from reviewed Croissant metadata,
+and checks project-owned loaders, mappings and graph pipelines. Builds export
+[BioCypher](https://biocypher.org/) files with provenance and a record of the run.
 
-|         |                                                                                                                                                                                                                                                                                                                                              |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Package | [![Latest PyPI Version](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/) [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/) [![Docs](https://github.com/biocypher/biotope/actions/workflows/docs_mkdocs.yaml/badge.svg)](https://biocypher.github.io/biotope/) |
-| Meta    | [![Apache 2.0](https://img.shields.io/pypi/l/biotope.svg)](LICENSE) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)                                                                                                         |
+[![PyPI](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/)
+[![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/)
+[![Documentation](https://github.com/biocypher/biotope/actions/workflows/docs_mkdocs.yaml/badge.svg)](https://biocypher.github.io/biotope/)
+[![License](https://img.shields.io/pypi/l/biotope.svg)](LICENSE)
 
-> **Pre-alpha.** CLI flags and APIs will change. The plugin skills are the most stable onboarding path.
+Biotope is under active development. The 0.9 release replaces YAML mappings with
+Python graph projects; see the [migration guide](docs/migration.md).
 
-## Install the plugin
+## Install
 
-Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope](https://github.com/biocypher/biotope).
-
-| Harness         | Setup                                                                                                                                    |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Claude Code** | `/plugin marketplace add biocypher/biotope` then `/plugin install biotope@biotope`                                                       |
-| **Cursor**      | [Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace) → import `biocypher/biotope`                            |
-| **Codex**       | [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli) pointing at this repo |
-
-**Skills only:** copy the folder(s) you need from [`skills/`](skills/) into your project — e.g. `.cursor/skills/`, `.claude/skills/`. Start with `biotope-croissant`; add `biocypher` for a standalone BioCypher project.
-
-## Use it
-
-The plugin ships two skills:
-
-| Skill                 | Use when                                                              |
-| --------------------- | --------------------------------------------------------------------- |
-| **biotope-croissant** | Curated sources, Python mappings and selected BioCypher file builds   |
-| **biocypher**         | A standalone BioCypher project: adapters, schema config, Neo4j import |
-
-You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-croissant`) or just ask:
-
-> *What does biotope do? I want to build a graph from my data.*
-
-The agent reads the skill contract and runs `biotope` commands for you.
-
-**Reference:** [biocypher.github.io/biotope](https://biocypher.github.io/biotope/)
-
-## CLI (manual / scripting)
-
-If you prefer the terminal or need CI, install the package in your environment.
-For this unreleased integration, use both local checkouts in the same environment:
+Use Python 3.10–3.12. These commands use [uv](https://docs.astral.sh/uv/getting-started/installation/)
+and a POSIX shell:
 
 ```bash
-uv venv .venv
-uv pip install --python .venv/bin/python -e ../croissant-baker -e '.[graph]'
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python 'biotope[graph]>=0.9,<0.10'
 source .venv/bin/activate
+biotope --version
 ```
 
-Published-release installation options (the updated baker release is still required):
+This installs the published croissant-baker dependency automatically. Graph type
+checking also needs Node.js on `PATH`; alternatively, install `pyright[nodejs]`
+in this environment. See [installation](docs/installation.md) for other setups.
 
-```bash
-uvx biotope init my-kg    # no install — ephemeral venv for scaffolding
-pipx install biotope      # global install
-uv add biotope              # inside a uv-managed project
-```
+## Build a graph
 
-Graph authoring starts with `biotope graph scaffold`, which creates `graph/`.
-Initialization and baking do not create or execute a graph.
+1. Initialize a metadata project with `biotope init my-kg`, then enter `my-kg`.
+1. Describe selected local data with `biotope add <path>` and review the Croissant metadata.
+1. Run `biotope graph scaffold` and generate source records with
+   `biotope source generate <manifest> --out graph/sources`.
+1. Define the graph's purpose, topology, loaders, mappings and pipeline in Python.
+1. Run `biotope graph check`, then `biotope graph build --out graph/build/review-1`.
+1. Review the exported values, provenance and validation results against the research question.
 
-Typical flow: `init` → `add` → `graph scaffold` → `source generate` → Python authoring → `graph check` → `graph build`. Use `graph metagraph` to view topology independently, or `graph quality` to execute and assess without export. Command overview: [docs/commands.md](docs/commands.md).
+The scaffold contains inactive examples to adapt. The [tutorial](docs/tutorial.md)
+provides a complete synthetic project you can run immediately.
 
-**Worked example:** [tutorial](docs/tutorial.md) — one Croissant description, one source package per record set, joined with typed mappings, provenance and BioCypher output.
+- [Typed graph guide](docs/mapping.md): source curation, authoring and validation.
+- [Commands](docs/commands.md): metadata, graph and version-control workflows.
+- [Architecture](docs/architecture.md): responsibilities and execution boundaries.
+- [Published documentation](https://biocypher.github.io/biotope/).
 
-## For developers
+## Use with a coding agent
 
-biotope is a CLI for the [BioCypher](https://biocypher.org/) ecosystem: curated Croissant → typed Python graph projects, with metadata version control.
+The repository includes a `biotope-croissant` skill for this workflow and a
+`biocypher` skill for standalone BioCypher projects. Follow the
+[agent setup guide](docs/plugin.md) for Claude Code, Cursor or Codex.
+Skills guide the agent; install the Python package in the project environment too.
 
-| Layer           | Module                | Role                                                                         |
-| --------------- | --------------------- | ---------------------------------------------------------------------------- |
-| Project & VCS   | `biotope.commands.*`  | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` — metadata workflow |
-| Source metadata | `biotope.croissant.*` | Metadata models and payload-free inspection                                  |
+## Contribute
 
-Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.graph` exposes the typed contracts; CLI verbs wrap generation, checking and explicit execution. See [how biotope works](https://biocypher.github.io/biotope/architecture/) and the [command overview](https://biocypher.github.io/biotope/commands/).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, checks and release conventions.
+Report reproducible problems through [GitHub issues](https://github.com/biocypher/biotope/issues).
 
-```bash
-uv sync --extra dev --extra graph
-node --version
-uv run python -m pyright --version
-uv run pyright
-uv run pytest
-uv run ruff check biotope tests
-```
+Typed authoring and modular topology construction were informed by Paul Ka Po To's
+`kg-build-system`. Biotope does not depend on that engine.
 
-Typed authoring, topology organization and modular construction were informed by Paul Ka Po To's `kg-build-system`. This implementation uses ordinary Python and does not copy, vendor or depend on that engine.
-
-## Copyright
-
-Copyright © 2025–2026 BioCypher Team. [Apache 2.0](./LICENSE).
+Copyright © 2025–2026 BioCypher Team. [Apache 2.0](LICENSE).

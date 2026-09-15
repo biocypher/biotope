@@ -1,23 +1,25 @@
-# Build the small typed example
+# Build the typed example
 
-The repository's `examples/typed_graph` project joins three synthetic samples to
-two people. It exercises generation, typed mappings, exclusions, provenance and
-actual BioCypher output. It does not read any consulting data.
+This tutorial joins three synthetic samples to two people. It demonstrates source
+generation, typed mappings, exclusions, provenance and BioCypher export.
 
 ## Set up
 
-From the Biotope checkout, install both local packages, including the graph extra:
+Use Python 3.12, [uv](https://docs.astral.sh/uv/getting-started/installation/), Git
+and Node.js on `PATH`. Clone the example from the release matching the package:
 
 ```bash
-uv venv .venv --python 3.12
-uv pip install --python .venv/bin/python -e ../croissant-baker -e '.[graph]'
+git clone --depth 1 --branch biotope-v0.9.0 https://github.com/biocypher/biotope.git biotope-example
+cd biotope-example
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python 'biotope[graph]==0.9.0'
 source .venv/bin/activate
 ```
 
-Pyright uses Node.js. Keep `node` on your PATH, or install the bundled runtime
-once with `uv pip install --python .venv/bin/python 'pyright[nodejs]'` before checking.
+If Node.js is unavailable, install `pyright[nodejs]` in this environment as
+shown in [installation](installation.md).
 
-Copy the example into a scratch directory, then enter it:
+Copy the example to a temporary project and initialize metadata tracking:
 
 ```bash
 example=$(mktemp -d)
@@ -26,17 +28,13 @@ cd "$example"
 biotope init . --no-git --no-prompt
 ```
 
-The example contains a completed `graph/` workspace using the scaffold's registry
-convention: `SOURCES`, `TOPOLOGY` and `MAPPINGS` in their folders' `__init__.py`
-files feed `pipelines/build_graph.py`. For a new project, `biotope graph scaffold`
-creates the same layout with inactive examples and an unimplemented pipeline.
+The example supplies a completed `graph/` workspace and a `project.yaml` with its
+purpose. Initialization preserves that file. In a new project,
+`biotope graph scaffold` creates the layout with inactive examples to adapt.
 
-The example already has a visible `project.yaml` containing its purpose.
-The pipeline references that file explicitly. Do not replace its contents.
+## Register and generate sources
 
-## Generate and inspect
-
-The example supplies reviewed Croissant descriptions so the types are predictable:
+The fixture includes reviewed Croissant metadata describing both CSV record sets:
 
 ```bash
 biotope source register graph/metadata/study.jsonld --name study --reason "Reviewed synthetic fixture-v1"
@@ -44,17 +42,22 @@ biotope source generate .biotope/datasets/study.jsonld --out graph/sources
 biotope map inspect .biotope/datasets/study.jsonld
 ```
 
-One Croissant description covers both record sets, and generation gives each its
-own package: `graph/sources/study/people/` and `graph/sources/study/samples/`.
-Read `graph/sources/study/samples/schema.py`, then its sibling `loader.py`. The
-generated class contains declarations; `RECORDS` supplies the inventory used by
-that package's `SOURCE` registration, and `graph/sources/study/__init__.py`
-collects both into `CONTRACTS` for the authored `SOURCES` to select from.
-Generation preserves the example's authored registrations and loaders. For a new
-source, it creates those files when absent.
-The loader uses Python's CSV library and explicitly
-decodes the score to `float`. `graph/mappings/samples.py` doubles that score and mints
-namespaced identifiers. `graph/pipelines/build_graph.py` states the join and exclusions.
+Generation creates one package per record set: `graph/sources/study/people/` and
+`graph/sources/study/samples/`. Each `schema.py` holds a generated dataclass,
+`RECORDS` and the `SourceRow` alias. Existing loaders and source registrations
+are preserved.
+
+Read these files to follow the transformation:
+
+| File                                    | Role                                                             |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| `graph/sources/study/samples/schema.py` | Declares the source fields and their types.                      |
+| `graph/sources/study/samples/loader.py` | Reads CSV and decodes the score as a float.                      |
+| `graph/mappings/samples.py`             | Doubles the score and constructs namespaced graph IDs.           |
+| `graph/pipelines/build_graph.py`        | Selects records, joins samples to people and records exclusions. |
+
+The `SOURCES`, `TOPOLOGY` and `MAPPINGS` registries select the definitions used by
+the pipeline. See the [authoring guide](mapping.md) for the full layout.
 
 ## Check and build
 
@@ -64,41 +67,50 @@ biotope graph build --out graph/build/first
 biotope graph build --out graph/build/second
 ```
 
-Expect **three nodes and two edges**: Ada, samples s1 and s2, and their relations.
-Definition checks warn about the intentionally illustrative `example:` concepts.
-The scores are **3.0 and 5.0**. Sample s3 has no person match; Bea has no selected
-sample. Both exclusions appear in `run.json`. Ada's provenance has three references:
-her people row and both contributing sample rows.
+Expect **three domain nodes and two domain edges**: Ada, samples s1 and s2, and
+their relations. The sample scores are **3.0 and 5.0**. Checks warn about the
+illustrative `example:` namespace.
 
-Open `graph/build/first/biocypher/*-header.csv` with the corresponding `*-part000.csv`
-to interpret each file. `topology.json` maps export labels to stable concept IDs.
-`provenance.jsonl` links IDs back to source locations. Compare the two `graph_digest`
-values in `run.json`; they should match.
+Sample s3 has no matching person; Bea has no selected sample. Both exclusions
+appear in `run.json`. Ada's provenance includes her people row and the two
+contributing sample rows.
 
-## Try an edit
+## Review the result
 
-In `graph/mappings/samples.py`, rename a source-property access or swap the relation's
-endpoint IDs. `graph check` should fail with a useful Pyright diagnostic. Repair
-it before building. Then change a field description in
-`graph/metadata/study.jsonld`, re-register it with
-`source register graph/metadata/study.jsonld --name study --reason "..." --replace`,
-run `source generate` again and repair affected loader/mapping code. Generation
-reads the managed description, so the re-registration is what carries the edit.
-Only the edited record set's `schema.py` is rewritten, and authored files are
-never regenerated. See [typed projects](mapping.md) for the validation boundaries.
+Inside `graph/build/first/`:
 
-## Clean up
+- Read `run.json` for completion, counts, exclusions, audits and validation.
+- Pair each `biocypher/*-header.csv` with its `*-part000.csv` to inspect exported values.
+- Use `topology.json` to resolve export labels to concept IDs.
+- Read `provenance.jsonl` for source locations and `query_context.json` for interpretation rules.
 
-From the scratch project, archive its generated run outputs:
+The export also includes `BiotopeQueryContext` system nodes. These are separate
+from the three domain nodes reported above. Compare `graph_digest` in both run
+records; it should match despite different output paths and timestamps.
+
+To view the topology with build observations:
 
 ```bash
-mkdir -p graph/review-backups
-archive=$(mktemp -d "$PWD/graph/review-backups/build-XXXXXX")
-for path in graph/build; do
-  if [ -d "$path" ]; then mv "$path" "$archive/"; fi
-done
-echo "$archive"
+biotope graph metagraph --report graph/build/first/run.json
 ```
 
-Keep curated metadata, purpose, topology, source modules and mappings for review.
-Do not use `biotope rm` to clean up graph outputs.
+Open `graph/reports/metagraph.html` in a browser. The viewer works offline.
+
+## Change a source contract
+
+Edit a field description in `graph/metadata/study.jsonld`, then register and
+generate the revised metadata:
+
+```bash
+biotope source register graph/metadata/study.jsonld --name study --reason "Reviewed updated field description" --replace
+biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+biotope graph check
+```
+
+Generation reads the registered description. It updates affected generated
+modules and preserves authored loaders and mappings. Changes to types or field
+names may require corresponding Python edits.
+
+The temporary project can be retained for experimentation. Build directories and
+reports are derived outputs; preserve curated metadata and authored code if you
+want to reproduce a run.

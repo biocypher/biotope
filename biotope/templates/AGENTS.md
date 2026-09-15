@@ -5,8 +5,9 @@ and maintain typed Python graph definitions. Read the biotope-croissant skill fo
 the workflow and public contracts. Keep the user's existing purpose and scientific
 choices; ask about missing decisions without blocking routine engineering work.
 
-Use the installed environment. During local integration, install the local baker
-and `biotope[graph]` together. Describe selected data with `biotope add`; inspect
+Use the project environment with the published `biotope[graph]` package and
+its croissant-baker dependency. Pyright needs Node.js on PATH or `pyright[nodejs]`.
+Describe selected data with `biotope add`; inspect
 its Croissant metadata with `biotope map inspect`. Reuse existing scans and account
 for omissions. Baking/checksums read bytes; structural inspection has no row samples.
 
@@ -27,9 +28,8 @@ Generate source contracts with `biotope source generate <manifest> --out graph/s
 where `<manifest>` is the registered `.biotope/datasets/<name>.jsonld`, never a
 draft under `graph/metadata/`; do not edit generated modules. **One record set
 becomes one source package**, at `graph/sources/<name>/<record-set>/`, the folder
-named for the manifest's filename. One manifest describing a whole directory
-still yields one folder per record set, so one upstream file can be added,
-removed or re-encoded on its own. A directory-level bake is expected;
+named for the manifest's filename. A manifest describing a directory still yields one folder per record set.
+Changes to a record set affect its package. A directory-level bake is supported;
 do not split the Croissant to get separate packages. The command creates missing
 sibling registration and loader files and a generated `CONTRACTS` inventory per
 manifest; select from it into `SOURCES`. Implement each loader with established
@@ -51,8 +51,7 @@ identity rules, join cardinality, unmatched policies, output grain and expected
 spot checks. Keep source evidence alongside records. Current intent lists are
 requirements; bind them to concepts or explicitly defer with reasons.
 
-Describe every concept and property where it is declared: whoever queries the
-finished graph receives labels and values and nothing else. Declare in
+Describe every concept and property where it is declared: these descriptions travel with the exported graph. Declare in
 `graph/query_context.py` the question families this graph claims to answer and
 every rule needed to filter, join or compare — selection, statistic definitions,
 identity conditions, qualifiers and stated uncertainty. Declare in
@@ -60,8 +59,7 @@ identity conditions, qualifiers and stated uncertainty. Declare in
 each with an expectation read from the source rather than recomputed from the
 pipeline. Record an audit in every stage that selects, joins or aggregates, and
 never let a record be dropped by a bare `continue`: report it through
-`context.exclude(...)` or account for it in an audit. A build with no checks is
-reported as unverified, and that is the honest description of it.
+`context.exclude(...)` or account for it in an audit. A build with no declared checks reports validation as `absent`.
 
 `biotope graph check --json` checks definitions and Python types.
 Use `--graph <folder>` to select another workspace and package-relative imports

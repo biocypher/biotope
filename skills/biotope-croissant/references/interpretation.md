@@ -1,89 +1,89 @@
-# Capabilities and their proof
+# Capabilities and interpretation
 
-## A capability is a question family, not a concept list
+## Define a question family
 
-`Capability(key, question, concepts, limitations)` states a question someone will actually ask. Naming the concepts it touches is not the same claim: a graph can hold every concept a question mentions and still lack the row that answers it.
+`Capability(key, question, concepts, limitations)` states what a graph is intended
+to answer. Its concepts identify the relevant topology; its limitations describe
+questions the selected population cannot support.
 
-`supported` in `run.json` means one thing and only one thing: every validation check bound to that capability returned a pass. It is not a claim that the interpretations are sufficient, that the expectation was truly independent, or that any query was ever run — the package cannot see those. A capability with no check reports `unchecked`; a capability whose check returned `unknown` reports `unverified`.
+`supported` in `run.json` means every bound validation check passed. It does not
+establish that every interpretation is sufficient or that a query example ran.
+A capability with no check reports `unchecked`; a check returning `unknown` leaves
+its capability `unverified`.
 
-So declare the rest and check the rest yourself: the interpretations a reader applies, and a `QueryExample` you have executed against the built graph. Running the examples is a step you perform and report; nothing in `run.json` records that it happened.
+Before fixing scope, consider adjacent comparisons, contradictory evidence,
+alternative readings, necessary context and meaningful absence results. Expand
+only where relevant to the agreed purpose and feasible resources.
 
-## Name the adjacent questions before you fix scope
+## Separate selection from query filters
 
-A purpose arrives with a few example questions. Those are a sample of intent. Work outward from them before deciding what to load:
+A selection rule determines which records exist in the graph. A query filter
+operates on those retained records. If two intended interpretations require
+different populations, discuss admitting their union. A second property on the
+retained subset cannot recover rows excluded during construction.
 
-- the neighbouring comparison, in the same study or a sibling one
-- evidence that would contradict the expected answer
-- a second defensible reading of the same statistic
-- the context a result needs to be interpretable — cohort, reference group, unit
-- the question whose correct answer is "no such record"
+`Interpretation(subject, kind, statement, alternatives)` binds a rule to a concept
+ID or `<concept ID>.<property>`.
 
-Widen selection where that materially improves usefulness. Do not expand into unrelated research, and do not fall back on loading everything. Reduce on relevance or on a measured resource limit you can name.
+| Kind          | State                                                                |
+| ------------- | -------------------------------------------------------------------- |
+| `selection`   | Which records were admitted and by what rule                         |
+| `statistic`   | What the value measures, its reference and calculation               |
+| `identity`    | When identifiers can be joined and where that identity is unresolved |
+| `qualifier`   | Cohort, timepoint, treatment or other context needed for comparison  |
+| `uncertainty` | What the value or evidence does not establish                        |
 
-## Inclusion is not a query default
-
-Separate the rule that admits a record from the filter a query applies. When two interpretations are both plausible and they change which records exist, admit the union: a property stored beside rows that were never admitted does not make the other reading available, and declaring it as an alternative is then false.
-
-## Each interpretation kind answers one question
-
-`Interpretation(subject, kind, statement, alternatives)` binds a rule to a concept ID or `<concept ID>.<property>`.
-
-| Kind          | Must state                                                     | Without it, a consumer will                             |
-| ------------- | -------------------------------------------------------------- | ------------------------------------------------------- |
-| `selection`   | Which records were admitted, and on what test                  | count a filtered subset as the whole                    |
-| `statistic`   | What the value measures, against which reference, how computed | compare two numbers that mean different things          |
-| `identity`    | When two identifiers may be joined, and when not               | join across a boundary the sources never established    |
-| `qualifier`   | The context that changes what the claim means                  | pool results from different cohorts, timepoints or arms |
-| `uncertainty` | What the value does not establish                              | rank or compare on an orientation nobody recovered      |
+For a topology with `study:measurement.strict_p`, this declaration describes a
+bounded selection:
 
 ```python
+from biotope.graph import Capability, Interpretation, QueryContext
+
 QUERY_CONTEXT = QueryContext(
     interpretations=(
         Interpretation(
             subject="study:measurement.strict_p",
             kind="selection",
-            statement="Rows were admitted on strict_p < 0.05, which excludes low-count features.",
-            alternatives=("study:measurement.open_p",),
+            statement="Only rows with strict_p < 0.05 were retained.",
         ),
     ),
     capabilities=(
         Capability(
-            key="significance",
-            question="Which measurements are significant under either adjustment?",
+            key="retained-significance",
+            question="Which supplied measurements passed the strict adjustment?",
             concepts=("study:measurement",),
-            limitations=("Only rows passing the strict adjustment were admitted.",),
+            limitations=("Rows failing the strict adjustment are absent.",),
         ),
     ),
-    examples=(QueryExample(capability="significance", language="cypher", query="MATCH ..."),),
 )
 ```
 
-## An alternative names a property in this graph
+`alternatives` must refer to concepts or properties in the actual topology. A
+reading requiring excluded records belongs in the capability's limitations.
+Add `QueryExample` declarations using actual export labels and runnable queries;
+report separately whether they have been executed.
 
-`alternatives` is resolved against the real topology by `biotope graph check`. A reading that would need a rebuild is a `Capability.limitation`, not an alternative. The same pass reports capabilities nothing tests, and concepts or properties with no description.
+## Derive independent expectations
 
-## Derive the expectation outside the pipeline
+`ValidationCheck(name, function, capability, evidence)` runs after reference
+integrity and before export. Its function takes `(GraphView, tuple[Audit, ...])`
+and returns a `ValidationResult`.
 
-`ValidationCheck(name, function, capability, evidence)` runs after reference integrity and before export. Its function takes `(GraphView, tuple[Audit, ...])` and returns a `ValidationResult`.
+Read the original source, a published result or a curated answer to establish the
+expectation. Reusing the pipeline's selection code can reproduce its mistakes.
+Compare both missing and unexpected records, using consistent namespaced IDs.
+Name the expectation's source in `evidence`.
 
-```python
-def eligible_rows_present(view: GraphView, audits: tuple[Audit, ...]) -> ValidationResult:
-    """Compare the graph with an expectation read straight from the source."""
-    expected = {row["id"] for row in read_source_table() if eligible(row)}
-    found = {m.id for m in view.records(Measurement)}
-    if found != expected:
-        return ValidationResult.wrong(f"Missing {sorted(expected - found)}", missing=len(expected - found))
-    return ValidationResult.ok(f"All {len(expected)} eligible rows are present.")
-```
+- `ValidationResult.ok(...)` records a pass.
+- `ValidationResult.wrong(...)` fails validation and blocks export.
+- `ValidationResult.unknown(...)` records an unresolved question as `unverified`.
 
-Read the source with a plain reader. A check that calls the project loader agrees with the pipeline by construction, and is blind to exactly the records it exists to find. Name the source of the expectation in `evidence`: a source table, a published figure, or a curated answer.
+A check that raises fails the run. State the missing evidence when returning
+`unknown`, including which capability it affects.
 
-## `unverified` records missing knowledge, and is not a pass
+## Review the exported context
 
-`ValidationResult.ok`, `.wrong` and `.unknown` are the three outcomes. `.unknown` reports state `"unverified"` — the constructor and the reported state use different words. `.wrong` blocks the export. `.unknown` leaves its capability unresolved and every other capability usable. A check that raises is recorded as failed.
-
-Prefer `.unknown` with a named gap over silence. State what could not be established and which capability it costs.
-
-## The interpretation context is the entire handoff
-
-`query_context.json` and the `BiotopeQueryContext` rows in the export are what the consumer receives. A rule in a decision document, a commit message or a conversation does not reach the agent querying the database. Before handing over, read the document with the graph and nothing else and confirm each statistic, admission rule, identity condition and stated limit is recoverable from it alone.
+`query_context.json` and the exported `BiotopeQueryContext` rows carry the
+interpretations to graph consumers. Review them alongside the graph to ensure
+statistics, selection rules, identities and limits are understandable without
+access to the development conversation.

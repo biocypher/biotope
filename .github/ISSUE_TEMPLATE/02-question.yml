@@ -1,27 +1,24 @@
 name: Question
-description: Ask a question
+description: Ask about using Biotope
 title: "[Question] "
 labels: [question]
 body:
   - type: checkboxes
     attributes:
-      label: Checklist
-      description: >
-        To help keep this issue tracker clean and focused, please make sure that you have
-         tried **all** of the following resources before submitting your question.
+      label: Existing guidance
+      description: Check the documentation and existing issues for relevant examples.
       options:
-        - label: I searched the [documentation](https://biotope.readthedocs.io).
+        - label: I checked the [documentation](https://biocypher.github.io/biotope/) and [existing issues](https://github.com/biocypher/biotope/issues).
           required: true
-        - label: I looked through existing [discussion topics](https://github.com/biocypher/biotope/discussions).
-          required: true
-        - label: I looked for [similar issues](https://github.com/biocypher/biotope/issues).
-          required: true
-        - label: I looked up my question/problem in a search engine.
-          required: true
-
   - type: textarea
     attributes:
       label: Question
-      description: Please ask your question
+      description: Describe the goal, the commands you tried and where you need help.
     validations:
       required: true
+  - type: textarea
+    attributes:
+      label: Environment
+      description: Include your Biotope and Python versions and operating system when relevant.
+    validations:
+      required: false
