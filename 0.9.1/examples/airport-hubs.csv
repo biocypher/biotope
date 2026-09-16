@@ -1,0 +1,13 @@
+airport_iata,airline_code,airline_name
+ATL,DL,Delta Air Lines
+DFW,AA,American Airlines
+JFK,DL,Delta Air Lines
+JFK,AA,American Airlines
+JFK,B6,JetBlue
+LAX,AA,American Airlines
+LAX,DL,Delta Air Lines
+LAX,UA,United Airlines
+ORD,UA,United Airlines
+ORD,AA,American Airlines
+SFO,UA,United Airlines
+SFO,AS,Alaska Airlines
