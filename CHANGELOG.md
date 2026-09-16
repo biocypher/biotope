@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1](https://github.com/biocypher/biotope/compare/biotope-v0.9.0...biotope-v0.9.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* correct validation examples and documentation publishing ([b355807](https://github.com/biocypher/biotope/commit/b355807d75525e0a2c3ebfdb680c83e3a925d7bf))
+
+
+### Documentation
+
+* prepare Biotope documentation for the public release ([aa38846](https://github.com/biocypher/biotope/commit/aa3884629a0642d8709a8935ef564ea7eac301b1))
+* prepare documentation for the public release ([17dd52d](https://github.com/biocypher/biotope/commit/17dd52db8b4c439f98a3802a4c4dbb186522e7ff))
+
 ## [0.9.0](https://github.com/biocypher/biotope/compare/biotope-v0.8.0...biotope-v0.9.0) (2026-09-15)
 
 
