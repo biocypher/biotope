@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import collections.abc
-from collections.abc import Callable, Iterable, Iterator
-from copy import deepcopy
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Generic, Literal, ParamSpec, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, Generic, ParamSpec, Protocol, TypeVar
 
 from biotope.graph.standardization import Term
 from biotope.graph.topology import ConceptSchema, Topology
@@ -48,7 +47,7 @@ class Loader(Protocol[C, T]):
         ...
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class SourceContract:
     """A source schema and its effective metadata; authored after scaffolding."""
 
@@ -56,30 +55,6 @@ class SourceContract:
     metadata: Path
     schema: Path
     records: tuple[type, ...]
-
-    def __init__(
-        self,
-        name: str,
-        metadata: Path,
-        schema: Path | None = None,
-        records: tuple[type, ...] = (),
-        *,
-        generated: Path | None = None,
-    ) -> None:
-        if schema is not None and generated is not None:
-            raise ValueError("Use schema, not both schema and the legacy generated argument")
-        path = schema if schema is not None else generated
-        if path is None:
-            raise ValueError("A source registration requires its schema module")
-        object.__setattr__(self, "name", name)
-        object.__setattr__(self, "metadata", metadata)
-        object.__setattr__(self, "schema", path)
-        object.__setattr__(self, "records", records)
-
-    @property
-    def generated(self) -> Path:
-        """Compatibility alias for existing projects; new registrations use schema."""
-        return self.schema
 
 
 class GraphObject(Protocol):
@@ -91,9 +66,6 @@ class GraphObject(Protocol):
     """
 
     schema_id: ClassVar[str]
-
-
-G = TypeVar("G", bound=GraphObject)
 
 
 class MappingEntry(Protocol):
@@ -143,7 +115,7 @@ class Audit:
     objects, feed an aggregate or be read twice, and an unavailable join can
     limit one output while leaving another intact, so no fixed arithmetic
     relates loaded records to emitted ones. Biotope records and reports the
-    account; project validation checks are what interpret it.
+    account; interpreting it against the sources is review work.
     """
 
     stage: str
@@ -164,144 +136,6 @@ class GraphStores:
     nodes: collections.abc.Mapping[str, GraphRecord]
     edges: collections.abc.Mapping[str, GraphRecord]
     requirements: collections.abc.Mapping[str, str]
-
-
-class GraphView:
-    """Isolated read-only access to the built graph, for a project validation check.
-
-    Everything reachable from here is a copy: the schema, each record, and each
-    record's provenance. A check cannot reach the build's own state, so it
-    cannot change what the export will contain or what the run will report.
-    """
-
-    def __init__(self, stores: GraphStores) -> None:
-        self.concepts: dict[str, ConceptSchema] = deepcopy(dict(stores.concepts))
-        self.requirements: dict[str, str] = dict(stores.requirements)
-        self._stores = stores
-
-    def records(self, concept: type[G]) -> Iterator[G]:
-        """Iterate copies of the collected objects of one declared type."""
-        for store in (self._stores.nodes, self._stores.edges):
-            for row in store.values():
-                if type(row.value) is concept:
-                    yield deepcopy(cast(G, row.value))
-
-    def identities(self, concept: type[GraphObject]) -> tuple[str, ...]:
-        """Collected identities of one declared type, in insertion order."""
-        return tuple(
-            identity
-            for store in (self._stores.nodes, self._stores.edges)
-            for identity, row in store.items()
-            if type(row.value) is concept
-        )
-
-    def evidence(self, identity: str) -> tuple[Evidence, ...]:
-        """Sorted contributor references for one collected identity."""
-        row = self._stores.nodes.get(identity) or self._stores.edges.get(identity)
-        return tuple(sorted(row.evidence)) if row is not None else ()
-
-    def mappings(self, identity: str) -> tuple[str, ...]:
-        """Sorted names of the mappings that produced one collected identity."""
-        row = self._stores.nodes.get(identity) or self._stores.edges.get(identity)
-        return tuple(sorted(row.mappings)) if row is not None else ()
-
-
-ValidationState = Literal["passed", "failed", "unverified"]
-
-
-@dataclass(frozen=True)
-class ValidationResult:
-    """One check's outcome. ``unverified`` records missing knowledge, never a pass."""
-
-    state: ValidationState
-    detail: str
-    measurements: dict[str, object] = field(default_factory=dict[str, object])
-
-    @classmethod
-    def ok(cls, detail: str, **measurements: object) -> ValidationResult:
-        """The expectation was derived independently and the graph met it."""
-        return cls("passed", detail, dict(measurements))
-
-    @classmethod
-    def wrong(cls, detail: str, **measurements: object) -> ValidationResult:
-        """The graph contradicts an expectation the project stands behind; blocks export."""
-        return cls("failed", detail, dict(measurements))
-
-    @classmethod
-    def unknown(cls, detail: str, **measurements: object) -> ValidationResult:
-        """The expectation could not be established; the capability stays unresolved."""
-        return cls("unverified", detail, dict(measurements))
-
-
-@dataclass(frozen=True)
-class ValidationCheck:
-    """A project check of the built graph against an independently derived expectation.
-
-    Runs after reference integrity and before export. Deriving the expectation
-    from the same code that built the graph proves nothing: read the source, a
-    published count or a curated answer instead. A failed check blocks export;
-    an unverified one leaves its capability unresolved and keeps the rest.
-    """
-
-    name: str
-    function: Callable[[GraphView, tuple[Audit, ...]], ValidationResult]
-    capability: str = ""
-    evidence: tuple[str, ...] = ()
-
-
-InterpretationKind = Literal["selection", "statistic", "identity", "qualifier", "uncertainty"]
-
-
-@dataclass(frozen=True)
-class Interpretation:
-    """One rule a reader must apply, bound to the concept or property it governs.
-
-    ``subject`` is a topology concept ID or ``<concept ID>.<property>``. Kinds
-    separate what was admitted (``selection``), what a value measures
-    (``statistic``), when two identifiers may be joined (``identity``), context
-    that changes a claim's meaning (``qualifier``) and what the value does not
-    establish (``uncertainty``).
-    """
-
-    subject: str
-    kind: InterpretationKind
-    statement: str
-    alternatives: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class Capability:
-    """One question family the graph is claimed to answer, with its stated limits."""
-
-    key: str
-    question: str
-    concepts: tuple[str, ...] = ()
-    limitations: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class QueryExample:
-    """A query a consumer can run, kept beside the capability it demonstrates."""
-
-    capability: str
-    language: str
-    query: str
-    expectation: str = ""
-
-
-@dataclass(frozen=True)
-class QueryContext:
-    """Interpretation rules delivered with the graph, for a reader who has only the graph.
-
-    The consuming agent receives labels, properties and values, not the
-    builder's reasoning. Whatever it must know to select the right comparison,
-    read a statistic, join identities or decline an unsupported conclusion
-    belongs here, because nothing else travels with the export.
-    """
-
-    interpretations: tuple[Interpretation, ...] = ()
-    capabilities: tuple[Capability, ...] = ()
-    examples: tuple[QueryExample, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -327,8 +161,6 @@ class Pipeline:
     intent: Path | None = None
     dependencies: tuple[str, ...] = ()
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."
-    validation_checks: tuple[ValidationCheck, ...] = ()
-    query_context: QueryContext = field(default_factory=QueryContext)
     terms: tuple[Term, ...] = ()
     source_inventory: tuple[SourceContract, ...] = ()
     excluded_sources: dict[str, str] = field(default_factory=dict[str, str])

@@ -10,6 +10,8 @@ from biotope.graph.runtime import RunContext
 
 
 PROVENANCE_PROPERTY = "biotope_provenance_id"
+PROVENANCE_CATALOG = "provenance.json"
+PROVENANCE_REFERENCE = {"property": PROVENANCE_PROPERTY, "catalog": PROVENANCE_CATALOG, "indexing": "zero-based"}
 ProvenanceKey = tuple[tuple[str, ...], tuple[Evidence, ...]]
 
 
@@ -22,7 +24,6 @@ class ProvenanceCatalog:
 
     All references are zero-based array indexes scoped to this build. Sorting the
     complete vocabulary makes references independent of mapping execution order.
-    The exporter adds the reference property; domain dataclasses stay unchanged.
     """
 
     def __init__(self, context: RunContext) -> None:
@@ -46,14 +47,16 @@ class ProvenanceCatalog:
         ]
 
     def reference(self, record: GraphRecord) -> int:
-        """Return the shared provenance record for a collected graph object."""
+        """Return the index of a graph object's provenance record."""
         return self.record_ids[_key(record)]
 
     def write(self, path: Path) -> None:
         """Write valid JSON with one catalog entry per line for inspection."""
         with path.open("w", encoding="utf-8") as stream:
             stream.write('{"schema_version":1,"report_kind":"biotope.provenance",')
-            stream.write(f'"property":{json.dumps(PROVENANCE_PROPERTY)},"indexing":"zero-based",\n')
+            stream.write(
+                f'"property":{json.dumps(PROVENANCE_PROPERTY)},"indexing":{json.dumps(PROVENANCE_REFERENCE["indexing"])},\n'
+            )
             for offset, (name, entries) in enumerate(
                 (("sources", self.sources), ("evidence", self.evidence), ("records", self.records))
             ):

@@ -11,10 +11,11 @@ from typing import Any, Callable
 import click
 
 from biotope.commands._graph_output import GraphOutput
-from biotope.graph.artifacts import check_build_destination, check_report_destination, save_report
-from biotope.graph.check import check_pipeline
-from biotope.graph.reports import CheckFailed, Finding
-from biotope.graph.workspace import select_workspace
+from biotope.graph.artifacts import check_build_destination, record_failed_build, save_report
+from biotope.graph.check import check_workspace
+from biotope.graph.render import render_inventory
+from biotope.graph.reports import REPORT_SCHEMA_VERSION, CheckFailed, Finding
+from biotope.graph.workspace import WorkspaceLoadFailed, select_workspace
 
 
 @click.group(name="graph")
@@ -46,7 +47,7 @@ def command_report(
             report = exc.report
         except Exception as exc:
             report = getattr(exc, "report", None) or {
-                "schema_version": 1,
+                "schema_version": REPORT_SCHEMA_VERSION,
                 "report_kind": "biotope." + operation,
                 "operation": operation,
                 "state": "failed",
@@ -68,10 +69,10 @@ def command_report(
         raise click.exceptions.Exit(1)
 
 
-def save_load_failure(operation: str, root: Path, path: Path, error: Exception) -> dict[str, Any]:
-    """Record an unavailable pipeline without claiming definitions or data were checked."""
-    report = {
-        "schema_version": 1,
+def load_failure(operation: str, root: Path, error: WorkspaceLoadFailed) -> dict[str, Any]:
+    """Describe an unavailable pipeline without claiming definitions or data were checked."""
+    return {
+        "schema_version": REPORT_SCHEMA_VERSION,
         "report_kind": "biotope." + operation,
         "operation": operation,
         "graph": str(root),
@@ -82,11 +83,9 @@ def save_load_failure(operation: str, root: Path, path: Path, error: Exception) 
         "finished": datetime.now(timezone.utc).isoformat(),
         "error": str(error),
         "quality": {"state": "not_run", "reason": "Workspace could not be loaded"},
-        "report_path": str(path),
-        "findings": [Finding("workspace.load", "error", str(root), str(error)).to_json()],
+        "report_path": None,
+        "findings": [finding.to_json() for finding in error.findings],
     }
-    save_report(path, json.dumps(report, indent=2) + "\n", "biotope." + operation)
-    return report
 
 
 @graph_group.command()
@@ -99,6 +98,7 @@ def scaffold(graph_path: Path, as_json: bool) -> None:
             raise ValueError(f"{target} already exists; reuse its authored files. Nothing was changed.")
         template = Path(__file__).resolve().parents[1] / "templates/graph"
         shutil.copytree(template, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        (target / "sources/inventory.py").write_text(render_inventory(), encoding="utf-8")
         return {
             "schema_version": 1,
             "report_kind": "biotope.scaffold",
@@ -118,7 +118,7 @@ def check(graph_path: Path, as_json: bool) -> None:
 
     def action(output: GraphOutput, root: Path) -> dict[str, Any]:
         with select_workspace(root) as workspace:
-            return check_pipeline(workspace.pipeline(), phase=output.phase, on_finding=output.on_finding)
+            return check_workspace(workspace, phase=output.phase, on_finding=output.on_finding)
 
     command_report("check", graph_path, as_json, action)
 
@@ -141,15 +141,13 @@ def build(graph_path: Path, as_json: bool, out: Path | None) -> None:
         try:
             with select_workspace(root) as workspace:
                 pipeline = workspace.pipeline()
-                return run_pipeline(pipeline, destination, phase=output.phase, on_finding=output.on_finding)
-        except Exception as exc:
-            if hasattr(exc, "report") or not root.is_dir():
-                raise
-            previous = destination.exists()
-            destination.mkdir(parents=True, exist_ok=True)
-            return save_load_failure(
-                "build", root, destination / ("last_failure.json" if previous else "run.json"), exc
-            )
+                return run_pipeline(
+                    pipeline, destination, workspace=workspace, phase=output.phase, on_finding=output.on_finding
+                )
+        except WorkspaceLoadFailed as exc:
+            report = load_failure("build", root, exc)
+            record_failed_build(destination, report)
+            return report
 
     command_report("build", graph_path, as_json, action)
 
@@ -157,23 +155,16 @@ def build(graph_path: Path, as_json: bool, out: Path | None) -> None:
 @graph_group.command()
 @workspace_options
 def quality(graph_path: Path, as_json: bool) -> None:
-    """Run project loaders and mappings; assess Python graph objects without export."""
+    """Run project loaders and mappings; print measurements of the Python graph objects without export."""
     from biotope.graph.build import assess_pipeline
 
     def action(output: GraphOutput, root: Path) -> dict[str, Any]:
-        path = root / "reports/quality.json"
-        # Check before any project code runs; preserve an unrelated authored report.
-        check_report_destination(path, "biotope.quality")
         try:
             with select_workspace(root) as workspace:
                 pipeline = workspace.pipeline()
-                return assess_pipeline(pipeline, path, phase=output.phase, on_finding=output.on_finding)
-        except Exception as exc:
-            if hasattr(exc, "report"):
-                raise
-            if root.is_dir():
-                return save_load_failure("quality", root, path, exc)
-            raise
+                return assess_pipeline(pipeline, workspace=workspace, phase=output.phase, on_finding=output.on_finding)
+        except WorkspaceLoadFailed as exc:
+            return load_failure("quality", root, exc)
 
     command_report("quality", graph_path, as_json, action)
 
@@ -181,11 +172,9 @@ def quality(graph_path: Path, as_json: bool) -> None:
 @graph_group.command()
 @workspace_options
 @click.option(
-    "--report", "report_path", type=click.Path(path_type=Path), help="Optional quality.json or run.json observations."
+    "--report", "report_path", type=click.Path(path_type=Path), help="Optional run.json observations to overlay."
 )
-@click.option(
-    "--out", type=click.Path(path_type=Path), help="HTML destination; defaults to <graph>/reports/metagraph.html."
-)
+@click.option("--out", type=click.Path(path_type=Path), help="HTML destination; defaults to <graph>/metagraph.html.")
 def metagraph(graph_path: Path, as_json: bool, report_path: Path | None, out: Path | None) -> None:
     """Inspect declared topology; optionally overlay a matching saved assessment."""
     from biotope.graph.metagraph import describe_metagraph, render_metagraph
@@ -193,7 +182,7 @@ def metagraph(graph_path: Path, as_json: bool, report_path: Path | None, out: Pa
     if as_json and out is not None:
         raise click.UsageError("--json and --out are mutually exclusive")
     report_path = report_path.absolute() if report_path is not None else None
-    destination = out.absolute() if out is not None else graph_path.absolute() / "reports/metagraph.html"
+    destination = out.absolute() if out is not None else graph_path.absolute() / "metagraph.html"
 
     def action(output: GraphOutput, root: Path) -> dict[str, Any]:
         report = json.loads(report_path.read_text(encoding="utf-8")) if report_path else None

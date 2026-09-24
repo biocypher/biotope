@@ -1,10 +1,16 @@
 """Workspace selection, independent diagnostics and terminal/report boundaries."""
 
 import json
+import subprocess
+import sys
+from io import StringIO
 
 from click.testing import CliRunner
+from rich.console import Console
+from typed_example import prepare
 
 from biotope.cli import cli
+from biotope.commands._graph_output import GraphOutput
 
 
 def test_workspace_selection_and_independent_definition_failures(tmp_path, monkeypatch):
@@ -13,22 +19,16 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
     for folder in ("graph", "alternate graph"):
         created = runner.invoke(cli, ["graph", "scaffold", "--graph", folder, "--json"])
         assert created.exit_code == 0, created.output
-        project = tmp_path / folder
-        pipeline = project / "pipelines/build_graph.py"
-        pipeline.write_text(
-            pipeline.read_text().replace('name=""', 'name="review"').replace('scope=""', 'scope="test"')
-        )
-        # A missing code path must not prevent reporting a broken requirement.
+        pipeline = tmp_path / folder / "pipelines/build_graph.py"
         pipeline.write_text(
             pipeline.read_text()
+            .replace('name=""', 'name="review"')
+            .replace('scope=""', 'scope="test"')
             .replace("requirements={}", 'requirements={"entity:missing": "test:missing"}')
             .replace('"pipelines",', '"pipelines", "missing.py",')
-        )
-        pipeline.write_text(
-            pipeline.read_text()
             .replace(
-                "from biotope.graph import Pipeline, RunContext",
-                "from pathlib import Path\nfrom biotope.graph import Pipeline, RunContext, SourceContract, Mapping",
+                "from biotope.graph import Pipeline\n",
+                "from pathlib import Path\nfrom biotope.graph import Pipeline, SourceContract, Mapping\n",
             )
             .replace(
                 "sources=SOURCES",
@@ -37,14 +37,15 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
             )
             .replace(
                 "mappings=MAPPINGS",
-                'mappings=(Mapping(name="bad-a", function=build), Mapping(name="bad-b", function=build))',
+                'mappings=(Mapping(name="bad-a", function=run), Mapping(name="bad-b", function=run))',
             )
         )
         result = runner.invoke(cli, ["graph", "check", "--graph", folder, "--json"])
         assert result.exit_code != 0
         report = json.loads(result.stdout)
         assert report["state"] == "failed"
-        assert {"code.paths", "requirements.invalid"} <= {f["code"] for f in report["findings"]}
+        # The substituted sources are not in the scaffold's empty inventory.
+        assert {"code.paths", "requirements.invalid", "inventory.absent"} <= {f["code"] for f in report["findings"]}
         assert any(s["name"] == "python" and s["state"] == "skipped" for s in report["checks"])
         assert {f["subject"] for f in report["findings"] if f["code"] == "source.contract"} == {
             "missing-a",
@@ -52,7 +53,6 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
         }
         assert {f["subject"] for f in report["findings"] if f["code"] == "mapping.contract"} == {"bad-a", "bad-b"}
         assert "\x1b" not in result.stdout
-        assert not (project / "reports").exists()
 
     missing = runner.invoke(cli, ["graph", "check", "--graph", "absent", "--json"])
     assert missing.exit_code != 0
@@ -60,11 +60,6 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
 
 
 def test_alternate_workspace_quality_uses_its_parent_and_isolates_json(tmp_path):
-    import subprocess
-    import sys
-
-    from test_example import prepare
-
     root = prepare(tmp_path)
     selected = root / "alternate graph"
     (root / "graph").rename(selected)
@@ -84,16 +79,9 @@ def test_alternate_workspace_quality_uses_its_parent_and_isolates_json(tmp_path)
     assert report["outputs"] == []
     assert "project import diagnostic" in result.stderr and "native import diagnostic" in result.stderr
     assert not (selected / "build").exists()
-    assert (selected / "reports/quality.json").exists()
 
 
 def test_human_report_wraps_paths_and_renders_every_finding():
-    from io import StringIO
-
-    from rich.console import Console
-
-    from biotope.commands._graph_output import GraphOutput
-
     path = "graph/mappings/44161_2025_626_MOESM3_ESM_[snRNAseq]_cohort_characteristics.py"
     report = {
         "report_kind": "biotope.definitions",
@@ -127,4 +115,3 @@ def test_human_report_wraps_paths_and_renders_every_finding():
     assert all(len(line) <= 64 for line in lines)
     assert "Mapping [donor]" in stream.getvalue() and "a[0]" in stream.getvalue()
     assert path + ":84:17" in "".join(line.strip() for line in lines)
-    assert "Expected DonorId; received SampleId." in stream.getvalue()

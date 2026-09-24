@@ -1,1 +1,0 @@
-"""Illustrative collection node."""

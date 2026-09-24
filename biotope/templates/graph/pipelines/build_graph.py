@@ -1,19 +1,14 @@
-"""Complete this pipeline for the selected research purpose and source scope."""
+"""Register the pipeline: its scope, sources, mappings and scientific policies."""
 
-from biotope.graph import Pipeline, RunContext
+from biotope.graph import Pipeline
 
-from ..checks import VALIDATION_CHECKS
 from ..mappings import MAPPINGS
 from ..paths import GRAPH_ROOT
-from ..query_context import QUERY_CONTEXT
-from ..sources import SOURCES
+from ..sources import EXCLUDED_SOURCES, SOURCES
+from ..sources.inventory import INVENTORY
+from ..standardization import TERMS
 from ..topology import TOPOLOGY
-
-
-def build(context: RunContext) -> None:
-    """Load selected inputs, prepare joins, and call registered mappings."""
-    # Adapt pipelines/_example.py after registering the actual sources and mappings.
-    raise NotImplementedError("Implement the selected pipeline in graph/pipelines/build_graph.py")
+from .compose import run
 
 
 PIPELINE = Pipeline(
@@ -21,26 +16,27 @@ PIPELINE = Pipeline(
     topology=TOPOLOGY,
     sources=SOURCES,
     mappings=MAPPINGS,
-    run=build,
+    run=run,
     scope="",  # State the selected inputs, output grain and exclusions.
     code_paths=tuple(
         GRAPH_ROOT / path
         for path in (
             "__init__.py",
             "paths.py",
-            "checks.py",
-            "query_context.py",
+            "standardization.py",
+            "alignment",
             "sources",
             "topology",
             "mappings",
             "pipelines",
         )
     ),
+    terms=TERMS,
+    source_inventory=INVENTORY,
+    excluded_sources=EXCLUDED_SOURCES,
     # Existing project intent is discovered when checking from the project root.
     requirements={},
     deferrals={},
     policies={},
     settings={},
-    query_context=QUERY_CONTEXT,
-    validation_checks=VALIDATION_CHECKS,
 )

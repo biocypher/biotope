@@ -14,7 +14,6 @@ from biotope.graph.contracts import (
     GraphObject,
     GraphRecord,
     GraphStores,
-    GraphView,
     Loader,
     Mapping,
     MappingEntry,
@@ -74,14 +73,6 @@ class RunContext:
             MappingProxyType(self.edges),
             MappingProxyType(self.pipeline.requirements),
         )
-
-    def view(self) -> GraphView:
-        """Build an isolated view for a project validation check."""
-        return GraphView(self.stores())
-
-    def snapshot(self) -> tuple[Audit, ...]:
-        """Copy the recorded audits so a project check cannot edit the run's own account."""
-        return deepcopy(self.audits)
 
     def content_digest(self) -> str:
         """Fingerprint the schema, the audits and every collected object."""
@@ -243,8 +234,8 @@ class RunContext:
 
         Name every count the stage actually needs to be checkable, including the
         rows it considered and did not emit. Biotope imposes no arithmetic between
-        them: state the grains and let a validation check compare the counts with
-        an expectation derived from the source.
+        them: state the grains so a reviewer can compare the counts with an
+        expectation derived from the source.
         """
         if stage in self._audits:
             raise ValueError(f"Stage {stage!r} is already recorded; give each recorded stage its own identity")

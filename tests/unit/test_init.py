@@ -30,9 +30,6 @@ def test_init_default_layout(tmp_path: Path) -> None:
         assert not (root / directory).exists()
     assert (root / ".biotope" / "config.yaml").is_file()
     assert (root / ".biotope" / "project.yaml").is_file()
-    # The agent contract lives in the biotope plugin skills, not a
-    # per-project root AGENTS.md, so init must NOT emit one by default.
-    assert not (root / "AGENTS.md").exists()
     assert (root / ".gitignore").is_file()
     assert not (root / "pyproject.toml").exists()
     config = yaml.safe_load((root / ".biotope" / "config.yaml").read_text())
@@ -42,16 +39,7 @@ def test_init_default_layout(tmp_path: Path) -> None:
     assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10
 
 
-def test_init_agents_md_flag_opts_in(tmp_path: Path) -> None:
-    """--agents-md restores the legacy root contract for backward compat."""
-    runner = CliRunner()
-    result = _invoke(runner, "withagents", "--dir", str(tmp_path), "--no-git", "--agents-md")
-    assert result.exit_code == 0, result.output
-    assert (tmp_path / "withagents" / "AGENTS.md").is_file()
-
-
 def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
-    """If the user already has a pyproject (init inside an existing project), keep it."""
     target = tmp_path / "myproj"
     target.mkdir()
     user_pyproject = '[project]\nname = "user-owned"\nversion = "9.9.9"\n'
@@ -103,7 +91,7 @@ def test_init_refuses_existing_biotope(tmp_path: Path) -> None:
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
 def test_init_creates_initial_commit_and_leaves_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """After init, the scaffold should be committed so `git status` is clean —
-    otherwise init artefacts (config.yaml, AGENTS.md, ...) leak into the user's
+    otherwise init artefacts (config.yaml, .gitignore, ...) leak into the user's
     first `biotope status` and look like changes they made."""
     for var, val in (
         ("GIT_AUTHOR_NAME", "t"),

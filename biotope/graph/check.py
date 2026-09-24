@@ -11,9 +11,9 @@ import sys
 import tempfile
 from dataclasses import fields
 from pathlib import Path
-from typing import Any, get_args, get_type_hints
+from typing import Any, get_type_hints
 
-from biotope.graph.context import check_query_context
+from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
 from biotope.graph.reports import (
     CheckFailed,
@@ -26,8 +26,11 @@ from biotope.graph.reports import (
     PythonCheckFailed,
 )
 from biotope.graph.signatures import MappingContract, SignatureError, contract
-from biotope.graph.sources import UnknownValue, check_source_record, digest, read_metadata
+from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, read_metadata
 from biotope.graph.standardization import describe_standardization
+from biotope.graph.survey import inventory_findings, sources_of, survey_sources
+from biotope.graph.topology import CHECKABLE_TYPES, unchecked_fields
+from biotope.graph.workspace import Workspace, WorkspaceLoadFailed
 from biotope.project_model import Project, find_project
 
 
@@ -105,14 +108,39 @@ def check_types(pipeline: Pipeline, *, on_finding: FindingSink | None = None) ->
     return summary
 
 
-def _contains_unknown(annotation: object) -> bool:
-    return annotation is UnknownValue or any(_contains_unknown(arg) for arg in get_args(annotation))
+def check_workspace(
+    workspace: Workspace, *, static: bool = True, phase: Phase | None = None, on_finding: FindingSink | None = None
+) -> dict[str, Any]:
+    """Check a workspace; inventory findings stay visible when its pipeline cannot be imported."""
+    try:
+        pipeline = workspace.pipeline()
+    except WorkspaceLoadFailed as exc:
+        report = DefinitionReport(data={"pipeline": None, "scope": "definitions only", "sources": {}})
+        for finding in exc.findings:
+            report.findings.append(finding)
+            if on_finding:
+                on_finding(finding)
+        report.checks.append(CheckResult("workspace", "failed"))
+        raise CheckFailed(report.to_json()) from exc
+    return check_pipeline(pipeline, workspace=workspace, static=static, phase=phase, on_finding=on_finding)
 
 
 def check_pipeline(
-    pipeline: Pipeline, *, static: bool = True, phase: Phase | None = None, on_finding: FindingSink | None = None
+    pipeline: Pipeline,
+    *,
+    workspace: Workspace | None = None,
+    static: bool = True,
+    phase: Phase | None = None,
+    on_finding: FindingSink | None = None,
 ) -> dict[str, Any]:
-    """Collect independent definition failures; never invoke project data functions."""
+    """Collect independent definition failures; never invoke project data functions.
+
+    Source packages are discovered from the workspace when one is given, otherwise
+    from the schemas the pipeline's source inventory registers.
+    """
+    surveys = (
+        workspace.surveys if workspace is not None else tuple(survey_sources(path) for path in sources_of(pipeline))
+    )
     report = DefinitionReport(
         data={
             "pipeline": pipeline.name,
@@ -125,11 +153,6 @@ def check_pipeline(
             "intent": None,
             "requirements": pipeline.requirements,
             "deferrals": pipeline.deferrals,
-            "capabilities": [c.key for c in pipeline.query_context.capabilities],
-            "validation_checks": [
-                {"name": c.name, "capability": c.capability, "evidence": list(c.evidence)}
-                for c in pipeline.validation_checks
-            ],
             "code_digests": {},
         }
     )
@@ -169,16 +192,43 @@ def check_pipeline(
             raise ValueError("Pipeline needs a stable name and explicit selected scope")
 
     stage("pipeline", identity)
-    schema = stage("topology", pipeline.topology.describe)
-    if schema is not None:
-        report.data.update(topology=schema, topology_digest=digest(schema))
-        examples = [key for key in schema if key.startswith("example:")]
+
+    def topology() -> dict[str, Any]:
+        described = pipeline.topology.describe()
+        descriptions = pipeline.topology.descriptions()
+        examples = [key for key in described if key.startswith("example:")]
         if examples:
             warning(
                 "topology.examples",
                 "topology",
                 "Registered example: concepts are illustrative placeholders: " + ", ".join(examples),
             )
+        undescribed = sorted(key for key in described if not descriptions[key]["description"].strip())
+        if undescribed:
+            warning(
+                "topology.undescribed",
+                "topology",
+                "Concepts carry no authored description; a consumer sees only the label: " + ", ".join(undescribed),
+            )
+        missing = sorted(
+            f"{concept}.{name}"
+            for concept, item in descriptions.items()
+            for name, text in item["properties"].items()
+            if not text.strip()
+        )
+        if missing:
+            warning(
+                "topology.undescribed_property",
+                "topology",
+                "Properties carry no authored description; their meaning is only their name: "
+                + ", ".join(missing[:20])
+                + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
+            )
+        return described
+
+    schema = stage("topology", topology)
+    if schema is not None:
+        report.data.update(topology=schema, topology_digest=digest(schema))
 
     def paths() -> tuple[Path, ...] | None:
         try:
@@ -206,18 +256,30 @@ def check_pipeline(
                 if source.name in seen:
                     raise ValueError(f"Duplicate source registration {source.name}")
                 seen.add(source.name)
-                if files is not None and source.generated.resolve() not in declared:
-                    raise ValueError(f"{source.generated}: include source schemas in code_paths")
+                if files is not None and source.schema.resolve() not in declared:
+                    raise ValueError(f"{source.schema}: include source schemas in code_paths")
                 metadata = read_metadata(source.metadata)
                 if not source.records or len(set(source.records)) != len(source.records):
                     raise ValueError(f"{source.name}: declare at least one source record type without duplicates")
                 revisions: list[str] = []
                 for record in source.records:
-                    revisions.append(check_source_record(metadata, record))
-                    if Path(inspect.getfile(record)).resolve() != source.generated.resolve():
+                    try:
+                        revisions.append(check_source_record(metadata, record))
+                    except StaleBinding as exc:
+                        if not any(survey.reports_drift(source.schema, source.metadata) for survey in surveys):
+                            raise
+                        revisions.append(exc.expected)
+                    if Path(inspect.getfile(record)).resolve() != source.schema.resolve():
                         raise ValueError(f"{record}: record does not come from the registered schema module")
+                    for problem in unchecked_fields(record):
+                        error(
+                            "source.contract",
+                            source.name,
+                            f"{problem} cannot be validated when the source loads; use {CHECKABLE_TYPES}",
+                            source.schema,
+                        )
                     for member in fields(record):
-                        if _contains_unknown(get_type_hints(record)[member.name]):
+                        if contains(get_type_hints(record)[member.name], UnknownValue):
                             warning(
                                 "source.opaque",
                                 f"{source.name}.{record.__name__}.{member.name}",
@@ -245,35 +307,16 @@ def check_pipeline(
     stage("standardization", standardization)
 
     def inventory() -> None:
-        if not pipeline.source_inventory:
-            return
-        known = {source.name: source for source in pipeline.source_inventory}
-        selected = {source.name: source for source in pipeline.sources}
-        excluded = pipeline.excluded_sources
-        if len(known) != len(pipeline.source_inventory):
-            raise ValueError("Duplicate source inventory names")
-        if set(selected) & set(excluded) or set(known) != set(selected) | set(excluded):
-            raise ValueError("Every inventoried source must be selected or explicitly excluded, exactly once")
-        if any(not reason.strip() for reason in excluded.values()):
-            raise ValueError("Source exclusions require nonempty reasons")
-        for name, source in selected.items():
-            if source != known[name]:
-                raise ValueError(f"{name}: selected contract differs from inventory")
-            loader = source.generated.parent / "loader.py"
-            if not loader.is_file() or "# biotope:placeholder" in loader.read_text():
-                raise ValueError(f"{name}: selected loader is missing or still a placeholder")
-        for metadata_path in {source.metadata.resolve() for source in known.values()}:
-            metadata = read_metadata(metadata_path)
-            registered = {
-                getattr(record, "__record_set__")
-                for source in known.values()
-                if source.metadata.resolve() == metadata_path
-                for record in source.records
-            }
-            expected = {item["@id"] for item in metadata.get("recordSet", [])}
-            if expected - registered:
-                raise ValueError(f"{metadata_path}: missing record sets {sorted(expected - registered)}")
-        report.data["excluded_sources"] = dict(excluded)
+        for finding in inventory_findings(surveys, pipeline):
+            add_finding(finding)
+        report.data["excluded_sources"] = dict(pipeline.excluded_sources)
+        report.data["inventory"] = {
+            "roots": [plan.root.name for survey in surveys for plan in survey.plans],
+            "packages": len({schema for survey in surveys for schema in survey.schemas}),
+            "registered": len(pipeline.source_inventory),
+            "selected": len(pipeline.sources),
+            "excluded": len(pipeline.excluded_sources),
+        }
 
     stage("inventory", inventory)
 
@@ -320,8 +363,7 @@ def check_pipeline(
     stage("mappings", mappings)
 
     def declarations() -> None:
-        checks = tuple(check.function for check in pipeline.validation_checks)
-        for item in (*pipeline.topology.nodes, *pipeline.topology.edges, pipeline.run, *checks):
+        for item in (*pipeline.topology.nodes, *pipeline.topology.edges, pipeline.run):
             try:
                 path = Path(inspect.getfile(item)).resolve()
                 if path not in declared:
@@ -386,12 +428,6 @@ def check_pipeline(
         blocked="Topology or intent is invalid" if schema is None or required is None else "",
     )
 
-    def context() -> None:
-        assert schema is not None
-        for finding in check_query_context(pipeline, schema, pipeline.topology.descriptions()):
-            add_finding(finding)
-
-    stage("context", context, blocked="Topology is invalid" if schema is None else "")
     if static:
         summary = stage(
             "python",

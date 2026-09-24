@@ -1,4 +1,4 @@
-"""Normalization and graph construction as two separately checked typed steps.
+"""Sample mappings: normalization and graph construction as two separately checked typed steps.
 
 Split here to demonstrate the pattern. One source that maps cleanly onto its concepts
 can skip the intermediate and annotate ``map_sample`` with ``SourceRecord[Samples]``.
@@ -9,11 +9,11 @@ from dataclasses import dataclass
 
 from biotope.graph import Mapping, SourceRecord
 
-from ..sources.study.people.schema import People
-from ..sources.study.samples.schema import Samples
-from ..topology.person.node import Person, PersonId
-from ..topology.sample.from_person import FromPerson
-from ..topology.sample.node import Sample, SampleId
+from ...sources.study.people.schema import People
+from ...sources.study.samples.schema import Samples
+from ...topology.person.node import Person, PersonId
+from ...topology.sample.from_person import FromPerson
+from ...topology.sample.node import Sample, SampleId
 
 
 SCORE_MULTIPLIER = 2.0

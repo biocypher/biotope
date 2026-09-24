@@ -94,6 +94,16 @@ class GraphOutput:
             detail = path + "\n" + detail if path != finding["subject"] else detail
         self.row(label, finding["subject"], detail)
 
+    def standardization(self, overview: dict[str, Any]) -> None:
+        for name, term in overview.get("terms", {}).items():
+            self.row("Term", name, term["description"])
+            for binding in term["bindings"]:
+                where = f"{binding['record_set']}.{binding['attribute']}"
+                self.row("", str(binding["source_field"] or "Not supplied"), where)
+        preserved = overview.get("preserved_fields", [])
+        if preserved:
+            self.row("Preserve", f"{len(preserved)} source fields without a shared term; see --json for bindings")
+
     def finish(self, report: dict[str, Any]) -> None:
         if self.as_json:
             click.echo(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False))
@@ -109,23 +119,9 @@ class GraphOutput:
             if check["state"] == "skipped":
                 self.row("SKIP", check["name"], check["reason"])
         if self.operation == "check":
-            overview = definitions.get("standardization", {})
-            for name, term in overview.get("terms", {}).items():
-                bindings = term["bindings"]
-                self.row("Term", name, term["description"])
-                for binding in bindings:
-                    self.row(
-                        "",
-                        str(binding["source_field"] or "Not supplied"),
-                        f"{binding['record_set']}.{binding['attribute']}",
-                    )
-            preserved = overview.get("preserved_fields", [])
-            if preserved:
-                self.row("Preserve", f"{len(preserved)} source fields without a shared term; see --json for bindings")
-        validation: dict[str, Any] = report.get("validation") or {}
+            self.standardization(definitions.get("standardization", {}))
         findings: list[Any] = [
             *definitions.get("findings", []),
-            *validation.get("findings", []),
             *report.get("quality", {}).get("findings", []),
         ]
         if definitions is not report:
@@ -134,17 +130,6 @@ class GraphOutput:
             self.finding(finding)
         for key, reason in definitions.get("deferrals", {}).items():
             self.row("Defer", key, reason)
-        if validation.get("state") not in (None, "not_run"):
-            label = {"passed": "OK", "failed": "FAIL", "unverified": "WARN", "absent": "WARN"}
-            self.row(label.get(validation["state"], "INFO"), "Validation", validation.get("reason", ""))
-            for check in validation.get("checks", []):
-                mark = {"passed": "OK", "failed": "FAIL", "unverified": "WARN"}[check["state"]]
-                self.row(mark, check["name"], check["detail"])
-            for key, capability in sorted(validation.get("capabilities", {}).items()):
-                mark = {"supported": "OK", "failed": "FAIL"}.get(capability["state"], "WARN")
-                self.row(mark, f"Capability {key}", f"{capability['state']} · {capability['question']}")
-        elif self.operation in ("quality", "build") and validation:
-            self.row("SKIP", "Validation", validation.get("reason", ""))
         for audit in report.get("audits", []):
             counts = " · ".join(f"{k}: {v}" for k, v in sorted(audit["counts"].items()))
             self.row(

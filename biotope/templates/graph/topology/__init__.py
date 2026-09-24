@@ -1,7 +1,6 @@
-"""Register authored node dataclasses and outgoing relation dataclasses here."""
+"""Register node and relation dataclasses, organized by concept: topology/<concept>/."""
 
 from biotope.graph import Topology
 
 
-# Adapt the _example_* nodes and relation; register only the chosen target concepts.
 TOPOLOGY = Topology(nodes=(), edges=())

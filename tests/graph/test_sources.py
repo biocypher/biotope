@@ -1,148 +1,14 @@
-"""Curated metadata and declaration regeneration, without source payloads."""
+"""Curated metadata: registration, protection from rebakes, replacement reports and atomic writes."""
 
-import dataclasses
-import importlib.util
 import json
-import sys
-from pathlib import Path
 
-import pytest
+from click.testing import CliRunner
 
-from biotope.graph.sources import (
-    check_generated,
-    generate_source_packages,
-    register_metadata,
-)
-
-
-def import_generated(path):
-    spec = importlib.util.spec_from_file_location("generated_contract_test", path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_curated_generation_and_revision(tmp_path):
-    manifest = tmp_path / "curated.jsonld"
-    data = {
-        "name": "source",
-        "distribution": [{"@id": "absent", "@type": "cr:FileObject", "contentUrl": "absent.csv"}],
-        "recordSet": [
-            {
-                "@id": "samples",
-                "name": "sample rows",
-                "field": [
-                    {
-                        "@id": "samples/class",
-                        "name": "class",
-                        "dataType": "sc:Text",
-                        "description": "Reviewed annotation belongs only in Croissant.",
-                        "source": {"fileObject": {"@id": "absent"}, "extract": {"column": "Original class label"}},
-                        "custom:review": {"evidence": "Curator's original evidence"},
-                    },
-                    {"@id": "samples/a", "name": "a-b", "dataType": "sc:Integer", "biotope:nullable": False},
-                    {"@id": "samples/b", "name": "a b", "dataType": "sc:Float"},
-                    {
-                        "name": "UnknownValueDetails",
-                        "repeated": True,
-                        "subField": {"name": "label", "dataType": "sc:Text"},
-                    },
-                    {"name": "matrix", "dataType": "cr:Float32", "cr:arrayShape": "100,200"},
-                    {"name": "field", "dataType": "sc:Text"},
-                    {"name": "unknown", "dataType": "custom:Unresolved"},
-                ],
-            }
-        ],
-    }
-    manifest.write_text(json.dumps(data))
-    root = tmp_path / "project"
-    (root / ".biotope").mkdir(parents=True)
-    target = register_metadata(root, manifest, "samples", reason="Reviewed source structure; matrix grain unresolved")
-    sources = root / "sources"
-    generated = sources / "samples/samples/schema.py"
-    generate_source_packages(target, sources)
-    first = generated.read_bytes()
-    # Types remain importable without reading or embedding the authoritative manifest.
-    effective_text = target.read_text()
-    target.unlink()
-    module = import_generated(generated)
-    target.write_text(effective_text)
-    for metadata_only in (
-        "Reviewed annotation belongs only in Croissant.",
-        "Original class label",
-        "Curator's original evidence",
-    ):
-        assert metadata_only not in generated.read_text()
-        assert metadata_only in target.read_text()
-    row = module.Samples
-    assert module.RECORDS == (row,)  # Nested field classes are not independently loaded record sets.
-    attrs = {f.name: f for f in dataclasses.fields(row)}
-    assert len(attrs) == 7
-    assert "class_" in attrs and "a_b" in attrs and "a_b_2" in attrs
-    assert row.__field_refs__["class_"] == "samples/class"
-    assert row.__field_refs__["a_b"] == "samples/a"
-    assert row.__field_refs__["a_b_2"] == "samples/b"
-    # An id-less field is referenced under its record set, not by manifest position,
-    # so inserting an unrelated record set leaves this module byte-identical.
-    assert row.__field_refs__["UnknownValueDetails"] == "samples/field/3"
-    assert module.SamplesUnknownValueDetails.__field_refs__["label"] == "samples/field/3/subField"
-    assert all(not member.metadata for member in attrs.values())
-    assert "list[" in row.__annotations__["UnknownValueDetails"]
-    assert "UnknownValue" in row.__annotations__["matrix"]
-    assert "UnknownValue" in row.__annotations__["unknown"]
-    assert "None" in row.__annotations__["class_"]
-    assert "None" not in row.__annotations__["a_b"]
-    from biotope.graph import Pipeline, SourceContract, Topology
-    from biotope.graph.check import check_pipeline
-
-    pipeline = Pipeline(
-        "fields",
-        Topology((), ()),
-        (SourceContract("rows", target, generated, (row,)),),
-        (),
-        lambda ctx: None,
-        scope="metadata warnings",
-        code_paths=(generated, Path(__file__)),
-    )
-    report = check_pipeline(pipeline, static=False)
-    assert sum(f["code"] == "source.opaque" for f in report["findings"]) == 2
-
-    authored = generated.with_name("loader.py")
-    authored.write_text("# project-owned loader\n")
-    generate_source_packages(target, sources)
-    assert generated.read_bytes() == first
-    target.write_text(json.dumps(json.loads(target.read_text()), sort_keys=True))
-    generate_source_packages(target, sources)
-    assert generated.read_bytes() == first
-    check_generated(target, generated)
-    effective = json.loads(target.read_text())
-    effective["biotope:curation"]["reason"] = "Reviewed again"
-    effective["distribution"][0].update(sha256="new-payload-version", dateModified="2026-09-09")
-    target.write_text(json.dumps(effective))
-    check_generated(target, generated)
-    generate_source_packages(target, sources)
-    assert generated.read_bytes() == first
-    revised_report = check_pipeline(pipeline, static=False)
-    assert revised_report["sources"]["rows"]["digest"] != report["sources"]["rows"]["digest"]
-    assert revised_report["sources"]["rows"]["contract_digest"] == report["sources"]["rows"]["contract_digest"]
-    effective = json.loads(target.read_text())
-    effective["recordSet"][0]["field"][0]["dataType"] = "sc:Integer"
-    target.write_text(json.dumps(effective))
-    with pytest.raises(ValueError, match="stale"):
-        check_generated(target, generated)
-    generate_source_packages(target, sources)
-    assert generated.read_bytes() != first
-    assert authored.read_text() == "# project-owned loader\n"
-    with pytest.raises(ValueError, match="already exists"):
-        register_metadata(root, manifest, "samples", reason="do not clobber")
+from biotope.cli import cli
+from biotope.graph.sources import register_metadata, write_text_atomic
 
 
 def test_rebake_stops_before_overwriting_curated_metadata(tmp_path, monkeypatch):
-    from click.testing import CliRunner
-
-    from biotope.cli import cli
-
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
     assert runner.invoke(cli, ["init", ".", "--no-git", "--no-prompt"]).exit_code == 0
@@ -167,75 +33,18 @@ def test_rebake_stops_before_overwriting_curated_metadata(tmp_path, monkeypatch)
     reviewed = json.loads(fresh.read_text())
     reviewed["description"] = "Reconciled with authored corrections"
     fresh.write_text(json.dumps(reviewed))
-    result = runner.invoke(
-        cli, ["source", "register", str(fresh), "--name", "raw", "--reason", "Reconciled", "--replace"]
-    )
+    register = ["source", "register", str(fresh), "--name", "raw", "--reason", "Reconciled"]
+    refused = runner.invoke(cli, register)
+    assert refused.exit_code != 0 and "already exists" in refused.output
+    result = runner.invoke(cli, [*register, "--replace"])
     assert result.exit_code == 0, result.output
     assert json.loads(target.read_text())["description"] == reviewed["description"]
-    # A review bake must not overwrite authored files, managed metadata, or payloads.
     for destination in (fresh, target, raw / "new.jsonld"):
         result = runner.invoke(cli, ["add", "raw", "--bake-to", str(destination)])
         assert result.exit_code != 0
 
 
-def test_large_generated_contract_and_opaque_type_checks(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    from biotope.graph import Pipeline, Topology
-    from biotope.graph.check import check_types
-
-    data = {
-        "recordSet": [
-            {
-                "name": f"table_{i}",
-                "field": [
-                    {
-                        "name": f"column_{j}",
-                        "dataType": "sc:Text",
-                        "description": "The word UnknownValue in prose is not a type annotation.",
-                        "source": {"fileObject": {"@id": f"file_{i}"}, "extract": {"column": f"column_{j}"}},
-                    }
-                    for j in range(200)
-                ],
-            }
-            for i in range(55)
-        ]
-    }
-    manifest = tmp_path / "large.jsonld"
-    manifest.write_text(json.dumps(data))
-    sources = tmp_path / "sources"
-    generate_source_packages(manifest, sources)
-    pipeline = Pipeline(
-        "large",
-        Topology((), ()),
-        (),
-        (),
-        lambda ctx: None,
-        scope="static generation regression",
-        code_paths=(sources,),
-    )
-    assert check_types(pipeline)["errorCount"] == 0
-    inventory = import_generated(sources / "large/__init__.py")
-    assert len(inventory.CONTRACTS) == 55
-    module = import_generated(sources / "large/table_54/schema.py")
-    # One record set per module: the inventory, not the module, carries the breadth.
-    assert tuple(cls.__name__ for cls in module.RECORDS) == ("Table54",)
-    assert module.Table54.__field_refs__["column_199"] == "/recordSet/54/field/199"
-
-    # Opaque values remain a real type error when a mapping treats them as strings.
-    opaque = tmp_path / "opaque.jsonld"
-    opaque.write_text(
-        json.dumps({"recordSet": [{"name": "opaque", "field": [{"name": "image", "dataType": "custom:Image"}]}]})
-    )
-    generate_source_packages(opaque, sources)
-    probe = sources / "opaque/probe.py"
-    probe.write_text("from .opaque.schema import Opaque\n\n\ndef label(row: Opaque) -> str:\n    return row.image\n")
-    with pytest.raises(ValueError, match="UnknownValue"):
-        check_types(dataclasses.replace(pipeline, code_paths=(sources / "opaque",)))
-
-
 def test_atomic_artifacts_respect_creation_and_existing_permissions(tmp_path):
-    from biotope.graph.sources import write_text_atomic
-
     ordinary, artifact = tmp_path / "ordinary", tmp_path / "artifact"
     ordinary.write_text("ordinary")
     write_text_atomic(artifact, "new")
@@ -247,10 +56,6 @@ def test_atomic_artifacts_respect_creation_and_existing_permissions(tmp_path):
 
 
 def test_replacement_reports_lost_annotations_and_nested_field_ids(tmp_path, monkeypatch):
-    from click.testing import CliRunner
-
-    from biotope.cli import cli
-
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".biotope").mkdir()
     reviewed = tmp_path / "reviewed.jsonld"
@@ -289,146 +94,6 @@ def test_replacement_reports_lost_annotations_and_nested_field_ids(tmp_path, mon
     for lost in ("citation", "annotation_review", "removed-table", "removed-table/id", "rows/details/removed"):
         assert lost in result.output
     assert "rows/details/kept" not in result.output
-    assert "citation" not in json.loads(target.read_text())  # --replace still replaces; no implicit merge.
+    assert "citation" not in json.loads(target.read_text())
     again = CliRunner().invoke(cli, args)
     assert again.exit_code == 0 and "drops" not in again.output
-
-
-def test_record_set_names_are_deterministic_and_collision_safe():
-    from biotope.graph.sources import record_set_targets
-
-    def targets(identities):
-        return record_set_targets({"recordSet": [{"@id": i, "field": []} for i in identities]})
-
-    # Real InTRAC ids: clean ones read idiomatically, digit-leading ones stay verbatim.
-    real = [
-        "LAA_final_table",
-        "hill_af_corrected",
-        "study_metadata_Tabelle1",
-        "44161_2025_626_MOESM3_ESM.xlsx_-_SupTable5",
-        "44161_2025_626_MOESM3_ESM.xlsx_-_Top_100_marker_genes_for_each_cell-type",
-    ]
-    projected = targets(real)
-    assert [t.package for t in projected] == [
-        "LAA_final_table",
-        "hill_af_corrected",
-        "study_metadata_Tabelle1",
-        "_44161_2025_626_MOESM3_ESM_xlsx_SupTable5",
-        "_44161_2025_626_MOESM3_ESM_xlsx_Top_100_marker_genes_for_each_cell_type",
-    ]
-    assert [t.class_name for t in projected] == [
-        "LAAFinalTable",
-        "HillAfCorrected",
-        "StudyMetadataTabelle1",
-        "Record_44161_2025_626_MOESM3_ESM_xlsx_SupTable5",
-        "Record_44161_2025_626_MOESM3_ESM_xlsx_Top_100_marker_genes_for_each_cell_type",
-    ]
-
-    # Reordering the manifest must not rename any package.
-    assert {t.identity: t.package for t in targets(real)} == {t.identity: t.package for t in targets(real[::-1])}
-
-    # Colliding slugs suffix every member, so which one is the incumbent cannot matter.
-    # Compatibility pin: these digests are part of the layout users author loaders
-    # against, so changing digest(), its input or the truncation renames their packages.
-    collided = targets(["a.b", "a-b", "c"])
-    assert [t.package for t in collided] == ["a_b_12734df7", "a_b_4a3ef97a", "c"]
-    # A suffixed name must never absorb a record set whose own slug already looks
-    # suffixed, or one of them would be silently generated over the other.
-    absorbed = targets(["a.b", "a-b", "a_b_12734df7"])
-    assert len({t.package for t in absorbed}) == 3
-
-    # Identity falls back to the pointer; naming may fall back to a hand-authored name.
-    unnamed = record_set_targets({"recordSet": [{"name": "Plain rows", "field": []}]})
-    assert unnamed[0].identity == "/recordSet/0" and unnamed[0].package == "Plain_rows"
-
-    # A name that would shadow a module-level name in either generated file is pushed
-    # aside; otherwise SourceRow becomes a tuple and UnknownValue stops being opaque.
-    for shadowing in ("loader", "schema", "RECORDS", "SourceRow", "UnknownValue", "CONTRACTS"):
-        package = record_set_targets({"recordSet": [{"@id": shadowing, "field": []}]})[0].package
-        assert package.startswith(f"{shadowing}_") and package != shadowing
-
-
-def test_one_package_changes_when_one_record_set_changes(tmp_path):
-    from biotope.graph.sources import check_source_packages
-
-    manifest = tmp_path / "study.jsonld"
-    kept = {"@id": "kept", "field": [{"name": "id", "dataType": "sc:Text"}]}
-    # No field @id, so the reference falls back to a generated locator.
-    trailing = {"@id": "trailing", "field": [{"name": "value", "dataType": "sc:Float"}]}
-    manifest.write_text(json.dumps({"recordSet": [kept, trailing]}))
-    sources = tmp_path / "sources"
-    generate_source_packages(manifest, sources)
-    before = {p: p.read_bytes() for p in sources.rglob("*/schema.py")}
-
-    inserted = {"@id": "inserted", "field": [{"name": "n", "dataType": "sc:Integer"}]}
-    manifest.write_text(json.dumps({"recordSet": [inserted, kept, trailing]}))
-    generate_source_packages(manifest, sources)
-    assert all(path.read_bytes() == code for path, code in before.items())
-
-    # Record sets with no @id are identified by position, so neighbours move them.
-    # That is stale, not a conflict; refusing here would deadlock regeneration.
-    positional = [{"name": "alpha", "field": []}, {"name": "beta", "field": []}]
-    manifest.write_text(json.dumps({"recordSet": positional}))
-    generate_source_packages(manifest, sources)
-    manifest.write_text(json.dumps({"recordSet": positional[::-1]}))
-    assert {s.state for s in check_source_packages(manifest, sources) if s.package in {"alpha", "beta"}} == {"stale"}
-    generate_source_packages(manifest, sources)
-    assert all(s.severity != "error" for s in check_source_packages(manifest, sources))
-
-
-def test_leftover_packages_warn_without_deleting_authored_work(tmp_path):
-    from biotope.graph.sources import check_source_packages
-
-    manifest = tmp_path / "study.jsonld"
-    records = [{"@id": name, "field": [{"name": "id", "dataType": "sc:Text"}]} for name in ("kept", "dropped")]
-    manifest.write_text(json.dumps({"recordSet": records}))
-    sources = tmp_path / "sources"
-    generate_source_packages(manifest, sources)
-    assert all(s.severity == "ok" for s in check_source_packages(manifest, sources))
-
-    # An authored helper beside the packages is project business, never classified.
-    (sources / "study/_shared.py").write_text("# shared decoding helper\n")
-    helper = sources / "study/_helpers"
-    helper.mkdir()
-    (helper / "__init__.py").write_text("# authored helper package\n")
-    assert all(s.severity == "ok" for s in check_source_packages(manifest, sources))
-
-    loader = sources / "study/dropped/loader.py"
-    authored = loader.read_text() + "\n# Authored decoding policy\n"
-    loader.write_text(authored)
-    manifest.write_text(json.dumps({"recordSet": records[:1]}))
-    generate_source_packages(manifest, sources)
-    statuses = {s.package: s for s in check_source_packages(manifest, sources)}
-    assert statuses["dropped"].state == "orphan" and statuses["dropped"].severity == "warning"
-    assert loader.read_text() == authored  # Generation reports leftovers; it never removes them.
-    assert "dropped" not in (sources / "study/__init__.py").read_text()
-
-    # A registered orphan is a hard error, not a warning.
-    with pytest.raises(ValueError, match="no longer described"):
-        check_generated(manifest, sources / "study/dropped/schema.py")
-
-    # A collision that suffixes an existing package reports where it moved to,
-    # rather than claiming the record set disappeared.
-    manifest.write_text(json.dumps({"recordSet": [*records[:1], {"@id": "kept.", "field": []}]}))
-    generate_source_packages(manifest, sources)
-    moved = next(s for s in check_source_packages(manifest, sources) if s.state == "renamed")
-    assert moved.package == "kept" and moved.severity == "warning" and "kept_" in moved.detail
-
-
-def test_inventory_refuses_to_clobber_an_authored_registration(tmp_path):
-    manifest = tmp_path / "study.jsonld"
-    manifest.write_text(json.dumps({"recordSet": [{"@id": "rows", "field": [{"name": "id", "dataType": "sc:Text"}]}]}))
-    sources = tmp_path / "sources"
-    (sources / "study").mkdir(parents=True)
-    authored = sources / "study/__init__.py"
-    authored.write_text('"""Registration authored under the single-module layout."""\n')
-    with pytest.raises(ValueError, match="generated inventory"):
-        generate_source_packages(manifest, sources)
-    assert authored.read_text() == '"""Registration authored under the single-module layout."""\n'
-    assert not (sources / "study/rows").exists()
-
-    # A caller-supplied pre-flight skips the early refusal, so the write must hold
-    # the line on its own rather than clobbering the authored registration.
-    with pytest.raises(ValueError, match="authored code"):
-        generate_source_packages(manifest, sources, statuses=())
-    assert authored.read_text() == '"""Registration authored under the single-module layout."""\n'

@@ -9,6 +9,9 @@ from typing import Any, Callable, Literal
 Phase = Callable[[str], None]
 Severity = Literal["error", "warning", "info"]
 
+REPORT_SCHEMA_VERSION = 2
+READABLE_REPORT_VERSIONS = frozenset({1, REPORT_SCHEMA_VERSION})
+
 
 @dataclass(frozen=True)
 class Location:
@@ -57,7 +60,7 @@ class DefinitionReport:
     def to_json(self) -> dict[str, Any]:
         return {
             **self.data,
-            "schema_version": 1,
+            "schema_version": REPORT_SCHEMA_VERSION,
             "report_kind": "biotope.definitions",
             "state": "failed" if any(f.severity == "error" for f in self.findings) else "checked",
             "findings": [f.to_json() for f in self.findings],

@@ -94,11 +94,6 @@ precision = 2
 
 [tool.ruff]
 line-length = 120
-# Preserve the generated template contract byte-for-byte; freshness is tested.
-extend-exclude = [
-    "biotope/templates/graph/sources/_example/__init__.py",
-    "biotope/templates/graph/sources/_example/example_rows/schema.py",
-]
 force-exclude = true
 
 [tool.ruff.lint]

@@ -1,0 +1,21 @@
+# biotope:placeholder
+"""Decode this source into its schema, then delete the placeholder line above."""
+
+from collections.abc import Iterator
+
+from biotope.graph import RunContext, SourceRecord
+
+from . import SOURCE
+from .schema import ${class_import}
+
+
+${read_signature}
+    """${read_summary}
+
+    ${read_detail}
+    """
+    raise NotImplementedError("Implement this loader, then delete its biotope:placeholder line")
+
+
+${load_signature}
+    yield from context.load(SOURCE, _read, None)

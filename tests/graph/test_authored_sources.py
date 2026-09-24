@@ -1,4 +1,4 @@
-"""Authored schemas retain source coverage and freshness without raw text equality."""
+"""Authored schemas: field coverage, value aliases, freshness and inventory selection."""
 
 import importlib.util
 import json
@@ -11,7 +11,8 @@ import pytest
 from biotope.graph import Pipeline, SourceContract, Topology
 from biotope.graph.check import check_pipeline
 from biotope.graph.reports import CheckFailed
-from biotope.graph.sources import check_source_record, contract_digests, digest
+from biotope.graph.sources import check_source_record, digest
+from biotope.graph.targets import manifest_targets
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ from typing import ClassVar
 @dataclass(frozen=True)
 class Row:
     __record_set__: ClassVar[str] = "table"
-    __source_digest__: ClassVar[str] = {contract_digests(data)["table"]!r}
+    __source_digest__: ClassVar[str] = {manifest_targets(data)[0].revision!r}
     __field_refs__: ClassVar[dict[str, str]] = {{"gene_symbol": "table/Gene", "expression_state": "table/low"}}
     gene_symbol: str
     expression_state: str
@@ -54,41 +55,40 @@ class Facts:
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
+    source = SourceContract("source", manifest, schema, (module.Row, module.Facts))
     pipeline = Pipeline(
         "authored",
         Topology((), ()),
-        (SourceContract("source", manifest, schema, (module.Row, module.Facts)),),
+        (source,),
         (),
         lambda context: None,
         scope="table and reviewed paper",
         code_paths=(schema, Path(__file__)),
+        source_inventory=(source,),
     )
+    (tmp_path / "loader.py").write_text("def load(context):\n    return iter(())\n")
     yield data, module, pipeline
     sys.modules.pop(spec.name, None)
 
 
-def test_definition_check_accepts_renamed_fields_and_standardized_value_types(authored):
-    _, _, pipeline = authored
+def test_definition_check_accepts_renamed_fields_and_class_level_value_aliases(authored, monkeypatch):
+    _, module, pipeline = authored
+    aliases = {"true": "flagged", "false": "unflagged"}
+    monkeypatch.setattr(module.Row, "__value_aliases__", {"expression_state": aliases}, raising=False)
     report = check_pipeline(pipeline, static=False)
     assert report["state"] == "checked"
     assert report["sources"]["source"]["records"] == ["table", "paper/facts"]
-
-
-def test_value_aliases_can_be_supplied_by_a_shared_protocol(authored, monkeypatch):
-    _, module, pipeline = authored
-    monkeypatch.setattr(
-        module.Row, "__value_aliases__", {"expression_state": {"true": "flagged", "false": "unflagged"}}, raising=False
-    )
-    assert check_pipeline(pipeline, static=False)["state"] == "checked"
+    [entry] = [e for e in report["standardization"]["preserved_fields"] if e["attribute"] == "expression_state"]
+    assert entry["aliases"] == aliases
 
 
 @pytest.mark.parametrize(
     "aliases",
     [
-        {"typo": {"true": "flagged"}},
-        {"expression_state": {}},
-        {"expression_state": {" TRUE ": "flagged"}},
-        {"expression_state": {"true": 1}},
+        pytest.param({"typo": {"true": "flagged"}}, id="unbound-attribute"),
+        pytest.param({"expression_state": {}}, id="empty"),
+        pytest.param({"expression_state": {" TRUE ": "flagged"}}, id="untrimmed-token"),
+        pytest.param({"expression_state": {"true": 1}}, id="non-string-output"),
     ],
 )
 def test_invalid_value_policy_blocks_definition_check(authored, monkeypatch, aliases):
@@ -104,9 +104,8 @@ def test_invalid_value_policy_blocks_definition_check(authored, monkeypatch, ali
 @pytest.mark.parametrize(
     "bindings",
     [
-        {"gene_symbol": "table/Gene"},  # A described field was silently omitted.
-        {"gene_symbol": "other/Gene", "expression_state": "table/low"},
-        {"typo": "table/Gene", "expression_state": "table/low"},
+        pytest.param({"gene_symbol": "table/Gene"}, id="omitted-field"),
+        pytest.param({"typo": "table/Gene", "expression_state": "table/low"}, id="unknown-attribute"),
     ],
 )
 def test_bad_field_coverage_blocks_definition_check(authored, monkeypatch, bindings):
@@ -119,17 +118,20 @@ def test_bad_field_coverage_blocks_definition_check(authored, monkeypatch, bindi
     )
 
 
-@pytest.mark.parametrize("source", ["table", "paper"])
-def test_changed_source_declaration_requires_review(authored, source):
+def retype_the_first_column(data):
+    data["recordSet"][0]["field"][0]["dataType"] = "sc:Integer"
+
+
+def replace_the_document(data):
+    data["distribution"][0]["sha256"] = "different-document"
+
+
+@pytest.mark.parametrize(("change", "record"), [(retype_the_first_column, "Row"), (replace_the_document, "Facts")])
+def test_changed_source_declaration_requires_review(authored, change, record):
     data, module, _ = authored
-    if source == "table":
-        data["recordSet"][0]["field"][0]["dataType"] = "sc:Integer"
-        record = module.Row
-    else:
-        data["distribution"][0]["sha256"] = "different-document"
-        record = module.Facts
+    change(data)
     with pytest.raises(ValueError, match="stale source binding"):
-        check_source_record(data, record)
+        check_source_record(data, getattr(module, record))
 
 
 def test_missing_document_and_foreign_fact_identity_are_rejected(authored, monkeypatch):
@@ -150,34 +152,31 @@ def test_empty_record_registration_is_not_validated_as_a_source(authored):
     assert any("at least one source record" in f["message"] for f in failure.value.report["findings"])
 
 
+def error_codes(failure: pytest.ExceptionInfo[CheckFailed]) -> set[str]:
+    return {f["code"] for f in failure.value.report["findings"] if f["severity"] == "error"}
+
+
 def test_inventory_requires_selection_or_exclusion_and_rejects_placeholder(authored):
     _, _, pipeline = authored
     source = pipeline.sources[0]
     loader = source.schema.parent / "loader.py"
     loader.write_text("# biotope:placeholder\nraise NotImplementedError\n")
-    selected = replace(pipeline, source_inventory=(source,))
     with pytest.raises(CheckFailed) as failure:
-        check_pipeline(selected, static=False)
-    assert any(
-        f["code"] == "inventory.invalid" and "placeholder" in f["message"] for f in failure.value.report["findings"]
-    )
-    loader.write_text("def load(context):\n    return iter(())\n")
-    assert check_pipeline(selected, static=False)["excluded_sources"] == {}
-    for exclusions in ({source.name: "excluded"}, {"unknown": "excluded"}):
-        with pytest.raises(CheckFailed):
-            check_pipeline(replace(selected, excluded_sources=exclusions), static=False)
-    excluded = replace(selected, sources=(), excluded_sources={source.name: "Out of scope"})
+        check_pipeline(pipeline, static=False)
+    assert error_codes(failure) == {"inventory.placeholder"}
+    loader.write_text('"""Replaced the # biotope:placeholder stub."""\n\ndef load(context):\n    return iter(())\n')
+    assert check_pipeline(pipeline, static=False)["excluded_sources"] == {}
+    cases = {
+        "inventory.conflicting_selection": replace(pipeline, excluded_sources={source.name: "excluded"}),
+        "inventory.unknown_exclusion": replace(pipeline, excluded_sources={"unknown": "excluded"}),
+        "inventory.unselected": replace(pipeline, sources=()),
+        "inventory.exclusion_reason": replace(pipeline, sources=(), excluded_sources={source.name: " "}),
+        "inventory.absent": replace(pipeline, source_inventory=()),
+        "inventory.mismatch": replace(pipeline, source_inventory=(replace(source, name="renamed"),)),
+    }
+    for code, case in cases.items():
+        with pytest.raises(CheckFailed) as failure:
+            check_pipeline(case, static=False)
+        assert code in error_codes(failure), (code, failure.value.report["findings"])
+    excluded = replace(pipeline, sources=(), excluded_sources={source.name: "Out of scope"})
     assert check_pipeline(excluded, static=False)["excluded_sources"] == {source.name: "Out of scope"}
-
-
-def test_inventory_detects_missing_record_set(authored):
-    _, module, pipeline = authored
-    facts_only = replace(pipeline.sources[0], records=(module.Facts,))
-    selected = replace(pipeline, sources=(facts_only,), source_inventory=(facts_only,))
-    (facts_only.schema.parent / "loader.py").write_text("def load(context):\n    return iter(())\n")
-    with pytest.raises(CheckFailed) as failure:
-        check_pipeline(selected, static=False)
-    assert any(
-        f["code"] == "inventory.invalid" and "missing record sets" in f["message"]
-        for f in failure.value.report["findings"]
-    )

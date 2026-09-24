@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import collections.abc
 import inspect
-import types
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from functools import lru_cache
-from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, TypeVar, get_args, get_origin, get_type_hints
 
+from biotope.graph.annotations import label, tuple_members, union_members
 from biotope.graph.contracts import MappingEntry, SourceRecord
+from biotope.graph.topology import CHECKABLE_TYPES, unchecked_fields
 
 
 # Parameterized returns the engine can turn into an element contract.
@@ -48,26 +49,12 @@ class SignatureError(ValueError):
         super().__init__("; ".join(f"{subject}: {message}" for subject, message in problems))
 
 
-def _label(annotation: object) -> str:
-    """Name an annotation the way its author is likely to recognize it."""
-    if isinstance(annotation, type):
-        return annotation.__name__
-    return str(annotation).replace("typing.", "")
-
-
-def _members(annotation: Any) -> tuple[Any, ...]:
-    """Flatten a finite union; every other annotation is its own single member."""
-    if get_origin(annotation) in (Union, types.UnionType):
-        return get_args(annotation)
-    return (annotation,)
-
-
 def _concrete(annotation: Any) -> tuple[type, ...]:
     """Require concrete dataclasses, refusing the annotations that erase contracts."""
     resolved: list[type] = []
-    for member in _members(annotation):
+    for member in union_members(annotation):
         # Name the annotation before narrowing, so the message reads as authored.
-        label = _label(member)
+        authored = label(member)
         if (
             member is Any
             or member is object
@@ -76,7 +63,7 @@ def _concrete(annotation: Any) -> tuple[type, ...]:
             or not isinstance(member, type)
             or not is_dataclass(member)
         ):
-            raise ValueError(f"expected a concrete dataclass or a finite union of them, got {label}")
+            raise ValueError(f"expected a concrete dataclass or a finite union of them, got {authored}")
         resolved.append(member)
     return tuple(dict.fromkeys(resolved))
 
@@ -84,10 +71,10 @@ def _concrete(annotation: Any) -> tuple[type, ...]:
 def _input(annotation: Any) -> tuple[type, ...]:
     """Read the record types one evidence-bearing parameter accepts."""
     accepted: list[type] = []
-    for member in _members(annotation):
+    for member in union_members(annotation):
         if get_origin(member) is not SourceRecord:
             raise ValueError(
-                f"annotate mapping inputs as SourceRecord[...] so contributors travel with them, got {_label(member)}"
+                f"annotate mapping inputs as SourceRecord[...] so contributors travel with them, got {label(member)}"
             )
         accepted.extend(_concrete(get_args(member)[0]))
     return tuple(dict.fromkeys(accepted))
@@ -96,20 +83,25 @@ def _input(annotation: Any) -> tuple[type, ...]:
 def _outputs(annotation: Any) -> tuple[type, ...]:
     """Read the element types a mapping's return annotation produces."""
     origin, args = get_origin(annotation), get_args(annotation)
-    if origin is tuple and args and args != ((),):
-        # A fixed tuple declares each position; a variadic one repeats its element.
-        elements = (args[0],) if args[-1] is Ellipsis else args
+    members = tuple_members(annotation)[0] if origin is tuple else ()
+    if members:
+        elements = members
     elif origin in SEQUENCES and args:
         elements = (args[0],)
     else:
         raise ValueError(
             "annotate the return as a parameterized Iterable, Iterator, Generator, list or tuple of the "
-            f"dataclasses the mapping produces, got {_label(annotation)}"
+            f"dataclasses the mapping produces, got {label(annotation)}"
         )
     resolved: list[type] = []
     for element in elements:
         resolved.extend(_concrete(element))
     return tuple(dict.fromkeys(resolved))
+
+
+def _is_intermediate(record: type) -> bool:
+    """Whether a record is neither a source record, checked with its source, nor a graph declaration."""
+    return not hasattr(record, "__record_set__") and not hasattr(record, "schema_id")
 
 
 def _location(function: Callable[..., object]) -> tuple[str | None, int | None]:
@@ -173,6 +165,12 @@ def contract(entry: MappingEntry) -> MappingContract:
             outputs = _outputs(annotations["return"])
         except ValueError as exc:
             problems.append(("return", str(exc)))
+    subjects = [(f"parameter {p.name!r}", accepted) for p in parameters for accepted in p.accepts]
+    for subject, record in [*subjects, *(("return", output) for output in outputs)]:
+        if _is_intermediate(record):
+            for problem in unchecked_fields(record):
+                message = f"{problem} cannot be validated when the mapping runs; use {CHECKABLE_TYPES}"
+                problems.append((subject, message))
     if problems:
         raise reject(tuple(problems))
     return MappingContract(entry.name, signature, tuple(parameters), outputs, path, line)

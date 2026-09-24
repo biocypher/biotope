@@ -14,7 +14,7 @@ from PIL import Image
 from biotope.commands.add import _add_file, _bake_directory
 from biotope.croissant.inspector import inspect_dataset
 from biotope.croissant.spec import load_from_path
-from biotope.graph.sources import generate_source_packages
+from biotope.graph.inventory import generate_source_packages
 
 
 def _workbook(path, column="gene_id"):
@@ -64,14 +64,13 @@ def test_directory_workbook_ids_disambiguate_source_contracts(tmp_path):
         assert selected.id == record_set.id
         assert selected.source_ids and len(set(selected.source_ids)) == 1
     origins = [inspection.by_name(rs.id).source_ids[0] for rs in repeated]
-    assert len(set(origins)) == 2  # One workbook each, so the shared sheet name is disambiguated.
+    assert len(set(origins)) == 2
     assert inspection.by_name("Measurements") is None
     manifest = tmp_path / ".biotope/datasets/raw.jsonld"
     generate_source_packages(manifest, tmp_path / "sources")
     modules = {p.parent.name: p.read_text() for p in (tmp_path / "sources/raw").glob("*/schema.py")}
     assert len(modules) == len(dataset.record_set)
-    # Two workbooks sharing a sheet name become two packages named by their ids, never Foo and Foo_2.
-    holders = {name for name, code in modules.items() if any(repr(rs.id) in code for rs in repeated)}
+    holders = {name for name, code in modules.items() if any(json.dumps(rs.id) in code for rs in repeated)}
     assert len(holders) == 2
 
 
@@ -138,7 +137,7 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     unnamed = raw["recordSet"][0]["field"][0]
     assert "name" not in unnamed
     assert unnamed["@id"] == "indexed/"
-    source.unlink()  # All remaining work must use the description alone.
+    source.unlink()
     dataset = load_from_path(manifest)
     inspection = inspect_dataset(dataset)
     assert {f.name for f in inspection.record_sets[0].fields} == {"indexed/", "gene_id", "score"}

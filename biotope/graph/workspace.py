@@ -9,10 +9,22 @@ import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from biotope.graph.contracts import Pipeline
+from biotope.graph.reports import Finding
+from biotope.graph.revisions import project_root
+from biotope.graph.survey import Survey, inventory_findings, survey_sources
 from biotope.graph.topology import Topology
+
+
+class WorkspaceLoadFailed(ValueError):
+    """The pipeline cannot be imported; ``findings`` still holds everything static discovery found."""
+
+    def __init__(self, message: str, findings: tuple[Finding, ...]) -> None:
+        super().__init__(message)
+        self.findings = findings
 
 
 @dataclass(frozen=True)
@@ -20,10 +32,24 @@ class Workspace:
     root: Path
     package: str
 
+    @cached_property
+    def surveys(self) -> tuple[Survey, ...]:
+        sources = self.root / "sources"
+        return (survey_sources(sources, project_root(self.root)),) if sources.is_dir() else ()
+
     def pipeline(self) -> Pipeline:
-        value = getattr(importlib.import_module(f"{self.package}.pipelines.build_graph"), "PIPELINE")
-        if not isinstance(value, Pipeline):
-            raise ValueError("pipelines/build_graph.py must declare PIPELINE as a biotope.graph.Pipeline")
+        """Import the pipeline, after static discovery, so that its findings survive an import failure."""
+        surveys = self.surveys
+        try:
+            value = getattr(importlib.import_module(f"{self.package}.pipelines.build_graph"), "PIPELINE")
+            if not isinstance(value, Pipeline):
+                raise ValueError("pipelines/build_graph.py must declare PIPELINE as a biotope.graph.Pipeline")
+        except Exception as exc:
+            findings = (
+                *inventory_findings(surveys, None),
+                Finding("workspace.load", "error", str(self.root), str(exc)),
+            )
+            raise WorkspaceLoadFailed(str(exc), findings) from exc
         return value
 
     def topology(self) -> Topology:

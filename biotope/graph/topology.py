@@ -5,11 +5,11 @@ from __future__ import annotations
 import inspect
 import math
 import re
-import types
 from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
-from typing import Any, Literal, TypedDict, Union, cast, get_args, get_origin, get_type_hints
+from typing import Any, Literal, TypedDict, cast, get_args, get_origin, get_type_hints
 
+from biotope.graph.annotations import label, nested_records, tuple_members, union_members, unwrap
 from biotope.graph.sources import UnknownValue
 
 
@@ -38,18 +38,17 @@ def concept_description(cls: type) -> str:
 
 def validate_value(value: object, expected: Any, location: str) -> None:
     """Validate declarations without coercing source or scientific values."""
-    if hasattr(expected, "__supertype__"):
-        validate_value(value, expected.__supertype__, location)
-        return
-    origin, args = get_origin(expected), get_args(expected)
-    if origin in (types.UnionType, Union):
-        for choice in args:
+    expected = unwrap(expected)
+    choices = union_members(expected)
+    if len(choices) > 1:
+        for choice in choices:
             try:
                 validate_value(value, choice, location)
                 return
             except ValueError:
                 pass
         raise ValueError(f"{location}: {value!r} does not satisfy {expected}")
+    origin, args = get_origin(expected), get_args(expected)
     if expected is type(None) and value is None:
         return
     if expected in (str, int, float, bool) and type(value) is expected:
@@ -60,6 +59,16 @@ def validate_value(value: object, expected: Any, location: str) -> None:
         for i, item in enumerate(cast(list[object], value)):
             validate_value(item, args[0], f"{location}[{i}]")
         return
+    if origin is tuple and type(value) is tuple:
+        items = cast(tuple[object, ...], value)
+        members, repeated = tuple_members(expected)
+        if repeated:
+            members *= len(items)
+        if len(members) != len(items):
+            raise ValueError(f"{location}: expected {expected}, got {len(items)} items: {value!r}")
+        for i, (item, member) in enumerate(zip(items, members)):
+            validate_value(item, member, f"{location}[{i}]")
+        return
     if isinstance(expected, type) and is_dataclass(expected) and type(value) is expected:
         for member in fields(expected):
             validate_value(getattr(value, member.name), hints(expected)[member.name], f"{location}.{member.name}")
@@ -69,14 +78,57 @@ def validate_value(value: object, expected: Any, location: str) -> None:
     raise ValueError(f"{location}: expected {expected}, got {type(value).__name__}: {value!r}")
 
 
+CHECKABLE_TYPES = "str, int, float, bool, None, a NewType, list[...], tuple[...] or a dataclass"
+
+
+def is_checkable(annotation: Any) -> bool:
+    """Whether validate_value can check values of an annotation."""
+    annotation = unwrap(annotation)
+    choices = union_members(annotation)
+    if len(choices) > 1:
+        return all(is_checkable(choice) for choice in choices)
+    if annotation in (type(None), str, int, float, bool) or annotation is UnknownValue:
+        return True
+    origin, args = get_origin(annotation), get_args(annotation)
+    if origin is list:
+        return len(args) == 1 and is_checkable(args[0])
+    if origin is tuple:
+        return all(is_checkable(member) for member in tuple_members(annotation)[0])
+    return isinstance(annotation, type) and is_dataclass(annotation)
+
+
+def unchecked_fields(record: type) -> list[str]:
+    """Fields of a record, nested records included, whose declared types validate_value cannot check.
+
+    Execution validates every value against its declaration, so an unsupported
+    annotation would otherwise fail only once a build reaches the first value.
+    """
+    problems: list[str] = []
+    pending, seen = [record], set[type]()
+    while pending:
+        cls = pending.pop(0)
+        if cls in seen:
+            continue
+        seen.add(cls)
+        try:
+            annotations = hints(cls)
+        except Exception as exc:
+            problems.append(f"{cls.__name__}: annotations could not be resolved: {exc}")
+            continue
+        for member in fields(cls):
+            annotation = annotations[member.name]
+            pending.extend(nested_records(annotation))
+            if not is_checkable(annotation):
+                problems.append(f"{cls.__name__}.{member.name}: {label(annotation)}")
+    return problems
+
+
 def property_type(annotation: Any) -> str:
     """Return a supported export type, rejecting implicit string conversions."""
-    if hasattr(annotation, "__supertype__"):
-        return property_type(annotation.__supertype__)
-    if get_origin(annotation) in (Union, types.UnionType):
-        nonnull = [item for item in get_args(annotation) if item is not type(None)]
-        if len(nonnull) == 1:
-            return property_type(nonnull[0])
+    annotation = unwrap(annotation)
+    nonnull = [item for item in union_members(annotation) if item is not type(None)]
+    if len(nonnull) == 1 and nonnull[0] is not annotation:
+        return property_type(nonnull[0])
     if annotation in (str, bool, int, float):
         return {str: "str", bool: "bool", int: "int", float: "float"}[annotation]
     # Lists containing nulls have no unambiguous BioCypher export representation.

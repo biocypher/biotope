@@ -13,7 +13,7 @@ from typing import Any, Protocol, cast
 import yaml
 
 from biotope.graph.contracts import GraphRecord
-from biotope.graph.provenance import PROVENANCE_PROPERTY, ProvenanceCatalog
+from biotope.graph.provenance import PROVENANCE_CATALOG, PROVENANCE_PROPERTY, PROVENANCE_REFERENCE, ProvenanceCatalog
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest, write_text_atomic
 from biotope.graph.topology import concept_id
@@ -98,6 +98,15 @@ def export_labels(concepts: Iterable[str]) -> dict[str, str]:
     return labels
 
 
+def _relocate_import_scripts(directory: Path) -> None:
+    """Resolve the import scripts' paths from the script's own location, so a published or moved build still imports."""
+    for script in directory.glob("*.sh"):
+        first, separator, rest = script.read_text(encoding="utf-8").partition("\n")
+        rest = rest.replace(str(directory.resolve()), "${BIOCYPHER_IMPORT_DIR}")
+        locate = 'BIOCYPHER_IMPORT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n'
+        write_text_atomic(script, first + separator + locate + rest)
+
+
 class BioCypherWriter:
     """Derive the export schema and write one offline BioCypher format."""
 
@@ -133,7 +142,7 @@ class BioCypherWriter:
         return {"exporter": "biocypher", "version": installed, "format": contract}
 
     def write(self, context: RunContext, directory: Path) -> list[str]:
-        """Write Neo4j import files and an identity-keyed provenance sidecar."""
+        """Write Neo4j import files and the provenance catalog their nodes and edges reference."""
         self.check_environment()
         # BioCypher configures disk logging during import, before its per-build
         # configuration is applied. Supply stderr logging first; respect existing handlers.
@@ -182,11 +191,7 @@ class BioCypherWriter:
                 "biotope": {
                     "nullable": item["nullable"],
                     "property_descriptions": descriptions[semantic]["properties"],
-                    "provenance": {
-                        "property": PROVENANCE_PROPERTY,
-                        "catalog": "provenance.json",
-                        "indexing": "zero-based",
-                    },
+                    "provenance": PROVENANCE_REFERENCE,
                 },
             }
             for semantic, item in context.schema.items()
@@ -236,13 +241,9 @@ class BioCypherWriter:
 
         # BioCypher 0.17 leaves these iterable parameters unannotated. Keep the
         # exception local to its API; our tuples and GraphWriter remain checked.
-        if not writer.write_nodes(  # pyright: ignore[reportUnknownMemberType]
-            [
-                *(
-                    (identity, concept_id(type(row.value)), properties(row))
-                    for identity, row in sorted(context.nodes.items())
-                ),
-            ]
+        # It cannot write node headers without a node, so an empty graph exports only the import script.
+        if context.nodes and not writer.write_nodes(  # pyright: ignore[reportUnknownMemberType]
+            (identity, concept_id(type(row.value)), properties(row)) for identity, row in sorted(context.nodes.items())
         ):
             raise ValueError("BioCypher node export failed")
         if context.edges and not writer.write_edges(  # pyright: ignore[reportUnknownMemberType]
@@ -257,15 +258,7 @@ class BioCypherWriter:
         ):
             raise ValueError("BioCypher edge export failed")
         writer.write_import_call()
-        # Keep the import script usable after publishing a staged build or moving it.
-        for script in (directory / "biocypher").glob("*.sh"):
-            content = script.read_text(encoding="utf-8")
-            first, separator, rest = content.partition("\n")
-            rest = rest.replace(str((directory / "biocypher").resolve()), "${BIOCYPHER_IMPORT_DIR}")
-            write_text_atomic(
-                script,
-                first + separator + 'BIOCYPHER_IMPORT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n' + rest,
-            )
+        _relocate_import_scripts(directory / "biocypher")
         unexpected = sorted(
             str(path.relative_to(directory))
             for path in (directory / "biocypher").rglob("*")
@@ -277,5 +270,5 @@ class BioCypherWriter:
                 f"not cover: {', '.join(unexpected)}. The writer and the declaration disagree; "
                 "reconcile them before accepting the output."
             )
-        provenance.write(directory / "provenance.json")
+        provenance.write(directory / PROVENANCE_CATALOG)
         return [str(path.relative_to(directory)) for path in sorted(directory.rglob("*")) if path.is_file()]
