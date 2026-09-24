@@ -13,8 +13,8 @@ from biotope.graph.annotations import label, nested_records, tuple_members, unio
 from biotope.graph.sources import UnknownValue
 
 
+# Concept IDs in this namespace are reserved for Biotope's own metadata.
 RESERVED_NAMESPACE = "biotope"
-"""Concept IDs in this namespace belong to Biotope's own export metadata."""
 
 
 @lru_cache(maxsize=None)

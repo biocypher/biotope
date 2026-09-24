@@ -65,8 +65,8 @@ FIELD_KIND_PYTHON_TYPES: dict[FieldKind, str] = {
     FieldKind.ARRAY: "str[]",
 }
 
+# The schema type of a `Selector.value` literal, by its Python type.
 LITERAL_VALUE_PYTHON_TYPES: dict[type, str] = {bool: "bool", int: "int", float: "float", str: "str"}
-"""Python type → schema type name, for typing a `Selector.value` literal."""
 
 
 SCALAR_KIND_MAP: dict[str, FieldKind] = {

@@ -20,6 +20,9 @@ from biotope.utils import (
 )
 
 
+EXAMPLE_CSV = Path(__file__).resolve().parents[1] / "fixtures/example_gene_expression.csv"
+
+
 @pytest.fixture
 def runner():
     return CliRunner()
@@ -287,8 +290,7 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     (project_root / ".biotope" / "datasets").mkdir(parents=True)
     data_dir.mkdir(parents=True)
 
-    source_csv = Path("tests/example_gene_expression.csv").resolve()
-    (data_dir / "example_gene_expression.csv").write_text(source_csv.read_text())
+    (data_dir / "example_gene_expression.csv").write_text(EXAMPLE_CSV.read_text())
     (data_dir / "README.md").write_text("notes")
 
     metadata_dict, n_source_files = _bake_directory(data_dir, project_root, {})
@@ -430,9 +432,6 @@ def test_add_command_rejects_name_for_multiple_paths(mock_find_root, runner, git
 # croissant-baker integration — run against the real baker, because the last
 # break was an import move swallowed by an `except ImportError`.
 # ---------------------------------------------------------------------------
-
-
-EXAMPLE_CSV = Path(__file__).resolve().parents[1] / "example_gene_expression.csv"
 
 
 @pytest.fixture

@@ -19,29 +19,20 @@ from biotope.graph.sources import digest, write_text_atomic
 from biotope.graph.topology import concept_id
 
 
+# The lowest tested BioCypher release, and the first release above the tested range. BioCypher is pre-1.0
+# and moves defaults between minors (0.17 flipped offline Neo4j output to Parquet and renamed the CSV
+# delimiter keys), so the range spans patches, which fix behaviour, and stops at the next minor.
 SUPPORTED_BIOCYPHER = ((0, 17), (0, 18))
-"""Lowest tested BioCypher release, and the first release above the tested range.
 
-BioCypher is pre-1.0 and moves defaults between minors: 0.17 flipped offline
-Neo4j output to Parquet and renamed the CSV delimiter keys. The range therefore
-spans patches, which fix behaviour, and stops at the next minor, which may
-change it.
-"""
-
+# The file suffixes each data format produces. Parquet needs a Neo4j release whose import accepts it, so the
+# choice belongs to whoever runs the import rather than to a library default.
 EXPORT_FORMATS = {
     "csv": frozenset({".csv", ".sh"}),
     "parquet": frozenset({".parquet", ".sh"}),
 }
-"""Selectable data formats, and the file suffixes each is expected to produce.
 
-CSV writes a header file beside each data file; Parquet carries its schema
-inline and writes neither. Parquet needs a Neo4j release whose import accepts
-it, so the choice belongs to whoever runs the import rather than to a library
-default.
-"""
-
+# neo4j-admin's own default separator inside a string list.
 ARRAY_DELIMITER = ";"
-"""Separator inside an exported string list, matching neo4j-admin's own default."""
 
 
 def supported_specifier() -> str:

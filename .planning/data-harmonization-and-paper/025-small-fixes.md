@@ -1,2 +1,0 @@
-- why, to every entity, some kind of cvkg is prepended?
-- metagraph html includes absolute paths => bad

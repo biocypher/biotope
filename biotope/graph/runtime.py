@@ -34,7 +34,6 @@ G = TypeVar("G", bound=GraphObject)
 P = ParamSpec("P")
 
 EVIDENCE_SAMPLE = 10
-"""How many contributor references a bounded report sample keeps."""
 
 
 @dataclass
