@@ -8,7 +8,7 @@ A source states what it measured. Anything you conclude from it is yours, and a 
 
 A rodent assay reports `mean_delta = -0.42` with the contrast written only as "treated vs. reference" in a figure legend you cannot recover. A `direction` property saying `decreased` then sorts, filters and compares exactly like a well-founded one.
 
-A query ranking by direction may overlook a separate `direction_uncertain` flag. To preserve uncertainty, keep the raw effect and name the reference group in its description; attach `Interpretation(kind="uncertainty")` to that exact property; or do not publish the derived value. The same holds for any derived label — a severity band, a responder flag, a pathway assignment.
+A query ranking by direction may overlook a separate `direction_uncertain` flag. To preserve uncertainty, keep the raw effect and name the reference group in its description; state in the derived property's own description what it does not establish, and record the open question in `graph/ASSUMPTIONS.md`; or do not publish the derived value. The same holds for any derived label — a severity band, a responder flag, a pathway assignment.
 
 ## Preserve the qualifiers that change what a claim means
 
@@ -24,7 +24,7 @@ Similar labels from different studies are the easiest thing in a graph to confla
 
 Two studies both report a "thrombus vs. control" comparison. One contrasts thrombus against matched peripheral blood; the other against healthy donors. Under one label they answer each other's questions silently.
 
-Preserve the distinction in the export: the distinguishing value is queryable, an `Interpretation(kind="qualifier")` states how to choose between them, and a `QueryExample` selects one of them explicitly. A study or contrast node that exists but carries no distinguishing property does not count — it has to be the value a `WHERE` clause can filter on.
+Preserve the distinction in the export: the distinguishing value is a queryable property, and its description states how to choose between the comparisons. A study or contrast node that exists but carries no distinguishing property does not count — it has to be the value a `WHERE` clause can filter on.
 
 ## Distinguish absence states
 
@@ -60,4 +60,4 @@ A gene appears under a symbol in one table and an accession in another. If the f
 
 Keep unresolved identity visible. When sources disagree on which accession a symbol denotes, do not arbitrate silently and do not merge every symbol to make a join succeed. Keep the unresolved entity, record the candidates and what supports each, and relate the unresolved entity to them so a query reaches the evidence instead of dead-ending. Preserve every identifier and alias the sources supplied.
 
-Then measure the joins you intended. For each cross-source join a capability depends on, report how much of it resolves, so readers can distinguish unresolved joins from absence in the sources.
+Then measure the joins you intended. For each cross-source join a requirement depends on, record how much of it resolves with `context.record_audit(...)` counts, so readers can distinguish unresolved joins from absence in the sources. This resolution belongs in `graph/alignment/`, before any mapping admits a record.
