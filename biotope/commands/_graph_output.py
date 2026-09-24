@@ -108,6 +108,20 @@ class GraphOutput:
         for check in checks:
             if check["state"] == "skipped":
                 self.row("SKIP", check["name"], check["reason"])
+        if self.operation == "check":
+            overview = definitions.get("standardization", {})
+            for name, term in overview.get("terms", {}).items():
+                bindings = term["bindings"]
+                self.row("Term", name, term["description"])
+                for binding in bindings:
+                    self.row(
+                        "",
+                        str(binding["source_field"] or "Not supplied"),
+                        f"{binding['record_set']}.{binding['attribute']}",
+                    )
+            preserved = overview.get("preserved_fields", [])
+            if preserved:
+                self.row("Preserve", f"{len(preserved)} source fields without a shared term; see --json for bindings")
         validation: dict[str, Any] = report.get("validation") or {}
         findings: list[Any] = [
             *definitions.get("findings", []),

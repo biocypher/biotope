@@ -24,6 +24,7 @@ from biotope.graph.contracts import (
 )
 from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
+from biotope.graph.standardization import validate_terms
 from biotope.graph.topology import concept_id, identifier, validate_value
 
 
@@ -62,6 +63,7 @@ class RunContext:
         self._exclusions: dict[str, ExclusionFinding] = {}
         self._audits: dict[str, Audit] = {}
         self.loaded: dict[str, int] = {}
+        self.completed_sources: set[str] = set()
         self.source_versions: set[tuple[str, str]] = set()
 
     def stores(self) -> GraphStores:
@@ -106,11 +108,14 @@ class RunContext:
                 self._evidence(record.evidence)
                 location = f"{source.name} {record.evidence}"
                 validate_value(record.value, type(record.value), location)
+                validate_terms(record.value)
                 record_set = getattr(type(record.value), "__record_set__", None)
                 if not any(item.record_set == record_set for item in record.evidence):
                     raise ValueError(f"{location}: evidence does not identify record set {record_set}")
                 self.loaded[source.name] = self.loaded.get(source.name, 0) + 1
                 yield record
+            self.loaded.setdefault(source.name, 0)
+            self.completed_sources.add(source.name)
         except Exception as exc:
             raise ValueError(f"{source.name} ({source.metadata}): loader or source contract failed: {exc}") from exc
 

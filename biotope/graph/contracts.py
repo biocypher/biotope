@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, Literal, ParamSpec, Protocol, TypeVar, cast
 
+from biotope.graph.standardization import Term
 from biotope.graph.topology import ConceptSchema, Topology
 
 
@@ -47,14 +48,38 @@ class Loader(Protocol[C, T]):
         ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class SourceContract:
-    """Participating generated record classes and their effective metadata."""
+    """A source schema and its effective metadata; authored after scaffolding."""
 
     name: str
     metadata: Path
-    generated: Path
+    schema: Path
     records: tuple[type, ...]
+
+    def __init__(
+        self,
+        name: str,
+        metadata: Path,
+        schema: Path | None = None,
+        records: tuple[type, ...] = (),
+        *,
+        generated: Path | None = None,
+    ) -> None:
+        if schema is not None and generated is not None:
+            raise ValueError("Use schema, not both schema and the legacy generated argument")
+        path = schema if schema is not None else generated
+        if path is None:
+            raise ValueError("A source registration requires its schema module")
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "metadata", metadata)
+        object.__setattr__(self, "schema", path)
+        object.__setattr__(self, "records", records)
+
+    @property
+    def generated(self) -> Path:
+        """Compatibility alias for existing projects; new registrations use schema."""
+        return self.schema
 
 
 class GraphObject(Protocol):
@@ -304,6 +329,9 @@ class Pipeline:
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."
     validation_checks: tuple[ValidationCheck, ...] = ()
     query_context: QueryContext = field(default_factory=QueryContext)
+    terms: tuple[Term, ...] = ()
+    source_inventory: tuple[SourceContract, ...] = ()
+    excluded_sources: dict[str, str] = field(default_factory=dict[str, str])
 
 
 @dataclass

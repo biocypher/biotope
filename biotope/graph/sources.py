@@ -16,9 +16,11 @@ import stat
 import tempfile
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args, get_type_hints
+
+from biotope.graph.standardization import field_aliases, field_bindings
 
 
 GENERATOR_VERSION = "5"
@@ -687,3 +689,114 @@ def check_generated(metadata: Path, output: Path) -> None:
         raise ValueError(f"{output} is stale; record set {identity!r} is no longer described by {metadata}")
     if current != render_source(data, target):
         raise ValueError(f"{output} is stale; {advice}, then review mappings")
+
+
+def _dataclasses(annotation: Any) -> list[type]:
+    if isinstance(annotation, type) and is_dataclass(annotation):
+        return [annotation]
+    return [record for argument in get_args(annotation) for record in _dataclasses(argument)]
+
+
+def _check_fields(record: type, definition: dict[str, Any], pointer: str, *, nested: bool = False) -> None:
+    """Keep all described fields bound while allowing authored names and value types."""
+    child_key = "subField" if nested else "field"
+    children = definition.get(child_key, [])
+    expected: dict[str, tuple[dict[str, Any], str]] = {}
+    for index, child in enumerate(_objects(children, f"{pointer}/{child_key}")):
+        locator = f"{pointer}/{child_key}" + ("" if isinstance(children, dict) else f"/{index}")
+        reference = child.get("@id", locator)
+        if not isinstance(reference, str) or reference in expected:
+            raise ValueError(f"{pointer}: invalid or duplicate field identity {reference!r}")
+        expected[reference] = (child, locator)
+    bindings_object: object = cast(object, field_bindings(record))
+    if not isinstance(bindings_object, dict):
+        raise ValueError(f"{record.__name__}: declare __field_refs__ mapping attributes to source field identities")
+    untyped = cast(dict[object, object], bindings_object)
+    if any(not isinstance(name, str) or not isinstance(reference, str) for name, reference in untyped.items()):
+        raise ValueError(f"{record.__name__}: source field bindings must contain string names and identities")
+    bindings = cast(dict[str, str], untyped)
+    attributes = {member.name for member in fields(record)}
+    unknown_attributes = set(bindings) - attributes
+    missing = set(expected) - set(bindings.values())
+    unknown_references = set(bindings.values()) - set(expected)
+    duplicates = [ref for ref, count in Counter(bindings.values()).items() if count > 1]
+    if unknown_attributes or missing or unknown_references or duplicates:
+        raise ValueError(
+            f"{record.__name__}: invalid source field coverage; "
+            f"unbound source fields={sorted(missing)}, "
+            f"unknown source fields={sorted(unknown_references)}, "
+            f"unknown attributes={sorted(unknown_attributes)}, duplicate bindings={sorted(duplicates)}"
+        )
+    annotations = get_type_hints(record)
+    value_aliases: object = cast(object, field_aliases(record))
+    if not isinstance(value_aliases, dict):
+        raise ValueError(f"{record.__name__}: __value_aliases__ must map source attributes to token dictionaries")
+    for name, aliases in cast(dict[object, object], value_aliases).items():
+        if not isinstance(name, str) or name not in bindings:
+            raise ValueError(f"{record.__name__}: value aliases refer to an unbound source attribute {name!r}")
+        if not isinstance(aliases, dict) or not aliases:
+            raise ValueError(f"{record.__name__}.{name}: value aliases must be a nonempty string-to-string dictionary")
+        members = get_args(annotations[name]) or (annotations[name],)
+        if str not in members:
+            raise ValueError(f"{record.__name__}.{name}: string value aliases require a string-valued schema field")
+        for token, value in cast(dict[object, object], aliases).items():
+            if not isinstance(token, str) or not token or token != token.strip().lower() or not isinstance(value, str):
+                raise ValueError(
+                    f"{record.__name__}.{name}: value aliases require trimmed lowercase tokens and string outputs"
+                )
+    for name, reference in bindings.items():
+        child, locator = expected[reference]
+        if child.get("subField"):
+            for nested_record in _dataclasses(annotations[name]):
+                _check_fields(nested_record, child, locator, nested=True)
+
+
+def check_source_record(data: dict[str, Any], record: object) -> str:
+    """Check a RecordSet or FileObject binding and return its reviewed revision.
+
+    An authored schema may standardize names and types. It must still identify a
+    current source declaration and, for tables, account for every described field.
+    Document facts bind to a FileObject without fabricating a raw RecordSet.
+    """
+    if not isinstance(record, type) or not is_dataclass(record):
+        raise ValueError(f"{record!r}: source records must be dataclass types")
+    if not getattr(record, "__dataclass_params__").frozen:
+        raise ValueError(f"{record.__name__}: source records must be frozen dataclasses")
+    identity = getattr(record, "__record_set__", None)
+    if not isinstance(identity, str) or not identity.strip():
+        raise ValueError(f"{record.__name__}: declare a nonempty __record_set__ evidence identity")
+    file_identity = getattr(record, "__file_object__", None)
+    if file_identity is not None:
+        if not isinstance(file_identity, str) or not file_identity.strip():
+            raise ValueError(f"{record.__name__}: invalid __file_object__ identity")
+        files = [
+            item for item in _objects(data.get("distribution", []), "/distribution") if item.get("@id") == file_identity
+        ]
+        if len(files) != 1:
+            raise ValueError(f"{record.__name__}: FileObject {file_identity!r} is missing or ambiguous")
+        file = files[0]
+        kinds = file.get("@type", [])
+        if isinstance(kinds, str):
+            kinds = [kinds]
+        if not any(
+            kind
+            in {
+                "cr:FileObject",
+                "http://mlcommons.org/croissant/FileObject",
+                "https://mlcommons.org/croissant/FileObject",
+            }
+            for kind in kinds
+        ):
+            raise ValueError(f"{record.__name__}: {file_identity!r} is not a FileObject")
+        if not identity.startswith(file_identity + "/") or identity == file_identity + "/":
+            raise ValueError(f"{record.__name__}: document record identity must be scoped under {file_identity!r}")
+        expected = digest({"@context": data.get("@context"), "distribution": file})
+    else:
+        target = next((target for target in record_set_targets(data) if target.identity == identity), None)
+        if target is None:
+            raise ValueError(f"{record.__name__}: RecordSet {identity!r} is missing from metadata")
+        expected = digest(record_set_definition(data, target))
+        _check_fields(record, target.record, target.identity)
+    if getattr(record, "__source_digest__", None) != expected:
+        raise ValueError(f"{record.__name__}: stale source binding; review the changed metadata and update the schema")
+    return expected

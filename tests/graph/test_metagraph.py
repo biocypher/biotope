@@ -2,6 +2,7 @@
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -36,6 +37,17 @@ def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     monkeypatch.setattr(Node, "display_name", "Sample measurement", raising=False)
     monkeypatch.setattr(Link, "display_name", "Measured with", raising=False)
     plain = describe_metagraph(PIPELINE.topology)
+    # Without a project to name them against, declarations fall back to their module.
+    assert plain["nodes"][0]["declaration"]["path"] is None
+    located = describe_metagraph(PIPELINE.topology, root=Path(__file__).parent)
+    assert located["nodes"][0]["declaration"]["path"] == "test_quality.py"
+    assert str(Path(__file__).parent) not in render_metagraph(located)
+    assert (
+        describe_metagraph(PIPELINE.topology, root=Path(__file__).parent / "composition")["nodes"][0]["declaration"][
+            "path"
+        ]
+        is None
+    )
     assert plain["nodes"][0]["label"] == "Sample measurement"
     assert plain["edges"][0]["label"] == "Measured with"
     assert plain["nodes"][1]["label"] == "Unused"

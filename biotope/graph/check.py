@@ -9,9 +9,9 @@ import os
 import subprocess
 import sys
 import tempfile
-from dataclasses import fields, is_dataclass
+from dataclasses import fields
 from pathlib import Path
-from typing import Any, cast, get_args, get_type_hints
+from typing import Any, get_args, get_type_hints
 
 from biotope.graph.context import check_query_context
 from biotope.graph.contracts import Pipeline
@@ -26,7 +26,8 @@ from biotope.graph.reports import (
     PythonCheckFailed,
 )
 from biotope.graph.signatures import MappingContract, SignatureError, contract
-from biotope.graph.sources import UnknownValue, check_generated, contract_digests, digest, read_metadata
+from biotope.graph.sources import UnknownValue, check_source_record, digest, read_metadata
+from biotope.graph.standardization import describe_standardization
 from biotope.project_model import Project, find_project
 
 
@@ -205,27 +206,16 @@ def check_pipeline(
                 if source.name in seen:
                     raise ValueError(f"Duplicate source registration {source.name}")
                 seen.add(source.name)
-                check_generated(source.metadata, source.generated)
                 if files is not None and source.generated.resolve() not in declared:
-                    raise ValueError(f"{source.generated}: include generated source contracts in code_paths")
+                    raise ValueError(f"{source.generated}: include source schemas in code_paths")
                 metadata = read_metadata(source.metadata)
-                revisions = contract_digests(metadata)
-                covered: list[str] = []
+                if not source.records or len(set(source.records)) != len(source.records):
+                    raise ValueError(f"{source.name}: declare at least one source record type without duplicates")
+                revisions: list[str] = []
                 for record in source.records:
-                    identity = getattr(record, "__record_set__", None)
-                    # A record set removed from the manifest has no digest to match.
-                    expected = revisions.get(identity) if isinstance(identity, str) else None
-                    if (
-                        not is_dataclass(record)
-                        or expected is None
-                        or getattr(record, "__source_digest__", None) != expected
-                    ):
-                        raise ValueError(
-                            f"{source.name}: stale or non-generated record {record}; regenerate and restart the process"
-                        )
-                    covered.append(cast(str, identity))
+                    revisions.append(check_source_record(metadata, record))
                     if Path(inspect.getfile(record)).resolve() != source.generated.resolve():
-                        raise ValueError(f"{record}: record does not come from the registered generated module")
+                        raise ValueError(f"{record}: record does not come from the registered schema module")
                     for member in fields(record):
                         if _contains_unknown(get_type_hints(record)[member.name]):
                             warning(
@@ -236,7 +226,7 @@ def check_pipeline(
                 report.data["sources"][source.name] = {
                     "metadata": str(source.metadata),
                     "digest": digest(metadata),
-                    "contract_digest": digest(sorted(revisions[identity] for identity in covered)),
+                    "contract_digest": digest(sorted(revisions)),
                     "distribution": metadata.get("distribution", []),
                     "records": [getattr(r, "__record_set__") for r in source.records],
                 }
@@ -244,6 +234,48 @@ def check_pipeline(
                 error("source.contract", source.name, str(exc), source.metadata)
 
     stage("sources", sources)
+
+    def standardization() -> None:
+        overview = describe_standardization(pipeline.terms, tuple(r for s in pipeline.sources for r in s.records))
+        report.data["standardization"] = overview
+        for name, term in overview["terms"].items():
+            if not term["bindings"]:
+                warning("standardization.unused", name, "No selected source field uses this term")
+
+    stage("standardization", standardization)
+
+    def inventory() -> None:
+        if not pipeline.source_inventory:
+            return
+        known = {source.name: source for source in pipeline.source_inventory}
+        selected = {source.name: source for source in pipeline.sources}
+        excluded = pipeline.excluded_sources
+        if len(known) != len(pipeline.source_inventory):
+            raise ValueError("Duplicate source inventory names")
+        if set(selected) & set(excluded) or set(known) != set(selected) | set(excluded):
+            raise ValueError("Every inventoried source must be selected or explicitly excluded, exactly once")
+        if any(not reason.strip() for reason in excluded.values()):
+            raise ValueError("Source exclusions require nonempty reasons")
+        for name, source in selected.items():
+            if source != known[name]:
+                raise ValueError(f"{name}: selected contract differs from inventory")
+            loader = source.generated.parent / "loader.py"
+            if not loader.is_file() or "# biotope:placeholder" in loader.read_text():
+                raise ValueError(f"{name}: selected loader is missing or still a placeholder")
+        for metadata_path in {source.metadata.resolve() for source in known.values()}:
+            metadata = read_metadata(metadata_path)
+            registered = {
+                getattr(record, "__record_set__")
+                for source in known.values()
+                if source.metadata.resolve() == metadata_path
+                for record in source.records
+            }
+            expected = {item["@id"] for item in metadata.get("recordSet", [])}
+            if expected - registered:
+                raise ValueError(f"{metadata_path}: missing record sets {sorted(expected - registered)}")
+        report.data["excluded_sources"] = dict(excluded)
+
+    stage("inventory", inventory)
 
     resolved: dict[str, MappingContract] = {}
 

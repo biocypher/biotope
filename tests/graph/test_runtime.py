@@ -1,12 +1,12 @@
 """Typed topology and runtime integrity at the graph boundary."""
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import ClassVar, NewType, cast
 
 import pytest
 
-from biotope.graph import Evidence, Mapping, MappingEntry, Pipeline, SourceRecord, Topology
+from biotope.graph import Evidence, Mapping, MappingEntry, Pipeline, SourceRecord, Topology, build
 from biotope.graph.runtime import RunContext
 
 
@@ -93,6 +93,65 @@ BAD_IDENTIFIER = Mapping(name="bad-identifier", function=bad_identifier)
 UNDECLARED = Mapping(name="undeclared", function=undeclared)
 JOIN = Mapping(name="join", function=join)
 RESERVED = Mapping(name="reserved", function=reserved_names)
+
+
+ItemId = NewType("ItemId", str)
+
+
+@dataclass(frozen=True)
+class ItemRow:
+    """A synthetic source row standing in for one eligible observation."""
+
+    key: str
+
+
+@dataclass(frozen=True)
+class Item:
+    """One retained observation."""
+
+    schema_id: ClassVar[str] = "test:item"
+    id: ItemId
+    tags: list[str] = field(default_factory=list[str])
+
+
+def make_item(row: SourceRecord[ItemRow]) -> Iterator[Item]:
+    """Carry one row into the graph."""
+    yield Item(ItemId("item:" + row.value.key), [row.value.key])
+
+
+ITEMS = Mapping(name="items", function=make_item)
+
+
+def emit(context: RunContext, keys: tuple[str, ...]) -> None:
+    """Emit only the named keys, exactly as a pipeline with a bare `continue` would."""
+    for key in keys:
+        context.map(ITEMS, SourceRecord(ItemRow(key), (Evidence("rows", "v1", "items", key),)))
+
+
+# Two source rows are eligible; the pipeline emits both unless a test drops one.
+PIPELINE = Pipeline(
+    "loss",
+    Topology((Item,), ()),
+    (),
+    (ITEMS,),
+    lambda context: emit(context, ("a", "b")),
+    scope="every eligible row",
+    code_paths=(__file__,),
+)
+
+
+class Writer:
+    """A writer that records whether the export boundary was ever reached."""
+
+    def __init__(self) -> None:
+        self.wrote = False
+
+    def check_environment(self) -> dict[str, object]:
+        return {"exporter": "test", "version": "0", "format": "none"}
+
+    def write(self, context: RunContext, directory: object) -> list[str]:
+        self.wrote = True
+        return []
 
 
 def context(*mappings: MappingEntry, topology: Topology = TOPOLOGY) -> RunContext:
@@ -213,3 +272,64 @@ def test_exclusions_aggregate_counts_and_bound_evidence():
     assert len(finding["evidence_sample"]) == 10
     assert finding["evidence_truncated"] is True
     assert run.source_versions == {("rows", "v1"), ("rows", "v2")}
+
+
+def test_structural_checks_alone_cannot_see_a_dropped_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked"})
+    dropped = replace(PIPELINE, run=lambda context: emit(context, ("a",)))
+    writer = Writer()
+
+    # Reproduce the gap exactly: one retained node, no exclusions, quality complete.
+    report = build.run_pipeline(dropped, tmp_path / "silent", writer=writer)
+    assert writer.wrote and report["state"] == "complete"
+    assert report["graph_objects"] == {"nodes": 1, "edges": 0}
+    assert [f for f in report["findings"] if f.get("kind") == "exclusion"] == []
+    assert report["quality"]["state"] == "complete" and report["quality"]["findings"] == []
+
+    # Nothing structural failed, so the absence of checks is itself the finding.
+    assert report["validation"]["state"] == "absent"
+    assert report["validation"]["checks"] == []
+    assert [f["code"] for f in report["validation"]["findings"]] == ["validation.absent"]
+
+
+def test_audits_record_stage_accounting_without_imposing_arithmetic(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked"})
+
+    def run(context: RunContext) -> None:
+        emit(context, ("a", "b"))
+        # One row read twice, several rows folded into one object, and a join that
+        # could not be attempted: none of these totals relate by a fixed equation.
+        context.record_audit(
+            "read:items",
+            inputs="one row per key, read once for identity and once for values",
+            outputs="one Item per distinct key",
+            selection="Keep every eligible row.",
+            counts={"reads": 4, "distinct_keys": 2, "items": 2},
+            evidence=(Evidence("rows", "v1", "items", "a"),),
+        )
+        context.record_audit(
+            "join:annotations",
+            inputs="one Item per key",
+            outputs="one annotation edge per resolved key",
+            selection="Join only where the reference table supplies an identifier.",
+            counts={"items": 2, "resolved": 0, "unresolvable": 2},
+            notes=("Unresolved keys limit the join; the items themselves are retained.",),
+        )
+
+    report = build.run_pipeline(replace(PIPELINE, run=run), tmp_path / "audit", writer=Writer())
+    stages = {item["stage"]: item for item in report["audits"]}
+    assert set(stages) == {"read:items", "join:annotations"}
+    assert stages["read:items"]["counts"] == {"reads": 4, "distinct_keys": 2, "items": 2}
+    assert stages["read:items"]["evidence_sample"][0]["location"] == "a"
+    assert stages["join:annotations"]["counts"]["unresolvable"] == 2
+    assert report["graph_objects"]["nodes"] == 2, "an unavailable join does not remove a retained record"
+    assert report["loaded_records"] == {}
+
+    context = RunContext(PIPELINE)
+    context.record_audit("s", inputs="i", outputs="o", selection="all", counts={})
+    with pytest.raises(ValueError, match="already recorded"):
+        context.record_audit("s", inputs="i", outputs="o", selection="all", counts={})
+    with pytest.raises(ValueError, match="non-empty selection"):
+        context.record_audit("t", inputs="i", outputs="o", selection=" ", counts={})
+    with pytest.raises(ValueError, match="non-negative integer"):
+        context.record_audit("u", inputs="i", outputs="o", selection="all", counts={"n": -1})

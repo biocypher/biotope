@@ -92,9 +92,6 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     assert software["version"] and len(software["source_digest"]) == 64
     assert software == second["dependencies"]["biotope"]
     assert len(first["findings"]) == 2
-    provenance = [json.loads(line) for line in (root / "graph/build/first/provenance.jsonl").read_text().splitlines()]
-    ada = next(item for item in provenance if item["id"] == "fixture:person:p1")
-    assert len(ada["evidence"]) == 3
     csv_files = list((root / "graph/build/first/biocypher").glob("*.csv"))
     assert csv_files and any("fixture:sample:s1" in path.read_text() for path in csv_files)
     samples_file = next(path for path in csv_files if "Sample" in path.name and "part000" in path.name)
@@ -105,15 +102,24 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
         ("fixture:sample:s1", 3.0),
         ("fixture:sample:s2", 5.0),
     ]
-    assert all("ExampleSample" in row[":LABEL"].split("|") for row in rows)
-    edge_file = root / "graph/build/first/biocypher/ExampleFromPerson-part000.csv"
+    assert all("Sample" in row[":LABEL"].split("|") for row in rows)
+    edge_file = root / "graph/build/first/biocypher/FromPerson-part000.csv"
     with edge_file.open() as stream:
-        assert all(row[-1] == "ExampleFromPerson" for row in csv.reader(stream))
+        assert all(row[-1] == "FromPerson" for row in csv.reader(stream))
     people_file = next(
         path for path in csv_files if "Person" in path.name and "From" not in path.name and "part000" in path.name
     )
+    people_header = next(csv.reader([people_file.with_name(people_file.name.replace("part000", "header")).read_text()]))
     with people_file.open() as stream:
-        assert next(csv.reader(stream))[1] == 'Ada "A"'
+        person = next(csv.DictReader(stream, fieldnames=people_header))
+    assert person["name"] == 'Ada "A"'
+    provenance = json.loads((root / "graph/build/first/provenance.json").read_text())
+    ada = provenance["records"][int(person["biotope_provenance_id:long"])]
+    assert len(ada["evidence"]) == 3
+    assert run(root, "metagraph").returncode == 0
+    viewer = (root / "graph/reports/metagraph.html").read_text()
+    # The viewer travels with the project, so it must name declarations the way the project does.
+    assert "graph/topology/sample/node.py" in viewer and str(root) not in viewer
     raw = root / "raw/samples.csv"
     raw_text = raw.read_text()
     raw.write_text(raw_text.replace("1.5", "bad"))

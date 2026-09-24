@@ -67,7 +67,7 @@ QUERY_CONTEXT = QueryContext(
             capability="samples-per-person",
             language="cypher",
             query=(
-                "MATCH (s:ExampleSample)-[:ExampleFromPerson]->(p:ExamplePerson)\n"
+                "MATCH (s:Sample)-[:FromPerson]->(p:Person)\n"
                 "// one row per person with at least one matched sample\n"
                 "RETURN p.name, count(s) AS samples\n"
                 "ORDER BY samples DESC"

@@ -20,6 +20,7 @@ from biotope.graph.contracts import (
 )
 from biotope.graph.runtime import RunContext
 from biotope.graph.topology import Topology
+from biotope.graph.standardization import Term, source_field
 
 
 __all__ = [
@@ -39,6 +40,8 @@ __all__ = [
     "SourceContract",
     "SourceRecord",
     "Topology",
+    "Term",
+    "source_field",
     "ValidationCheck",
     "ValidationResult",
 ]

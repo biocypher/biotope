@@ -11,7 +11,7 @@ from typing import Any, Callable
 import click
 
 from biotope.commands._graph_output import GraphOutput
-from biotope.graph.artifacts import check_report_destination, save_report
+from biotope.graph.artifacts import check_build_destination, check_report_destination, save_report
 from biotope.graph.check import check_pipeline
 from biotope.graph.reports import CheckFailed, Finding
 from biotope.graph.workspace import select_workspace
@@ -126,26 +126,30 @@ def check(graph_path: Path, as_json: bool) -> None:
 @graph_group.command()
 @workspace_options
 @click.option(
-    "--out", required=True, type=click.Path(path_type=Path), help="New output directory; never overwrite a run."
+    "--out",
+    type=click.Path(path_type=Path),
+    help="Build directory; defaults to <graph>/build and replaces a generated build.",
 )
-def build(graph_path: Path, as_json: bool, out: Path) -> None:
+def build(graph_path: Path, as_json: bool, out: Path | None) -> None:
     """Run loaders, mappings and quality checks, then export through BioCypher."""
     from biotope.graph.build import run_pipeline
 
-    destination = out.absolute()
+    destination = (out if out is not None else graph_path / "build").absolute()
 
     def action(output: GraphOutput, root: Path) -> dict[str, Any]:
-        if destination.exists() or destination.is_symlink():
-            raise ValueError(f"Output directory already exists: {destination}")
+        check_build_destination(destination)
         try:
             with select_workspace(root) as workspace:
                 pipeline = workspace.pipeline()
                 return run_pipeline(pipeline, destination, phase=output.phase, on_finding=output.on_finding)
         except Exception as exc:
-            if hasattr(exc, "report") or destination.exists() or not root.is_dir():
+            if hasattr(exc, "report") or not root.is_dir():
                 raise
-            destination.mkdir(parents=True, exist_ok=False)
-            return save_load_failure("build", root, destination / "run.json", exc)
+            previous = destination.exists()
+            destination.mkdir(parents=True, exist_ok=True)
+            return save_load_failure(
+                "build", root, destination / ("last_failure.json" if previous else "run.json"), exc
+            )
 
     command_report("build", graph_path, as_json, action)
 
@@ -194,7 +198,7 @@ def metagraph(graph_path: Path, as_json: bool, report_path: Path | None, out: Pa
     def action(output: GraphOutput, root: Path) -> dict[str, Any]:
         report = json.loads(report_path.read_text(encoding="utf-8")) if report_path else None
         with select_workspace(root) as workspace:
-            document = describe_metagraph(workspace.topology(), report)
+            document = describe_metagraph(workspace.topology(), report, root=workspace.root.parent)
         if not as_json:
             save_report(destination, render_metagraph(document), "html")
             document["html_path"] = str(destination)

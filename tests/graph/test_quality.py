@@ -174,7 +174,7 @@ def test_quality_executes_once_without_export_and_records_failures(tmp_path, mon
             calls.append("environment")
             return {"exporter": "test", "version": "0", "format": "none"}
 
-        def write(self, context, output, *, query_context):
+        def write(self, context, output):
             calls.append("export")
             return []
 

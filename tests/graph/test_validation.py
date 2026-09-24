@@ -1,4 +1,4 @@
-"""Project checks, stage accounting, and the silent-loss gap they exist to close."""
+"""Retired project validation checks and capability states; removed with the validation API."""
 
 import json
 from collections.abc import Iterator
@@ -121,27 +121,9 @@ class Writer:
     def check_environment(self) -> dict[str, object]:
         return {"exporter": "test", "version": "0", "format": "none"}
 
-    def write(self, context: RunContext, directory: object, *, query_context: dict[str, object]) -> list[str]:
+    def write(self, context: RunContext, directory: object) -> list[str]:
         self.wrote = True
         return []
-
-
-def test_structural_checks_alone_cannot_see_a_dropped_record(tmp_path, monkeypatch):
-    monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked"})
-    dropped = replace(unchecked(PIPELINE), run=lambda context: emit(context, ("a",)))
-    writer = Writer()
-
-    # Reproduce the gap exactly: one retained node, no exclusions, quality complete.
-    report = build.run_pipeline(dropped, tmp_path / "silent", writer=writer)
-    assert writer.wrote and report["state"] == "complete"
-    assert report["graph_objects"] == {"nodes": 1, "edges": 0}
-    assert [f for f in report["findings"] if f.get("kind") == "exclusion"] == []
-    assert report["quality"]["state"] == "complete" and report["quality"]["findings"] == []
-
-    # Nothing structural failed, so the absence of checks is itself the finding.
-    assert report["validation"]["state"] == "absent"
-    assert report["validation"]["checks"] == []
-    assert [f["code"] for f in report["validation"]["findings"]] == ["validation.absent"]
 
 
 def test_declared_check_catches_the_loss_and_blocks_export(tmp_path, monkeypatch):
@@ -209,49 +191,6 @@ def test_unverified_leaves_one_capability_unresolved_and_keeps_the_rest(tmp_path
     assert detail["state"] == "failed" and "check is broken" in detail["detail"]
 
 
-def test_audits_record_stage_accounting_without_imposing_arithmetic(tmp_path, monkeypatch):
-    monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked"})
-
-    def run(context: RunContext) -> None:
-        emit(context, ("a", "b"))
-        # One row read twice, several rows folded into one object, and a join that
-        # could not be attempted: none of these totals relate by a fixed equation.
-        context.record_audit(
-            "read:items",
-            inputs="one row per key, read once for identity and once for values",
-            outputs="one Item per distinct key",
-            selection="Keep every eligible row.",
-            counts={"reads": 4, "distinct_keys": 2, "items": 2},
-            evidence=(Evidence("rows", "v1", "items", "a"),),
-        )
-        context.record_audit(
-            "join:annotations",
-            inputs="one Item per key",
-            outputs="one annotation edge per resolved key",
-            selection="Join only where the reference table supplies an identifier.",
-            counts={"items": 2, "resolved": 0, "unresolvable": 2},
-            notes=("Unresolved keys limit the join; the items themselves are retained.",),
-        )
-
-    report = build.run_pipeline(replace(unchecked(PIPELINE), run=run), tmp_path / "audit", writer=Writer())
-    stages = {item["stage"]: item for item in report["audits"]}
-    assert set(stages) == {"read:items", "join:annotations"}
-    assert stages["read:items"]["counts"] == {"reads": 4, "distinct_keys": 2, "items": 2}
-    assert stages["read:items"]["evidence_sample"][0]["location"] == "a"
-    assert stages["join:annotations"]["counts"]["unresolvable"] == 2
-    assert report["graph_objects"]["nodes"] == 2, "an unavailable join does not remove a retained record"
-    assert report["loaded_records"] == {}
-
-    context = RunContext(PIPELINE)
-    context.record_audit("s", inputs="i", outputs="o", selection="all", counts={})
-    with pytest.raises(ValueError, match="already recorded"):
-        context.record_audit("s", inputs="i", outputs="o", selection="all", counts={})
-    with pytest.raises(ValueError, match="non-empty selection"):
-        context.record_audit("t", inputs="i", outputs="o", selection=" ", counts={})
-    with pytest.raises(ValueError, match="non-negative integer"):
-        context.record_audit("u", inputs="i", outputs="o", selection="all", counts={"n": -1})
-
-
 def test_a_check_cannot_change_the_graph_the_schema_the_provenance_or_the_audits(tmp_path, monkeypatch):
     monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked"})
     audited = replace(PIPELINE, run=lambda context: (emit(context, ("a", "b")), record(context)) and None)
@@ -275,8 +214,7 @@ def test_a_check_cannot_change_the_graph_the_schema_the_provenance_or_the_audits
     assert report["quality"]["measurements"]["population"] == {"test:item": 2}
     assert report["quality"]["measurements"]["properties"]["test:item"]["tags"]["total"] == 2
     assert [item["counts"] for item in report["audits"]] == [{"read": 2, "kept": 2}]
-    assert report["query_context"]["selection"]["audits"][0]["counts"] == {"read": 2, "kept": 2}
-    assert sorted(report["query_context"]["concepts"]["test:item"]["properties"]) == ["tags"]
+    assert "query_context" not in report
 
 
 def test_a_check_that_reaches_past_the_view_fails_the_run(tmp_path, monkeypatch):

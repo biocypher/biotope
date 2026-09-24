@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
 from dataclasses import fields
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
 from biotope.graph.artifacts import HTML_MARKER
@@ -22,7 +24,18 @@ def _label(cls: type) -> str:
     return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name).replace("_", " ")
 
 
-def describe_metagraph(topology: Topology, report: dict[str, Any] | None = None) -> dict[str, Any]:
+def _declared_in(cls: type, root: Path | None) -> str | None:
+    """Locate a declaration inside the project, so the artifact carries no machine path."""
+    source = inspect.getsourcefile(cls)
+    if root is None or source is None:
+        return None
+    relative = Path(os.path.relpath(Path(source).resolve(), root.resolve()))
+    return None if relative.parts and relative.parts[0] == os.pardir else relative.as_posix()
+
+
+def describe_metagraph(
+    topology: Topology, report: dict[str, Any] | None = None, *, root: Path | None = None
+) -> dict[str, Any]:
     """Describe declarations and optionally overlay measurements from a matching run."""
     schema = topology.describe()
     revision = digest(schema)
@@ -62,7 +75,6 @@ def describe_metagraph(topology: Topology, report: dict[str, Any] | None = None)
         # Dataclasses synthesize a signature docstring; it is not an authored description.
         if description.startswith(cls.__name__ + "("):
             description = ""
-        source = inspect.getsourcefile(cls)
         try:
             line = inspect.getsourcelines(cls)[1]
         except (OSError, TypeError):
@@ -73,7 +85,12 @@ def describe_metagraph(topology: Topology, report: dict[str, Any] | None = None)
             "kind": item["kind"],
             "name": cls.__name__,
             "label": _label(cls),
-            "declaration": {"module": cls.__module__, "class": cls.__qualname__, "path": source, "line": line},
+            "declaration": {
+                "module": cls.__module__,
+                "class": cls.__qualname__,
+                "path": _declared_in(cls, root),
+                "line": line,
+            },
             "description": inspect.cleandoc(description),
             "source": item["source"],
             "target": item["target"],
