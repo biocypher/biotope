@@ -1,8 +1,8 @@
 # Typed graph projects
 
 Croissant describes sources; Python defines the graph, its loaders and its
-transformations. Biotope generates source records, checks the definitions and
-exports validated graph objects through BioCypher. Start with the runnable
+transformations. Biotope inventories every described source, checks the definitions
+and exports validated graph objects through BioCypher. Start with the runnable
 [tutorial](tutorial.md) or use this guide to author a project.
 
 ## Create the workspace
@@ -14,43 +14,46 @@ from your project root:
 biotope graph scaffold
 ```
 
-This creates `graph/` with registration modules, path constants, dependencies and
-inactive examples. Adapt them to the project's purpose before running a build.
-Scaffolding works independently of `init` and `add`; it refuses an existing
+This creates `graph/` with empty registries, path constants, dependencies, a
+generated source inventory and a pipeline to complete; its README describes the
+layout. Scaffolding works independently of `init` and `add`; it refuses an existing
 `graph/` directory or symlink.
 
-Keep raw data, purpose files and managed metadata at the project level. Place
-source corrections and graph-specific code under `graph/`. Use `PROJECT_ROOT` and
-`GRAPH_ROOT` from `graph/paths.py` and package-relative imports for portability.
+Keep raw data, purpose files and managed metadata at the project level, and graph
+code under `graph/`. Use `PROJECT_ROOT` and `GRAPH_ROOT` from `graph/paths.py` and
+package-relative imports for portability.
 
-| Artifact                                            | Ownership and purpose                                           |
-| --------------------------------------------------- | --------------------------------------------------------------- |
-| `.biotope/datasets/<manifest>.jsonld`               | Effective source description, reviewed by the project           |
-| `graph/sources/<manifest>/__init__.py`              | Generated `CONTRACTS` inventory                                 |
-| `graph/sources/<manifest>/<record-set>/schema.py`   | Generated record class; regenerate after metadata changes       |
-| `graph/sources/<manifest>/<record-set>/__init__.py` | Authored `SOURCE` registration, created when absent             |
-| `graph/sources/<manifest>/<record-set>/loader.py`   | Authored physical reader, created as a stub when absent         |
-| `graph/sources/__init__.py`                         | Authored `SOURCES` selection                                    |
-| `graph/topology/`                                   | Node and relation dataclasses, collected in `TOPOLOGY`          |
-| `graph/mappings/`                                   | Typed transformations, collected in `MAPPINGS`                  |
-| `graph/pipelines/build_graph.py`                    | The active `PIPELINE`: selection, joins, policies and execution |
-| `graph/query_context.py`, `graph/checks.py`         | Interpretation guidance and declared validation checks          |
-| `graph/build/<run>/`, `graph/reports/`              | Derived output and assessments                                  |
+| Artifact                                        | Ownership and purpose                                           |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| `.biotope/datasets/<manifest>.jsonld`           | Effective source description, reviewed by the project           |
+| `.biotope/contracts/`                           | Recorded contract revisions, written by `source generate`       |
+| `graph/standardization.py`                      | Shared terms that fields of several sources bind to             |
+| `graph/sources/<manifest>/__init__.py`          | Generated root collecting that manifest's packages              |
+| `graph/sources/<manifest>/<source>/schema.py`   | Record class and field bindings; scaffolded once, then authored |
+| `graph/sources/<manifest>/<source>/__init__.py` | `SOURCE` registration, created when absent                      |
+| `graph/sources/<manifest>/<source>/loader.py`   | Authored physical reader, created as a placeholder when absent  |
+| `graph/sources/inventory.py`                    | Generated `INVENTORY` of every source package                   |
+| `graph/sources/__init__.py`                     | Authored `SOURCES` selection and reasoned `EXCLUDED_SOURCES`    |
+| `graph/alignment/`                              | Cross-source identity resolution, run before mappings           |
+| `graph/topology/<concept>/`                     | Node and relation dataclasses, collected in `TOPOLOGY`          |
+| `graph/mappings/<concept>/`                     | Typed transformations, collected in `MAPPINGS`                  |
+| `graph/pipelines/`                              | `compose.py` stage sequence; `build_graph.py` `PIPELINE`        |
+| `graph/build/`, `graph/metagraph.html`          | The current build and topology viewer; derived output           |
 
-For earlier YAML projects, see [migration to 0.9](migration.md).
+For earlier projects, see [migration](migration.md).
 
-## Review and generate source records
+## Describe and inventory the sources
 
 Use `biotope add <path>` to describe selected local data, then
 `biotope map inspect <manifest>` to review the resulting metadata. These operations
 have different access requirements: baking reads source bytes; inspection reads
 metadata only.
 
-Write evidence-based corrections in a separate Croissant file and register the
-complete description:
+Write evidence-based corrections in a separate Croissant file under
+`.biotope/reviews/` and register the complete description:
 
 ```bash
-biotope source register graph/metadata/study.jsonld --name study \
+biotope source register .biotope/reviews/study.jsonld --name study \
   --reason "Reviewed source headers and field types"
 biotope source generate .biotope/datasets/study.jsonld --out graph/sources
 ```
@@ -63,9 +66,9 @@ Curated or annotated manifests are protected from `add --rebake` and `add --forc
 To refresh one, bake separately and review the differences:
 
 ```bash
-biotope add raw/study --bake-to graph/metadata/study-fresh.jsonld
+biotope add raw/study --bake-to .biotope/reviews/study-fresh.jsonld
 # Reconcile this file with the existing curated description before registering it.
-biotope source register graph/metadata/study-fresh.jsonld --name study \
+biotope source register .biotope/reviews/study-fresh.jsonld --name study \
   --reason "Reconciled new data with reviewed metadata" --replace
 ```
 
@@ -74,18 +77,47 @@ Here `study` must be the name of the managed description being replaced.
 `.biotope/datasets/`. It does not update tracking. Source locations in the fresh
 description retain their original data root.
 
-Generation creates one package per top-level record set. Each schema contains a
-record dataclass, its `RECORDS` tuple and `SourceRow` alias. It creates missing
-loaders and registrations, preserves existing authored files, and updates the
-manifest's `CONTRACTS` inventory. Select the contracts used by the pipeline in
-`SOURCES`; generation does not select them for you.
+Baker leaves files it cannot parse, such as papers and notes, unclaimed. Add a
+`FileObject` with a stable `@id`, its `contentUrl` and `sha256` for each such file
+the graph may read; it then becomes a source like any table.
 
-Known scalar, nested and repeated types become Python declarations. Fields are
-nullable unless curated metadata asserts otherwise. Unknown types and arrays
-remain opaque and need further interpretation before loading. Use
-`biotope source generate <manifest> --out graph/sources --check` to check freshness.
+Generation gives every top-level record set, and every file that no record set
+reads, its own package. It creates missing files only and never rewrites an
+existing schema, registration or loader. The generated inventory collects every
+package; in `graph/sources/__init__.py`, select each source or list it in
+`EXCLUDED_SOURCES` with a reason. `biotope graph check` reports a source that is
+neither, a selected placeholder loader and a described input without a package.
 See [generation details](mapping_sidenotes.md#source-generation) for naming,
-nullability, digests and removed record sets.
+ownership, conflicts and removed sources.
+
+Each schema starts from the description: known scalar, nested and repeated types
+become Python declarations, fields are nullable unless curated metadata asserts
+otherwise, and unknown types and arrays stay opaque. The schema is then yours to
+edit. Bind each Croissant field once with `source_field`, declare source-local
+missing-value tokens and aliases, and bind fields to shared terms from
+`standardization.py` only where sources share a meaning:
+
+```python
+@dataclass(frozen=True, kw_only=True)
+class Samples:
+    __record_set__: ClassVar[str] = "samples"
+    __source_digest__: ClassVar[str] = "232b7860…"
+    __missing_values__: ClassVar[frozenset[str]] = frozenset({"", "na"})
+
+    sample_id: str                                  # binds samples/sample_id
+    score: float = source_field("raw_score", term=SCORE)
+    tissue: str | None = source_field(None, default=None)  # not supplied here
+```
+
+### Review source drift
+
+`__source_digest__` records the contract revision you reviewed. When the
+description changes, `biotope graph check` reports `source.drift` for each affected
+schema, with a field-level summary and every JSON-pointer difference against the
+recorded revision. Review the change against the schema and loader, update them,
+then set `__source_digest__` to the revision the finding names. Unaffected sources
+stay current. `biotope source generate` records each revision it sees; `--check`
+writes nothing.
 
 ## Define topology and identity
 
@@ -112,9 +144,10 @@ accidental endpoint swaps; they do not establish uniqueness or shared biological
 identity. Runtime checks reject conflicting objects with the same ID and resolve
 edges against the declared endpoint types.
 
-Concept docstrings and property descriptions appear in the exported query context.
-Optional `display_name: ClassVar[str]` values provide short diagram labels without
-changing concept IDs. The `biotope:` namespace is reserved for system metadata.
+Concept docstrings and property descriptions are exported in `schema_config.yaml`,
+and `graph check` warns about concepts and properties without one. Optional
+`display_name: ClassVar[str]` values provide short diagram labels without changing
+concept IDs. The `biotope:` namespace is reserved for system metadata.
 
 Graph properties support strings, booleans, integers, finite floats, nullable
 scalars and string lists. Lists cannot contain nulls or the export separator `|`.
@@ -126,14 +159,16 @@ A loader returns `Iterable[SourceRecord[Row]]`. Each record carries a typed valu
 and `Evidence(artifact, version, record_set, location)`. Use a checksum or known
 release version where available; label unverified fingerprints honestly.
 
-Read and decode files inside loader functions using established libraries.
-Source validation performs no coercion, so loaders must handle missing tokens,
-number parsing and source-specific representations. Include the source location
-in decoding errors.
+Read and decode files inside loader functions using established libraries, and
+delete the placeholder's `# biotope:placeholder` first line once the loader is
+implemented. Source validation performs no coercion, so loaders must handle missing
+tokens, number parsing and source-specific representations. Loaders preserve rows:
+they do not filter, impute or deduplicate. Include the source location in decoding
+errors.
 
 Mapping parameters are named `SourceRecord[...]` values, accessed through `.value`.
 The return annotation declares the output dataclasses. `Mapping(name=..., function=...)` registers the function, with optional requirements and evidence.
-See `graph/mappings/_example.py` in the scaffold for an implementation.
+The [tutorial](tutorial.md) project shows a complete implementation.
 
 A mapping can return topology objects directly. Introduce an intermediate
 dataclass when sources need a shared normalized shape, a stage requires buffering,
@@ -153,49 +188,39 @@ join keys, cardinality, unmatched policy and output grain. Account for omitted
 records through exclusions or audits. Every graph object enters through a
 registered mapping; there is no direct emission API.
 
-Register `SOURCES`, `TOPOLOGY` and `MAPPINGS`, then complete the `Pipeline` in
-`pipelines/build_graph.py`. Include source selection, scope, settings, code paths
-and execution. Bind purpose requirements with `entity:<exact intent text>` or
+Resolve cross-source identity in `graph/alignment/` before any mapping admits a
+record: gather every source's identifiers first, so the result does not depend on
+read order, and keep each resolution's contributing rows as evidence. Write the
+stage sequence in `pipelines/compose.py`, then complete the `Pipeline` in
+`pipelines/build_graph.py` with scope, policies, settings and code paths; the
+scaffold already wires `SOURCES`, `INVENTORY`, `EXCLUDED_SOURCES` and `TERMS`. Bind purpose requirements with `entity:<exact intent text>` or
 `relation:<exact intent text>` keys, or record a reason in `deferrals`.
 
 Imports must contain declarations only. Source access and execution belong inside
 explicitly called functions. Biotope imports project Python; this is an authoring
 contract, not an execution sandbox.
 
-## State what the graph can answer
+## Describe what the graph means
 
-Declare a `QueryContext` in `graph/query_context.py` with:
+The consumer receives the graph and `graph/build/`, not the project. Interpretation
+therefore travels in three places: concept and property descriptions in
+`schema_config.yaml`, the pipeline's `scope`, and its `policies`, one per exclusion
+reported through `context.exclude(...)`. State in them what each value measures,
+against which reference, when identifiers can be joined, and what the selection
+left out. Record open scientific questions in `graph/ASSUMPTIONS.md`.
 
-- `Interpretation` rules for selection, statistics, identity, qualifiers and uncertainty;
-- `Capability` entries naming supported question families and their limits;
-- `QueryExample` entries when a concrete query helps consumers.
+Separate selection from query filters. A graph filtered to `strict_p < 0.05` can
+describe measurements that passed that selection. It cannot identify all
+measurements passing another adjustment merely because the retained rows also
+contain an `open_p` column. If two readings need different populations, admit
+their union and let the query choose.
 
-Interpretations reference a concept ID or `<concept ID>.<property>`. Alternatives
-must also refer to concepts or properties present in the graph. If another reading
-requires excluded rows, state it as a capability limitation.
-
-For example, a graph filtered to `strict_p < 0.05` can describe measurements that
-passed that selection. It cannot identify all measurements passing another
-adjustment merely because the retained rows also contain an `open_p` column.
-
-Declare `ValidationCheck` functions in `graph/checks.py` to compare claims with
-independent expectations from sources, published results or curated answers. Each
-receives a `GraphView` and recorded audits, and returns a `ValidationResult`:
-
-| Result         | Effect                                        |
-| -------------- | --------------------------------------------- |
-| `ok(...)`      | The declared check passed.                    |
-| `wrong(...)`   | Validation fails and export is blocked.       |
-| `unknown(...)` | The associated capability remains unresolved. |
-
-A check that raises fails the run. With no declared checks, validation is reported
-as `absent`. A capability is `supported` only in the sense that its bound checks
-passed. Include missing and unexpected records when comparing expected IDs with
-observed IDs; use the same declared namespace in both sets.
-
-Definition checks assess declarations. Built-in integrity and quality checks
-assess emitted objects. Source-derived expectations are needed to detect records
-that should have been emitted but were omitted.
+Biotope checks structure, not science. Definition checks assess declarations;
+integrity and quality checks assess emitted objects. None of them can see a record
+that should have been emitted but was not. Before relying on a claim, compare the
+graph with expectations read independently from the sources or a published
+result, never from the pipeline's own selection, and compare missing and
+unexpected records by namespaced ID.
 
 ## Check, execute and review
 
@@ -204,24 +229,25 @@ Run from the project root:
 ```bash
 biotope graph check
 biotope graph metagraph
-biotope graph build --out graph/build/review-1
+biotope graph build
 ```
 
-`graph check` checks definitions, source freshness, bindings and Python types
-without invoking loaders. `graph metagraph` imports topology independently and
-writes an offline viewer. `graph build` checks and executes the pipeline once,
-validates the graph and writes a new output directory.
+`graph check` checks the source inventory, drift, definitions, bindings and Python
+types without invoking loaders. `graph metagraph` imports topology independently
+and writes `graph/metagraph.html`. `graph build` checks and executes the pipeline
+once, validates the graph and replaces `graph/build/` after success; a failed
+rebuild keeps the previous build and writes `graph/build/last_failure.json`.
 
-Use `biotope graph quality` when you want to execute and assess without exporting.
-Running quality and build separately executes the pipeline twice. Counts,
-connectivity and missing-property observations are advisory; execution, integrity
-and declared validation failures can block a build.
+Use `biotope graph quality` when you want to execute and assess without exporting;
+it prints the assessment. Running quality and build separately executes the
+pipeline twice. Counts, connectivity and missing-property observations are
+advisory; definition, execution and integrity failures block a build.
 
-Review `run.json`, `provenance.jsonl`, `query_context.json` and exported values.
-`topology.json` maps concept IDs to export labels, such as `example:sample` to
-`ExampleSample` in Biotope 0.9. Query guidance also appears under the exported
-`BiotopeQueryContext` system label, outside domain population counts.
+Review `run.json`, `schema_config.yaml`, `provenance.json` and exported values.
+Export labels are the concept's local name, such as `Sample` for `example:sample`,
+widened only when two concepts collide. Every exported object carries
+`biotope_provenance_id`, an index into `provenance.json`.
 
-Use `biotope graph metagraph --report graph/build/review-1/run.json` to add build
+Use `biotope graph metagraph --report graph/build/run.json` to add build
 observations to the viewer. See [technical notes](mapping_sidenotes.md) for report
 limits, source attribution, reproducibility and export formats.

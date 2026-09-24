@@ -1,6 +1,6 @@
 # Installation
 
-Biotope 0.9 supports Python **3.10–3.12**. The `graph` extra installs BioCypher
+Biotope 0.10 supports Python **3.10–3.12**. The `graph` extra installs BioCypher
 and Pyright for typed graph checking and export. The base package supports the
 metadata workflow without those graph dependencies.
 
@@ -11,7 +11,7 @@ and a POSIX shell on Linux or macOS:
 
 ```bash
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python 'biotope[graph]>=0.9,<0.10'
+uv pip install --python .venv/bin/python 'biotope[graph]>=0.10,<0.11'
 source .venv/bin/activate
 biotope --version
 ```
@@ -35,7 +35,7 @@ environment without network access.
 Add Biotope to the project's dependencies and run commands through its environment:
 
 ```bash
-uv add 'biotope[graph]>=0.9,<0.10'
+uv add 'biotope[graph]>=0.10,<0.11'
 uv run biotope --version
 ```
 
@@ -49,7 +49,7 @@ With Python 3.10–3.12 selected:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install 'biotope[graph]>=0.9,<0.10'
+python -m pip install 'biotope[graph]>=0.10,<0.11'
 ```
 
 On Windows, activate with `.venv\Scripts\Activate.ps1` in PowerShell and use

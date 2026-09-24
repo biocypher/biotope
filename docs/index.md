@@ -14,9 +14,9 @@ Biotope checks the definitions and exports BioCypher files with provenance.
 ## Workflow
 
 ```text
-Local data → Croissant metadata → Review → Generated source records
+Local data → Croissant metadata → Review → Source inventory
                                                 ↓
-                           Python loaders, topology and mappings
+                  Python schemas, loaders, topology and mappings
                                                 ↓
                               Check → Build → Review graph output
 ```
@@ -25,14 +25,15 @@ Local data → Croissant metadata → Review → Generated source records
 metadata before generating source classes: a successful scan does not establish
 that every field or file was described completely.
 
-`biotope graph scaffold` creates a workspace with examples to adapt. Project
-Python code then loads selected data, transforms typed records and constructs the
-graph. `biotope graph check` checks declarations and types; `biotope graph build`
+`biotope graph scaffold` creates a workspace, and `biotope source generate` gives
+every described input a source package with a schema to edit. Project Python code
+then loads selected data, transforms typed records and constructs the graph. `biotope graph check` checks declarations and types; `biotope graph build`
 executes the pipeline, validates its objects and writes the export.
 
-A build includes source references, exclusions, declared validation checks and
-interpretation guidance. Use these to assess whether the graph supports its
-intended questions. Structural checks alone cannot establish scientific validity.
+A build records source references, exclusions and the concept and property
+descriptions that interpret the graph. Use these to assess whether the graph
+supports its intended questions. Structural checks alone cannot establish
+scientific validity: review the graph against the sources themselves.
 
 ## Reference
 
@@ -40,8 +41,8 @@ intended questions. Structural checks alone cannot establish scientific validity
 - [Architecture](architecture.md)
 - [Technical notes for typed graphs](mapping_sidenotes.md)
 - [Shared annotation policies](cluster-compliance.md)
-- [Migrating to 0.9](migration.md)
+- [Migrating to 0.10](migration.md)
 
-Biotope 0.9 supports Python 3.10–3.12. APIs may change while the project is under
+Biotope 0.10 supports Python 3.10–3.12. APIs may change while the project is under
 active development. Source code and issue reporting are on
 [GitHub](https://github.com/biocypher/biotope).

@@ -30,14 +30,19 @@ useful for scripts and for reviewing scan coverage without terminal formatting.
 
 ## Graph reports
 
-Graph commands accept `--json` and emit one document with `schema_version: 1`
-and an operation-specific `report_kind`. Diagnostics and incidental project
-output go to stderr. Operational failures also produce a report; argument errors
-can occur before reporting starts and use the CLI's normal stderr output.
+Graph commands accept `--json` and emit one document with an operation-specific
+`report_kind`. Check, quality and build reports have `schema_version: 2`, which
+dropped the validation and query-context keys; `--report` and build replacement
+still accept version 1. Diagnostics and incidental project output go to stderr.
+Operational failures also produce a report; argument errors can occur before
+reporting starts and use the CLI's normal stderr output.
 
-Quality saves its latest assessment in `<graph>/reports/quality.json`, including
-failed assessments. Build includes the assessment in `<run>/run.json`. Metagraph
-JSON writes no HTML and cannot be combined with `--out`.
+Every finding has a stable `code`, a `severity`, a `subject`, a `message` and an
+optional `location`. A `source.drift` finding lists every JSON-pointer difference
+in its `examples`. Quality prints its assessment and writes no file. Build records
+the assessment in `graph/build/run.json`; a failed rebuild writes
+`graph/build/last_failure.json` and keeps the previous build. Metagraph JSON writes
+no HTML and cannot be combined with `--out`.
 
 See [typed graph technical notes](mapping_sidenotes.md) for measurement limits,
 provenance and export artifacts.

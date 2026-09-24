@@ -17,5 +17,5 @@ nav:
   - Annotation policies:
       - Configuration: cluster-compliance.md
       - Administration examples: cluster-compliance_sidenotes.md
-  - Migration to 0.9: migration.md
+  - Migration to 0.10: migration.md
   - Development ideas: ideas.md
