@@ -50,7 +50,7 @@ Keep these entries. Generation gives each one a document package whose `Facts` s
 
 Add a FileObject by hand only for a file that no scan covered, in a draft registered as above. Give it a stable `@id`, its `contentUrl` relative to the project root (as in the entries `biotope add` appends; Baker's own entries are relative to the directory it scanned), `encodingFormat` and `sha256`.
 
-`biotope add` registers byte-identical files once, under the first path in sorted order, whether Baker parses them or not, and names each copy it skipped. Members of one FileSet, such as identical images in a collection, all stay.
+`biotope add` registers byte-identical files once, under the first path in sorted order, and names each copy it skipped. Baker never parses a copy, and a FileSet whose pattern covers one lists it under `excludes`. Baker matches exclusions by path suffix, so a distinct file whose path ends with a copy's path, such as `x/b/t.csv` for the copy `b/t.csv`, is not parsed either. `biotope add` warns about it and still appends its FileObject; describe its records as for a structured file Baker cannot parse.
 
 Whether a file can be ingested and whether it should be read are separate questions. A described file that the graph does not need is excluded with a reason in `graph/sources/__init__.py`, not removed from the manifest.
 

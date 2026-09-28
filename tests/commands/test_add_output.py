@@ -92,7 +92,7 @@ def test_scan_layout_wraps_long_paths_and_keeps_grouped_members():
         progress.attach(SimpleNamespace(scan_report=ScanReport([entry])))
         progress(1, 3, failed)
         assert "Invalid Parquet footer." in stream.getvalue()  # Visible before assembly finishes.
-        progress.finish(scan)
+        progress.finish(scan, {})
     rendered = stream.getvalue()
     assert "association_overall_direct/ (2 Parquet files)" in rendered
     assert "FAIL   other/" in rendered

@@ -258,11 +258,11 @@ def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
     assert not is_file_tracked(project_root / "elsewhere.txt", project_root)
 
 
-def _write_png(path: Path) -> None:
+def _write_png(path: Path, colour: str = "black") -> None:
     """A 1x1 PNG, so the image handler claims it and emits a FileSet."""
     from PIL import Image
 
-    Image.new("RGB", (1, 1)).save(path)
+    Image.new("RGB", (1, 1), colour).save(path)
 
 
 def test_glob_covered_files_keep_their_checksum(tmp_path):
@@ -275,8 +275,8 @@ def test_glob_covered_files_keep_their_checksum(tmp_path):
     data_dir = project_root / "data" / "images"
     (project_root / ".biotope" / "datasets").mkdir(parents=True)
     data_dir.mkdir(parents=True)
-    for name in ("a.png", "b.png"):
-        _write_png(data_dir / name)
+    for name, colour in (("a.png", "black"), ("b.png", "white")):
+        _write_png(data_dir / name, colour)
 
     metadata_dict, _ = _bake_directory(data_dir, project_root, {})
 
@@ -318,7 +318,7 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     assert payload["record_sets"]
 
 
-def test_byte_identical_files_are_registered_once(tmp_path, capsys):
+def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, capsys):
     project_root = tmp_path / "project"
     data_dir = project_root / "data"
     (project_root / ".biotope" / "datasets").mkdir(parents=True)
@@ -326,24 +326,32 @@ def test_byte_identical_files_are_registered_once(tmp_path, capsys):
         (data_dir / folder).mkdir(parents=True)
         (data_dir / folder / "codes.txt").write_text("code\tlabel\n")
         (data_dir / folder / "table.csv").write_text("id,value\n1,x\n2,y\n")
+        _write_png(data_dir / folder / "pixel.png")
+    (data_dir / "x/b").mkdir(parents=True)
+    (data_dir / "x/b/table.csv").write_text("id,value\n3,z\n")
 
-    reporter = AddOutput(as_json=True)
+    reporter = AddOutput()
     metadata_dict, _ = _bake_directory(data_dir, project_root, {}, reporter=reporter)
 
-    [table, codes] = metadata_dict["distribution"]
-    assert (table["contentUrl"], codes["contentUrl"]) == ("a/table.csv", "data/a/codes.txt")
-    [record_set] = metadata_dict["recordSet"]
-    assert {field["source"]["fileObject"]["@id"] for field in record_set["field"]} == {table["@id"]}
-    assert reporter.sources[-1]["duplicates"] == [
-        {"path": "data/b/table.csv", "duplicate_of": "data/a/table.csv"},
-        {"path": "data/b/codes.txt", "duplicate_of": "data/a/codes.txt"},
+    [source] = reporter.sources
+    assert source["duplicates"] == [
+        {"path": f"data/b/{name}", "duplicate_of": f"data/a/{name}"} for name in ("codes.txt", "pixel.png", "table.csv")
     ]
-    plan = generate_source_packages(project_root / ".biotope/datasets/data.jsonld", project_root / "graph/sources")
-    assert len(plan.statuses) == 2
+    assert sorted(file["path"] for file in source["scan"]["files"]) == ["a/codes.txt", "a/pixel.png", "a/table.csv"]
+    [diagnostic] = source["diagnostics"]
+    assert diagnostic["message"].startswith("x/b/table.csv was not parsed")
+    urls = {item["@type"]: [] for item in metadata_dict["distribution"]}
+    for item in metadata_dict["distribution"]:
+        urls[item["@type"]].append(item.get("contentUrl") or item.get("excludes"))
+    assert sorted(urls["cr:FileObject"]) == ["a/pixel.png", "a/table.csv", "data/a/codes.txt", "data/x/b/table.csv"]
+    assert urls["cr:FileSet"] == [["b/pixel.png"]]
+    generate_source_packages(project_root / ".biotope/datasets/data.jsonld", project_root / "graph/sources")
 
-    _bake_directory(data_dir, project_root, {}, output=tmp_path / "review.jsonld")
     text = " ".join(capsys.readouterr().err.split())
-    assert "SKIP data/b/codes.txt Identical to data/a/codes.txt" in text
+    assert "SKIP b/table.csv Identical to a/table.csv; registered once" in text
+    assert "OK b/" not in text
+    assert "3 scanned · 2 described · 1 not described · 3 identical · 1 diagnostic" in text
+    assert text.index("Identical to a/table.csv") < text.index("3 scanned")
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")

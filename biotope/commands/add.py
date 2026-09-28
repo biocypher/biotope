@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
+from collections import defaultdict
 from datetime import datetime, timezone
 from glob import escape as escape_glob
 from pathlib import Path
@@ -29,6 +30,7 @@ from biotope.metadata import (
     set_status,
 )
 from biotope.utils import (
+    calculate_file_checksum,
     find_biotope_root,
     is_file_tracked,
     load_project_metadata,
@@ -305,7 +307,7 @@ def _enrich_with_baker(metadata: dict[str, Any], file_path: Path, *, reporter: A
             for key, value in baked.items():
                 if key not in {"name", "description", "dateCreated"}:
                     metadata[key] = value
-        report.finish(generator.scan_report.to_dict())
+        report.finish(generator.scan_report.to_dict(), {})
     if bake_error is not None:
         if str(bake_error) != "No supported files found in the dataset":
             report.result.update(status="failed", error=str(bake_error))
@@ -454,8 +456,19 @@ def _bake_directory(
     defaults = load_project_metadata(biotope_root)
     now = datetime.now(tz=timezone.utc).isoformat()
 
+    files = sorted(_iter_directory_files(abs_dir))
+    copies = _identical_copies(files)
+    excluded = {escape_glob(str(copy.relative_to(abs_dir))): copy for copy in copies}
     bake_error = None
     with reporter.scan(abs_dir, abs_dir) as report:
+        for relative in (path.relative_to(abs_dir) for path in files if path not in copies):
+            caught = next((copy for pattern, copy in excluded.items() if relative.match(pattern)), None)
+            if caught is not None:
+                reporter.warning(
+                    abs_dir,
+                    f"{relative} was not parsed: croissant-baker matches exclusions by path suffix, "
+                    f"so skipping the identical copy {caught.relative_to(abs_dir)} also skipped it",
+                )
         try:
             from croissant_baker.metadata_generator import MetadataGenerator
         except ImportError as exc:
@@ -479,6 +492,7 @@ def _bake_directory(
                 "**/.biotope/**",
                 ".git/**",
                 "**/.git/**",
+                *excluded,
             ],
             rai_fields=overrides.get("rai_fields") or None,
         )
@@ -488,7 +502,7 @@ def _bake_directory(
             metadata_dict = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
         except ValueError as exc:
             bake_error = exc
-        report.finish(generator.scan_report.to_dict())
+        report.finish(generator.scan_report.to_dict(), copies)
 
     if bake_error is not None:
         if str(bake_error) != "No supported files found in the dataset":
@@ -499,14 +513,12 @@ def _bake_directory(
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
-    _register_distinct_files(metadata_dict, abs_dir, biotope_root, reporter)
+    _register_distinct_files(metadata_dict, abs_dir, biotope_root, files, copies)
     _apply_pipeline_state(metadata_dict, overrides)
 
     write_text_atomic(output or target.metadata_path, json.dumps(metadata_dict, indent=2, default=str) + "\n")
     reporter.saved(output or target.metadata_path, metadata_dict)
-
-    n_source_files = sum(1 for _ in _iter_directory_files(abs_dir))
-    return metadata_dict, n_source_files
+    return metadata_dict, len(files)
 
 
 def _build_minimal_directory_metadata(
@@ -529,64 +541,54 @@ def _build_minimal_directory_metadata(
     return metadata
 
 
+def _identical_copies(files: list[Path]) -> dict[Path, Path]:
+    """Map each file whose bytes repeat a file earlier in ``files`` to that file."""
+    by_size: dict[int, list[Path]] = defaultdict(list)
+    for file_path in files:
+        by_size[file_path.stat().st_size].append(file_path)
+    copies: dict[Path, Path] = {}
+    for paths in by_size.values():
+        originals: dict[str, Path] = {}
+        for file_path in paths if len(paths) > 1 else ():
+            original = originals.setdefault(calculate_file_checksum(file_path), file_path)
+            if original != file_path:
+                copies[file_path] = original
+    return copies
+
+
+def _patterns(value: str | list[str] | None) -> list[str]:
+    return [value] if isinstance(value, str) else list(value or [])
+
+
 def _register_distinct_files(
     metadata_dict: dict[str, Any],
     abs_dir: Path,
     biotope_root: Path,
-    reporter: AddOutput,
+    files: list[Path],
+    copies: dict[Path, Path],
 ) -> None:
-    """Keep one file pointer per distinct content, and add pointers for files croissant-baker left out.
-
-    A file a FileSet covers is a member of its collection, so it stays even when another member is identical.
-    """
+    """Add file pointers for distinct files croissant-baker left out, and keep identical copies out of FileSets."""
     distributions = metadata_dict.setdefault("distribution", [])
-    in_file_sets = {
-        candidate.resolve()
-        for item in distributions
-        if item.get("@type") == "cr:FileSet"
-        for pattern in ([item["includes"]] if isinstance(item.get("includes"), str) else item.get("includes") or [])
-        for candidate in abs_dir.glob(pattern)
-        if candidate.is_file()
-    }
-    baked = [
-        (path.resolve(), item)
-        for item in distributions
-        if item.get("@type") == FILE_OBJECT_TYPE
-        and item.get("contentUrl")
-        and (path := resolve_content_url(item["contentUrl"], abs_dir, biotope_root))
-        and path.is_file()
-    ]
-    baked.sort(key=lambda pair: pair[0])
-    registered: dict[str, Path] = {}
-    skipped: set[str] = set()
-    for path, item in baked:
-        if path in in_file_sets or not item.get("sha256"):
-            continue
-        original = registered.setdefault(item["sha256"], path)
-        if original != path:
-            skipped.add(item["@id"])
-            reporter.duplicate(path, original)
-    if skipped:
-        distributions[:] = [item for item in distributions if item.get("@id") not in skipped]
-        metadata_dict["recordSet"] = [
-            record_set
-            for record_set in metadata_dict.get("recordSet", [])
-            if not any(
-                field.get("source", {}).get("fileObject", {}).get("@id") in skipped
-                for field in record_set.get("field", [])
-            )
-        ]
-
-    covered = in_file_sets | {path for path, _ in baked}
-    for file_path in sorted(_iter_directory_files(abs_dir)):
-        if file_path.resolve() in covered:
-            continue
-        file_object = make_file_object(file_path, biotope_root)
-        original = registered.setdefault(file_object["sha256"], file_path)
-        if original == file_path:
-            distributions.append(file_object)
-        else:
-            reporter.duplicate(file_path, original)
+    covered: set[Path] = set()
+    for item in distributions:
+        if item.get("@type") == FILE_OBJECT_TYPE and item.get("contentUrl"):
+            path = resolve_content_url(item["contentUrl"], abs_dir, biotope_root)
+            if path is not None and path.is_file():
+                covered.add(path.resolve())
+        elif item.get("@type") == "cr:FileSet":
+            members = {
+                candidate
+                for pattern in _patterns(item.get("includes"))
+                for candidate in abs_dir.glob(pattern)
+                if candidate.is_file()
+            }
+            covered.update(member.resolve() for member in members)
+            skipped = sorted(escape_glob(str(member.relative_to(abs_dir))) for member in members if member in copies)
+            if skipped:
+                item["excludes"] = [*_patterns(item.get("excludes")), *skipped]
+    for file_path in files:
+        if file_path not in copies and file_path.resolve() not in covered:
+            distributions.append(make_file_object(file_path, biotope_root))
 
 
 def _iter_directory_files(abs_dir: Path):
