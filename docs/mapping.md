@@ -163,8 +163,9 @@ release version where available; label unverified fingerprints honestly.
 
 Read and decode files inside loader functions using established libraries, and
 delete the placeholder's `# biotope:placeholder` first line once the loader is
-implemented. Source validation performs no coercion, so loaders must handle missing
-tokens, number parsing and source-specific representations. Loaders preserve rows:
+implemented. Source validation performs no coercion and applies no declared alias
+or missing-value token, so loaders must handle missing tokens, aliases, number
+parsing and source-specific representations. Loaders preserve rows:
 they do not filter, impute or deduplicate. Include the source location in decoding
 errors.
 
