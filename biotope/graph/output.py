@@ -34,6 +34,8 @@ EXPORT_FORMATS = {
 # neo4j-admin's own default separator inside a string list.
 ARRAY_DELIMITER = ";"
 
+NEO4J_DEFAULT_READ_BUFFER = 4 * 2**20
+
 
 def supported_specifier() -> str:
     """Render the tested range as a requirement specifier."""
@@ -89,11 +91,24 @@ def export_labels(concepts: Iterable[str]) -> dict[str, str]:
     return labels
 
 
-def _relocate_import_scripts(directory: Path) -> None:
-    """Resolve the import scripts' paths from the script's own location, so a published or moved build still imports."""
+def _read_buffer(directory: Path) -> str | None:
+    longest = 0
+    for table in directory.glob("*.csv"):
+        with table.open("rb") as stream:
+            longest = max(longest, max(map(len, stream), default=0))
+    if longest < NEO4J_DEFAULT_READ_BUFFER:
+        return None
+    return f"{(1 << longest.bit_length()) >> 20}m"
+
+
+def _rewrite_import_scripts(directory: Path) -> None:
+    """Resolve paths from the script's own location, so a moved build still imports, and fit the longest line."""
+    read_buffer = _read_buffer(directory)
     for script in directory.glob("*.sh"):
         first, separator, rest = script.read_text(encoding="utf-8").partition("\n")
         rest = rest.replace(str(directory.resolve()), "${BIOCYPHER_IMPORT_DIR}")
+        if read_buffer:
+            rest = rest.replace(" --delimiter=", f" --read-buffer-size={read_buffer} --delimiter=")
         locate = 'BIOCYPHER_IMPORT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n'
         write_text_atomic(script, first + separator + locate + rest)
 
@@ -249,7 +264,7 @@ class BioCypherWriter:
         ):
             raise ValueError("BioCypher edge export failed")
         writer.write_import_call()
-        _relocate_import_scripts(directory / "biocypher")
+        _rewrite_import_scripts(directory / "biocypher")
         unexpected = sorted(
             str(path.relative_to(directory))
             for path in (directory / "biocypher").rglob("*")

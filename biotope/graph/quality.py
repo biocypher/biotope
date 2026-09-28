@@ -15,6 +15,8 @@ from biotope.graph.topology import concept_id
 
 __all__ = ["CHECKS", "GraphStores", "analyze_quality"]
 
+OVERSIZED = 2**20
+
 
 def _records(view: GraphStores) -> Iterator[tuple[str, GraphRecord]]:
     yield from view.nodes.items()
@@ -75,6 +77,7 @@ def properties(view: GraphStores, report: QualityReport) -> None:
     # These lists borrow at most three existing values per property; reports contain bounded copies.
     seen: dict[tuple[str, str], list[object]] = {}
     examples: dict[str, list[dict[str, object]]] = {}
+    oversized: dict[tuple[str, str], list[int]] = {}
     for identity, row in _records(view):
         concept = concept_id(type(row.value))
         samples = examples.setdefault(concept, [])
@@ -95,6 +98,9 @@ def properties(view: GraphStores, report: QualityReport) -> None:
             if key:
                 stats[key] += 1
                 stats["missing"] += 1
+            size = len(value) if isinstance(value, str) else 0
+            if size > OVERSIZED:
+                oversized.setdefault((concept, name), []).append(size)
             previous = seen.setdefault((concept, name), [])
             if value is not None and len(previous) < 3 and value not in previous:
                 previous.append(cast(object, value))
@@ -114,6 +120,16 @@ def properties(view: GraphStores, report: QualityReport) -> None:
                         examples=tuple(examples[concept]),
                     )
                 )
+    for (concept, name), sizes in sorted(oversized.items()):
+        report.findings.append(
+            Finding(
+                "quality.oversized_value",
+                "warning",
+                f"{concept}.{name}",
+                f"{len(sizes)} of {results[concept][name]['total']} values exceed 1 MiB, the longest "
+                f"{max(sizes)} characters; the import script sizes the Neo4j read buffer to the longest line",
+            )
+        )
     report.measurements["properties"] = results
 
 

@@ -212,6 +212,18 @@ def test_a_build_exports_schema_descriptions_and_a_relocatable_import_script(tmp
     script = (tmp_path / "run/biocypher/neo4j-admin-import-call.sh").read_text()
     assert str(tmp_path) not in script
     assert "${BIOCYPHER_IMPORT_DIR}" in script
+    assert "--read-buffer-size" not in script
+
+
+def test_a_value_longer_than_the_neo4j_read_buffer_still_imports(tmp_path, unchecked_definitions):
+    geometry = "MULTIPOLYGON(((" + "0 0," * 1_100_000 + "0 0)))"
+    row = SourceRecord(ItemRow("item:1", geometry, []), EVIDENCE)
+    report = build.run_pipeline(replace(EXPORT, run=lambda context: context.map(ITEMS, row)), tmp_path / "run")
+    script = (tmp_path / "run/biocypher/neo4j-admin-import-call.sh").read_text()
+    assert script.count("--read-buffer-size=8m") == script.count("--delimiter=") == 2
+    [finding] = [f for f in report["quality"]["findings"] if f["code"] == "quality.oversized_value"]
+    assert finding["subject"] == "study:item.label"
+    assert "1 of 1" in finding["message"]
 
 
 @pytest.mark.parametrize("file_format", ["csv", "parquet"])
