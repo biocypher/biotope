@@ -5,9 +5,10 @@ from __future__ import annotations
 import inspect
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
+from itertools import repeat
 from typing import Any, Literal, TypedDict, cast, get_args, get_origin, get_type_hints
 
 from biotope.graph.annotations import label, nested_records, tuple_members, union_members, unwrap
@@ -49,9 +50,18 @@ def concept_description(cls: type) -> str:
 ValueCheck = Callable[[object], "str | None"]
 
 
-def value_problem(value: object, expected: Any) -> str | None:
-    """Return the path and reason a value departs from its declaration, or None; never coerce the value."""
-    return value_check(expected)(value)
+def validate_value(value: object, expected: Any, subject: str, evidence: object) -> None:
+    """Refuse a value that departs from its declaration, naming its path; never coerce the value."""
+    problem = value_check(expected)(value)
+    if problem is not None:
+        raise ValueError(f"{subject} {evidence}{problem}")
+
+
+def first_problem(items: Iterable[object], checks: Iterable[ValueCheck]) -> str | None:
+    for index, (item, check) in enumerate(zip(items, checks)):
+        if (problem := check(item)) is not None:
+            return f"[{index}]{problem}"
+    return None
 
 
 @lru_cache(maxsize=None)
@@ -72,8 +82,6 @@ def value_check(expected: Any) -> ValueCheck:
             return f": {value!r} does not satisfy {expected}"
 
         return check_union
-    if expected is type(None):
-        return lambda value: None if value is None else mismatch(value)
     if expected is float:
 
         def check_float(value: object) -> str | None:
@@ -82,7 +90,7 @@ def value_check(expected: Any) -> ValueCheck:
             return None if math.isfinite(value) else ": non-finite values are unsupported"
 
         return check_float
-    if expected in (str, int, bool):
+    if expected in (str, int, bool, type(None)):
         return lambda value: None if type(value) is expected else mismatch(value)
     origin, args = get_origin(expected), get_args(expected)
     if origin is list:
@@ -91,11 +99,7 @@ def value_check(expected: Any) -> ValueCheck:
         def check_list(value: object) -> str | None:
             if type(value) is not list:
                 return mismatch(value)
-            for index, item in enumerate(cast(list[object], value)):
-                problem = item_check(item)
-                if problem is not None:
-                    return f"[{index}]{problem}"
-            return None
+            return first_problem(cast(list[object], value), repeat(item_check))
 
         return check_list
     if origin is tuple:
@@ -106,14 +110,11 @@ def value_check(expected: Any) -> ValueCheck:
             if type(value) is not tuple:
                 return mismatch(value)
             items = cast(tuple[object, ...], value)
-            checks = slot_checks * len(items) if repeated else slot_checks
-            if len(checks) != len(items):
+            if repeated:
+                return first_problem(items, repeat(slot_checks[0]))
+            if len(slot_checks) != len(items):
                 return f": expected {expected}, got {len(items)} items: {value!r}"
-            for index, (item, check) in enumerate(zip(items, checks)):
-                problem = check(item)
-                if problem is not None:
-                    return f"[{index}]{problem}"
-            return None
+            return first_problem(items, slot_checks)
 
         return check_tuple
     if isinstance(expected, type) and is_dataclass(expected):
@@ -143,7 +144,7 @@ CHECKABLE_TYPES = "str, int, float, bool, None, a NewType, list[...], tuple[...]
 
 
 def is_checkable(annotation: Any) -> bool:
-    """Whether value_check can check values of an annotation."""
+    """Whether validate_value can check values of an annotation."""
     annotation = unwrap(annotation)
     choices = union_members(annotation)
     if len(choices) > 1:
@@ -159,7 +160,7 @@ def is_checkable(annotation: Any) -> bool:
 
 
 def unchecked_fields(record: type) -> list[str]:
-    """Fields of a record, nested records included, whose declared types value_check cannot check.
+    """Fields of a record, nested records included, whose declared types validate_value cannot check.
 
     Execution validates every value against its declaration, so an unsupported
     annotation would otherwise fail only once a build reaches the first value.

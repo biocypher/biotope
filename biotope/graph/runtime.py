@@ -24,7 +24,7 @@ from biotope.graph.contracts import (
 from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
 from biotope.graph.standardization import validate_terms
-from biotope.graph.topology import ConceptSchema, concept_id, field_names, identifier, value_problem
+from biotope.graph.topology import ConceptSchema, concept_id, field_names, identifier, validate_value
 
 
 C = TypeVar("C")
@@ -108,9 +108,7 @@ class RunContext:
                 if type(record.value) not in source.records:
                     raise ValueError(f"{source.name}: loader returned an undeclared record type {type(record.value)}")
                 self._evidence(record.evidence)
-                problem = value_problem(record.value, type(record.value))
-                if problem is not None:
-                    raise ValueError(f"{source.name} {record.evidence}{problem}")
+                validate_value(record.value, type(record.value), source.name, record.evidence)
                 validate_terms(record.value)
                 record_set = getattr(type(record.value), "__record_set__", None)
                 if not any(item.record_set == record_set for item in record.evidence):
@@ -133,9 +131,7 @@ class RunContext:
         for output in mapping.function(*args, **kwargs):
             if type(output) not in resolved.outputs:
                 raise ValueError(f"{resolved.name}: undeclared output {type(output).__name__}")
-            problem = value_problem(output, type(output))
-            if problem is not None:
-                raise ValueError(f"{resolved.name} output {evidence}{problem}")
+            validate_value(output, type(output), f"{resolved.name} output", evidence)
             yield SourceRecord(output, evidence)
 
     def map(self, mapping: Mapping[P, G], /, *args: P.args, **kwargs: P.kwargs) -> None:
@@ -171,9 +167,7 @@ class RunContext:
                     f"{subject} {record.evidence}: expected {' | '.join(item.__name__ for item in parameter.accepts)}, "
                     f"got {type(record.value).__name__}"
                 )
-            problem = value_problem(record.value, accepted)
-            if problem is not None:
-                raise ValueError(f"{subject} {record.evidence}{problem}")
+            validate_value(record.value, accepted, subject, record.evidence)
             records.append(record)
         return tuple(sorted({item for record in records for item in record.evidence}))
 
