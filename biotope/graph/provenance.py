@@ -27,7 +27,9 @@ class ProvenanceCatalog:
     """
 
     def __init__(self, context: RunContext) -> None:
-        keys = sorted({_key(row) for store in (context.nodes, context.edges) for row in store.values()})
+        # Keyed by object identity: the catalog lives only while the context holds these records.
+        self.row_keys = {id(row): _key(row) for store in (context.nodes, context.edges) for row in store.values()}
+        keys = sorted(set(self.row_keys.values()))
         evidence = sorted({item for _, contributors in keys for item in contributors})
         sources = sorted({(item.artifact, item.version, item.record_set) for item in evidence})
         source_ids = {source: index for index, source in enumerate(sources)}
@@ -48,7 +50,7 @@ class ProvenanceCatalog:
 
     def reference(self, record: GraphRecord) -> int:
         """Return the index of a graph object's provenance record."""
-        return self.record_ids[_key(record)]
+        return self.record_ids[self.row_keys[id(record)]]
 
     def write(self, path: Path) -> None:
         """Write valid JSON with one catalog entry per line for inspection."""

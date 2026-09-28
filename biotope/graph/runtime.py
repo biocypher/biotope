@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import ParamSpec, TypeVar, cast
 
 from biotope.graph.contracts import (
     Audit,
@@ -24,7 +24,7 @@ from biotope.graph.contracts import (
 from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
 from biotope.graph.standardization import validate_terms
-from biotope.graph.topology import ConceptSchema, concept_id, identifier, validate_value
+from biotope.graph.topology import ConceptSchema, concept_id, field_names, identifier, value_problem
 
 
 C = TypeVar("C")
@@ -57,6 +57,12 @@ class RunContext:
         self.pipeline = pipeline
         self.check = check
         self.schema = pipeline.topology.describe()
+        # A frozen graph object can still change through a list property, so only those objects are copied.
+        self._mutable = {
+            semantic
+            for semantic, item in self.schema.items()
+            if any(kind.endswith("[]") for kind in item["properties"].values())
+        }
         self.nodes: dict[str, GraphRecord] = {}
         self.edges: dict[str, GraphRecord] = {}
         self._exclusions: dict[str, ExclusionFinding] = {}
@@ -81,7 +87,12 @@ class RunContext:
                 self.schema,
                 [asdict(item) for item in self.audits],
                 [
-                    [kind, identity, concept_id(type(row.value)), asdict(cast("Any", row.value))]
+                    [
+                        kind,
+                        identity,
+                        concept_id(type(row.value)),
+                        {name: getattr(row.value, name) for name in field_names(type(row.value))},
+                    ]
                     for kind, store in (("node", self.nodes), ("edge", self.edges))
                     for identity, row in sorted(store.items())
                 ],
@@ -97,12 +108,15 @@ class RunContext:
                 if type(record.value) not in source.records:
                     raise ValueError(f"{source.name}: loader returned an undeclared record type {type(record.value)}")
                 self._evidence(record.evidence)
-                location = f"{source.name} {record.evidence}"
-                validate_value(record.value, type(record.value), location)
+                problem = value_problem(record.value, type(record.value))
+                if problem is not None:
+                    raise ValueError(f"{source.name} {record.evidence}{problem}")
                 validate_terms(record.value)
                 record_set = getattr(type(record.value), "__record_set__", None)
                 if not any(item.record_set == record_set for item in record.evidence):
-                    raise ValueError(f"{location}: evidence does not identify record set {record_set}")
+                    raise ValueError(
+                        f"{source.name} {record.evidence}: evidence does not identify record set {record_set}"
+                    )
                 self.loaded[source.name] = self.loaded.get(source.name, 0) + 1
                 yield record
             self.loaded.setdefault(source.name, 0)
@@ -119,7 +133,9 @@ class RunContext:
         for output in mapping.function(*args, **kwargs):
             if type(output) not in resolved.outputs:
                 raise ValueError(f"{resolved.name}: undeclared output {type(output).__name__}")
-            validate_value(output, type(output), f"{resolved.name} output {evidence}")
+            problem = value_problem(output, type(output))
+            if problem is not None:
+                raise ValueError(f"{resolved.name} output {evidence}{problem}")
             yield SourceRecord(output, evidence)
 
     def map(self, mapping: Mapping[P, G], /, *args: P.args, **kwargs: P.kwargs) -> None:
@@ -149,14 +165,15 @@ class RunContext:
             record = cast("SourceRecord[object]", given)
             # Per input: one contributor-bearing record must never cover for another.
             self._evidence(record.evidence, subject)
-            location = f"{subject} {record.evidence}"
             accepted = next((item for item in parameter.accepts if type(record.value) is item), None)
             if accepted is None:
                 raise ValueError(
-                    f"{location}: expected {' | '.join(item.__name__ for item in parameter.accepts)}, "
+                    f"{subject} {record.evidence}: expected {' | '.join(item.__name__ for item in parameter.accepts)}, "
                     f"got {type(record.value).__name__}"
                 )
-            validate_value(record.value, accepted, location)
+            problem = value_problem(record.value, accepted)
+            if problem is not None:
+                raise ValueError(f"{subject} {record.evidence}{problem}")
             records.append(record)
         return tuple(sorted({item for record in records for item in record.evidence}))
 
@@ -173,11 +190,10 @@ class RunContext:
         self.source_versions.update((item.artifact, item.version) for item in evidence)
 
     def _collect(self, value: GraphObject, evidence: tuple[Evidence, ...], mapping: str) -> None:
-        """Validate and collect a graph object; exact duplicates combine evidence."""
+        """Collect a graph object that apply has validated; exact duplicates combine evidence."""
         cls = type(value)
         if cls not in (*self.pipeline.topology.nodes, *self.pipeline.topology.edges):
             raise ValueError(f"{cls}: output is absent from topology")
-        validate_value(value, cls, f"{mapping} {evidence}")
         semantic = concept_id(cls)
         edge = cls in self.pipeline.topology.edges
         if edge:
@@ -207,7 +223,8 @@ class RunContext:
                     self.check(identity, value, self.schema[semantic])
                 except ValueError as exc:
                     raise ValueError(f"{mapping}: {exc}") from exc
-            store[identity] = GraphRecord(deepcopy(value), set(evidence), {mapping})
+            stored = deepcopy(value) if semantic in self._mutable else value
+            store[identity] = GraphRecord(stored, set(evidence), {mapping})
 
     def exclude(self, reason: str, evidence: tuple[Evidence, ...], *, count: int = 1) -> None:
         """Report a declared exclusion/unmatched-input policy and its source context."""

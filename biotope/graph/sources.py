@@ -93,11 +93,12 @@ class UnknownValue:
     """An unsupported source shape; refine its metadata before using its values."""
 
 
+CANONICAL_JSON = json.JSONEncoder(sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
 def digest(value: object) -> str:
     """Hash canonical JSON metadata or a derived definition."""
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return hashlib.sha256(CANONICAL_JSON.encode(value).encode()).hexdigest()
 
 
 def read_metadata(path: Path) -> dict[str, Any]:

@@ -110,6 +110,14 @@ def test_biocypher_labels_and_string_values_round_trip(tmp_path):
     assert labels_as_written == set(labels.values())
 
 
+def test_a_collected_object_keeps_the_list_its_mapping_changes_later():
+    aliases = ["first"]
+    context = RunContext(EXPORT)
+    context.map(ITEMS, SourceRecord(ItemRow("item:1", "label", aliases), EVIDENCE))
+    aliases.append("later")
+    assert context.nodes["item:1"].value == Item(ItemId("item:1"), "label", ["first"])
+
+
 @pytest.mark.parametrize(
     ("mapping", "value", "message"),
     [

@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
 from typing import Any, Literal, TypedDict, cast, get_args, get_origin, get_type_hints
@@ -23,9 +24,18 @@ def hints(cls: type) -> dict[str, Any]:
     return get_type_hints(cls)
 
 
+@lru_cache(maxsize=None)
+def field_names(cls: type) -> tuple[str, ...]:
+    """List a dataclass's fields once per declaration class."""
+    return tuple(member.name for member in fields(cls))
+
+
+IDENTIFIER = re.compile(r"[^\s:]+:[^\s]+")
+
+
 def identifier(value: object) -> str:
     """Require an explicit namespace, without claiming biological equivalence."""
-    if not isinstance(value, str) or not re.fullmatch(r"[^\s:]+:[^\s]+", value):
+    if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
         raise ValueError(f"Invalid identifier {value!r}; mint an explicit namespace:local-id in project code")
     return value
 
@@ -36,53 +46,104 @@ def concept_description(cls: type) -> str:
     return "" if text.startswith(cls.__name__ + "(") else inspect.cleandoc(text)
 
 
-def validate_value(value: object, expected: Any, location: str) -> None:
-    """Validate declarations without coercing source or scientific values."""
+ValueCheck = Callable[[object], "str | None"]
+
+
+def value_problem(value: object, expected: Any) -> str | None:
+    """Return the path and reason a value departs from its declaration, or None; never coerce the value."""
+    return value_check(expected)(value)
+
+
+@lru_cache(maxsize=None)
+def value_check(expected: Any) -> ValueCheck:
+    """Resolve a declared type once into a check of its values."""
     expected = unwrap(expected)
+
+    def mismatch(value: object) -> str:
+        return f": expected {expected}, got {type(value).__name__}: {value!r}"
+
     choices = union_members(expected)
     if len(choices) > 1:
-        for choice in choices:
-            try:
-                validate_value(value, choice, location)
-                return
-            except ValueError:
-                pass
-        raise ValueError(f"{location}: {value!r} does not satisfy {expected}")
+        alternatives = tuple(value_check(choice) for choice in choices)
+
+        def check_union(value: object) -> str | None:
+            if any(check(value) is None for check in alternatives):
+                return None
+            return f": {value!r} does not satisfy {expected}"
+
+        return check_union
+    if expected is type(None):
+        return lambda value: None if value is None else mismatch(value)
+    if expected is float:
+
+        def check_float(value: object) -> str | None:
+            if type(value) is not float:
+                return mismatch(value)
+            return None if math.isfinite(value) else ": non-finite values are unsupported"
+
+        return check_float
+    if expected in (str, int, bool):
+        return lambda value: None if type(value) is expected else mismatch(value)
     origin, args = get_origin(expected), get_args(expected)
-    if expected is type(None) and value is None:
-        return
-    if expected in (str, int, float, bool) and type(value) is expected:
-        if isinstance(value, float) and not math.isfinite(value):
-            raise ValueError(f"{location}: non-finite values are unsupported")
-        return
-    if origin is list and type(value) is list:
-        for i, item in enumerate(cast(list[object], value)):
-            validate_value(item, args[0], f"{location}[{i}]")
-        return
-    if origin is tuple and type(value) is tuple:
-        items = cast(tuple[object, ...], value)
+    if origin is list:
+        item_check = value_check(args[0])
+
+        def check_list(value: object) -> str | None:
+            if type(value) is not list:
+                return mismatch(value)
+            for index, item in enumerate(cast(list[object], value)):
+                problem = item_check(item)
+                if problem is not None:
+                    return f"[{index}]{problem}"
+            return None
+
+        return check_list
+    if origin is tuple:
         members, repeated = tuple_members(expected)
-        if repeated:
-            members *= len(items)
-        if len(members) != len(items):
-            raise ValueError(f"{location}: expected {expected}, got {len(items)} items: {value!r}")
-        for i, (item, member) in enumerate(zip(items, members)):
-            validate_value(item, member, f"{location}[{i}]")
-        return
-    if isinstance(expected, type) and is_dataclass(expected) and type(value) is expected:
-        for member in fields(expected):
-            validate_value(getattr(value, member.name), hints(expected)[member.name], f"{location}.{member.name}")
-        return
+        slot_checks = tuple(value_check(member) for member in members)
+
+        def check_tuple(value: object) -> str | None:
+            if type(value) is not tuple:
+                return mismatch(value)
+            items = cast(tuple[object, ...], value)
+            checks = slot_checks * len(items) if repeated else slot_checks
+            if len(checks) != len(items):
+                return f": expected {expected}, got {len(items)} items: {value!r}"
+            for index, (item, check) in enumerate(zip(items, checks)):
+                problem = check(item)
+                if problem is not None:
+                    return f"[{index}]{problem}"
+            return None
+
+        return check_tuple
+    if isinstance(expected, type) and is_dataclass(expected):
+        record = expected
+        # Resolved on first use, so a record that nests itself does not recurse while its check is built.
+        field_checks: list[tuple[str, ValueCheck]] | None = None
+
+        def check_record(value: object) -> str | None:
+            nonlocal field_checks
+            if type(value) is not record:
+                return mismatch(value)
+            if field_checks is None:
+                field_checks = [(member.name, value_check(hints(record)[member.name])) for member in fields(record)]
+            for name, check in field_checks:
+                problem = check(getattr(value, name))
+                if problem is not None:
+                    return f".{name}{problem}"
+            return None
+
+        return check_record
     if expected is UnknownValue:
-        raise ValueError(f"{location}: unsupported source shape; refine curated metadata before loading this value")
-    raise ValueError(f"{location}: expected {expected}, got {type(value).__name__}: {value!r}")
+        return lambda value: ": unsupported source shape; refine curated metadata before loading this value"
+    return mismatch
 
 
 CHECKABLE_TYPES = "str, int, float, bool, None, a NewType, list[...], tuple[...] or a dataclass"
 
 
 def is_checkable(annotation: Any) -> bool:
-    """Whether validate_value can check values of an annotation."""
+    """Whether value_check can check values of an annotation."""
     annotation = unwrap(annotation)
     choices = union_members(annotation)
     if len(choices) > 1:
@@ -98,7 +159,7 @@ def is_checkable(annotation: Any) -> bool:
 
 
 def unchecked_fields(record: type) -> list[str]:
-    """Fields of a record, nested records included, whose declared types validate_value cannot check.
+    """Fields of a record, nested records included, whose declared types value_check cannot check.
 
     Execution validates every value against its declaration, so an unsupported
     annotation would otherwise fail only once a build reaches the first value.
@@ -139,6 +200,7 @@ def property_type(annotation: Any) -> str:
     )
 
 
+@lru_cache(maxsize=None)
 def concept_id(cls: type) -> str:
     """Read a semantic identifier independent of Python module and class names."""
     value = getattr(cls, "schema_id", None)
