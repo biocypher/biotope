@@ -42,6 +42,7 @@ dependencies = [
     "requests>=2.32.0",
     "pydantic>=2.6",
     "croissant-baker>=0.5,<1",
+    "tomli>=1.1; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]

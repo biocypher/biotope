@@ -136,6 +136,10 @@ def _execute(
     stage = "definitions"
     try:
         report["definitions"] = check_pipeline(pipeline, workspace=workspace, phase=phase, on_finding=on_finding)
+        for providers in report["definitions"].get("imports", {}).values():
+            for name in providers:
+                if name not in report["dependencies"]:
+                    report["dependencies"][name] = _software(name)
         if exporter is not None:
             stage = "environment"
             if phase:

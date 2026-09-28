@@ -31,7 +31,9 @@ graph/
 
 Install the published `biotope[graph]>=0.10,<0.11` package in the project
 environment. Pyright needs Node.js on `PATH` or `pyright[nodejs]`. Record reader
-libraries that loaders import, such as pandas, in `graph/pyproject.toml`. See
+libraries that loaders import, such as pandas, in `graph/pyproject.toml`;
+`biotope graph check` warns about an undeclared import, and `run.json` records the
+installed version of each. See
 [installation](https://biocypher.github.io/biotope/installation/).
 
 Run Biotope commands from the parent project directory, where raw data, the

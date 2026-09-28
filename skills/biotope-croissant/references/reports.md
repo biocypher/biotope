@@ -34,6 +34,7 @@ version 1 reports.
 | Findings with `kind: exclusion` | Policy counts and bounded evidence                                    |
 | `graph_objects`, `graph_digest` | What was exported, and a deterministic fingerprint of it              |
 | `exporter`                      | Verified writer version and physical format                           |
+| `dependencies`                  | Installed versions of Biotope, its tools and every imported library   |
 
 A failed rebuild leaves the previous build in place and writes
 `graph/build/last_failure.json` beside it; the next success removes it. A build

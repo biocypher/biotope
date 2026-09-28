@@ -39,8 +39,9 @@ uv add 'biotope[graph]>=0.10,<0.11'
 uv run biotope --version
 ```
 
-The same Node.js requirement applies. Record any libraries needed by your own
-loaders in the project's dependencies too.
+The same Node.js requirement applies. Install the libraries your own loaders
+import in this environment too, and declare them in `graph/pyproject.toml`;
+`biotope graph check` warns about an undeclared import.
 
 ### Standard Python environment
 

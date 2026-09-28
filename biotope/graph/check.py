@@ -15,6 +15,7 @@ from typing import Any, get_type_hints
 
 from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
+from biotope.graph.dependencies import declared_distributions, imported_distributions
 from biotope.graph.reports import (
     CheckFailed,
     CheckResult,
@@ -238,6 +239,26 @@ def check_pipeline(
             return None
 
     files: tuple[Path, ...] | None = stage("code", paths)
+
+    def dependencies() -> dict[str, list[str]]:
+        assert files is not None
+        imported = imported_distributions(files)
+        if workspace is not None:
+            pyproject = Path(workspace.root.name) / "pyproject.toml"
+            declared = declared_distributions(workspace.root / "pyproject.toml")
+            for module, providers in imported.items():
+                if not declared.intersection(providers):
+                    warning(
+                        "dependencies.undeclared",
+                        " | ".join(providers),
+                        f"Graph code imports {module}, which {pyproject} does not declare; add it to "
+                        "[project].dependencies so the build environment can be rebuilt",
+                    )
+        return imported
+
+    report.data["imports"] = (
+        stage("dependencies", dependencies, blocked="Code paths are invalid" if files is None else "") or {}
+    )
 
     def revisions() -> dict[str, str]:
         assert files is not None
