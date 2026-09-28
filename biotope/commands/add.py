@@ -499,7 +499,7 @@ def _bake_directory(
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
-    _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root, reporter)
+    _register_distinct_files(metadata_dict, abs_dir, biotope_root, reporter)
     _apply_pipeline_state(metadata_dict, overrides)
 
     write_text_atomic(output or target.metadata_path, json.dumps(metadata_dict, indent=2, default=str) + "\n")
@@ -529,26 +529,57 @@ def _build_minimal_directory_metadata(
     return metadata
 
 
-def _append_uncovered_file_objects(
+def _register_distinct_files(
     metadata_dict: dict[str, Any],
     abs_dir: Path,
     biotope_root: Path,
     reporter: AddOutput,
 ) -> None:
-    """Append file pointers for physical files not covered by croissant-baker, one per distinct content."""
-    covered_files = _covered_files(metadata_dict, abs_dir, biotope_root)
+    """Keep one file pointer per distinct content, and add pointers for files croissant-baker left out.
+
+    A file a FileSet covers is a member of its collection, so it stays even when another member is identical.
+    """
     distributions = metadata_dict.setdefault("distribution", [])
-    registered = {
-        item["sha256"]: path
+    in_file_sets = {
+        candidate.resolve()
+        for item in distributions
+        if item.get("@type") == "cr:FileSet"
+        for pattern in ([item["includes"]] if isinstance(item.get("includes"), str) else item.get("includes") or [])
+        for candidate in abs_dir.glob(pattern)
+        if candidate.is_file()
+    }
+    baked = [
+        (path.resolve(), item)
         for item in distributions
         if item.get("@type") == FILE_OBJECT_TYPE
-        and item.get("sha256")
         and item.get("contentUrl")
         and (path := resolve_content_url(item["contentUrl"], abs_dir, biotope_root))
-    }
+        and path.is_file()
+    ]
+    baked.sort(key=lambda pair: pair[0])
+    registered: dict[str, Path] = {}
+    skipped: set[str] = set()
+    for path, item in baked:
+        if path in in_file_sets or not item.get("sha256"):
+            continue
+        original = registered.setdefault(item["sha256"], path)
+        if original != path:
+            skipped.add(item["@id"])
+            reporter.duplicate(path, original)
+    if skipped:
+        distributions[:] = [item for item in distributions if item.get("@id") not in skipped]
+        metadata_dict["recordSet"] = [
+            record_set
+            for record_set in metadata_dict.get("recordSet", [])
+            if not any(
+                field.get("source", {}).get("fileObject", {}).get("@id") in skipped
+                for field in record_set.get("field", [])
+            )
+        ]
 
+    covered = in_file_sets | {path for path, _ in baked}
     for file_path in sorted(_iter_directory_files(abs_dir)):
-        if file_path.resolve() in covered_files:
+        if file_path.resolve() in covered:
             continue
         file_object = make_file_object(file_path, biotope_root)
         original = registered.setdefault(file_object["sha256"], file_path)
@@ -556,38 +587,6 @@ def _append_uncovered_file_objects(
             distributions.append(file_object)
         else:
             reporter.duplicate(file_path, original)
-
-
-def _covered_files(
-    metadata_dict: dict[str, Any],
-    abs_dir: Path,
-    biotope_root: Path,
-) -> set[Path]:
-    """Resolve all physical files already covered by distribution entries."""
-    covered: set[Path] = set()
-
-    for distribution in metadata_dict.get("distribution", []) or []:
-        entry_type = distribution.get("@type")
-        if entry_type == FILE_OBJECT_TYPE:
-            content_url = distribution.get("contentUrl")
-            if not content_url:
-                continue
-            candidate = resolve_content_url(content_url, abs_dir, biotope_root)
-            if candidate is not None and candidate.is_file():
-                covered.add(candidate.resolve())
-            continue
-
-        if entry_type != "cr:FileSet":
-            continue
-
-        includes = distribution.get("includes")
-        patterns = [includes] if isinstance(includes, str) else list(includes or [])
-        for pattern in patterns:
-            for candidate in abs_dir.glob(pattern):
-                if candidate.is_file():
-                    covered.add(candidate.resolve())
-
-    return covered
 
 
 def _iter_directory_files(abs_dir: Path):

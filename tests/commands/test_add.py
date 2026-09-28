@@ -325,14 +325,21 @@ def test_byte_identical_files_are_registered_once(tmp_path, capsys):
     for folder in ("b", "a"):
         (data_dir / folder).mkdir(parents=True)
         (data_dir / folder / "codes.txt").write_text("code\tlabel\n")
+        (data_dir / folder / "table.csv").write_text("id,value\n1,x\n2,y\n")
 
     reporter = AddOutput(as_json=True)
     metadata_dict, _ = _bake_directory(data_dir, project_root, {}, reporter=reporter)
 
-    assert [d["contentUrl"] for d in metadata_dict["distribution"]] == ["data/a/codes.txt"]
-    assert reporter.sources[-1]["duplicates"] == [{"path": "data/b/codes.txt", "duplicate_of": "data/a/codes.txt"}]
+    [table, codes] = metadata_dict["distribution"]
+    assert (table["contentUrl"], codes["contentUrl"]) == ("a/table.csv", "data/a/codes.txt")
+    [record_set] = metadata_dict["recordSet"]
+    assert {field["source"]["fileObject"]["@id"] for field in record_set["field"]} == {table["@id"]}
+    assert reporter.sources[-1]["duplicates"] == [
+        {"path": "data/b/table.csv", "duplicate_of": "data/a/table.csv"},
+        {"path": "data/b/codes.txt", "duplicate_of": "data/a/codes.txt"},
+    ]
     plan = generate_source_packages(project_root / ".biotope/datasets/data.jsonld", project_root / "graph/sources")
-    assert len(plan.statuses) == 1
+    assert len(plan.statuses) == 2
 
     _bake_directory(data_dir, project_root, {}, output=tmp_path / "review.jsonld")
     text = " ".join(capsys.readouterr().err.split())
