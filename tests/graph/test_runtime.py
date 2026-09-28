@@ -1,5 +1,6 @@
 """Typed topology and runtime integrity at the graph boundary."""
 
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from itertools import islice
@@ -207,6 +208,47 @@ def test_intermediates_may_hold_tuples_whose_items_are_checked():
     for message, value in invalid.items():
         with pytest.raises(ValueError, match=message):
             list(run.apply(PASS_THROUGH, SourceRecord(value, evidence)))
+
+
+@dataclass(frozen=True)
+class Label:
+    text: str
+
+
+@dataclass(frozen=True)
+class Measurement:
+    __record_set__: ClassVar[str] = "measurements"
+    score: float
+    tags: list[str]
+    rank: int | None
+    label: Label
+
+
+def measured_person(row: SourceRecord[Measurement]) -> Iterator[Person]:
+    yield Person(PersonId("study:person:1"), row.value.label.text)
+
+
+def test_load_and_map_refuse_values_outside_their_declarations_by_path():
+    source = SourceContract("measurements", Path("measurements.jsonld"), Path(__file__), (Measurement,))
+    measured = Mapping(name="measured", function=measured_person)
+    run = RunContext(Pipeline("test", TOPOLOGY, (source,), (measured,), lambda ctx: None, scope="unit", code_paths=()))
+    evidence = (Evidence("measurements.csv", "v1", "measurements", "row:1"),)
+    valid = SourceRecord(Measurement(1.5, ["a", "b"], None, Label("Ada")), evidence)
+    assert list(run.load(source, lambda config: iter((valid,)), None)) == [valid]
+    run.map(measured, valid)
+    invalid = {
+        r"\.score: non-finite": replace(valid.value, score=math.nan),
+        r"\.tags\[1\]: expected": replace(valid.value, tags=["a", cast(str, 2)]),
+        r"\.rank: 'high' does not satisfy": replace(valid.value, rank=cast(int, "high")),
+        r"\.label\.text: expected": replace(valid.value, label=Label(cast(str, 3))),
+    }
+    for message, value in invalid.items():
+        record = SourceRecord(value, evidence)
+        with pytest.raises(ValueError, match=message):
+            list(run.load(source, lambda config: iter((record,)), None))
+        with pytest.raises(ValueError, match=message):
+            run.map(measured, record)
+    assert len(run.nodes) == 1
 
 
 def test_exclusions_aggregate_counts_and_bound_evidence():
