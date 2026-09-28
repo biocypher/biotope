@@ -3,46 +3,41 @@
 from __future__ import annotations
 
 import importlib.metadata
-import json
 import logging
 import re
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 import yaml
 
-from biotope.graph.context import CONTEXT_CONCEPT, CONTEXT_LABEL, CONTEXT_PROPERTIES, context_rows
+from biotope.graph.contracts import GraphRecord
+from biotope.graph.provenance import PROVENANCE_CATALOG, PROVENANCE_PROPERTY, PROVENANCE_REFERENCE, ProvenanceCatalog
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest, write_text_atomic
-from biotope.graph.topology import concept_id
+from biotope.graph.topology import ConceptSchema, concept_id
 
 
+# The lowest tested BioCypher release, and the first release above the tested range. BioCypher is pre-1.0
+# and moves defaults between minors (0.17 flipped offline Neo4j output to Parquet and renamed the CSV
+# delimiter keys), so the range spans patches, which fix behaviour, and stops at the next minor.
 SUPPORTED_BIOCYPHER = ((0, 17), (0, 18))
-"""Lowest tested BioCypher release, and the first release above the tested range.
 
-BioCypher is pre-1.0 and moves defaults between minors: 0.17 flipped offline
-Neo4j output to Parquet and renamed the CSV delimiter keys. The range therefore
-spans patches, which fix behaviour, and stops at the next minor, which may
-change it.
-"""
-
+# The file suffixes each data format produces. Parquet needs a Neo4j release whose import accepts it, so the
+# choice belongs to whoever runs the import rather than to a library default.
 EXPORT_FORMATS = {
     "csv": frozenset({".csv", ".sh"}),
     "parquet": frozenset({".parquet", ".sh"}),
 }
-"""Selectable data formats, and the file suffixes each is expected to produce.
 
-CSV writes a header file beside each data file; Parquet carries its schema
-inline and writes neither. Parquet needs a Neo4j release whose import accepts
-it, so the choice belongs to whoever runs the import rather than to a library
-default.
-"""
-
+# neo4j-admin's own default separator inside a string list.
 ARRAY_DELIMITER = ";"
-"""Separator inside an exported string list, matching neo4j-admin's own default."""
+
+NEO4J_DEFAULT_READ_BUFFER = 4 * 2**20
+
+RESERVED_PROPERTIES = ("preferred_id", PROVENANCE_PROPERTY)
+UNQUOTABLE_IDENTIFIER = re.compile(r'[,"|\r\n]')
 
 
 def supported_specifier() -> str:
@@ -70,32 +65,63 @@ class GraphWriter(Protocol):
         """
         ...
 
-    def write(self, context: RunContext, directory: Path, *, query_context: dict[str, Any]) -> list[str]:
-        """Write validated graph data with its interpretation context; return artifact paths."""
+    def check_object(self, identity: str, value: object, schema: ConceptSchema) -> None:
+        """Refuse a graph object the output cannot represent, when the pipeline collects it."""
+        ...
+
+    def write(self, context: RunContext, directory: Path) -> list[str]:
+        """Write validated graph data and its provenance; return artifact paths."""
         ...
 
 
+def _pascal(text: str) -> str:
+    base = "".join(word.capitalize() for word in re.findall(r"[a-z0-9]+", text.lower()))
+    return base if base and base[0].isalpha() else "Concept" + base
+
+
+def _taken(candidates: dict[str, str]) -> frozenset[str]:
+    return frozenset(label for label, count in Counter(candidates.values()).items() if count > 1)
+
+
 def export_labels(concepts: Iterable[str]) -> dict[str, str]:
-    # Use readable PascalCase from the complete namespaced ID. Disambiguate only
-    # normalization collisions, including the writer's synthetic Entity root.
-    bases = {
-        semantic: "".join(word.capitalize() for word in re.findall(r"[a-z0-9]+", semantic.lower()))
-        for semantic in concepts
-    }
-    bases = {semantic: base if base and base[0].isalpha() else "Concept" + base for semantic, base in bases.items()}
-    counts = Counter(bases.values())
-    reserved = {"Entity", CONTEXT_LABEL}
+    """Name each concept by its local part, widening only as far as a collision forces."""
+    local = {semantic: _pascal(semantic.partition(":")[2]) for semantic in concepts}
+    ambiguous = _taken(local)
+    full = {semantic: _pascal(semantic) if label in ambiguous else label for semantic, label in local.items()}
+    ambiguous = _taken(full)
     labels = {
-        semantic: base + "H" + digest(semantic)[:10] if counts[base] > 1 or base in reserved else base
-        for semantic, base in bases.items()
+        semantic: label + "H" + digest(semantic)[:10] if label in ambiguous else label
+        for semantic, label in full.items()
     }
     if len(set(labels.values())) != len(labels):
         raise ValueError("Graph concept IDs collide after export label normalization; use distinct semantic IDs")
     return labels
 
 
+def _read_buffer(directory: Path) -> str | None:
+    longest = 0
+    for table in directory.glob("*.csv"):
+        with table.open("rb") as stream:
+            longest = max(longest, max(map(len, stream), default=0))
+    if longest < NEO4J_DEFAULT_READ_BUFFER:
+        return None
+    return f"{(1 << longest.bit_length()) >> 20}m"
+
+
+def _rewrite_import_scripts(directory: Path) -> None:
+    """Resolve paths from the script's own location, so a moved build still imports, and fit the longest line."""
+    read_buffer = _read_buffer(directory)
+    for script in directory.glob("*.sh"):
+        first, separator, rest = script.read_text(encoding="utf-8").partition("\n")
+        rest = rest.replace(str(directory.resolve()), "${BIOCYPHER_IMPORT_DIR}")
+        if read_buffer:
+            rest = rest.replace(" --delimiter=", f" --read-buffer-size={read_buffer} --delimiter=")
+        locate = 'BIOCYPHER_IMPORT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n'
+        write_text_atomic(script, first + separator + locate + rest)
+
+
 class BioCypherWriter:
-    """Derive a local schema/ontology and write one offline BioCypher format."""
+    """Derive the export schema and write one offline BioCypher format."""
 
     def __init__(self, file_format: str = "csv") -> None:
         if file_format not in EXPORT_FORMATS:
@@ -128,9 +154,40 @@ class BioCypherWriter:
             )
         return {"exporter": "biocypher", "version": installed, "format": contract}
 
-    def write(self, context: RunContext, directory: Path, *, query_context: dict[str, Any]) -> list[str]:
-        """Write Neo4j import files, the query context and an identity-keyed provenance sidecar."""
-        environment = self.check_environment()
+    def check_object(self, identity: str, value: object, schema: ConceptSchema) -> None:
+        """Refuse identifiers and values that a Neo4j import file cannot hold."""
+        concept = concept_id(type(value))
+        endpoints = (getattr(value, "source"), getattr(value, "target")) if schema["kind"] == "edge" else ()
+        for text in (identity, *endpoints):
+            if UNQUOTABLE_IDENTIFIER.search(text):
+                raise ValueError(
+                    f"{concept} {text!r}: an identifier in a Neo4j import file cannot contain "
+                    ", \" | or a line break; encode them in the project's identity policy"
+                )
+        for name in schema["properties"]:
+            if name in RESERVED_PROPERTIES:
+                raise ValueError(f"{concept}.{name}: the exporter reserves {name}; rename the property")
+            item = getattr(value, name)
+            if isinstance(item, str) and ("\n" in item or "\r" in item):
+                raise ValueError(
+                    f"{concept}.{name} of {identity} spans several lines; a Neo4j import file "
+                    "holds one line per record, so replace the line breaks in the mapping"
+                )
+            if isinstance(item, list) and any(
+                ARRAY_DELIMITER in text or "\n" in text or "\r" in text for text in cast(list[str], item)
+            ):
+                raise ValueError(
+                    f"{concept}.{name} of {identity} has an item with {ARRAY_DELIMITER!r} or a line break; "
+                    f"Neo4j import files separate list items with {ARRAY_DELIMITER!r}, so split or encode "
+                    "the items in the mapping"
+                )
+
+    def write(self, context: RunContext, directory: Path) -> list[str]:
+        """Write Neo4j import files and the provenance catalog their nodes and edges reference."""
+        self.check_environment()
+        if context.check is None:
+            for identity, row in (*context.nodes.items(), *context.edges.items()):
+                self.check_object(identity, row.value, context.schema[concept_id(type(row.value))])
         # BioCypher configures disk logging during import, before its per-build
         # configuration is applied. Supply stderr logging first; respect existing handlers.
         logger = logging.getLogger("biocypher")
@@ -142,45 +199,22 @@ class BioCypherWriter:
         except ImportError as exc:
             raise ValueError("Install biotope[graph] for BioCypher file output") from exc
         directory.mkdir(parents=True, exist_ok=True)
-        for identity, row in (*context.nodes.items(), *context.edges.items()):
-            identifiers = [identity]
-            if type(row.value) in context.pipeline.topology.edges:
-                identifiers += [getattr(row.value, "source"), getattr(row.value, "target")]
-            if any(any(char in value for char in ',"|\r\n') for value in identifiers):
-                raise ValueError(
-                    f"Unsupported BioCypher identifier {identity!r}: "
-                    "encode delimiter/quote characters in the project's identity policy"
-                )
-            property_names = context.schema[concept_id(type(row.value))]["properties"]
-            if "preferred_id" in property_names:
-                raise ValueError("preferred_id is reserved by BioCypher; rename the graph property")
-            for name in property_names:
-                value = getattr(row.value, name)
-                if isinstance(value, str) and any(char in value for char in "\r\n"):
-                    raise ValueError(
-                        f"Unsupported multiline BioCypher property {identity}.{name}; "
-                        "choose an explicit project representation"
-                    )
-                if isinstance(value, list) and any(
-                    any(char in item for char in ARRAY_DELIMITER + "\r\n") for item in cast(list[str], value)
-                ):
-                    raise ValueError(f"Unsupported BioCypher string-list separator/newline in {identity}.{name}")
         labels = export_labels(context.schema)
-        rows = context_rows(query_context)
+        provenance = ProvenanceCatalog(context)
+        descriptions = context.pipeline.topology.descriptions()
         schema = {
             labels[semantic]: {
                 "represented_as": item["kind"],
                 "input_label": semantic,
-                "is_a": "entity",
-                "properties": item["properties"],
+                "properties": {**item["properties"], PROVENANCE_PROPERTY: "int"},
+                "description": descriptions[semantic]["description"],
+                "biotope": {
+                    "nullable": item["nullable"],
+                    "property_descriptions": descriptions[semantic]["properties"],
+                    "provenance": PROVENANCE_REFERENCE,
+                },
             }
             for semantic, item in context.schema.items()
-        }
-        schema[CONTEXT_LABEL] = {
-            "represented_as": "node",
-            "input_label": CONTEXT_CONCEPT,
-            "is_a": "entity",
-            "properties": dict(CONTEXT_PROPERTIES),
         }
         for semantic, item in context.schema.items():
             if item["kind"] == "edge":
@@ -191,37 +225,13 @@ class BioCypherWriter:
                 schema[labels[semantic]]["target"] = labels[target]
         schema_path = directory / "schema_config.yaml"
         write_text_atomic(schema_path, yaml.safe_dump(schema, sort_keys=True))
-        write_text_atomic(
-            directory / "topology.json",
-            json.dumps(
-                {
-                    "concepts": context.schema,
-                    "export_labels": {**labels, CONTEXT_CONCEPT: CONTEXT_LABEL},
-                    "exporter": environment,
-                },
-                indent=2,
-            )
-            + "\n",
-        )
-        write_text_atomic(
-            directory / "query_context.json",
-            json.dumps(query_context, indent=2, sort_keys=True, allow_nan=False) + "\n",
-        )
-        ontology_path = directory / "ontology.ttl"
-        # This local root exists only to satisfy the writer's ontology interface.
-        # Declared topology supplies every domain concept; no implicit Biolink.
-        write_text_atomic(
-            ontology_path,
-            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
-            '<urn:biotope:entity> a rdfs:Class ; rdfs:label "entity" .\n',
-        )
         config_path = directory / "biocypher_config.yaml"
-        config = {
+        config: dict[str, Any] = {
             "biocypher": {
                 "dbms": "neo4j",
                 "offline": True,
                 "strict_mode": False,
-                "head_ontology": {"url": str(ontology_path.resolve()), "root_node": "entity"},
+                "head_ontology": None,
                 "tail_ontologies": {},
                 "log_to_disk": False,
                 "debug": False,
@@ -240,22 +250,20 @@ class BioCypherWriter:
         writer = BioCypher(
             biocypher_config_path=str(config_path),
             schema_config_path=str(schema_path),
-            output_directory=str(directory / "biocypher"),
+            output_directory=str((directory / "biocypher").resolve()),
         )
 
-        def properties(value: object) -> dict[str, object]:
-            return {key: getattr(value, key) for key in context.schema[concept_id(type(value))]["properties"]}
+        def properties(row: GraphRecord) -> dict[str, object]:
+            return {
+                **{key: getattr(row.value, key) for key in context.schema[concept_id(type(row.value))]["properties"]},
+                PROVENANCE_PROPERTY: provenance.reference(row),
+            }
 
-        # BioCypher 0.9.7 leaves these iterable parameters unannotated. Keep the
+        # BioCypher 0.17 leaves these iterable parameters unannotated. Keep the
         # exception local to its API; our tuples and GraphWriter remain checked.
-        if not writer.write_nodes(  # pyright: ignore[reportUnknownMemberType]
-            [
-                *(
-                    (identity, concept_id(type(row.value)), properties(row.value))
-                    for identity, row in sorted(context.nodes.items())
-                ),
-                *((identity, CONTEXT_CONCEPT, dict(row)) for identity, row in rows),
-            ]
+        # It cannot write node headers without a node, so an empty graph exports only the import script.
+        if context.nodes and not writer.write_nodes(  # pyright: ignore[reportUnknownMemberType]
+            (identity, concept_id(type(row.value)), properties(row)) for identity, row in sorted(context.nodes.items())
         ):
             raise ValueError("BioCypher node export failed")
         if context.edges and not writer.write_edges(  # pyright: ignore[reportUnknownMemberType]
@@ -264,12 +272,13 @@ class BioCypherWriter:
                 getattr(row.value, "source"),
                 getattr(row.value, "target"),
                 concept_id(type(row.value)),
-                properties(row.value),
+                properties(row),
             )
             for identity, row in sorted(context.edges.items())
         ):
             raise ValueError("BioCypher edge export failed")
         writer.write_import_call()
+        _rewrite_import_scripts(directory / "biocypher")
         unexpected = sorted(
             str(path.relative_to(directory))
             for path in (directory / "biocypher").rglob("*")
@@ -281,20 +290,5 @@ class BioCypherWriter:
                 f"not cover: {', '.join(unexpected)}. The writer and the declaration disagree; "
                 "reconcile them before accepting the output."
             )
-        with (directory / "provenance.jsonl").open("w", encoding="utf-8") as output:
-            for kind, records in (("node", context.nodes), ("edge", context.edges)):
-                for identity, row in sorted(records.items()):
-                    output.write(
-                        json.dumps(
-                            {
-                                "kind": kind,
-                                "id": identity,
-                                "concept": concept_id(type(row.value)),
-                                "mappings": sorted(row.mappings),
-                                "evidence": [asdict(e) for e in sorted(row.evidence)],
-                            },
-                            sort_keys=True,
-                        )
-                        + "\n"
-                    )
+        provenance.write(directory / PROVENANCE_CATALOG)
         return [str(path.relative_to(directory)) for path in sorted(directory.rglob("*")) if path.is_file()]

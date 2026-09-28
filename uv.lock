@@ -210,6 +210,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rich" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.optional-dependencies]
@@ -241,6 +242,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.32.0" },
     { name = "rich", specifier = ">=13.9.4" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=1.1" },
 ]
 provides-extras = ["graph", "dev"]
 

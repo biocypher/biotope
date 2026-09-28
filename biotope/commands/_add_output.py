@@ -76,7 +76,7 @@ class AddOutput:
     def scan(self, source: Path, root: Path):
         result = {"input": self.path(source), "root": self.path(root), "status": "scanning", "diagnostics": []}
         self.sources.append(result)
-        return _ScanOutput(self, result)
+        return _ScanOutput(self, result, root)
 
     def skipped(self, source: Path, reason: str) -> None:
         self.sources.append({"input": self.path(source), "status": "skipped", "reason": reason})
@@ -105,10 +105,11 @@ class AddOutput:
 class _ScanOutput(logging.Handler):
     """Show upstream warnings live; publish confirmed file outcomes after assembly."""
 
-    def __init__(self, output: AddOutput, result: dict[str, Any]) -> None:
+    def __init__(self, output: AddOutput, result: dict[str, Any], root: Path) -> None:
         super().__init__(logging.WARNING)
         self.output = output
         self.result = result
+        self.root = root
         self.generator = None
         self.entries: dict[str, Any] = {}
         self.shown: set[tuple[str, ...]] = set()
@@ -142,6 +143,8 @@ class _ScanOutput(logging.Handler):
             counts.extend(f"{report[key]} {key}" for key in ("linked", "referenced") if report.get(key))
             if report["undescribed"]:
                 counts.append(f"{report['undescribed']} not described")
+            if self.result.get("duplicates"):
+                counts.append(f"{len(self.result['duplicates'])} identical")
             if self.result["diagnostics"]:
                 count = len(self.result["diagnostics"])
                 counts.append(f"{count} {'diagnostic' if count == 1 else 'diagnostics'}")
@@ -179,8 +182,13 @@ class _ScanOutput(logging.Handler):
         # Baker logs have no stable source IDs; preserve them rather than guessing attribution.
         self.output.row("FAIL" if record.levelno >= logging.ERROR else "WARN", message)
 
-    def finish(self, report: dict[str, Any]) -> None:
+    def finish(self, report: dict[str, Any], copies: dict[Path, Path]) -> None:
         self.result.update(scan=report, status="scanned")
+        if copies:
+            self.result["duplicates"] = [
+                {"path": self.output.path(copy), "duplicate_of": self.output.path(original)}
+                for copy, original in copies.items()
+            ]
         if self.output.as_json:
             return
         files = report["files"]
@@ -199,6 +207,12 @@ class _ScanOutput(logging.Handler):
                     shown.add(parent)
                 continue
             self.file(file)
+        for copy, original in copies.items():
+            self.output.row(
+                "SKIP",
+                str(copy.relative_to(self.root)),
+                f"Identical to {original.relative_to(self.root)}; registered once",
+            )
 
     def file(self, file: dict[str, Any]) -> None:
         identity = tuple(file.get(k, "") for k in ("path", "outcome", "reason", "detail"))

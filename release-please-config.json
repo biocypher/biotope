@@ -4,6 +4,7 @@
       "release-type": "python",
       "package-name": "biotope",
       "version-file": "pyproject.toml",
+      "bump-minor-pre-major": true,
       "extra-files": [
         {
           "type": "toml",

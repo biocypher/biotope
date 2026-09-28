@@ -39,5 +39,7 @@ repos:
     rev: 0.7.17
     hooks:
       - id: mdformat
+        # release-please writes the changelog.
+        exclude: ^CHANGELOG\.md$
         additional_dependencies:
           [mdformat-gfm, mdformat-frontmatter, mdformat-footnote]

@@ -1,5 +1,5 @@
 site_name: Biotope
-site_description: Build typed Python knowledge graphs from reviewed Croissant metadata, with provenance and validation.
+site_description: Build typed Python knowledge graphs from reviewed Croissant metadata, with provenance for every exported node and edge.
 site_author: BioCypher Team
 site_url: https://biocypher.github.io/biotope/
 
@@ -57,7 +57,7 @@ nav:
   - Annotation policies:
       - Configuration: cluster-compliance.md
       - Administration examples: cluster-compliance_sidenotes.md
-  - Migration to 0.9: migration.md
+  - Migration to 0.10: migration.md
   - Development ideas: ideas.md
 
 validation:

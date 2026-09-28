@@ -5,21 +5,22 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import platform
+import shutil
+import tempfile
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from biotope.graph.artifacts import check_report_destination, save_report
+from biotope.graph.artifacts import RUN_REPORT, check_build_destination, record_failed_build, report_text, save_report
 from biotope.graph.check import check_pipeline
-from biotope.graph.context import build_query_context
 from biotope.graph.contracts import Pipeline
-from biotope.graph.output import BioCypherWriter, GraphWriter, export_labels
+from biotope.graph.output import BioCypherWriter, GraphWriter
 from biotope.graph.quality import analyze_quality
-from biotope.graph.reports import CheckFailed, Finding, FindingSink, Phase
+from biotope.graph.reports import REPORT_SCHEMA_VERSION, CheckFailed, Finding, FindingSink, Phase
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest
-from biotope.graph.validation import run_validation
+from biotope.graph.workspace import Workspace
 
 
 class RunFailed(ValueError):
@@ -34,35 +35,66 @@ def run_pipeline(
     pipeline: Pipeline,
     output: Path,
     *,
+    workspace: Workspace | None = None,
     writer: GraphWriter | None = None,
     phase: Phase | None = None,
     on_finding: FindingSink | None = None,
 ) -> dict[str, Any]:
-    """Execute and assess once, then export into a new run directory."""
-    output.mkdir(parents=True, exist_ok=False)
-    return _execute(pipeline, output / "run.json", output=output, writer=writer, phase=phase, on_finding=on_finding)
+    """Build in staging, then replace the previous generated build on success."""
+    output = output.absolute()
+    check_build_destination(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
+    backup = staging.with_name(staging.name + "-previous")
+    try:
+        try:
+            report = _execute(pipeline, staging, workspace=workspace, writer=writer, phase=phase, on_finding=on_finding)
+        except RunFailed as exc:
+            record_failed_build(output, exc.report)
+            raise
+        report["report_path"] = str(output / RUN_REPORT)
+        save_report(staging / RUN_REPORT, report_text(report), "biotope.build")
+        check_build_destination(output)
+        if output.exists():
+            output.replace(backup)
+        try:
+            staging.replace(output)
+        except OSError:
+            if backup.exists():
+                backup.replace(output)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
+        return report
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
 
 
 def assess_pipeline(
-    pipeline: Pipeline, report_path: Path, *, phase: Phase | None = None, on_finding: FindingSink | None = None
+    pipeline: Pipeline,
+    *,
+    workspace: Workspace | None = None,
+    phase: Phase | None = None,
+    on_finding: FindingSink | None = None,
 ) -> dict[str, Any]:
-    """Execute and assess once without constructing an exporter."""
-    check_report_destination(report_path, "biotope.quality")
-    return _execute(pipeline, report_path, phase=phase, on_finding=on_finding)
+    """Execute and assess once without constructing an exporter or writing a report."""
+    return _execute(pipeline, None, workspace=workspace, phase=phase, on_finding=on_finding)
 
 
 def _execute(
     pipeline: Pipeline,
-    report_path: Path,
+    output: Path | None,
     *,
-    output: Path | None = None,
+    workspace: Workspace | None = None,
     writer: GraphWriter | None = None,
     phase: Phase | None = None,
     on_finding: FindingSink | None = None,
 ) -> dict[str, Any]:
     operation = "quality" if output is None else "build"
+    report_path = output / RUN_REPORT if output is not None else None
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": REPORT_SCHEMA_VERSION,
         "report_kind": "biotope." + operation,
         "operation": operation,
         "pipeline": pipeline.name,
@@ -74,10 +106,9 @@ def _execute(
         "variability": pipeline.variability,
         "python": platform.python_version(),
         "outputs": [],
-        "report_path": str(report_path),
+        "report_path": str(report_path) if report_path is not None else None,
         "findings": [],
         "audits": [],
-        "validation": {"state": "not_run", "reason": "Pipeline execution and integrity checks have not completed"},
         "quality": {"state": "not_run", "reason": "Pipeline execution and integrity checks have not completed"},
         "dependencies": {
             name: _software(name) for name in ("biotope", "croissant-baker", "pyright", *pipeline.dependencies)
@@ -87,12 +118,11 @@ def _execute(
     exporter = (writer or BioCypherWriter()) if output is not None else None
 
     def save() -> None:
-        save_report(
-            report_path, json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", "biotope." + operation
-        )
+        if report_path is not None:
+            save_report(report_path, report_text(report), "biotope." + operation)
 
     def collect() -> None:
-        """Refresh the run's own evidence; idempotent so the context can be generated from it."""
+        """Refresh the run's own evidence; idempotent, so a failure report keeps what was measured."""
         if context is None:
             return
         report["audits"] = [asdict(item) for item in context.audits]
@@ -105,57 +135,37 @@ def _execute(
     save()
     stage = "definitions"
     try:
-        report["definitions"] = check_pipeline(pipeline, phase=phase, on_finding=on_finding)
+        report["definitions"] = check_pipeline(pipeline, workspace=workspace, phase=phase, on_finding=on_finding)
+        for providers in report["definitions"].get("imports", {}).values():
+            for name in providers:
+                if name not in report["dependencies"]:
+                    report["dependencies"][name] = _software(name)
         if exporter is not None:
             stage = "environment"
             if phase:
                 phase("Checking the exporter")
             report["exporter"] = exporter.check_environment()
         stage = "execution"
-        context = RunContext(pipeline)
+        context = RunContext(pipeline, exporter.check_object if exporter is not None else None)
         if phase:
             phase("Running project loaders and mappings")
         pipeline.run(context)
+        unfinished = {source.name for source in pipeline.sources} - context.completed_sources
+        if unfinished:
+            raise ValueError(f"Selected source loaders did not finish: {sorted(unfinished)}")
         if phase:
             phase("Checking references")
         stage = "integrity"
         context.validate_references()
-        stage = "validation"
         collect()
-        sealed = context.content_digest() if pipeline.validation_checks else None
-        report["validation"] = run_validation(
-            pipeline, context.view(), context.snapshot(), phase=phase, on_finding=on_finding
-        )
-        if sealed is not None and context.content_digest() != sealed:
-            raise ValueError(
-                "A validation check modified the graph. Checks inspect the built graph and must "
-                "not change it; the run is abandoned rather than exporting an unchecked graph."
-            )
         stage = "quality"
         report["quality"] = analyze_quality(context.stores(), phase=phase, on_finding=on_finding).to_json()
-        if report["validation"]["state"] == "failed":
-            stage = "validation"
-            raise ValueError(
-                "Declared validation failed: "
-                + "; ".join(
-                    f"{item['name']}: {item['detail']}"
-                    for item in report["validation"]["checks"]
-                    if item["state"] == "failed"
-                )
-            )
-        report["query_context"] = build_query_context(
-            pipeline,
-            schema=context.schema,
-            descriptions=pipeline.topology.descriptions(),
-            labels=export_labels(context.schema),
-            report=report,
-        )
         if exporter is not None and output is not None:
             stage = "export"
             if phase:
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
-            report["outputs"] = exporter.write(context, output, query_context=report["query_context"])
+            report["outputs"] = exporter.write(context, output)
             report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
     except Exception as exc:
@@ -163,9 +173,8 @@ def _execute(
             report["definitions"] = exc.report
         else:
             report["findings"].append(Finding(stage + ".failed", "error", pipeline.name, str(exc)).to_json())
-        for section in ("validation", "quality"):
-            if report[section]["state"] == "not_run":
-                report[section].update(blocked_by=stage + ".failed", reason=f"{stage.capitalize()} failed: {exc}")
+        if report["quality"]["state"] == "not_run":
+            report["quality"].update(blocked_by=stage + ".failed", reason=f"{stage.capitalize()} failed: {exc}")
         report.update(state="failed", error=str(exc))
         raise RunFailed(report) from exc
     finally:

@@ -61,15 +61,13 @@ for example:
 > samples to donors so I can compare measurements by donor. Review the source
 > metadata and explain any missing scientific decisions before choosing a mapping.
 
-The agent records the purpose, reviews source descriptions, generates records and
-authors the graph workspace. When construction is requested, it checks and runs
-the selected pipeline, then reports outputs, exclusions and validation results.
+The agent records the purpose, reviews source descriptions, generates the source
+inventory and authors the graph workspace. When construction is requested, it
+checks and runs the selected pipeline, then reports outputs, exclusions and the
+independent reads it made against the sources.
 Existing scientific choices remain part of the project; unresolved choices need
 input from someone who knows the data.
 
 Database import and querying require a separate task and environment. The
 [tutorial](tutorial.md) covers file output, while the [authoring guide](mapping.md)
 explains the Python contracts.
-
-For an agent without skill support, `biotope init --agents-md` can add project-local
-`AGENTS.md` instructions during initialization.

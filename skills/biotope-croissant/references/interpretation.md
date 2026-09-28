@@ -1,89 +1,71 @@
-# Capabilities and interpretation
+# Interpretation that travels with the graph
 
-## Define a question family
-
-`Capability(key, question, concepts, limitations)` states what a graph is intended
-to answer. Its concepts identify the relevant topology; its limitations describe
-questions the selected population cannot support.
-
-`supported` in `run.json` means every bound validation check passed. It does not
-establish that every interpretation is sufficient or that a query example ran.
-A capability with no check reports `unchecked`; a check returning `unknown` leaves
-its capability `unverified`.
-
-Before fixing scope, consider adjacent comparisons, contradictory evidence,
-alternative readings, necessary context and meaningful absence results. Expand
-only where relevant to the agreed purpose and feasible resources.
+The consumer receives the graph and `graph/build/`: labels, properties,
+`biotope_provenance_id`, the descriptions in `schema_config.yaml`, and the scope,
+policies and settings in `run.json`. Everything they need to read a value
+correctly must be in one of those places.
 
 ## Separate selection from query filters
 
 A selection rule determines which records exist in the graph. A query filter
-operates on those retained records. If two intended interpretations require
-different populations, discuss admitting their union. A second property on the
-retained subset cannot recover rows excluded during construction.
+operates on those retained records. If two intended readings require different
+populations, discuss admitting their union: a second property on the retained
+subset cannot recover rows excluded during construction.
 
-`Interpretation(subject, kind, statement, alternatives)` binds a rule to a concept
-ID or `<concept ID>.<property>`.
+State a selection rule twice. The pipeline's `policies` name each exclusion a
+mapping reports through `context.exclude(...)`, with the rule a reviewer can
+check; the `scope` states the selected inputs and output grain. A threshold kept
+as a property lets a consumer tighten it in a query; one applied during
+construction cannot be loosened without a rebuild, and the policy must say so.
 
-| Kind          | State                                                                |
-| ------------- | -------------------------------------------------------------------- |
-| `selection`   | Which records were admitted and by what rule                         |
-| `statistic`   | What the value measures, its reference and calculation               |
-| `identity`    | When identifiers can be joined and where that identity is unresolved |
-| `qualifier`   | Cohort, timepoint, treatment or other context needed for comparison  |
-| `uncertainty` | What the value or evidence does not establish                        |
+## What each description must state
 
-For a topology with `study:measurement.strict_p`, this declaration describes a
-bounded selection:
+Descriptions are authored where the concept or property is declared, in the class
+docstring and `field(metadata={"description": ...})`. Each kind of rule has a
+home:
+
+| Rule        | State                                                               | Where                                      |
+| ----------- | ------------------------------------------------------------------- | ------------------------------------------ |
+| Selection   | Which records were admitted and by what rule                        | `Pipeline.policies`, `scope`, the concept  |
+| Statistic   | What the value measures, its reference and its calculation          | The property description                   |
+| Identity    | When identifiers can be joined and where identity is unresolved     | The identifier's concept and the relation  |
+| Qualifier   | Cohort, timepoint, treatment or other context needed for comparison | A queryable property, described            |
+| Uncertainty | What the value or evidence does not establish                       | The property description; `ASSUMPTIONS.md` |
+
+For a property retained under a strict adjustment, this states both the
+statistic and the selection it implies:
 
 ```python
-from biotope.graph import Capability, Interpretation, QueryContext
-
-QUERY_CONTEXT = QueryContext(
-    interpretations=(
-        Interpretation(
-            subject="study:measurement.strict_p",
-            kind="selection",
-            statement="Only rows with strict_p < 0.05 were retained.",
-        ),
-    ),
-    capabilities=(
-        Capability(
-            key="retained-significance",
-            question="Which supplied measurements passed the strict adjustment?",
-            concepts=("study:measurement",),
-            limitations=("Rows failing the strict adjustment are absent.",),
-        ),
-    ),
+strict_p: float = field(
+    metadata={
+        "description": (
+            "Benjamini-Hochberg adjusted p over the authors' filtered gene set, as reported. "
+            "Rows with strict_p >= 0.05 were not admitted (policy above_admission_band)."
+        )
+    }
 )
 ```
 
-`alternatives` must refer to concepts or properties in the actual topology. A
-reading requiring excluded records belongs in the capability's limitations.
-Add `QueryExample` declarations using actual export labels and runnable queries;
-report separately whether they have been executed.
+A reading that needs excluded records is a limitation: say so in the concept or
+property description and in the policy, not only in the hand-over.
 
-## Derive independent expectations
+## Keep open questions visible
 
-`ValidationCheck(name, function, capability, evidence)` runs after reference
-integrity and before export. Its function takes `(GraphView, tuple[Audit, ...])`
-and returns a `ValidationResult`.
+A scientific interpretation the sources do not settle — an unrecorded contrast
+orientation, a cohort overlap, an identity the evidence does not establish — goes
+into `graph/ASSUMPTIONS.md` with what would resolve it, and into the hand-over.
+Keep the affected description honest about it.
 
-Read the original source, a published result or a curated answer to establish the
-expectation. Reusing the pipeline's selection code can reproduce its mistakes.
-Compare both missing and unexpected records, using consistent namespaced IDs.
-Name the expectation's source in `evidence`.
+## Review with independent reads
 
-- `ValidationResult.ok(...)` records a pass.
-- `ValidationResult.wrong(...)` fails validation and blocks export.
-- `ValidationResult.unknown(...)` records an unresolved question as `unverified`.
+Builds check structure, not scientific correctness. Before relying on a claim,
+read the original source, a published result or a curated answer to establish
+the expectation. Never derive it from the pipeline's own selection: reusing the
+code that built the graph reproduces its mistakes. Compare both missing and
+unexpected records, using consistent namespaced IDs, and name the source of each
+expectation. Report these reads in the hand-over; they are review work, not
+committed code.
 
-A check that raises fails the run. State the missing evidence when returning
-`unknown`, including which capability it affects.
-
-## Review the exported context
-
-`query_context.json` and the exported `BiotopeQueryContext` rows carry the
-interpretations to graph consumers. Review them alongside the graph to ensure
-statistics, selection rules, identities and limits are understandable without
-access to the development conversation.
+Review the export alongside the graph to ensure statistics, selection rules,
+identities and limits are understandable without access to the development
+conversation.

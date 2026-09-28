@@ -30,6 +30,8 @@ class GraphOutput:
         )
         self.seen: set[str] = set()
         self.task = self.progress.add_task("Loading definitions", total=None)
+        self.log_phases = not as_json and not self.console.is_terminal and operation in ("quality", "build")
+        self.logged_phase = ""
 
     def __enter__(self) -> GraphOutput:
         # Redirect both Python streams and native/subprocess writes while project code runs.
@@ -58,7 +60,12 @@ class GraphOutput:
             os.close(self.stdout_fd)
 
     def phase(self, name: str) -> None:
-        self.progress.update(self.task, description=name.capitalize())
+        description = name[:1].upper() + name[1:]
+        step = description.partition(": ")[0]
+        if self.log_phases and step != self.logged_phase:
+            self.logged_phase = step
+            self.row("Phase", step)
+        self.progress.update(self.task, description=description)
 
     def row(self, status: str, subject: str, detail: str = "") -> None:
         table = Table.grid(padding=0)
@@ -71,7 +78,8 @@ class GraphOutput:
         self.console.print(table)
 
     def on_finding(self, finding: Finding) -> None:
-        self.finding(finding.to_json())
+        if finding.severity != "error":
+            self.finding(finding.to_json())
 
     def finding(self, finding: dict[str, Any]) -> None:
         key = json.dumps(finding, sort_keys=True)
@@ -84,7 +92,7 @@ class GraphOutput:
             return
         label = {"error": "FAIL", "warning": "WARN", "info": "INFO"}.get(finding["severity"], "INFO")
         location = finding.get("location")
-        detail = finding["message"]
+        detail = f"{finding['code']}: {finding['message']}" if finding["severity"] == "error" else finding["message"]
         if location:
             path = location["path"]
             if location.get("line") is not None:
@@ -93,6 +101,16 @@ class GraphOutput:
                     path += f":{location['column']}"
             detail = path + "\n" + detail if path != finding["subject"] else detail
         self.row(label, finding["subject"], detail)
+
+    def standardization(self, overview: dict[str, Any]) -> None:
+        for name, term in overview.get("terms", {}).items():
+            self.row("Term", name, term["description"])
+            for binding in term["bindings"]:
+                where = f"{binding['record_set']}.{binding['attribute']}"
+                self.row("", str(binding["source_field"] or "Not supplied"), where)
+        preserved = overview.get("preserved_fields", [])
+        if preserved:
+            self.row("Preserve", f"{len(preserved)} source fields without a shared term; see --json for bindings")
 
     def finish(self, report: dict[str, Any]) -> None:
         if self.as_json:
@@ -108,29 +126,20 @@ class GraphOutput:
         for check in checks:
             if check["state"] == "skipped":
                 self.row("SKIP", check["name"], check["reason"])
-        validation: dict[str, Any] = report.get("validation") or {}
+        if self.operation == "check":
+            self.standardization(definitions.get("standardization", {}))
         findings: list[Any] = [
             *definitions.get("findings", []),
-            *validation.get("findings", []),
             *report.get("quality", {}).get("findings", []),
         ]
         if definitions is not report:
             findings.extend(report.get("findings", []))
+        errors = [finding for finding in findings if finding.get("severity") == "error"]
         for finding in findings:
-            self.finding(finding)
+            if finding.get("severity") != "error":
+                self.finding(finding)
         for key, reason in definitions.get("deferrals", {}).items():
             self.row("Defer", key, reason)
-        if validation.get("state") not in (None, "not_run"):
-            label = {"passed": "OK", "failed": "FAIL", "unverified": "WARN", "absent": "WARN"}
-            self.row(label.get(validation["state"], "INFO"), "Validation", validation.get("reason", ""))
-            for check in validation.get("checks", []):
-                mark = {"passed": "OK", "failed": "FAIL", "unverified": "WARN"}[check["state"]]
-                self.row(mark, check["name"], check["detail"])
-            for key, capability in sorted(validation.get("capabilities", {}).items()):
-                mark = {"supported": "OK", "failed": "FAIL"}.get(capability["state"], "WARN")
-                self.row(mark, f"Capability {key}", f"{capability['state']} · {capability['question']}")
-        elif self.operation in ("quality", "build") and validation:
-            self.row("SKIP", "Validation", validation.get("reason", ""))
         for audit in report.get("audits", []):
             counts = " · ".join(f"{k}: {v}" for k, v in sorted(audit["counts"].items()))
             self.row(
@@ -138,17 +147,23 @@ class GraphOutput:
                 audit["stage"],
                 f"{audit['inputs']} -> {audit['outputs']}\n{audit['selection']}\n{counts}",
             )
-        measurements = report.get("quality", {}).get("measurements", {})
-        if measurements:
-            self.quality(measurements)
-        if report.get("quality", {}).get("state") == "not_run":
-            self.row("SKIP", "Quality measurements", report["quality"]["reason"])
+        quality = report.get("quality", {})
+        if quality.get("measurements"):
+            self.quality(quality["measurements"])
+        if quality.get("state") == "not_run":
+            blocked = quality.get("blocked_by")
+            self.row("SKIP", "Quality measurements", f"Blocked by {blocked}" if blocked else quality["reason"])
         if self.operation == "scaffold" and report.get("state") == "complete":
             self.row("Created", f"{len(report['files'])} files in {report['path']}")
         for key in ("report_path", "html_path"):
             if report.get(key):
                 self.row("Saved", report[key])
-        self.row("FAIL" if report.get("state") == "failed" else "Done", report.get("state", "complete"))
+        for finding in errors:
+            self.finding(finding)
+        if report.get("state") != "failed":
+            self.row("Done", report.get("state", "complete"))
+        elif not errors:
+            self.row("FAIL", "failed", report.get("error", ""))
 
     def quality(self, measurements: dict[str, Any]) -> None:
         for name, value in measurements.items():

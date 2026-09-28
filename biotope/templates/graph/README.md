@@ -1,99 +1,105 @@
 # Graph workspace
 
-This workspace contains declarations and inactive examples to adapt to your
-research purpose. Complete the topology, sources, mappings and pipeline before
-building. The `_example` files are outside the active registries and contain no
-working data reader.
+This workspace holds the project-owned code that turns described sources into a
+typed graph. Scientific preprocessing stays upstream: loaders decode what the
+sources report, and mappings select and construct graph objects.
 
-## Environment and paths
+## Layout
 
-Install the published `biotope[graph]>=0.9,<0.10` package in the project environment.
-Its croissant-baker dependency comes from PyPI. Pyright needs Node.js on `PATH` or
-`pyright[nodejs]`. Record additional reader libraries in `graph/pyproject.toml`.
-See [installation](https://biocypher.github.io/biotope/installation/) for setup commands.
-
-Run Biotope commands from the parent project directory. Keep raw data, purpose
-files and managed `.biotope/datasets/` there. Keep graph code, corrections, helper
-tools and outputs in this workspace. `paths.py` supplies `PROJECT_ROOT` and
-`GRAPH_ROOT`; use package-relative imports so the workspace can be renamed.
-
-## Generate source records
-
-Review and register source metadata, then generate its contracts:
-
-```bash
-biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+```text
+graph/
+  standardization.py     shared terms that fields of several sources bind to
+  sources/
+    __init__.py          selected sources and explicit, reasoned exclusions
+    inventory.py         generated: every source package, collected on import
+    <manifest>/          generated root for one managed Croissant manifest
+      <source>/          one package per RecordSet or undescribed file
+        __init__.py      SOURCE registration
+        schema.py        typed records and field bindings; yours to edit
+        loader.py        decoding into the schema; starts as a placeholder
+  alignment/             cross-source identity resolution, before mappings
+  topology/<concept>/    node dataclasses and their outgoing relations
+  mappings/<concept>/    selection, joins and graph-object construction
+  pipelines/
+    compose.py           the stage sequence
+    build_graph.py       registration, scope and scientific policies
+  build/                 the current generated graph (not committed)
+  metagraph.html         generated topology view
 ```
 
-Replace `study.jsonld` with the managed description you reviewed. Each top-level
-record set gets a package under `sources/study/` containing a generated `schema.py`,
-a `SOURCE` registration and a loader stub. Generation preserves existing authored
-registrations and loaders. The generated manifest-level `CONTRACTS` inventory
-collects the packages; select the contracts used by the pipeline in `SOURCES`.
+## Environment
 
-Regenerate after metadata changes and review the diff. Do not edit generated
-schemas or inventories. Removed record sets leave orphan packages for you to
-review; generation never deletes authored loaders.
+Install the published `biotope[graph]>=0.10,<0.11` package in the project
+environment. Pyright needs Node.js on `PATH` or `pyright[nodejs]`. Record reader
+libraries that loaders import, such as pandas, in `graph/pyproject.toml`;
+`biotope graph check` warns about an undeclared import, and `run.json` records the
+installed version of each. See
+[installation](https://biocypher.github.io/biotope/installation/).
 
-## Author the graph
+Run Biotope commands from the parent project directory, where raw data, the
+purpose file and the managed `.biotope/datasets/` live. `paths.py` supplies
+`PROJECT_ROOT` and `GRAPH_ROOT`; use package-relative imports.
 
-| Location                                    | What to implement                                                            |
-| ------------------------------------------- | ---------------------------------------------------------------------------- |
-| `sources/<manifest>/<record-set>/loader.py` | Physical decoding and source evidence using established format libraries     |
-| `topology/<concept>/`                       | Frozen node and relation dataclasses, stable concept IDs and typed endpoints |
-| `mappings/`                                 | Transformations of named `SourceRecord[...]` inputs, read through `.value`   |
-| `pipelines/build_graph.py`                  | Scope, source selection, joins, exclusions and execution                     |
-| `query_context.py`                          | Supported questions, interpretation rules and limitations                    |
-| `checks.py`                                 | Validation against independently established expectations                    |
+## Workflow
 
-Use a distinct identifier `NewType` for each node type and mint namespaced IDs.
-Describe concepts in class docstrings and properties with
-`field(metadata={"description": "..."})`. Optional `display_name` declarations
-provide short diagram labels.
+1. Register each reviewed Croissant description with `biotope source register`.
+   Every input the graph might use must be described, documents included.
 
-Mappings may return topology objects directly. The `_example` files show a
-normalization step returning an intermediate dataclass, followed by graph
-construction. Use that split when transformations are reused or need buffering.
+1. Scaffold its sources:
 
-Register definitions in `TOPOLOGY`, `SOURCES` and `MAPPINGS`, then import those
-registries into the active pipeline. `context.load` validates loaded records;
-`context.apply` passes typed intermediates onward; `context.map` collects graph
-objects. Keep payload access inside explicitly called functions, never imports.
+   ```bash
+   biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+   ```
 
-Declare join keys, cardinality, unmatched policies and output grain. Report
-excluded records through `context.exclude`, and record stage rules and named
-counts through `context.record_audit`. Validation checks can compare the result
-with source-derived expectations, including records omitted by the pipeline.
+   Each RecordSet, and each file no RecordSet reads, gets a package. Generation
+   creates missing files only; it never rewrites a schema, registration or
+   loader. It records every contract revision in `.biotope/contracts/`.
 
-## Check and build
+1. Select sources in `sources/__init__.py`. A source that is not used goes into
+   `EXCLUDED_SOURCES` with a reason; every inventoried source is one or the other.
 
-```bash
-biotope graph check
-biotope graph metagraph
-biotope graph build --out graph/build/review-1
-```
+1. Edit each selected schema: names, types, missing-value tokens and bindings to
+   terms in `standardization.py`. Implement its loader and delete the loader's
+   `# biotope:placeholder` first line. Loaders preserve rows; they do not filter.
 
-Check imports declarations and runs type checks without invoking loaders.
-Metagraph loads topology independently and writes `reports/metagraph.html`.
-Build checks and executes the pipeline, validates its objects and exports a new
-run directory. To execute without exporting, use `biotope graph quality` instead.
-Running quality and build separately executes twice.
+1. Declare concepts in `topology/<concept>/`. Describe every concept in its
+   docstring and every property with `field(metadata={"description": ...})`;
+   the descriptions travel with the export.
 
-`ValidationResult.wrong` blocks export; `.unknown` leaves the associated capability
-unresolved. With no declared checks, validation is `absent`. Built-in quality
-warnings describe the emitted graph and need scientific interpretation.
+1. Resolve identities in `alignment/`, then write mappings and the stage
+   sequence in `pipelines/compose.py`. Report excluded records through
+   `context.exclude` and stage accounts through `context.record_audit`.
 
-## Review output
+1. Check, build and inspect:
 
-Read exported values alongside `run.json`, `provenance.jsonl` and
-`query_context.json`. Biotope derives the BioCypher schema from your topology; no
-separate project adapter is needed. The query context is also exported under the
-`BiotopeQueryContext` system label, outside domain population counts.
+   ```bash
+   biotope graph check
+   biotope graph build
+   biotope graph metagraph --report graph/build/run.json
+   ```
 
-Use `biotope graph metagraph --report graph/build/review-1/run.json` to view build
-observations. Archive run directories and generated reports when needed, retaining
-raw data, curated metadata and authored code for reproduction.
+When a manifest changes, `biotope graph check` reports `source.drift` for each
+affected schema and explains the change. Review it, update the schema, then set
+its `__source_digest__` to the revision the finding names.
+
+## Artifacts
+
+A successful build replaces `graph/build/` from staging; a failed rebuild keeps
+the previous graph and writes `build/last_failure.json`.
+
+| Artifact                | Purpose                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `schema_config.yaml`    | Labels, properties, descriptions and constraints                             |
+| `biocypher_config.yaml` | Export settings                                                              |
+| `run.json`              | Inputs, code fingerprints, settings, bindings, counts, exclusions and checks |
+| `provenance.json`       | Shared source and contributor evidence                                       |
+| `biocypher/`            | Import data, headers and script                                              |
+
+Every exported node and edge carries `biotope_provenance_id`, an index into
+`provenance.json`, so distribute `graph/build/` with the graph. Checks establish
+structure, not scientific correctness: review selected records against the
+sources themselves before relying on the graph.
 
 Further reference: [typed graph guide](https://biocypher.github.io/biotope/mapping/),
-[technical notes](https://biocypher.github.io/biotope/mapping_sidenotes/), and
+[technical notes](https://biocypher.github.io/biotope/mapping_sidenotes/) and
 [tutorial](https://biocypher.github.io/biotope/tutorial/).

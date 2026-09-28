@@ -19,22 +19,16 @@ OtherId = NewType("OtherId", str)
 
 @dataclass(frozen=True)
 class Row:
-    """A synthetic source row."""
-
     key: str
 
 
 @dataclass(frozen=True)
 class Alternate:
-    """A second source row accepted by the same parameter."""
-
     key: str
 
 
 @dataclass(frozen=True)
 class Value:
-    """An intermediate that declares no graph identity."""
-
     key: str
 
 
@@ -54,6 +48,24 @@ class Stray:
     id: OtherId
 
 
+@dataclass(frozen=True)
+class EveryCheckableShape:
+    symbols: tuple[str, ...]
+    pair: tuple[str, int]
+    nested: list[tuple[Value, ...]]
+    thing: ThingId | None = None
+
+
+@dataclass(frozen=True)
+class Uncheckable:
+    tags: dict[str, str]
+
+
+@dataclass(frozen=True)
+class HoldsUncheckable:
+    inner: Uncheckable
+
+
 TOPOLOGY = Topology(nodes=(Thing,), edges=())
 
 
@@ -67,6 +79,7 @@ def as_union(row: SourceRecord[Row]) -> Iterator[Value | Thing]: ...
 def union_input(row: SourceRecord[Row | Alternate]) -> Iterator[Value]: ...
 def split_union_input(row: SourceRecord[Row] | SourceRecord[Alternate]) -> Iterator[Value]: ...
 def keyword_only(row: SourceRecord[Row], *, other: SourceRecord[Alternate]) -> Iterator[Value]: ...
+def as_every_checkable_shape(row: SourceRecord[EveryCheckableShape]) -> Iterator[EveryCheckableShape]: ...
 
 
 SHAPES = {
@@ -80,6 +93,7 @@ SHAPES = {
     union_input: ((("row", (Row, Alternate)),), (Value,)),
     split_union_input: ((("row", (Row, Alternate)),), (Value,)),
     keyword_only: ((("row", (Row,)), ("other", (Alternate,))), (Value,)),
+    as_every_checkable_shape: ((("row", (EveryCheckableShape,)),), (EveryCheckableShape,)),
 }
 
 
@@ -105,6 +119,8 @@ def unannotated_return(row: SourceRecord[Row]): ...
 def unregistered_output(row: SourceRecord[Row]) -> Iterator[Stray]: ...
 def unresolved(row: "SourceRecord[Absent]") -> Iterator[Value]: ...  # noqa: F821
 def type_variable(row: SourceRecord[Unsolved]) -> Iterator[Value]: ...
+def unchecked_input(row: SourceRecord[Uncheckable]) -> Iterator[Value]: ...
+def unchecked_output(row: SourceRecord[Row]) -> Iterator[HoldsUncheckable]: ...
 
 
 REJECTED = {
@@ -122,6 +138,8 @@ REJECTED = {
     unregistered_output: "return: register these graph outputs in the topology: Stray",
     unresolved: "annotations: could not be resolved",
     type_variable: "parameter 'row': expected a concrete dataclass or a finite union of them",
+    unchecked_input: "parameter 'row': Uncheckable.tags",
+    unchecked_output: "return: Uncheckable.tags",
 }
 
 
@@ -143,7 +161,6 @@ def test_invalid_signatures_are_reported_together_without_running_project_code()
     with pytest.raises(CheckFailed) as failure:
         check_pipeline(pipeline, static=False)
     findings = [f for f in failure.value.report["findings"] if f["code"] == "mapping.contract"]
-    # Every registration is reported independently, and each names its own problem.
     assert {f["subject"] for f in findings} == {function.__name__ for function in REJECTED}
     for function, message in REJECTED.items():
         reported = [f for f in findings if f["subject"] == function.__name__]
@@ -151,7 +168,6 @@ def test_invalid_signatures_are_reported_together_without_running_project_code()
         assert all(f["location"]["path"].endswith("test_check_mappings.py") for f in reported)
         assert all(f["location"]["line"] for f in reported)
     assert executed == []
-    # Several problems in one signature are collected rather than reported one at a time.
     with pytest.raises(SignatureError) as raised:
         contract(Mapping(name="both", function=not_iterable_and_untyped))
     assert len(raised.value.problems) == 2
@@ -179,7 +195,6 @@ def test_report_keeps_signature_derived_inputs_outputs_and_concepts():
         "requirements": ("entity:thing",),
         "evidence": ("Why.",),
     }
-    # An intermediate output needs no topology registration; a graph output does.
     stray: tuple[MappingEntry, ...] = (Mapping(name="check:stray", function=unregistered_output),)
     with pytest.raises(CheckFailed, match="register these graph outputs"):
         check_pipeline(

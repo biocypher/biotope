@@ -1,113 +1,21 @@
 """Measurements of typed outputs and execution without an export dependency."""
 
-from collections.abc import Iterator
-from dataclasses import dataclass
-from typing import ClassVar, NewType
+from dataclasses import replace
 
 import pytest
+from synthetic_pipelines import EDGES, MEASURED_PIPELINE, NODES, RecordingWriter, emit_measured, link, node
 
-from biotope.graph import Evidence, Mapping, Pipeline, SourceRecord, Topology
+from biotope.graph import build
+from biotope.graph.quality import GraphStores, analyze_quality
+from biotope.graph.reports import CheckFailed
 from biotope.graph.runtime import RunContext
 
 
-NodeId = NewType("NodeId", str)
-UnusedId = NewType("UnusedId", str)
-
-
-@dataclass(frozen=True)
-class NodeRow:
-    """A synthetic source row behind one measured node."""
-
-    index: int
-    name: str | None
-    tags: list[str]
-
-
-@dataclass(frozen=True)
-class LinkRow:
-    """A synthetic source row behind one measured edge."""
-
-    index: int
-    source: int
-    target: int
-
-
-@dataclass(frozen=True)
-class Node:
-    schema_id: ClassVar[str] = "test:node"
-    id: NodeId
-    name: str | None = None
-    count: int = 0
-    enabled: bool = False
-    tags: list[str] | None = None
-
-
-@dataclass(frozen=True)
-class Unused:
-    schema_id: ClassVar[str] = "test:unused"
-    id: UnusedId
-    note: str | None = None
-
-
-@dataclass(frozen=True)
-class Link:
-    schema_id: ClassVar[str] = "test:link"
-    id: str
-    source: NodeId
-    target: NodeId
-
-
-def make_node(row: SourceRecord[NodeRow]) -> Iterator[Node]:
-    """Produce one node with the row's own name and tag values."""
-    yield Node(NodeId(f"n:{row.value.index}"), row.value.name, tags=row.value.tags)
-
-
-def make_link(row: SourceRecord[LinkRow]) -> Iterator[Link]:
-    """Produce one edge between two node identifiers."""
-    yield Link(f"e:{row.value.index}", NodeId(f"n:{row.value.source}"), NodeId(f"n:{row.value.target}"))
-
-
-NODES = Mapping(name="nodes", function=make_node)
-EDGES = Mapping(name="edges", function=make_link)
-
-
-def node(index: int, name: str | None, tags: list[str]) -> SourceRecord[NodeRow]:
-    """One evidence-bearing node row."""
-    return SourceRecord(NodeRow(index, name, tags), (Evidence("rows", "v1", "nodes", str(index)),))
-
-
-def link(index: int, source: int, target: int) -> SourceRecord[LinkRow]:
-    """One evidence-bearing edge row."""
-    return SourceRecord(LinkRow(index, source, target), (Evidence("rows", "v1", "edges", str(index)),))
-
-
-def emit_fixture(context: RunContext) -> None:
-    """Build the measured fixture graph through the checked mapping path."""
-    for index, name in enumerate((None, "  ", "x" * 200, "fourth")):
-        context.map(NODES, node(index, name, []))
-    for index, (source, target) in enumerate(((0, 1), (0, 1), (1, 1))):
-        context.map(EDGES, link(index, source, target))
-
-
-PIPELINE = Pipeline(
-    "fixture",
-    Topology((Node, Unused), (Link,)),
-    (),
-    (NODES, EDGES),
-    emit_fixture,
-    scope="four nodes and three edges",
-    code_paths=(__file__,),
-    requirements={"entity:unused": "test:unused"},
-)
-
-
 def test_quality_counts_evidence_and_empty_denominators():
-    from biotope.graph.quality import GraphStores, analyze_quality
-
-    context = RunContext(PIPELINE)
-    emit_fixture(context)
+    context = RunContext(MEASURED_PIPELINE)
+    emit_measured(context)
     context.validate_references()
-    report = analyze_quality(GraphStores(context.schema, context.nodes, context.edges, PIPELINE.requirements)).to_json()
+    report = analyze_quality(context.stores()).to_json()
     m = report["measurements"]
     assert m["population"] == {"test:node": 4, "test:unused": 0, "test:link": 3}
     names = m["properties"]["test:node"]["name"]
@@ -140,74 +48,53 @@ def test_quality_counts_evidence_and_empty_denominators():
     assert empty["self_loops"]["test:link"]["rate"] is None
 
 
-def test_quality_executes_once_without_export_and_records_failures(tmp_path, monkeypatch):
-    import json
-    from dataclasses import replace
-
-    from biotope.graph import build
-    from biotope.graph.reports import CheckFailed
-
-    calls = []
+def test_quality_executes_once_without_export_and_records_failures(tmp_path, monkeypatch, unchecked_definitions):
+    calls: list[str] = []
 
     def run(context):
         calls.append("run")
-        emit_fixture(context)
-
-    monkeypatch.setattr(build, "check_pipeline", lambda *a, **kw: {"state": "checked", "topology_digest": "fixture"})
+        emit_measured(context)
 
     class ForbiddenWriter:
         def __init__(self):
             raise AssertionError("Quality instantiated BioCypher")
 
     monkeypatch.setattr(build, "BioCypherWriter", ForbiddenWriter)
-    report_path = tmp_path / "graph/reports/quality.json"
-    report = build.assess_pipeline(replace(PIPELINE, run=run), report_path)
+    monkeypatch.chdir(tmp_path)
+    measured = replace(MEASURED_PIPELINE, run=run)
+    report = build.assess_pipeline(measured)
     assert calls == ["run"]
     assert report["operation"] == "quality" and report["state"] == "complete"
-    assert report["outputs"] == []
+    assert report["outputs"] == [] and report["report_path"] is None
     assert report["quality"]["measurements"]["population"]["test:node"] == 4
-    assert json.loads(report_path.read_text())["quality"] == report["quality"]
-    assert list(report_path.parent.iterdir()) == [report_path]
+    assert list(tmp_path.iterdir()) == []
 
-    class Writer:
-        def check_environment(self):
-            calls.append("environment")
-            return {"exporter": "test", "version": "0", "format": "none"}
-
-        def write(self, context, output, *, query_context):
-            calls.append("export")
-            return []
-
-    result = build.run_pipeline(replace(PIPELINE, run=run), tmp_path / "build", writer=Writer())
-    # The exporter is verified before any project loader runs, not after.
-    assert calls == ["run", "environment", "run", "export"]
+    calls.clear()
+    result = build.run_pipeline(measured, tmp_path / "build", writer=RecordingWriter(calls))
+    assert calls == ["environment", "run", "export"]
     assert result["quality"] == report["quality"]
 
     def bad(context):
         raise ValueError("mapping failed")
 
-    with pytest.raises(ValueError, match="mapping failed"):
-        build.assess_pipeline(replace(PIPELINE, run=bad), report_path)
-    assert json.loads(report_path.read_text())["quality"]["state"] == "not_run"
+    with pytest.raises(build.RunFailed, match="mapping failed") as failure:
+        build.assess_pipeline(replace(MEASURED_PIPELINE, run=bad))
+    assert failure.value.report["quality"]["state"] == "not_run"
 
     def dangling(context):
         context.map(EDGES, link(99, 98, 97))
 
-    with pytest.raises(ValueError):
-        build.assess_pipeline(replace(PIPELINE, run=dangling), report_path)
-    failure = json.loads(report_path.read_text())
-    assert failure["quality"]["state"] == "not_run"
-    assert failure["quality"]["blocked_by"] == "integrity.failed"
-    assert "measurements" not in failure["quality"]
+    with pytest.raises(build.RunFailed) as failure:
+        build.assess_pipeline(replace(MEASURED_PIPELINE, run=dangling))
+    assert failure.value.report["quality"]["state"] == "not_run"
+    assert failure.value.report["quality"]["blocked_by"] == "integrity.failed"
+    assert "measurements" not in failure.value.report["quality"]
 
     def invalid(*a, **kw):
         raise CheckFailed({"state": "failed", "findings": [{"severity": "error", "message": "stale"}]})
 
     monkeypatch.setattr(build, "check_pipeline", invalid)
-    with pytest.raises(ValueError, match="stale"):
-        build.assess_pipeline(PIPELINE, report_path)
-    assert json.loads(report_path.read_text())["definitions"]["state"] == "failed"
-    report_path.write_text('{"authored": true}')
-    with pytest.raises(ValueError, match="authored|generated"):
-        build.assess_pipeline(PIPELINE, report_path)
-    assert json.loads(report_path.read_text()) == {"authored": True}
+    with pytest.raises(build.RunFailed, match="stale") as failure:
+        build.assess_pipeline(MEASURED_PIPELINE)
+    assert failure.value.report["definitions"]["state"] == "failed"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["build"]

@@ -1,0 +1,15 @@
+"""Source registration; the schema and loader beside it are project-owned."""
+
+from pathlib import Path
+
+from biotope.graph import SourceContract
+
+from .schema import ${class_import}
+
+
+SOURCE = SourceContract(
+    name=${name},
+    metadata=Path(__file__).resolve().parent / ${metadata},
+    schema=Path(__file__).with_name("schema.py"),
+    records=(${class_ref},),
+)

@@ -1,17 +1,11 @@
-"""Register generated source contracts; keep each authored loader beside its schema."""
+"""Select sources from the complete generated inventory; every exclusion states why."""
 
 from biotope.graph import SourceContract
 
+from .inventory import INVENTORY
 
-# Generation writes one package per record set, plus a CONTRACTS inventory per
-# manifest. Selecting from it stays a project decision:
-#
-#     from .raw import CONTRACTS               # every record set of raw.jsonld
-#     from .raw.measurements import SOURCE as MEASUREMENTS
-#
-#     SOURCES: tuple[SourceContract, ...] = (MEASUREMENTS,)
-#
-# A decoding helper shared by several loaders is authored code and may live
-# anywhere under graph/, including beside the packages it serves; only
-# directories holding a generated schema.py are treated as source packages.
-SOURCES: tuple[SourceContract, ...] = ()
+
+# Map an inventoried source name, such as "study/samples", to the reason it is left out.
+EXCLUDED_SOURCES: dict[str, str] = {}
+
+SOURCES: tuple[SourceContract, ...] = tuple(source for source in INVENTORY if source.name not in EXCLUDED_SOURCES)

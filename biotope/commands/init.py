@@ -7,8 +7,6 @@ the user via ``biotope map``) fills in the competence questions afterwards.
 The agent-facing contract is the **biotope** plugin skills (``skills/biotope-croissant``
 and ``skills/biocypher``), installed via the virtual-human marketplace. Load only
 the skill that matches the current pipeline stage.
-Pass ``--agents-md`` to also drop a root ``AGENTS.md`` template, for agents
-that don't support skills.
 
 Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
 ``project.yaml`` so the user can fill ``purpose:`` before exiting init.
@@ -17,7 +15,6 @@ Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -36,8 +33,6 @@ PURPOSE_PROMPT = (
 )
 
 console = Console()
-
-TEMPLATES = Path(__file__).parent.parent / "templates"
 
 
 DEFAULT_BIOTOPE_CONFIG: dict = {
@@ -107,12 +102,6 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
     default=False,
     help="Open $EDITOR on project.yaml so you can fill in purpose before exiting init.",
 )
-@click.option(
-    "--agents-md",
-    is_flag=True,
-    default=False,
-    help="Also drop a root AGENTS.md, for agents that don't support skills.",
-)
 def init(
     name: str | None,
     dir: Path,  # noqa: A002
@@ -121,7 +110,6 @@ def init(
     no_git: bool,
     visible: bool,
     interactive: bool,
-    agents_md: bool,
 ) -> None:
     """Scaffold a new biotope project.
 
@@ -160,11 +148,6 @@ def init(
     project_yaml_path.parent.mkdir(parents=True, exist_ok=True)
     project.dump(project_yaml_path)
 
-    if agents_md:
-        agents_md_dest = project_dir / "AGENTS.md"
-        agents_md_src = TEMPLATES / "AGENTS.md"
-        shutil.copy(agents_md_src, agents_md_dest)
-
     gitignore = project_dir / ".gitignore"
     if not gitignore.exists():
         gitignore.write_text("data/\n__pycache__/\n*.pyc\n.venv/\n")
@@ -176,8 +159,6 @@ def init(
             click.echo(f"⚠️  git init failed: {exc}")
         else:
             scaffold_paths = [".gitignore", ".biotope/"]
-            if agents_md:
-                scaffold_paths.append("AGENTS.md")
             if visible:
                 scaffold_paths.append(project_yaml_path.relative_to(project_dir).as_posix())
             try:

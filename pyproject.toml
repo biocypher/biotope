@@ -13,7 +13,7 @@ build-backend = "hatchling.build"
 [project]
 name = "biotope"
 version = "0.9.1"
-description = "CLI integration for BioCypher ecosystem packages"
+description = "Curate Croissant descriptions of local data and build typed, provenance-tracked BioCypher knowledge graphs"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = { text = "Apache-2.0" }
@@ -21,13 +21,18 @@ authors = [
     { name = "Sebastian Lobentanzer", email = "sebastian.lobentanzer@gmail.com" },
     { name = "Vladislav Samoilov", email = "vladislav.samoilov@gmail.com" },
 ]
-keywords = []
+keywords = ["knowledge-graph", "biocypher", "croissant", "metadata", "provenance", "bioinformatics", "data-integration"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Typing :: Typed",
 ]
 dependencies = [
     "click>=8.1.8",
@@ -37,6 +42,7 @@ dependencies = [
     "requests>=2.32.0",
     "pydantic>=2.6",
     "croissant-baker>=0.5,<1",
+    "tomli>=1.1; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -56,7 +62,7 @@ dev = [
 Homepage = "https://github.com/biocypher/biotope"
 "Source Code" = "https://github.com/biocypher/biotope"
 "Bug Tracker" = "https://github.com/biocypher/biotope/issues"
-Documentation = "https://biocypher.org"
+Documentation = "https://biocypher.github.io/biotope/"
 Download = "https://pypi.org/project/biotope/#files"
 
 [project.scripts]
@@ -94,11 +100,6 @@ precision = 2
 
 [tool.ruff]
 line-length = 120
-# Preserve the generated template contract byte-for-byte; freshness is tested.
-extend-exclude = [
-    "biotope/templates/graph/sources/_example/__init__.py",
-    "biotope/templates/graph/sources/_example/example_rows/schema.py",
-]
 force-exclude = true
 
 [tool.ruff.lint]

@@ -2,12 +2,10 @@
 
 from biotope.graph import Pipeline, RunContext, SourceRecord
 
-from ..checks import VALIDATION_CHECKS
 from ..mappings import MAPPINGS
-from ..mappings.samples import IDENTITY_SCOPE, MAPPING, NORMALISE, SCORE_MULTIPLIER
+from ..mappings.sample import IDENTITY_SCOPE, MAPPING, NORMALISE, SCORE_MULTIPLIER
 from ..paths import GRAPH_ROOT, PROJECT_ROOT
-from ..query_context import QUERY_CONTEXT
-from ..sources import PEOPLE, SAMPLES, SOURCES
+from ..sources import EXCLUDED_SOURCES, INVENTORY, PEOPLE, SAMPLES, SOURCES
 from ..sources.study.people.loader import load as load_people
 from ..sources.study.people.schema import People
 from ..sources.study.samples.loader import load as load_samples
@@ -64,8 +62,6 @@ PIPELINE = Pipeline(
         for path in (
             "__init__.py",
             "paths.py",
-            "checks.py",
-            "query_context.py",
             "sources",
             "topology",
             "mappings",
@@ -84,6 +80,6 @@ PIPELINE = Pipeline(
     },
     settings={"score_multiplier": SCORE_MULTIPLIER, "identity_scope": IDENTITY_SCOPE},
     variability="Fixed checked-in synthetic inputs, version fixture-v1; deterministic content.",
-    validation_checks=VALIDATION_CHECKS,
-    query_context=QUERY_CONTEXT,
+    source_inventory=INVENTORY,
+    excluded_sources=EXCLUDED_SOURCES,
 )

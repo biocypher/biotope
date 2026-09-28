@@ -2,24 +2,26 @@
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from test_quality import PIPELINE, Link, Node, emit_fixture
+from synthetic_pipelines import MEASURED_PIPELINE, Link, Node, emit_measured
 
 from biotope.cli import cli
+from biotope.graph.metagraph import describe_metagraph, render_metagraph
+from biotope.graph.quality import analyze_quality
+from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest
 
 
-def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
-    from biotope.graph.metagraph import describe_metagraph, render_metagraph
-    from biotope.graph.quality import GraphStores, analyze_quality
-    from biotope.graph.runtime import RunContext
+TOPOLOGY = MEASURED_PIPELINE.topology
 
-    context = RunContext(PIPELINE)
-    emit_fixture(context)
-    stores = GraphStores(context.schema, context.nodes, context.edges, PIPELINE.requirements)
-    quality = analyze_quality(stores).to_json()
+
+def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
+    context = RunContext(MEASURED_PIPELINE)
+    emit_measured(context)
+    quality = analyze_quality(context.stores()).to_json()
     source = {
         "schema_version": 1,
         "report_kind": "biotope.quality",
@@ -32,17 +34,23 @@ def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     monkeypatch.setattr(
         Node, "__doc__", "A <script>document</script> with [brackets] and </script><script>bad()</script>"
     )
-    before = digest(context.schema)
+    digest_without_labels = digest(context.schema)
     monkeypatch.setattr(Node, "display_name", "Sample measurement", raising=False)
     monkeypatch.setattr(Link, "display_name", "Measured with", raising=False)
-    plain = describe_metagraph(PIPELINE.topology)
+    plain = describe_metagraph(TOPOLOGY)
+    assert plain["nodes"][0]["declaration"]["path"] is None
+    located = describe_metagraph(TOPOLOGY, root=Path(__file__).parent)
+    assert located["nodes"][0]["declaration"]["path"] == "synthetic_pipelines.py"
+    assert str(Path(__file__).parent) not in render_metagraph(located)
+    outside = describe_metagraph(TOPOLOGY, root=Path(__file__).parent / "composition")
+    assert outside["nodes"][0]["declaration"]["path"] is None
     assert plain["nodes"][0]["label"] == "Sample measurement"
     assert plain["edges"][0]["label"] == "Measured with"
     assert plain["nodes"][1]["label"] == "Unused"
-    assert plain["topology_digest"] == before  # Display labels do not change graph identity.
+    assert plain["topology_digest"] == digest_without_labels
 
     assert plain["nodes"][0]["count"] is None
-    enriched = describe_metagraph(PIPELINE.topology, source)
+    enriched = describe_metagraph(TOPOLOGY, source)
     assert enriched["nodes"][0]["count"] == 4
     assert enriched["edges"][0]["observations"]["self_loops"]["count"] == 1
     assert enriched["report"]["scope"] == "four records"
@@ -53,14 +61,14 @@ def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     assert "</script><script>bad()" not in html
     assert not re.search(r"<script[^>]+src=", html)
     assert "d3" in html and "Search concepts" in html
-    # Reports are local build outputs; attribution ships with the package, not in every artifact.
+    # Attribution ships with the package, not in every generated report.
     assert "%%NOTICE%%" not in html and "Apache License" not in html
     with pytest.raises(ValueError, match="topology"):
-        describe_metagraph(PIPELINE.topology, {**source, "definitions": {"topology_digest": "different"}})
-    incomplete = describe_metagraph(PIPELINE.topology, {**source, "state": "failed", "quality": {"state": "not_run"}})
+        describe_metagraph(TOPOLOGY, {**source, "definitions": {"topology_digest": "different"}})
+    incomplete = describe_metagraph(TOPOLOGY, {**source, "state": "failed", "quality": {"state": "not_run"}})
     assert incomplete["nodes"][0]["count"] is None
     assert incomplete["report"]["state"] == "failed"
-    legacy = describe_metagraph(PIPELINE.topology, {k: v for k, v in source.items() if k != "quality"})
+    legacy = describe_metagraph(TOPOLOGY, {k: v for k, v in source.items() if k != "quality"})
     assert legacy["nodes"][0]["count"] is None and legacy["report"]["quality_state"] == "unmeasured"
 
 
@@ -73,11 +81,10 @@ def test_metagraph_does_not_import_pipeline_and_preserves_authored_files(tmp_pat
     result = runner.invoke(cli, ["graph", "metagraph", "--graph", str(root), "--json"])
     assert result.exit_code == 0, (result.stdout, result.stderr)
     assert json.loads(result.stdout)["nodes"] == []
-    assert not (root / "reports").exists()
+    assert not (root / "metagraph.html").exists()
     for _ in range(2):
         result = runner.invoke(cli, ["graph", "metagraph", "--graph", str(root)])
         assert result.exit_code == 0, result.stderr
-    # Pipeline import failures must still produce saved, unmeasured assessments.
     for operation in ("quality", "build"):
         args = ["graph", operation, "--graph", str(root), "--json"]
         if operation == "build":
@@ -86,15 +93,14 @@ def test_metagraph_does_not_import_pipeline_and_preserves_authored_files(tmp_pat
         assert result.exit_code == 1
         failed = json.loads(result.stdout)
         assert failed["quality"]["state"] == "not_run"
-        saved = root / ("reports/quality.json" if operation == "quality" else "build/failed/run.json")
-        assert json.loads(saved.read_text())["state"] == "failed"
-        assert not (root / "build/failed/biocypher").exists()
-    path = root / "reports/metagraph.html"
+        assert failed["state"] == "failed"
+    assert json.loads((root / "build/failed/run.json").read_text())["state"] == "failed"
+    path = root / "metagraph.html"
     assert path.exists()
     path.write_text("authored")
     assert runner.invoke(cli, ["graph", "metagraph", "--graph", str(root)]).exit_code != 0
     assert path.read_text() == "authored"
-    link = root / "reports/link.html"
+    link = root / "link.html"
     link.symlink_to(path)
     assert runner.invoke(cli, ["graph", "metagraph", "--graph", str(root), "--out", str(link)]).exit_code != 0
     assert runner.invoke(cli, ["graph", "metagraph", "--json", "--out", "both.html"]).exit_code == 2

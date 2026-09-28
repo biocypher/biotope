@@ -1,0 +1,17 @@
+# This file is yours to edit; biotope never rewrites it.
+# ${hint}
+"""Reviewed facts from one described file; interpretations belong to mappings."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+
+@dataclass(frozen=True, kw_only=True)
+class ${class_name}:
+    """Facts transcribed from cited locations in the file."""
+
+    ${attribute}: ClassVar[str] = ${identity}
+    __record_set__: ClassVar[str] = ${record_set}
+    __source_digest__: ClassVar[str] = ${digest}
