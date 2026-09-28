@@ -16,7 +16,7 @@ from biotope.graph.contracts import GraphRecord
 from biotope.graph.provenance import PROVENANCE_CATALOG, PROVENANCE_PROPERTY, PROVENANCE_REFERENCE, ProvenanceCatalog
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest, write_text_atomic
-from biotope.graph.topology import concept_id
+from biotope.graph.topology import ConceptSchema, concept_id
 
 
 # The lowest tested BioCypher release, and the first release above the tested range. BioCypher is pre-1.0
@@ -35,6 +35,9 @@ EXPORT_FORMATS = {
 ARRAY_DELIMITER = ";"
 
 NEO4J_DEFAULT_READ_BUFFER = 4 * 2**20
+
+RESERVED_PROPERTIES = ("preferred_id", PROVENANCE_PROPERTY)
+UNQUOTABLE_IDENTIFIER = re.compile(r'[,"|\r\n]')
 
 
 def supported_specifier() -> str:
@@ -60,6 +63,10 @@ class GraphWriter(Protocol):
         A build that discovers an unsupported writer after loading its sources
         wastes the run and can still produce files in an untested format.
         """
+        ...
+
+    def check_object(self, identity: str, value: object, schema: ConceptSchema) -> None:
+        """Refuse a graph object the output cannot represent, when the pipeline collects it."""
         ...
 
     def write(self, context: RunContext, directory: Path) -> list[str]:
@@ -147,6 +154,34 @@ class BioCypherWriter:
             )
         return {"exporter": "biocypher", "version": installed, "format": contract}
 
+    def check_object(self, identity: str, value: object, schema: ConceptSchema) -> None:
+        """Refuse identifiers and values that a Neo4j import file cannot hold."""
+        concept = concept_id(type(value))
+        endpoints = (getattr(value, "source"), getattr(value, "target")) if schema["kind"] == "edge" else ()
+        for text in (identity, *endpoints):
+            if UNQUOTABLE_IDENTIFIER.search(text):
+                raise ValueError(
+                    f"{concept} {text!r}: an identifier in a Neo4j import file cannot contain "
+                    ", \" | or a line break; encode them in the project's identity policy"
+                )
+        for name in schema["properties"]:
+            if name in RESERVED_PROPERTIES:
+                raise ValueError(f"{concept}.{name}: the exporter reserves {name}; rename the property")
+            item = getattr(value, name)
+            if isinstance(item, str) and ("\n" in item or "\r" in item):
+                raise ValueError(
+                    f"{concept}.{name} of {identity} spans several lines; a Neo4j import file "
+                    "holds one line per record, so replace the line breaks in the mapping"
+                )
+            if isinstance(item, list) and any(
+                ARRAY_DELIMITER in text or "\n" in text or "\r" in text for text in cast(list[str], item)
+            ):
+                raise ValueError(
+                    f"{concept}.{name} of {identity} has an item with {ARRAY_DELIMITER!r} or a line break; "
+                    f"Neo4j import files separate list items with {ARRAY_DELIMITER!r}, so split or encode "
+                    "the items in the mapping"
+                )
+
     def write(self, context: RunContext, directory: Path) -> list[str]:
         """Write Neo4j import files and the provenance catalog their nodes and edges reference."""
         self.check_environment()
@@ -161,30 +196,6 @@ class BioCypherWriter:
         except ImportError as exc:
             raise ValueError("Install biotope[graph] for BioCypher file output") from exc
         directory.mkdir(parents=True, exist_ok=True)
-        for identity, row in (*context.nodes.items(), *context.edges.items()):
-            identifiers = [identity]
-            if type(row.value) in context.pipeline.topology.edges:
-                identifiers += [getattr(row.value, "source"), getattr(row.value, "target")]
-            if any(any(char in value for char in ',"|\r\n') for value in identifiers):
-                raise ValueError(
-                    f"Unsupported BioCypher identifier {identity!r}: "
-                    "encode delimiter/quote characters in the project's identity policy"
-                )
-            property_names = context.schema[concept_id(type(row.value))]["properties"]
-            for reserved in ("preferred_id", PROVENANCE_PROPERTY):
-                if reserved in property_names:
-                    raise ValueError(f"{reserved} is reserved by the exporter; rename the graph property")
-            for name in property_names:
-                value = getattr(row.value, name)
-                if isinstance(value, str) and any(char in value for char in "\r\n"):
-                    raise ValueError(
-                        f"Unsupported multiline BioCypher property {identity}.{name}; "
-                        "choose an explicit project representation"
-                    )
-                if isinstance(value, list) and any(
-                    any(char in item for char in ARRAY_DELIMITER + "\r\n") for item in cast(list[str], value)
-                ):
-                    raise ValueError(f"Unsupported BioCypher string-list separator/newline in {identity}.{name}")
         labels = export_labels(context.schema)
         provenance = ProvenanceCatalog(context)
         descriptions = context.pipeline.topology.descriptions()

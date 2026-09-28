@@ -90,7 +90,7 @@ class Row:
 - Authored types are not compared with Croissant `dataType`. `__source_digest__` records the revision you reviewed; when the manifest changes, `graph check` reports `source.drift` with the changes, and you acknowledge them by updating it.
 - A 0.9 schema with `__field_refs__` still binds; it cannot be combined with `source_field` metadata.
 
-Export supports nullable scalars and string lists without nulls or `|`. Any other property shape needs an explicit project representation.
+Export supports nullable scalars and string lists without nulls. Strings are one line, and list items contain no `;` or line break; a build stops at the first graph object that breaks this and names its mapping, concept and property. Any other property shape needs an explicit project representation.
 
 ## Mapping signatures
 

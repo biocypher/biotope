@@ -113,16 +113,27 @@ def test_biocypher_labels_and_string_values_round_trip(tmp_path):
 @pytest.mark.parametrize(
     ("mapping", "value", "message"),
     [
-        (ITEMS, ItemRow("item:1", "label", [f"a{ARRAY_DELIMITER}b"]), "string-list separator"),
-        (CLAIMS, ItemRow("claim:1", "label", []), "biotope_provenance_id is reserved"),
+        (ITEMS, ItemRow("item:1", "two\nlines", []), r"items: study:item\.label of item:1 spans several lines"),
+        (ITEMS, ItemRow("item:1", "label", [f"a{ARRAY_DELIMITER}b"]), r"items: study:item\.aliases of item:1 has"),
+        (ITEMS, ItemRow('item:"1"', "label", []), r"items: study:item 'item:\"1\"': an identifier"),
+        (CLAIMS, ItemRow("claim:1", "label", []), r"claims: study:claim\.biotope_provenance_id: the exporter reserves"),
     ],
-    ids=["list_separator", "provenance_property"],
+    ids=["multiline", "list_separator", "identifier", "provenance_property"],
 )
-def test_export_refuses_values_and_properties_it_cannot_represent(tmp_path, mapping, value, message):
-    context = RunContext(replace(EXPORT, topology=Topology((Item, Claim), ())))
-    context.map(mapping, SourceRecord(value, EVIDENCE))
-    with pytest.raises(ValueError, match=message):
-        BioCypherWriter().write(context, tmp_path)
+def test_export_refuses_a_value_it_cannot_represent_when_it_is_emitted(
+    tmp_path, unchecked_definitions, mapping, value, message
+):
+    emitted: list[str] = []
+
+    def run(context: RunContext) -> None:
+        context.map(mapping, SourceRecord(value, EVIDENCE))
+        emitted.append("after")
+
+    pipeline = replace(EXPORT, topology=Topology((Item, Claim), ()), run=run)
+    with pytest.raises(build.RunFailed, match=message) as failure:
+        build.run_pipeline(pipeline, tmp_path / "run")
+    assert emitted == []
+    assert failure.value.report["quality"]["blocked_by"] == "execution.failed"
 
 
 def test_export_labels_drop_the_namespace_and_widen_only_under_collision():

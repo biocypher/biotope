@@ -164,6 +164,9 @@ class RecordingWriter:
         self.calls.append("environment")
         return {"exporter": "test", "version": "0", "format": "text"}
 
+    def check_object(self, identity: str, value: object, schema: object) -> None:
+        return None
+
     def write(self, context: RunContext, directory: Path) -> list[str]:
         self.calls.append("export")
         (directory / "artifact.txt").write_text(str(len(context.nodes)))

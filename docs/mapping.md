@@ -150,8 +150,10 @@ and `graph check` warns about concepts and properties without one. Optional
 concept IDs. The `biotope:` namespace is reserved for system metadata.
 
 Graph properties support strings, booleans, integers, finite floats, nullable
-scalars and string lists. Lists cannot contain nulls or the export separator `|`.
-Convert richer source values deliberately in the mappings.
+scalars and string lists. Lists cannot contain nulls. For the Neo4j import files,
+strings are one line and list items contain no `;` or line break; a build stops at
+the first graph object that breaks this and names its mapping, concept and
+property. Convert richer source values deliberately in the mappings.
 
 ## Implement loaders and mappings
 

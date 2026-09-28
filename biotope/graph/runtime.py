@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
@@ -24,7 +24,7 @@ from biotope.graph.contracts import (
 from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
 from biotope.graph.standardization import validate_terms
-from biotope.graph.topology import concept_id, identifier, validate_value
+from biotope.graph.topology import ConceptSchema, concept_id, identifier, validate_value
 
 
 C = TypeVar("C")
@@ -53,8 +53,9 @@ class RunContext:
     Projects own join memory and scientific exclusion policies.
     """
 
-    def __init__(self, pipeline: Pipeline):
+    def __init__(self, pipeline: Pipeline, check: Callable[[str, object, ConceptSchema], None] | None = None):
         self.pipeline = pipeline
+        self.check = check
         self.schema = pipeline.topology.describe()
         self.nodes: dict[str, GraphRecord] = {}
         self.edges: dict[str, GraphRecord] = {}
@@ -201,6 +202,11 @@ class RunContext:
             existing.evidence.update(evidence)
             existing.mappings.add(mapping)
         else:
+            if self.check is not None:
+                try:
+                    self.check(identity, value, self.schema[semantic])
+                except ValueError as exc:
+                    raise ValueError(f"{mapping}: {exc}") from exc
             store[identity] = GraphRecord(deepcopy(value), set(evidence), {mapping})
 
     def exclude(self, reason: str, evidence: tuple[Evidence, ...], *, count: int = 1) -> None:

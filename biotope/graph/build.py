@@ -142,7 +142,7 @@ def _execute(
                 phase("Checking the exporter")
             report["exporter"] = exporter.check_environment()
         stage = "execution"
-        context = RunContext(pipeline)
+        context = RunContext(pipeline, exporter.check_object if exporter is not None else None)
         if phase:
             phase("Running project loaders and mappings")
         pipeline.run(context)
