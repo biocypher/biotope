@@ -30,6 +30,7 @@ class GraphOutput:
         )
         self.seen: set[str] = set()
         self.task = self.progress.add_task("Loading definitions", total=None)
+        self.log_phases = not as_json and not self.console.is_terminal and operation in ("quality", "build")
 
     def __enter__(self) -> GraphOutput:
         # Redirect both Python streams and native/subprocess writes while project code runs.
@@ -58,7 +59,10 @@ class GraphOutput:
             os.close(self.stdout_fd)
 
     def phase(self, name: str) -> None:
-        self.progress.update(self.task, description=name.capitalize())
+        description = name[:1].upper() + name[1:]
+        if self.log_phases:
+            self.row("Phase", description)
+        self.progress.update(self.task, description=description)
 
     def row(self, status: str, subject: str, detail: str = "") -> None:
         table = Table.grid(padding=0)
@@ -71,7 +75,8 @@ class GraphOutput:
         self.console.print(table)
 
     def on_finding(self, finding: Finding) -> None:
-        self.finding(finding.to_json())
+        if finding.severity != "error":
+            self.finding(finding.to_json())
 
     def finding(self, finding: dict[str, Any]) -> None:
         key = json.dumps(finding, sort_keys=True)
@@ -126,8 +131,10 @@ class GraphOutput:
         ]
         if definitions is not report:
             findings.extend(report.get("findings", []))
+        errors = [finding for finding in findings if finding.get("severity") == "error"]
         for finding in findings:
-            self.finding(finding)
+            if finding.get("severity") != "error":
+                self.finding(finding)
         for key, reason in definitions.get("deferrals", {}).items():
             self.row("Defer", key, reason)
         for audit in report.get("audits", []):
@@ -137,17 +144,23 @@ class GraphOutput:
                 audit["stage"],
                 f"{audit['inputs']} -> {audit['outputs']}\n{audit['selection']}\n{counts}",
             )
-        measurements = report.get("quality", {}).get("measurements", {})
-        if measurements:
-            self.quality(measurements)
-        if report.get("quality", {}).get("state") == "not_run":
-            self.row("SKIP", "Quality measurements", report["quality"]["reason"])
+        quality = report.get("quality", {})
+        if quality.get("measurements"):
+            self.quality(quality["measurements"])
+        if quality.get("state") == "not_run":
+            blocked = quality.get("blocked_by")
+            self.row("SKIP", "Quality measurements", f"Blocked by {blocked}" if blocked else quality["reason"])
         if self.operation == "scaffold" and report.get("state") == "complete":
             self.row("Created", f"{len(report['files'])} files in {report['path']}")
         for key in ("report_path", "html_path"):
             if report.get(key):
                 self.row("Saved", report[key])
-        self.row("FAIL" if report.get("state") == "failed" else "Done", report.get("state", "complete"))
+        for finding in errors:
+            self.finding(finding)
+        if report.get("state") != "failed":
+            self.row("Done", report.get("state", "complete"))
+        elif not errors:
+            self.row("FAIL", "failed", report.get("error", ""))
 
     def quality(self, measurements: dict[str, Any]) -> None:
         for name, value in measurements.items():

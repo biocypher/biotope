@@ -11,6 +11,7 @@ from typed_example import prepare
 
 from biotope.cli import cli
 from biotope.commands._graph_output import GraphOutput
+from biotope.graph.reports import Finding
 
 
 def test_workspace_selection_and_independent_definition_failures(tmp_path, monkeypatch):
@@ -115,3 +116,42 @@ def test_human_report_wraps_paths_and_renders_every_finding():
     assert all(len(line) <= 64 for line in lines)
     assert "Mapping [donor]" in stream.getvalue() and "a[0]" in stream.getvalue()
     assert path + ":84:17" in "".join(line.strip() for line in lines)
+
+
+def render(operation: str, report: dict, live: tuple[Finding, ...] = ()) -> tuple[list[str], str]:
+    stream = StringIO()
+    renderer = GraphOutput(operation, "graph", False, console=Console(file=stream, width=80, color_system=None))
+    with renderer:
+        renderer.phase("Running project loaders and mappings")
+        for finding in live:
+            renderer.on_finding(finding)
+        assert all(finding.message not in stream.getvalue() for finding in live)
+    renderer.finish(report)
+    return [line.rstrip() for line in stream.getvalue().splitlines()], stream.getvalue()
+
+
+def test_a_failure_ends_with_its_error_and_phases_are_logged_without_a_terminal():
+    failed_export = {
+        "state": "failed",
+        "error": "Export broke.",
+        "definitions": {"checks": [{"name": "pipeline", "state": "passed", "reason": ""}], "findings": []},
+        "findings": [Finding("export.failed", "error", "results", "Export broke.").to_json()],
+        "audits": [],
+        "quality": {"state": "complete", "findings": [], "measurements": {"population": {"study:result": 2}}},
+        "report_path": "graph/build/run.json",
+    }
+    lines, text = render("build", failed_export)
+    assert "Phase     Running project loaders and mappings" in lines
+    assert lines[-3:] == ["Saved     graph/build/run.json", "FAIL      results", "          Export broke."]
+    assert text.count("Export broke.") == 1
+
+    mistyped = Finding("python.argument", "error", "mapping", "Expected StudyId.")
+    failed_check = {
+        "report_kind": "biotope.definitions",
+        "state": "failed",
+        "checks": [{"name": "python", "state": "failed", "reason": ""}],
+        "findings": [mistyped.to_json()],
+    }
+    lines, text = render("check", failed_check, (mistyped,))
+    assert lines[-2:] == ["FAIL      mapping", "          Expected StudyId."]
+    assert "Phase" not in text and text.count("Expected StudyId.") == 1
