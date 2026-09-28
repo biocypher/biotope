@@ -12,7 +12,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "biotope"
-version = "0.9.1"
+version = "0.10.0"
 description = "Curate Croissant descriptions of local data and build typed, provenance-tracked BioCypher knowledge graphs"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"

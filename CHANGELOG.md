@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.10.0](https://github.com/biocypher/biotope/compare/biotope-v0.9.1...biotope-v0.10.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **graph:** project validation callbacks and per-capability states are gone, so builds no longer verify scientific expectations; structural checks are not equivalent, and review-time independent reads replace them. interpretation no longer travels inside the graph; concept and property descriptions in schema_config.yaml, run.json policies and scope, and graph/ASSUMPTIONS.md replace the query context, so graph/build/ must travel with the graph. `biotope graph quality` prints its results instead of writing graph/reports/quality.json; `biotope graph metagraph` writes graph/metagraph.html by default. schemas are never re-rendered. Generated and 0.9 schemas no longer follow manifest changes; each change surfaces as source.drift for review. Authored types are not compared with Croissant dataType or nullability. new scaffolds bind fields through @ids scoped under their RecordSet; other ids produce source.unscoped_field, while an existing __field_refs__ mapping still binds them. a new package's name depends on the directories that already exist, so it can differ from a from-scratch generation. removed keywords such as SourceContract(generated=) and Pipeline(query_context=) fail with ordinary TypeErrors; run.json and definition reports are schema_version 2 (replacement and --report accept 1 and 2). See docs/migration.md for the 0.9 migration steps.
+* **graph:** builds no longer write topology.json, ontology.ttl, query_context.json, provenance.jsonl or BiotopeQueryContext rows. Provenance is reached through each object's biotope_provenance_id in provenance.json. `biotope graph build` defaults to <graph>/build and replaces the previous generated build instead of requiring a new --out directory; --out still chooses another location. Export is headless and labels drop the namespace (for example Gene rather than CvdGene), so Entity is no longer reserved.
+
+### Features
+
+* **graph:** generate complete source inventories and check drift, retire validation and query context ([957b2ce](https://github.com/biocypher/biotope/commit/957b2ce2fda2174bf5c91b0a54b46e6dd3c1ae38))
+* **graph:** integrate authored source contracts, staged builds and a provenance catalog ([4686916](https://github.com/biocypher/biotope/commit/468691669127d343f0fbb008afd76d388b966e90))
+
+
+### Bug Fixes
+
+* **add:** register byte-identical files once ([90a2838](https://github.com/biocypher/biotope/commit/90a283896c1f02a7ae59dae03c7fe53d3f313e1f))
+* **add:** register byte-identical files that Baker parses once ([160e2ae](https://github.com/biocypher/biotope/commit/160e2ae9bf463ec690ec55537a4ce4eb2128f6f5))
+* **add:** skip byte-identical copies before Baker parses them ([287bef0](https://github.com/biocypher/biotope/commit/287bef05d4ddc43d4bf2e3b7d791012b5ba16cf3))
+* **graph:** check exported objects in a write that no build context checked ([924c06c](https://github.com/biocypher/biotope/commit/924c06c24657c3688b1be9ef03695b5b39fccf7d))
+* **graph:** end a failed run with its error and log phases without a terminal ([845a229](https://github.com/biocypher/biotope/commit/845a229d4960a9b51c48b4ad3e1e8eb2606bb8df))
+* **graph:** end a failed run with its finding code and log one line per phase ([907792e](https://github.com/biocypher/biotope/commit/907792e4428f80a894f8e14e9b32c20fe5649b7a))
+* **graph:** keep descriptions of node properties named source or target ([bea90ae](https://github.com/biocypher/biotope/commit/bea90ae04e874b748c07268bd2e00a999ab8e37b))
+* **graph:** record the libraries graph code imports and warn when they are undeclared ([789da09](https://github.com/biocypher/biotope/commit/789da09d77a9d0f4ea7d868426b2282c85f4449b))
+* **graph:** refuse unexportable values when a mapping emits them ([7b4bdf1](https://github.com/biocypher/biotope/commit/7b4bdf19ab3f708e6dc48358b0fbf89043a452a5))
+* **graph:** size the Neo4j read buffer to the export's longest line ([c2f6757](https://github.com/biocypher/biotope/commit/c2f6757e71616d63ddea615aec48ae5bd20f9bd9))
+* **graph:** state the oversized-value threshold in characters and document the read buffer ([e2b5e82](https://github.com/biocypher/biotope/commit/e2b5e8210a7854931c82abddf9103346c2f74a1c))
+
+
+### Performance Improvements
+
+* **graph:** validate each value once per step and drop repeated work ([1fc51b7](https://github.com/biocypher/biotope/commit/1fc51b7a055acdc604d5bc16eb1b2f2bd609e910))
+
+
+### Documentation
+
+* document the 0.10 graph project shape and how to migrate to it ([31ee718](https://github.com/biocypher/biotope/commit/31ee7180422fca8e6d2becbfc84f4ab8e8376887))
+* **skills:** describe structured files Baker cannot parse as record sets ([d70ae3d](https://github.com/biocypher/biotope/commit/d70ae3ddcc095f5113b7ffdb2dbb7d5a0935a33a))
+* **skills:** install reader libraries from graph/pyproject.toml ([683efbb](https://github.com/biocypher/biotope/commit/683efbb1a2fc75d5ee812d898094521966f91aac))
+* **skills:** rework biotope-croissant around the generated source inventory ([a1d8c92](https://github.com/biocypher/biotope/commit/a1d8c92d46f7fb56da1735b6da521c359a52a2a0))
+* **skills:** say that aliases and missing-value tokens are declarations only ([5a7ffce](https://github.com/biocypher/biotope/commit/5a7ffcee319c71a04ddfd7513bee0ad36698fa58))
+
+
+### Build System
+
+* **release:** release breaking changes before 1.0 as a minor version and describe the package ([df3fa17](https://github.com/biocypher/biotope/commit/df3fa1733e86a8c4dd2ad903f198ed93e3cfdacd))
+
+
+### Refactoring
+
+* **graph:** raise value problems in one helper and share the item loop ([3c4e7dc](https://github.com/biocypher/biotope/commit/3c4e7dc375f2beff125df2e96b354f15703cd5f2))
+
 ## [0.9.1](https://github.com/biocypher/biotope/compare/biotope-v0.9.0...biotope-v0.9.1) (2026-09-15)
 
 
