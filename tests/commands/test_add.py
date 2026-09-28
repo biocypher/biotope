@@ -12,7 +12,9 @@ from unittest import mock
 import pytest
 from click.testing import CliRunner
 
+from biotope.commands._add_output import AddOutput
 from biotope.commands.add import _add_file, _bake_directory, add
+from biotope.graph.inventory import generate_source_packages
 from biotope.utils import (
     calculate_file_checksum,
     is_file_tracked,
@@ -314,6 +316,27 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     assert payload["dataset"]["source_path"] == "data/mixed"
     assert isinstance(payload["record_sets"], list)
     assert payload["record_sets"]
+
+
+def test_byte_identical_files_are_registered_once(tmp_path, capsys):
+    project_root = tmp_path / "project"
+    data_dir = project_root / "data"
+    (project_root / ".biotope" / "datasets").mkdir(parents=True)
+    for folder in ("b", "a"):
+        (data_dir / folder).mkdir(parents=True)
+        (data_dir / folder / "codes.txt").write_text("code\tlabel\n")
+
+    reporter = AddOutput(as_json=True)
+    metadata_dict, _ = _bake_directory(data_dir, project_root, {}, reporter=reporter)
+
+    assert [d["contentUrl"] for d in metadata_dict["distribution"]] == ["data/a/codes.txt"]
+    assert reporter.sources[-1]["duplicates"] == [{"path": "data/b/codes.txt", "duplicate_of": "data/a/codes.txt"}]
+    plan = generate_source_packages(project_root / ".biotope/datasets/data.jsonld", project_root / "graph/sources")
+    assert len(plan.statuses) == 1
+
+    _bake_directory(data_dir, project_root, {}, output=tmp_path / "review.jsonld")
+    text = " ".join(capsys.readouterr().err.split())
+    assert "SKIP data/b/codes.txt Identical to data/a/codes.txt" in text
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")

@@ -93,6 +93,12 @@ class AddOutput:
                 result["annotation_template"] = self.path(path)
         self.row("Review", self.path(path))
 
+    def duplicate(self, path: Path, original: Path) -> None:
+        self.sources[-1].setdefault("duplicates", []).append(
+            {"path": self.path(path), "duplicate_of": self.path(original)}
+        )
+        self.row("SKIP", self.path(path), f"Identical to {self.path(original)}; registered once")
+
     def warning(self, source: Path, message: str) -> None:
         for result in self.sources:
             if result["input"] == self.path(source):

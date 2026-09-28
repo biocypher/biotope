@@ -499,7 +499,7 @@ def _bake_directory(
 
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
-    _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root)
+    _append_uncovered_file_objects(metadata_dict, abs_dir, biotope_root, reporter)
     _apply_pipeline_state(metadata_dict, overrides)
 
     write_text_atomic(output or target.metadata_path, json.dumps(metadata_dict, indent=2, default=str) + "\n")
@@ -526,8 +526,6 @@ def _build_minimal_directory_metadata(
             "distribution": [],
         }
     )
-    for file_path in _iter_directory_files(abs_dir):
-        metadata["distribution"].append(make_file_object(file_path, biotope_root))
     return metadata
 
 
@@ -535,16 +533,29 @@ def _append_uncovered_file_objects(
     metadata_dict: dict[str, Any],
     abs_dir: Path,
     biotope_root: Path,
+    reporter: AddOutput,
 ) -> None:
-    """Append file pointers for physical files not covered by croissant-baker."""
+    """Append file pointers for physical files not covered by croissant-baker, one per distinct content."""
     covered_files = _covered_files(metadata_dict, abs_dir, biotope_root)
     distributions = metadata_dict.setdefault("distribution", [])
+    registered = {
+        item["sha256"]: path
+        for item in distributions
+        if item.get("@type") == FILE_OBJECT_TYPE
+        and item.get("sha256")
+        and item.get("contentUrl")
+        and (path := resolve_content_url(item["contentUrl"], abs_dir, biotope_root))
+    }
 
-    for file_path in _iter_directory_files(abs_dir):
-        resolved = file_path.resolve()
-        if resolved in covered_files:
+    for file_path in sorted(_iter_directory_files(abs_dir)):
+        if file_path.resolve() in covered_files:
             continue
-        distributions.append(make_file_object(file_path, biotope_root))
+        file_object = make_file_object(file_path, biotope_root)
+        original = registered.setdefault(file_object["sha256"], file_path)
+        if original == file_path:
+            distributions.append(file_object)
+        else:
+            reporter.duplicate(file_path, original)
 
 
 def _covered_files(
