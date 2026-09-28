@@ -21,6 +21,7 @@ class Described:
     id: DescribedId
     score: float = field(metadata={"description": "Mean score over three replicates."})
     note: str
+    source: str
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class Complete:
     schema_id: ClassVar[str] = "check:complete"
     id: CompleteId
     score: float = field(metadata={"description": "Mean score over three replicates."})
+    target: str = field(metadata={"description": "Which assay the score targets."})
 
 
 def check(*nodes: type) -> dict[str, dict[str, object]]:
@@ -64,7 +66,9 @@ def test_undescribed_and_example_concepts_are_warned_about_and_a_complete_topolo
     assert "check:bare" in found["topology.undescribed"]["message"]
     assert "check:described" not in found["topology.undescribed"]["message"]
     assert "check:described.note" in found["topology.undescribed_property"]["message"]
+    assert "check:described.source" in found["topology.undescribed_property"]["message"]
     assert "check:described.score" not in found["topology.undescribed_property"]["message"]
     assert "example:placeholder" in found["topology.examples"]["message"]
     assert "check:described" not in found["topology.examples"]["message"]
     assert check(Complete) == {}
+    assert Topology((Complete,), ()).descriptions()["check:complete"]["properties"]["target"].startswith("Which assay")

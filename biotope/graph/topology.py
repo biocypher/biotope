@@ -295,7 +295,7 @@ class Topology:
                 "properties": {
                     member.name: " ".join(str(member.metadata.get("description", "")).split())
                     for member in fields(cls)
-                    if member.name not in ("id", "source", "target")
+                    if member.name not in (("id", "source", "target") if cls in self.edges else ("id",))
                 },
             }
             for cls in sorted((*self.nodes, *self.edges), key=concept_id)
