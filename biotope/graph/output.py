@@ -185,6 +185,9 @@ class BioCypherWriter:
     def write(self, context: RunContext, directory: Path) -> list[str]:
         """Write Neo4j import files and the provenance catalog their nodes and edges reference."""
         self.check_environment()
+        if context.check is None:
+            for identity, row in (*context.nodes.items(), *context.edges.items()):
+                self.check_object(identity, row.value, context.schema[concept_id(type(row.value))])
         # BioCypher configures disk logging during import, before its per-build
         # configuration is applied. Supply stderr logging first; respect existing handlers.
         logger = logging.getLogger("biocypher")

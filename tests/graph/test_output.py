@@ -121,16 +121,14 @@ def test_a_collected_object_keeps_the_list_its_mapping_changes_later():
 @pytest.mark.parametrize(
     ("mapping", "value", "message"),
     [
-        (ITEMS, ItemRow("item:1", "two\nlines", []), r"items: study:item\.label of item:1 spans several lines"),
-        (ITEMS, ItemRow("item:1", "label", [f"a{ARRAY_DELIMITER}b"]), r"items: study:item\.aliases of item:1 has"),
-        (ITEMS, ItemRow('item:"1"', "label", []), r"items: study:item 'item:\"1\"': an identifier"),
-        (CLAIMS, ItemRow("claim:1", "label", []), r"claims: study:claim\.biotope_provenance_id: the exporter reserves"),
+        (ITEMS, ItemRow("item:1", "two\nlines", []), r"study:item\.label of item:1 spans several lines"),
+        (ITEMS, ItemRow("item:1", "label", [f"a{ARRAY_DELIMITER}b"]), r"study:item\.aliases of item:1 has"),
+        (ITEMS, ItemRow('item:"1"', "label", []), r"study:item 'item:\"1\"': an identifier"),
+        (CLAIMS, ItemRow("claim:1", "label", []), r"study:claim\.biotope_provenance_id: the exporter reserves"),
     ],
     ids=["multiline", "list_separator", "identifier", "provenance_property"],
 )
-def test_export_refuses_a_value_it_cannot_represent_when_it_is_emitted(
-    tmp_path, unchecked_definitions, mapping, value, message
-):
+def test_export_refuses_a_value_it_cannot_represent(tmp_path, unchecked_definitions, mapping, value, message):
     emitted: list[str] = []
 
     def run(context: RunContext) -> None:
@@ -138,10 +136,15 @@ def test_export_refuses_a_value_it_cannot_represent_when_it_is_emitted(
         emitted.append("after")
 
     pipeline = replace(EXPORT, topology=Topology((Item, Claim), ()), run=run)
-    with pytest.raises(build.RunFailed, match=message) as failure:
+    with pytest.raises(build.RunFailed, match=f"{mapping.name}: {message}") as failure:
         build.run_pipeline(pipeline, tmp_path / "run")
     assert emitted == []
     assert failure.value.report["quality"]["blocked_by"] == "execution.failed"
+
+    collected = RunContext(pipeline)
+    collected.map(mapping, SourceRecord(value, EVIDENCE))
+    with pytest.raises(ValueError, match=message):
+        BioCypherWriter().write(collected, tmp_path / "written")
 
 
 def test_export_labels_drop_the_namespace_and_widen_only_under_collision():
