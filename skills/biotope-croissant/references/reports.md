@@ -46,6 +46,8 @@ Quality reads validated Python objects before export. Empty required concepts,
 wholly missing properties and self-loops warn. Connectivity and endpoint
 concentration are observations. Empty denominators remain unmeasured; zero and
 `False` are usable values. Failed execution leaves later measurements unrun.
+String values longer than 1,048,576 characters warn as `quality.oversized_value`,
+which names the property, the count and the longest length.
 
 `biotope graph quality --json` executes the pipeline without exporting and prints
 the assessment; it writes no file. A build records the same measurements in
@@ -59,7 +61,9 @@ The exporter checks the installed BioCypher version before reading payloads.
 writes Parquet without CSV headers and requires a compatible database importer.
 Biotope checks the output against the declared format after writing. Export is
 headless: labels are the concept's local name, such as `Gene`, widened only when
-two concepts collide.
+two concepts collide. When a CSV line reaches 4 MiB, the default read buffer of
+`neo4j-admin database import`, the import script passes `--read-buffer-size` set
+to the next power of two above the longest line.
 
 Every exported node and edge carries `biotope_provenance_id`, a zero-based index
 into `provenance.json["records"]`. Each record lists its mapping names and indexes

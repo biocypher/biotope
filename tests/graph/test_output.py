@@ -237,7 +237,7 @@ def test_a_build_exports_schema_descriptions_and_a_relocatable_import_script(tmp
     assert "--read-buffer-size" not in script
 
 
-def test_a_value_longer_than_the_neo4j_read_buffer_still_imports(tmp_path, unchecked_definitions):
+def test_a_line_longer_than_the_neo4j_read_buffer_widens_the_import_buffer(tmp_path, unchecked_definitions):
     geometry = "MULTIPOLYGON(((" + "0 0," * 1_100_000 + "0 0)))"
     row = SourceRecord(ItemRow("item:1", geometry, []), EVIDENCE)
     report = build.run_pipeline(replace(EXPORT, run=lambda context: context.map(ITEMS, row)), tmp_path / "run")

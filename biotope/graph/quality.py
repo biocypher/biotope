@@ -15,7 +15,7 @@ from biotope.graph.topology import concept_id
 
 __all__ = ["CHECKS", "GraphStores", "analyze_quality"]
 
-OVERSIZED = 2**20
+OVERSIZED_CHARACTERS = 2**20
 
 
 def _records(view: GraphStores) -> Iterator[tuple[str, GraphRecord]]:
@@ -99,7 +99,7 @@ def properties(view: GraphStores, report: QualityReport) -> None:
                 stats[key] += 1
                 stats["missing"] += 1
             size = len(value) if isinstance(value, str) else 0
-            if size > OVERSIZED:
+            if size > OVERSIZED_CHARACTERS:
                 oversized.setdefault((concept, name), []).append(size)
             previous = seen.setdefault((concept, name), [])
             if value is not None and len(previous) < 3 and value not in previous:
@@ -126,8 +126,8 @@ def properties(view: GraphStores, report: QualityReport) -> None:
                 "quality.oversized_value",
                 "warning",
                 f"{concept}.{name}",
-                f"{len(sizes)} of {results[concept][name]['total']} values exceed 1 MiB, the longest "
-                f"{max(sizes)} characters; the import script sizes the Neo4j read buffer to the longest line",
+                f"{len(sizes)} of {results[concept][name]['total']} values exceed {OVERSIZED_CHARACTERS:,} "
+                f"characters; the longest has {max(sizes):,}",
             )
         )
     report.measurements["properties"] = results
