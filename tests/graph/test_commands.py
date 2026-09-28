@@ -142,7 +142,11 @@ def test_a_failure_ends_with_its_error_and_phases_are_logged_without_a_terminal(
     }
     lines, text = render("build", failed_export)
     assert "Phase     Running project loaders and mappings" in lines
-    assert lines[-3:] == ["Saved     graph/build/run.json", "FAIL      results", "          Export broke."]
+    assert lines[-3:] == [
+        "Saved     graph/build/run.json",
+        "FAIL      results",
+        "          export.failed: Export broke.",
+    ]
     assert text.count("Export broke.") == 1
 
     mistyped = Finding("python.argument", "error", "mapping", "Expected StudyId.")
@@ -153,5 +157,5 @@ def test_a_failure_ends_with_its_error_and_phases_are_logged_without_a_terminal(
         "findings": [mistyped.to_json()],
     }
     lines, text = render("check", failed_check, (mistyped,))
-    assert lines[-2:] == ["FAIL      mapping", "          Expected StudyId."]
+    assert lines[-2:] == ["FAIL      mapping", "          python.argument: Expected StudyId."]
     assert "Phase" not in text and text.count("Expected StudyId.") == 1

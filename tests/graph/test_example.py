@@ -2,6 +2,7 @@
 
 import csv
 import json
+import re
 import shutil
 
 from typed_example import EXAMPLE, prepare, run
@@ -88,6 +89,15 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     raw.write_text(raw_text.replace("1.5", "bad"))
     failed = run(root, "build", "invalid-values")
     assert failed.returncode != 0 and "line:2" in "".join(line.strip() for line in failed.stderr.splitlines())
+    rows = re.split(r"\n(?=\S)", failed.stderr.strip())
+    assert [row.split(None, 1)[1].strip() for row in rows if row.startswith("Phase")] == [
+        "Checking definitions",
+        "Checking the exporter",
+        "Running project loaders and mappings",
+    ]
+    status, *detail = rows[-1].splitlines()
+    assert status.split() == ["FAIL", "example:sample-people"]
+    assert "".join(line.strip() for line in detail).startswith("execution.failed: study/samples")
     assert json.loads((root / "graph/build/invalid-values/run.json").read_text())["state"] == "failed"
     raw.write_text(raw_text)
     manifest = root / ".biotope/datasets/study.jsonld"

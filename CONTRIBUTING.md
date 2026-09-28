@@ -61,7 +61,7 @@ Check  graph/
 OK     Sources · topology · requirements
 FAIL   Python
        graph/mappings/study.py:84:17
-       Expected StudyId; received GeneId.
+       python.argument: Expected StudyId; received GeneId.
 ```
 
 Show a spinner immediately during slow work when totals are unknown. Keep live

@@ -31,6 +31,7 @@ class GraphOutput:
         self.seen: set[str] = set()
         self.task = self.progress.add_task("Loading definitions", total=None)
         self.log_phases = not as_json and not self.console.is_terminal and operation in ("quality", "build")
+        self.logged_phase = ""
 
     def __enter__(self) -> GraphOutput:
         # Redirect both Python streams and native/subprocess writes while project code runs.
@@ -60,8 +61,10 @@ class GraphOutput:
 
     def phase(self, name: str) -> None:
         description = name[:1].upper() + name[1:]
-        if self.log_phases:
-            self.row("Phase", description)
+        step = description.partition(": ")[0]
+        if self.log_phases and step != self.logged_phase:
+            self.logged_phase = step
+            self.row("Phase", step)
         self.progress.update(self.task, description=description)
 
     def row(self, status: str, subject: str, detail: str = "") -> None:
@@ -89,7 +92,7 @@ class GraphOutput:
             return
         label = {"error": "FAIL", "warning": "WARN", "info": "INFO"}.get(finding["severity"], "INFO")
         location = finding.get("location")
-        detail = finding["message"]
+        detail = f"{finding['code']}: {finding['message']}" if finding["severity"] == "error" else finding["message"]
         if location:
             path = location["path"]
             if location.get("line") is not None:

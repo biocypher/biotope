@@ -168,7 +168,7 @@ def check_pipeline(
             report.checks.append(CheckResult(name, "skipped", blocked))
             return None
         if phase:
-            phase(name)
+            phase(f"Checking definitions: {name}")
         start = len(report.findings)
         value = None
         try:
