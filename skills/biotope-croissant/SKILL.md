@@ -50,7 +50,7 @@ Biotope graph project:
 
 - Describe new inputs with `biotope add <data-path> --json` and review each file's outcome. Do not scan environments or previous outputs. Keep the requested scope, including whole directories; never split a Croissant file to shape the packages, and never invent structure to make a mapping work.
 - `biotope add` also writes an annotation template, `<data-path>/.biotope.yaml`, and pre-fills the manifest's `creator` from the local git identity and its `license` with Baker's default, CC BY 4.0. Neither describes the data. The creator is whoever produced the data, which the person running the tools usually is not. In your first correction, keep a creator or licence only where the data's documentation or the user explicitly states it for this data; otherwise remove it and record the question. Do not fill it with any identity from the environment, such as the git user or the account you work for.
-- Files Baker cannot parse are reported `unclaimed`, and `biotope add` still gives each a FileObject whose `@id` follows its checksum. Keep these: each becomes a document source whose package holds the facts you transcribe. Add a FileObject by hand only for a file outside the scanned paths; see [curation.md](./references/curation.md).
+- Files Baker cannot parse are reported `unclaimed`, and `biotope add` still gives each a FileObject whose `@id` follows its checksum. Keep these. A document, such as a paper or notes, becomes a document source whose package holds the facts you transcribe. A structured file the graph reads records from, such as tab-separated `.txt`, RDF or a shapefile, needs a RecordSet over that FileObject instead. Add a FileObject by hand only for a file outside the scanned paths. Both are in [curation.md](./references/curation.md).
 - Inspect fields and exact IDs with `biotope map inspect <manifest> --json`, which reads metadata only.
 - To correct a manifest, copy it into `.biotope/reviews/`, edit the copy, and register it: `biotope source register <draft> --name <name> --reason "<evidence and gaps>" --replace`. Never edit `.biotope/datasets/` directly.
 - A metadata-only request ends here.
@@ -156,7 +156,7 @@ After code changes, rerun Step 8. During requested cleanup, remove generated out
 ## References
 
 - [example.md](./references/example.md): read before Step 5, for a complete checked project: terms, schemas, loaders for a table and a document, topology, alignment, mappings and the pipeline.
-- [curation.md](./references/curation.md): read in Step 3, when correcting, re-baking or registering a manifest, or adding a document by hand.
+- [curation.md](./references/curation.md): read in Step 3, when correcting, re-baking or registering a manifest, adding a document by hand, or describing a structured file Baker cannot parse.
 - [authoring.md](./references/authoring.md): read in Steps 4, 5 and 7, for the file layout, schema bindings, loader and mapping contracts and `RunContext`.
 - [interpretation.md](./references/interpretation.md): read in Steps 2, 6 and 9, for selection versus query filter and what each description must state.
 - [modeling.md](./references/modeling.md): read in Steps 6 and 7, before a modeling choice that could erase a distinction (qualifiers, absence states, identity).

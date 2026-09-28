@@ -52,6 +52,34 @@ Add a FileObject by hand only for a file that no scan covered, in a draft regist
 
 Whether a file can be ingested and whether it should be read are separate questions. A described file that the graph does not need is excluded with a reason in `graph/sources/__init__.py`, not removed from the manifest.
 
+## Structured files Baker cannot parse
+
+Baker has no handler for some structured formats, such as tab-separated `.txt`, RDF (N-Triples, N-Quads, Turtle) and shapefiles, so `biotope add` reports them `unclaimed`. When the graph reads records from such a file, describe them as a RecordSet over the FileObject that `biotope add` appended, rather than transcribing them as a document. Every field names that FileObject as its source:
+
+```json
+{
+  "@type": "cr:RecordSet",
+  "@id": "places",
+  "name": "places",
+  "field": [
+    {
+      "@type": "cr:Field",
+      "@id": "places/place_id",
+      "name": "place_id",
+      "dataType": "sc:Integer",
+      "source": { "fileObject": { "@id": "file_66121526" }, "extract": { "column": "place_id" } }
+    }
+  ]
+}
+```
+
+- A field's `@id` is `<record set @id>/<field>`.
+- Declare one field per value the loader decodes: each column of a table; the subject, predicate, object and graph of a statement, extracted from `{"fileProperty": "lines"}`; the attributes and geometry of a feature.
+- A file that a field reads gets a record-set package instead of a document package. A file that no field reads, such as a shapefile's `.shx` index, stays a document source: exclude it with a reason that names the source whose loader reads it.
+- The loader parses the file with an established library and yields one record per row, statement or feature.
+
+Keep document sources for prose whose facts you transcribe, such as methods, cohort descriptions and notes. Register the corrected draft as above, then generate.
+
 ## Keep structural gaps visible
 
 Validate fields, types and physical access against the source before relying on them in a mapping. Keep unsupported inputs, partial manifests and opaque fields visible instead. An opaque field that nothing reads can stay `None`; one a requirement needs gets its metadata refined first. Keep every field `@id` scoped under its RecordSet (`<record set @id>/<field>`), as Baker and `biotope annotate` write them; other ids cannot be bound by generated schemas and are reported as `source.unscoped_field`.
