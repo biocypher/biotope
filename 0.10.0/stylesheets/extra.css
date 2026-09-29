@@ -1,0 +1,33 @@
+/* Terminal-style appearance for blocks tagged with `.terminal`.
+   Usage:  ```console { .terminal .no-copy }
+   The .terminal class lands on the outer wrapper; .no-copy hides the
+   clipboard button. */
+
+.md-typeset .terminal,
+.md-typeset .terminal pre,
+.md-typeset .terminal pre > code,
+.md-typeset .terminal > pre > code {
+  background-color: #1e1e2e !important;
+  color: #cdd6f4 !important;
+}
+
+.md-typeset .terminal {
+  border-radius: 6px;
+  border: 1px solid #313244;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.md-typeset .terminal pre > code {
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+}
+
+/* Pygments token classes from the `console` lexer */
+.md-typeset .terminal .gp { color: #89b4fa !important; font-weight: 600; } /* prompt */
+.md-typeset .terminal .go { color: #cdd6f4 !important; }                    /* output */
+.md-typeset .terminal .gh,
+.md-typeset .terminal .nv { color: #f9e2af !important; }                    /* headings / vars */
+
+/* Hide the copy button on any block tagged with .no-copy. */
+.md-typeset .no-copy .md-clipboard {
+  display: none !important;
+}

@@ -1,0 +1,13 @@
+{
+  "required_pattern": "cluster-strict",
+  "required_fields": [
+    "name",
+    "description",
+    "creator",
+    "dateCreated",
+    "distribution",
+    "license",
+    "project_id"
+  ],
+  "require_remote_validation": true
+}
