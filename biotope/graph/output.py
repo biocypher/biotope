@@ -1,12 +1,15 @@
-"""Narrow BioCypher integration: local Neo4j import files, without a database."""
+"""Graph export: local Neo4j import files through BioCypher, or one SQLite database."""
 
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import logging
 import re
+import sqlite3
 from collections import Counter
 from collections.abc import Iterable
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -37,6 +40,9 @@ ARRAY_DELIMITER = ";"
 NEO4J_DEFAULT_READ_BUFFER = 4 * 2**20
 
 RESERVED_PROPERTIES = ("preferred_id", PROVENANCE_PROPERTY)
+
+SQLITE_DATABASE = "graph.sqlite"
+SQLITE_TYPES = {"str": "TEXT", "int": "INTEGER", "float": "REAL", "bool": "INTEGER", "str[]": "TEXT"}
 UNQUOTABLE_IDENTIFIER = re.compile(r'[,"|\r\n]')
 
 
@@ -120,6 +126,35 @@ def _rewrite_import_scripts(directory: Path) -> None:
         write_text_atomic(script, first + separator + locate + rest)
 
 
+def write_export_schema(context: RunContext, labels: dict[str, str], directory: Path) -> Path:
+    """Write every exported label with its concept, kind, property types, endpoints and descriptions."""
+    descriptions = context.pipeline.topology.descriptions()
+    schema: dict[str, dict[str, Any]] = {
+        labels[semantic]: {
+            "represented_as": item["kind"],
+            "input_label": semantic,
+            "properties": {**item["properties"], PROVENANCE_PROPERTY: "int"},
+            "description": descriptions[semantic]["description"],
+            "biotope": {
+                "nullable": item["nullable"],
+                "property_descriptions": descriptions[semantic]["properties"],
+                "provenance": PROVENANCE_REFERENCE,
+            },
+        }
+        for semantic, item in context.schema.items()
+    }
+    for semantic, item in context.schema.items():
+        if item["kind"] == "edge":
+            source, target = item["source"], item["target"]
+            if source is None or target is None:
+                raise ValueError(f"{semantic}: edge topology has no endpoint contracts")
+            schema[labels[semantic]]["source"] = labels[source]
+            schema[labels[semantic]]["target"] = labels[target]
+    path = directory / "schema_config.yaml"
+    write_text_atomic(path, yaml.safe_dump(schema, sort_keys=True))
+    return path
+
+
 class BioCypherWriter:
     """Derive the export schema and write one offline BioCypher format."""
 
@@ -201,30 +236,7 @@ class BioCypherWriter:
         directory.mkdir(parents=True, exist_ok=True)
         labels = export_labels(context.schema)
         provenance = ProvenanceCatalog(context)
-        descriptions = context.pipeline.topology.descriptions()
-        schema = {
-            labels[semantic]: {
-                "represented_as": item["kind"],
-                "input_label": semantic,
-                "properties": {**item["properties"], PROVENANCE_PROPERTY: "int"},
-                "description": descriptions[semantic]["description"],
-                "biotope": {
-                    "nullable": item["nullable"],
-                    "property_descriptions": descriptions[semantic]["properties"],
-                    "provenance": PROVENANCE_REFERENCE,
-                },
-            }
-            for semantic, item in context.schema.items()
-        }
-        for semantic, item in context.schema.items():
-            if item["kind"] == "edge":
-                source, target = item["source"], item["target"]
-                if source is None or target is None:
-                    raise ValueError(f"{semantic}: edge topology has no endpoint contracts")
-                schema[labels[semantic]]["source"] = labels[source]
-                schema[labels[semantic]]["target"] = labels[target]
-        schema_path = directory / "schema_config.yaml"
-        write_text_atomic(schema_path, yaml.safe_dump(schema, sort_keys=True))
+        schema_path = write_export_schema(context, labels, directory)
         config_path = directory / "biocypher_config.yaml"
         config: dict[str, Any] = {
             "biocypher": {
@@ -290,5 +302,73 @@ class BioCypherWriter:
                 f"not cover: {', '.join(unexpected)}. The writer and the declaration disagree; "
                 "reconcile them before accepting the output."
             )
+        provenance.write(directory / PROVENANCE_CATALOG)
+        return [str(path.relative_to(directory)) for path in sorted(directory.rglob("*")) if path.is_file()]
+
+
+def _quoted(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _cell(value: object) -> object:
+    return json.dumps(value, ensure_ascii=False) if isinstance(value, list) else value
+
+
+class SQLiteWriter:
+    """Write the validated graph into one SQLite database, without BioCypher or an import step.
+
+    Each concept becomes a table named by its export label: ``id`` and, for an edge,
+    ``source`` and ``target`` referencing the endpoint tables, then one typed column
+    per property and ``biotope_provenance_id``. Booleans are 0 or 1, string lists are
+    JSON arrays and nulls stay NULL, so values keep any quote, delimiter or line break.
+    """
+
+    def check_environment(self) -> dict[str, object]:
+        """Report the SQLite library that will write the database."""
+        return {"exporter": "sqlite3", "version": sqlite3.sqlite_version, "format": "sqlite"}
+
+    def check_object(self, identity: str, value: object, schema: ConceptSchema) -> None:
+        """Refuse a property whose name collides with a column the exporter writes."""
+        concept = concept_id(type(value))
+        for name in schema["properties"]:
+            if name in ("id", "source", "target", PROVENANCE_PROPERTY):
+                raise ValueError(f"{concept}.{name}: the exporter reserves {name}; rename the property")
+
+    def write(self, context: RunContext, directory: Path) -> list[str]:
+        """Write the database, the export schema and the provenance catalog its rows reference."""
+        if context.check is None:
+            for identity, row in (*context.nodes.items(), *context.edges.items()):
+                self.check_object(identity, row.value, context.schema[concept_id(type(row.value))])
+        directory.mkdir(parents=True, exist_ok=True)
+        labels = export_labels(context.schema)
+        provenance = ProvenanceCatalog(context)
+        write_export_schema(context, labels, directory)
+        database = directory / SQLITE_DATABASE
+        database.unlink(missing_ok=True)
+        with closing(sqlite3.connect(database)) as connection, connection:
+            for semantic, item in context.schema.items():
+                edge = item["kind"] == "edge"
+                endpoints = [(end, labels[str(item[end])]) for end in ("source", "target")] if edge else []
+                names = list(item["properties"])
+                columns = [
+                    f"{_quoted('id')} TEXT PRIMARY KEY",
+                    *(f"{_quoted(end)} TEXT NOT NULL REFERENCES {_quoted(label)}" for end, label in endpoints),
+                    *(f"{_quoted(name)} {SQLITE_TYPES[item['properties'][name]]}" for name in names),
+                    f"{_quoted(PROVENANCE_PROPERTY)} INTEGER NOT NULL",
+                ]
+                table = _quoted(labels[semantic])
+                connection.execute(f"CREATE TABLE {table} ({', '.join(columns)})")
+                store = context.edges if edge else context.nodes
+                rows = [
+                    (
+                        identity,
+                        *(getattr(row.value, name) for name, _ in endpoints),
+                        *(_cell(getattr(row.value, name)) for name in names),
+                        provenance.reference(row),
+                    )
+                    for identity, row in sorted(store.items())
+                    if concept_id(type(row.value)) == semantic
+                ]
+                connection.executemany(f"INSERT INTO {table} VALUES ({', '.join('?' * len(columns))})", rows)
         provenance.write(directory / PROVENANCE_CATALOG)
         return [str(path.relative_to(directory)) for path in sorted(directory.rglob("*")) if path.is_file()]

@@ -163,7 +163,7 @@ def _execute(
         if exporter is not None and output is not None:
             stage = "export"
             if phase:
-                phase("Exporting BioCypher files")
+                phase("Exporting the graph")
             report["dependencies"]["biocypher"] = _software("biocypher")
             report["outputs"] = exporter.write(context, output)
             report["graph_digest"] = context.content_digest()

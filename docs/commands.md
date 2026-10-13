@@ -62,6 +62,8 @@ and remote settings.
 Graph commands support `--json`; check, quality, build and metagraph also accept
 `--graph <folder>`. Scaffold always creates `graph/` in the current directory and
 refuses an existing path. It performs no initialization, baking or execution.
+Build exports Neo4j import files by default; `--format sqlite` writes one SQLite
+database, `graph.sqlite`, instead.
 
 Check, quality and build discover the source packages statically, then load
 `topology/__init__.py:TOPOLOGY` and `pipelines/build_graph.py:PIPELINE`, so
