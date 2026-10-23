@@ -49,8 +49,8 @@ TEMPLATE_NAMES = frozenset(
 # Biotope's own ruff line length, so that formatting generated code with it changes nothing.
 LINE_LENGTH = 120
 
-DOCUMENT_FORMATS = frozenset({"application/pdf", "text/plain", "text/markdown", "text/x-markdown"})
-DOCUMENT_SUFFIXES = frozenset({".pdf", ".txt", ".md", ".markdown"})
+DOCUMENT_FORMATS = frozenset({"application/pdf", "text/html", "text/plain", "text/markdown", "text/x-markdown"})
+DOCUMENT_SUFFIXES = frozenset({".pdf", ".html", ".htm", ".txt", ".md", ".markdown"})
 
 
 def _template(name: str) -> Template:
@@ -137,7 +137,10 @@ def _document_hint(resource: dict[str, Any]) -> str:
     content = resource.get("contentUrl")
     suffix = PurePosixPath(content).suffix.lower() if isinstance(content, str) else ""
     if formats & DOCUMENT_FORMATS or suffix in DOCUMENT_SUFFIXES:
-        return "Author reviewed facts as fields; loader.py returns them with page or section locations."
+        return (
+            "Extract this document's records with biotope extract run and map that dataset, or transcribe "
+            "reviewed facts as fields that loader.py returns with page or section locations."
+        )
     return (
         "Describe this file with a RecordSet in the manifest, author reviewed facts here, "
         "or exclude it in graph/sources/__init__.py."
