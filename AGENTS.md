@@ -42,13 +42,13 @@ uv run mkdocs build --strict                 # docs
 
 ### Tests, commits and releases
 
-- Unit tests run by default and in CI, on committed public fixtures and without network. B1 adds the `live` marker for tests that call a real model endpoint or read local documents that are not committed, and excludes it by default with `addopts`. `manual` criteria are judged by Vlad or a project's user and recorded in the PR.
-- Tests and examples use only public material (roadmap decision 14). Never commit copyrighted full text, such as the InTRAC papers; live tests read such files from a local path given by an environment variable.
+- Unit tests run by default and in CI, on committed public fixtures and without network. B1 adds the `live` marker for tests that call a real model endpoint, and excludes it by default with `addopts`. `manual` criteria are judged by Vlad or a project's user and recorded in the PR.
+- Tests and examples use only public material (roadmap decision 14). Never commit copyrighted full text, such as the InTRAC papers; runs on such documents happen in the data projects that hold them.
 - Commit subjects and PR titles follow Conventional Commits (`feat:`, `fix:`, `docs:`, …; `!` marks a break). Release-please maintains the version, `CHANGELOG.md` and `uv.lock`'s package entry: never edit them by hand.
 
 ### Secrets
 
-- Model endpoints read keys from environment variables, such as `OPENROUTER_API_KEY` and `HMGU_AGENTS_API_KEY`. Never read, print, log, commit or paste a `.env` file or a key, and never record one in a manifest, provenance or report.
+- Model endpoints read keys from environment variables, such as `OPENROUTER_API_KEY`. Never read, print, log, commit or paste a `.env` file or a key, and never record one in a manifest, provenance or report.
 - Work in a worktree under `/home/vladsam42/Projects/biotope_project/.worktrees/`; the main checkout is `/home/vladsam42/Projects/biotope_project/biotope`.
 
 ## Workflow

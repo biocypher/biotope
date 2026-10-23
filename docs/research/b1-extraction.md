@@ -61,3 +61,7 @@ Total spent: 0.195 USD on OpenRouter; the HMGU endpoint is free to us.
 - Since decision 6 limits this version to public documents, the provider choice is about cost and quality, not data protection. The model id, endpoint and provider are part of each record's provenance (decision 4), so switching later only re-extracts.
 
 The trial's scripts and outputs are not in the repo; they were throwaway smoke-test code.
+
+## Decision
+
+On 23 October 2026 Vlad chose `deepseek/deepseek-v4.1-flash` on OpenRouter for B1's tests and runs, instead of the models recommended above. It was not trialled in this research. OpenRouter lists it that day with a 1M-token context, strict structured output, and 0.165 USD per million input tokens and 0.66 per million output tokens. B1's live test (AC-10) is the first measure of its quote fidelity.
