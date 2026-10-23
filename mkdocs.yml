@@ -59,6 +59,7 @@ nav:
       - Administration examples: cluster-compliance_sidenotes.md
   - Migration to 0.10: migration.md
   - Development ideas: ideas.md
+  - Roadmap: roadmap.md
 
 validation:
   links:
