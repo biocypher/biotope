@@ -14,10 +14,11 @@ from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
 from biotope.commands.add import _add_file, _resolve_dataset_ref
-from biotope.extraction import Document, Schema
+from biotope.extraction import Document, Extractor, Schema
 from biotope.extraction.describe import describe
 from biotope.extraction.run import (
     STATES,
+    Outcome,
     Source,
     document_text,
     extract_document,
@@ -177,7 +178,7 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
     output.finish(any(outcome.status in {"failed", "missing"} for outcome in result.documents))
 
 
-def _prepare(output: Output, schema_ref: str):
+def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor]:
     root = find_biotope_root()
     if root is None:
         output.fail("Not in a biotope project. Run 'biotope init' first.")
@@ -273,7 +274,7 @@ def _header(output: Output, label: str, schema: Schema, named: dict[str, Any], t
     output.row(label, subject, f"schema revision {schema.revision[:12]}; {named['name']} {named['version']} {settings}")
 
 
-def _document_report(outcome: Any) -> dict[str, Any]:
+def _document_report(outcome: Outcome) -> dict[str, Any]:
     report = {"path": outcome.path, "status": outcome.status, "records": outcome.records, "sha256": outcome.sha256}
     if outcome.reason:
         report["reason"] = outcome.reason
