@@ -14,14 +14,14 @@ Specs have no status line: merged means approved. Implementation status is track
 
 - A spec says **what and why**, not how. Most of it covers the goal and its reasons, scope, non-goals, interfaces and acceptance criteria. The design is a short sketch.
 - **Binding:** the goal, scope, non-goals, interfaces and acceptance criteria. **Guidance:** the design sketch and the risks. The implementer may depart from the sketch and explains why in the PR; that needs no spec change.
-- **Interfaces** are exact where other code or people depend on them: commands and their options, file layouts, file formats and fields, configuration keys, Python contracts that projects implement, and environment variables. Everything else is the implementer's choice.
+- A spec aligns on goals, scope and interfaces; the implementer works out the details during development. **Interfaces** name only the surface others depend on, at the level of concepts and contracts, such as a Python protocol described in words or what a stored output promises later stages. Command options, configuration key names, file layouts and formats are decided by the implementer and documented in `docs/` by the implementation PR.
 - Each **acceptance criterion** describes an observable outcome, carries an id (`AC-1`, `AC-2`, …) and names its test tier:
   - `unit`: runs on committed fixtures, without network, by default and in CI;
   - `live`: calls a real model endpoint or reads local documents that are not committed, may cost money, is marked `@pytest.mark.live` and never runs in CI;
   - `manual`: judged by Vlad, or by a user of a project such as REACH or InTRAC, and recorded in the PR.
 - **Non-goals** are listed explicitly, so scope cannot grow unnoticed.
 - **Freedom to operate** says what the implementer decides, so nobody needs a spec change for an internal choice.
-- A spec fits in about 170 lines. If it grows much longer, it is probably describing the implementation.
+- A spec fits in about 80 lines. If it grows much longer, it is probably describing the implementation.
 
 ## Template
 
@@ -36,7 +36,7 @@ What exists afterwards that did not exist before, who needs it, and why. Quote t
 ## Scope
 ## Non-goals
 ## Interfaces
-Contracts others rely on. Exact where they depend on it.
+The surface others depend on, as concepts and contracts.
 ## Acceptance criteria
 - **AC-1** (unit) …
 ## Freedom to operate
