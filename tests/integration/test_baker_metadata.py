@@ -11,7 +11,7 @@ import pyarrow.parquet as pq
 import tifffile
 from PIL import Image
 
-from biotope.commands.add import _add_file, _bake_directory
+from biotope.commands.add import _bake_directory, add_file
 from biotope.croissant.inspector import inspect_dataset
 from biotope.croissant.spec import load_from_path
 from biotope.graph.inventory import generate_source_packages
@@ -36,7 +36,7 @@ def test_single_workbook_uses_full_assembly_and_only_selected_file(tmp_path):
     (raw / "nested").mkdir()
     _workbook(raw / "nested" / workbook.name, "unselected")
     metadata_dir = tmp_path / ".biotope" / "datasets"
-    assert _add_file(workbook, tmp_path, metadata_dir, False)
+    assert add_file(workbook, tmp_path, metadata_dir, False)
     manifest = metadata_dir / "raw" / "study[1].jsonld"
     data = json.loads(manifest.read_text())
     assert {rs["name"] for rs in data["recordSet"]} == {"Measurements", "Study"}
@@ -120,7 +120,7 @@ def test_nested_parquet_json_and_single_ome_preserve_baker_structure(tmp_path):
     assert "study_id" in {f["name"] for rs in data["recordSet"] for f in rs["field"]}
     ome = raw / "cells.ome.tif"
     tifffile.imwrite(ome, np.zeros((3, 4), dtype=np.uint8), ome=True, metadata={"axes": "YX"})
-    assert _add_file(ome, tmp_path, tmp_path / ".biotope" / "datasets", False)
+    assert add_file(ome, tmp_path, tmp_path / ".biotope" / "datasets", False)
     single = json.loads((tmp_path / ".biotope" / "datasets" / "raw" / "cells.ome.jsonld").read_text())
     assert any(rs["name"] == "ome_images" for rs in single["recordSet"])
     assert "4x3" in single["recordSet"][0]["description"]
@@ -131,7 +131,7 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     source = tmp_path / "indexed.csv"
     source.write_text(",gene_id,score\n0,G1,2.5\n")
     manifest_dir = tmp_path / ".biotope" / "datasets"
-    assert _add_file(source, tmp_path, manifest_dir, False)
+    assert add_file(source, tmp_path, manifest_dir, False)
     manifest = manifest_dir / "indexed.jsonld"
     raw = json.loads(manifest.read_text())
     unnamed = raw["recordSet"][0]["field"][0]

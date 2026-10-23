@@ -111,7 +111,9 @@ def _shape(line: str) -> str:
 class Searchable:
     def __init__(self, text: str, heads: list[str] | None = None) -> None:
         self.text = text
-        kept = [(index, char.lower()) for index, char in enumerate(text) if not IGNORED.match(char)]
+        kept = [
+            (index, folded) for index, char in enumerate(text) if not IGNORED.match(char) for folded in char.lower()
+        ]
         self.positions = [index for index, _ in kept]
         self.squeezed = "".join(char for _, char in kept)
         self.heads = "\0".join(squeeze(line) for line in heads or [])

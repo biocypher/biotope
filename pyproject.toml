@@ -82,7 +82,7 @@ markers = ["raises", "live: calls a real model endpoint; may cost money"]
 addopts = "-m 'not live'"
 
 [tool.pyright]
-include = ["biotope/graph", "biotope/extraction", "biotope/commands/graph.py", "biotope/commands/_graph_output.py", "biotope/commands/source.py"]
+include = ["biotope/graph", "biotope/extraction", "biotope/commands/graph.py", "biotope/commands/_graph_output.py", "biotope/commands/source.py", "biotope/commands/extract.py"]
 typeCheckingMode = "strict"
 reportMissingTypeStubs = "none"
 

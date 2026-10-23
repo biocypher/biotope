@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 import click
 import yaml
@@ -17,14 +16,16 @@ from rich.table import Table
 from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
-from biotope.commands.add import _add_file, _default_overrides, _resolve_dataset_ref
-from biotope.extraction import Extractor, Schema
+from biotope.commands.add import add_file, default_overrides, resolve_dataset_ref
+from biotope.extraction import ExtractionError, Extractor, Schema
 from biotope.extraction.describe import describe
 from biotope.extraction.run import (
+    PROGRESS,
     STATES,
     Outcome,
     Review,
     Source,
+    document_status,
     extract_all,
     failure,
     identity,
@@ -33,8 +34,6 @@ from biotope.extraction.run import (
     review,
     run,
     sha256,
-    unsupported_reason,
-    weaknesses,
 )
 from biotope.extraction.text import convert, media_type
 from biotope.graph.sources import write_text_atomic
@@ -69,7 +68,7 @@ class Output:
     def progress(self, number: int, total: int, path: str) -> None:
         click.echo(f"Extracting {number}/{total} {path}", err=True)
 
-    def fail(self, message: str) -> None:
+    def fail(self, message: str) -> NoReturn:
         if self.as_json:
             self.report.update(status="error", error=message)
             click.echo(json.dumps(self.report, indent=2, ensure_ascii=False))
@@ -113,27 +112,28 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
         )
     }
     failed = False
+    documents: list[dict[str, Any]] = []
+    output.report["documents"] = documents
     for path in paths:
-        extracted = done.get(path, ValueError("not a PDF, HTML, text or Markdown document"))
+        extracted = done.get(path, ExtractionError("not a PDF, HTML, text or Markdown document"))
         if isinstance(extracted, BaseException):
             failed = True
-            reason = str(extracted) if isinstance(extracted, ValueError) else failure(extracted)
-            output.report["documents"].append({"path": path, "status": "failed", "records": [], "reason": reason})
+            reason = failure(extracted)
+            documents.append({"path": path, "status": "failed", "records": [], "reason": reason})
             output.row("FAIL", path, reason)
             continue
-        reason = unsupported_reason(extracted)
-        status = "unsupported" if reason else "extracted" if extracted else "empty"
+        status, reason = document_status(extracted)
         entry = {"path": path, "status": status, "records": extracted}
-        output.report["documents"].append({**entry, "reason": reason} if reason else entry)
+        documents.append({**entry, "reason": reason} if reason else entry)
         label = "OK" if status == "extracted" else "WARN"
         output.row(label, path, f"{status}, {_count(len(extracted))}" + (f"\n{reason}" if reason else ""))
         for record in extracted:
             output.row("Record", record["id"], _shown(record))
     if any(not isinstance(extracted, BaseException) for extracted in done.values()):
-        marker = _tried(root, schema)
+        marker = _tried(schema)
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.touch()
-    _review(output, review([record for entry in output.report["documents"] for record in entry["records"]]))
+    _review(output, review([record for entry in documents for record in entry["records"]]))
     output.finish(failed)
 
 
@@ -158,45 +158,45 @@ def run_command(
     output = Output(as_json)
     root, schema, extractor, parallel = _prepare(output, schema_ref)
     try:
-        dataset_ids = [_resolve_dataset_ref(reference, root) for reference in datasets]
+        dataset_ids = [resolve_dataset_ref(reference, root) for reference in datasets]
     except ValueError as exc:
         output.fail(str(exc).replace("--derived-from ", ""))
-        return
     sources = _sources(root, dataset_ids)
     chosen = frozenset(_project_path(root, file) for file in redo)
     strangers = sorted(chosen - {source.path for source in sources})
     if strangers:
         output.fail(f"{', '.join(strangers)} is not a document of {', '.join(datasets)}")
-        return
     target = out.resolve() if out is not None else root / "extracted" / f"{_snake(schema.name)}.jsonl"
     try:
         relative = target.relative_to(root)
     except ValueError:
         output.fail(f"{out} is outside the project")
-        return
     named = identity(extractor)
     output.report.update(schema=_schema_report(schema), extractor=named, output=relative.as_posix())
     _header(output, "Extract", schema, named, relative.as_posix())
-    output.report["warnings"] = []
-    if not _tried(root, schema).is_file():
+    warnings: list[str] = []
+    output.report["warnings"] = warnings
+    if not _tried(schema).is_file():
         warning = (
             f"Schema revision {schema.revision[:12]} of {schema.name} was never shown with biotope extract try "
-            "in this project. Run try on sample documents and have the user approve the records before a full run."
+            "on this machine. Run try on sample documents and have the user approve the records before a full run."
         )
-        output.report["warnings"].append(warning)
+        warnings.append(warning)
         output.row("WARN", "untried schema", warning)
     state = root / STATES / relative.with_suffix(".json")
-    result = run(root, schema, extractor, sources, target, state, chosen, output.progress, parallel)
+    progress = root / PROGRESS / relative
+    result = run(root, schema, extractor, sources, target, state, progress, chosen, output.progress, parallel)
     manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
     if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
+    ignored = _ignored(root, [target, manifest, state])
     output.report.update(
         manifest=manifest.relative_to(root).as_posix(),
         documents=[_document_report(outcome) for outcome in result.documents],
         appeared=result.appeared,
         disappeared=result.disappeared,
         moved=result.moved,
-        ignored=_ignored(root, [target, manifest, state]),
+        ignored=ignored,
     )
     for outcome in result.documents:
         label = (
@@ -220,7 +220,7 @@ def run_command(
     for record_id in result.appeared:
         output.row("New", record_id)
     output.row("Saved", relative.as_posix(), f"registered as {manifest.relative_to(root).as_posix()}")
-    for path in output.report["ignored"]:
+    for path in ignored:
         output.row("WARN", f"git ignores {path}", "Commit it with the project: add an exception to .gitignore.")
     output.finish(any(outcome.status in {"failed", "missing"} for outcome in result.documents))
 
@@ -281,10 +281,9 @@ def _review(output: Output, found: Review) -> None:
         )
 
 
-def _tried(root: Path, schema: Schema) -> Path:
+def _tried(schema: Schema) -> Path:
     cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    project = hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:16]
-    return cache / "biotope/tried" / project / schema.revision
+    return cache / "biotope/tried" / schema.revision
 
 
 def _ignored(root: Path, paths: list[Path]) -> list[str]:
@@ -299,16 +298,15 @@ def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor, 
     root = find_biotope_root()
     if root is None:
         output.fail("Not in a biotope project. Run 'biotope init' first.")
-        raise SystemExit(1)
     config_path = root / ".biotope/config.yaml"
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+    loaded = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
+    config = cast(dict[str, Any], loaded or {})
     try:
         schema = Schema.load(schema_ref, root)
-        extractor = load_extractor(root, config or {})
-        parallel = parallelism(config or {})
+        extractor = load_extractor(root, config)
+        parallel = parallelism(config)
     except Exception as exc:
         output.fail(str(exc))
-        raise SystemExit(1) from exc
     return root, schema, extractor, parallel
 
 
@@ -316,9 +314,9 @@ def _sources(root: Path, dataset_ids: list[str]) -> list[Source]:
     found: dict[str, Source] = {}
     for dataset_id in dataset_ids:
         manifest = root / ".biotope/datasets" / f"{dataset_id}.jsonld"
-        metadata = json.loads(manifest.read_text(encoding="utf-8"))
+        metadata = cast(dict[str, Any], json.loads(manifest.read_text(encoding="utf-8")))
         dataset_dir = dataset_dir_for_manifest(manifest, root)
-        for entry in metadata.get("distribution", []) or []:
+        for entry in cast(list[dict[str, Any]], metadata.get("distribution") or []):
             url = entry.get("contentUrl")
             if entry.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
                 continue
@@ -339,14 +337,14 @@ def _register(
     root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
 ) -> None:
     overrides = {
-        **_default_overrides(),
+        **default_overrides(),
         "name": target.relative_to(root).as_posix(),
         "description": f"{schema.name} records extracted from {', '.join(dataset_ids)}. {schema.description}".strip(),
         "status_override": STATUS_PROCESSED,
         "derived_from": dataset_ids,
     }
     datasets_dir = root / ".biotope/datasets"
-    if not _add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
+    if not add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
     metadata = json.loads(manifest.read_text(encoding="utf-8"))
     for unknown in ("creator", "license"):
@@ -415,8 +413,8 @@ def _document_report(outcome: Outcome) -> dict[str, Any]:
 
 def _shown(record: dict[str, Any]) -> str:
     lines: list[str] = []
-    for name, given in record["values"].items():
-        for item in given if isinstance(given, list) else [given]:
+    for name, given in cast(dict[str, Any], record["values"]).items():
+        for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given]):
             lines.append(f"{name}: {json.dumps(item['value'], ensure_ascii=False)}")
             evidence = item["evidence"]
             if evidence is None:
@@ -431,11 +429,7 @@ def _shown(record: dict[str, Any]) -> str:
                 where = f"characters {evidence['start']}-{evidence['end']}"
                 if evidence["page"] is not None:
                     where = f"page {evidence['page']}, {where}"
-                reasons = (
-                    weaknesses(evidence["quote"], evidence["occurrences"], evidence.get("running_head"))
-                    if evidence.get("weak")
-                    else []
-                )
+                reasons = cast(list[str], evidence["weak"])
                 if reasons:
                     found = f"found {evidence['occurrences']} times"
                     where += f"; weak: {', '.join(found if reason == 'repeated' else reason for reason in reasons)}"

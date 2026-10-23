@@ -27,7 +27,7 @@ import click
 from rich.console import Console
 from rich.prompt import Confirm
 
-from biotope.commands.add import _resolve_dataset_ref
+from biotope.commands.add import resolve_dataset_ref
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
@@ -79,7 +79,7 @@ def rm(target: Path, keep_data: bool, force: bool) -> None:
     # Path doesn't exist on disk — accept canonical dataset id (`biotope rm
     # data/kidney_pdf` after the dir is already gone, for example).
     try:
-        rel_id = _resolve_dataset_ref(str(target), biotope_root)
+        rel_id = resolve_dataset_ref(str(target), biotope_root)
     except ValueError as exc:
         click.echo(f"❌ {target}: {exc}")
         raise click.Abort from exc

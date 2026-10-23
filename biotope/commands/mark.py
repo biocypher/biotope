@@ -6,7 +6,7 @@ import json
 
 import click
 
-from biotope.commands.add import _resolve_dataset_ref
+from biotope.commands.add import resolve_dataset_ref
 from biotope.metadata import (
     STATUS_VALUES,
     add_derived_from,
@@ -42,7 +42,7 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
         raise click.Abort
 
     try:
-        target_id = _resolve_dataset_ref(dataset, biotope_root)
+        target_id = resolve_dataset_ref(dataset, biotope_root)
     except ValueError as exc:
         raise click.BadParameter(str(exc)) from exc
 
@@ -54,7 +54,7 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
     resolved_sources: list[str] = []
     for ref in derived_from:
         try:
-            resolved_sources.append(_resolve_dataset_ref(ref, biotope_root))
+            resolved_sources.append(resolve_dataset_ref(ref, biotope_root))
         except ValueError as exc:
             raise click.BadParameter(str(exc)) from exc
 

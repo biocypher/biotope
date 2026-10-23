@@ -7,17 +7,30 @@ from biotope.extraction.schema import Schema
 
 CROISSANT_TYPES = {"string": "sc:Text", "integer": "sc:Integer", "number": "sc:Float", "boolean": "sc:Boolean"}
 EVIDENCE = (
-    ("quote", "sc:Text", "The text the extractor quoted for the value."),
-    ("locator", "sc:Text", "Where an extractor that does not quote found the value, in that extractor's notation."),
-    ("aligned", "sc:Boolean", "Whether biotope found the quote in its text of the document; false needs review."),
-    ("start", "sc:Integer", "Offset of the quote's first character in biotope's text of the document."),
-    ("end", "sc:Integer", "Offset just after the quote's last character in biotope's text of the document."),
-    ("page", "sc:Integer", "The PDF page the quote is on, counting from 1."),
-    ("occurrences", "sc:Integer", "How often the quote occurs in biotope's text of the document."),
+    ("quote", "sc:Text", "The text the extractor quoted for the value.", False),
+    (
+        "locator",
+        "sc:Text",
+        "Where an extractor that does not quote found the value, in that extractor's notation.",
+        False,
+    ),
+    (
+        "aligned",
+        "sc:Boolean",
+        "Whether biotope found the quote in its text of the document; false needs review.",
+        False,
+    ),
+    ("start", "sc:Integer", "Offset of the quote's first character in biotope's text of the document.", False),
+    ("end", "sc:Integer", "Offset just after the quote's last character in biotope's text of the document.", False),
+    ("page", "sc:Integer", "The PDF page the quote is on, counting from 1.", False),
+    ("occurrences", "sc:Integer", "How often the quote occurs in biotope's text of the document.", False),
     (
         "weak",
-        "sc:Boolean",
-        "Whether an aligned quote is short or occurs more than once, so it may not prove its value.",
+        "sc:Text",
+        "Why an aligned quote may not prove its value: short, under 10 characters; repeated, under 30 characters "
+        "and found more than once; running head, found only in lines that recur on most pages of a PDF. Empty for "
+        "a quote without these reasons, null for an unaligned quote and a locator.",
+        True,
     ),
 )
 
@@ -50,7 +63,7 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
         return item
 
     def evidenced(path: str, entry_description: str, data_type: str, nullable: bool, many: bool) -> dict[str, Any]:
-        evidence = [column(f"{path}/evidence/{key}", text, kind) for key, kind, text in EVIDENCE]
+        evidence = [column(f"{path}/evidence/{key}", text, kind, many=array) for key, kind, text, array in EVIDENCE]
         return column(
             path,
             f"{entry_description} With its evidence.",
@@ -96,6 +109,12 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
     provenance = [
         column("provenance/document_sha256", "SHA-256 digest of the document file.", "sc:Text", nullable=False),
         column("provenance/media_type", "The document's media type.", "sc:Text", nullable=False),
+        column(
+            "provenance/conversion",
+            "The version of biotope's conversion of the document to the text that evidence offsets refer to.",
+            "sc:Integer",
+            nullable=False,
+        ),
         column("provenance/schema", "The extraction schema's class name.", "sc:Text", nullable=False),
         column("provenance/schema_revision", "Digest of the schema's derived JSON Schema.", "sc:Text", nullable=False),
         column("provenance/extractor", "The extractor that produced the record.", nullable=False, children=extractor),
@@ -110,8 +129,9 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
         column("document", "The document's path in the project.", "sc:Text", nullable=False),
         column(
             "supported",
-            "False when more than half of the record's non-null values have no aligned quote or locator: "
-            "the extractor may have answered from memory, so the record needs review.",
+            "False when more than half of the record's non-null values have no aligned quote or locator, or are "
+            "quoted only from running heads: the extractor may have answered from memory or from page furniture, "
+            "so the record needs review.",
             "sc:Boolean",
             nullable=False,
         ),

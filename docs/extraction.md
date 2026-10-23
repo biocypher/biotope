@@ -30,17 +30,20 @@ biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/s
 - `biotope extract try SCHEMA FILE...` runs the configured extractor on the given
   files and shows each record with its values and their evidence. It changes no
   file in the project. Use it to review a schema on sample documents. When it
-  shows records, it notes the schema revision as tried in this project, outside
-  the project in `$XDG_CACHE_HOME/biotope/tried/` (by default `~/.cache`).
+  shows records, it notes the schema revision as tried on this machine, outside
+  the project in `$XDG_CACHE_HOME/biotope/tried/` (by default `~/.cache`), so the
+  note holds in every checkout of the project on this machine and in no other.
 - `biotope extract run SCHEMA DATASET...` extracts every document of the given
   registered datasets, stores the records in `extracted/<schema>.jsonl` (or
   `--out PATH`) and registers that file as a dataset with status `processed`,
-  derived from the input datasets. It stores each document's records as soon as
-  that document is extracted, so a run that is interrupted keeps the documents it
-  finished, and the next run reuses them and gives the same output as an
-  uninterrupted run. A dataset is named as for `--derived-from`: by
+  derived from the input datasets. It keeps each document's records in
+  `.biotope/progress/`, which Git ignores, as soon as that document is extracted,
+  and writes the records file and the run state only when the run completes. An
+  interrupted run leaves them unchanged; the next run reuses the documents it
+  finished, gives the same output as an uninterrupted run, and reports every
+  change since the last completed run. A dataset is named as for `--derived-from`: by
   its data path, its manifest path or its name. When `try` never showed the
-  schema's current revision in this project on this machine, `run` warns before
+  schema's current revision on this machine, `run` warns before
   extracting and lists the warning under `warnings` in its report; it still runs.
 - `--redo FILE`, repeatable, extracts that document of the given datasets again
   although its inputs are unchanged, for example after the model missed or
@@ -95,7 +98,8 @@ and 8 seconds between them, when the endpoint times out, limits the rate, has a
 server error, or answers with an empty, non-JSON or wrongly shaped message. A
 null record is asked again in the same way, because a model that misses a
 document often answers null; when every attempt gives null, the document has no
-record and the report lists it as `empty`. Its
+record and the report lists it as `empty`. When an attempt fails instead, the
+document fails with that attempt's reason. Its
 version is a digest of its prompt, so a changed prompt extracts every document
 again.
 
@@ -139,9 +143,10 @@ place.
 apart. A schema without one yields at most one record per document. Two records of
 one document with equal key values, both null included, fail that document.
 
-**Revision.** Biotope derives a JSON Schema from the class: a `records` array
-whose items have one property per field, with its type and description, and
-whose description states the record key. The revision is the SHA-256 digest of
+**Revision.** Biotope derives a JSON Schema from the class, the shape the
+extractor is asked for: a `records` array whose items have one property per
+field, with its type and description, and whose description states the record
+key; without a record key, a single `record` object or null. The revision is the SHA-256 digest of
 that JSON Schema's canonical form. It changes when a field, a type, a description,
 the docstring or the record key changes. There is no freeze step: the revision of
 the schema a run used is stored with each record.
@@ -199,12 +204,14 @@ with the project. Each line is one record:
     "deadline": {
       "value": "30 April 2027",
       "evidence": {"quote": "Full proposal 30 April 2027 1 500 000 EUR", "locator": null,
-                   "aligned": true, "start": 528, "end": 569, "page": 2}
+                   "aligned": true, "start": 528, "end": 569, "page": 2,
+                   "occurrences": 1, "weak": []}
     }
   },
   "provenance": {
     "document_sha256": "0e2faf46…",
     "media_type": "application/pdf",
+    "conversion": 2,
     "schema": "FundingRound",
     "schema_revision": "065fb9fb…",
     "extractor": {"name": "llm", "version": "5c0d81e2a7f4",
@@ -226,19 +233,19 @@ with the project. Each line is one record:
   first exactly and then ignoring whitespace, hyphens and case. `start` and `end`
   are character offsets into that text and `page` is the PDF page, from 1.
   `occurrences` counts how often the quote occurs in the text, with the same
-  matching. `running_head` is true for an aligned quote of a PDF found only in
-  lines that recur, digits aside, on more than half of its pages, when it has at
-  least three: running heads, footers, page numbers and mastheads. `weak` is true
-  for an aligned quote that is `short`, under 10 characters ignoring whitespace
-  and hyphens, `repeated`, under 30 such characters and found more than once, or
-  a `running head`. Such a quote is found, but it may not show
+  matching. `weak` lists why an aligned quote may not prove its value: `short`,
+  under 10 characters ignoring whitespace and hyphens; `repeated`, under 30 such
+  characters and found more than once; `running head`, found only in lines of a
+  PDF that recur, digits aside, on more than half of its pages, when it has at
+  least three: running heads, footers, page numbers and mastheads. The list is
+  empty for a quote without these reasons. Such a quote is found, but it may not show
   that the value is right: a short quote, such as a label, can support many
   values, and a repeated one may come from another part of the document, such as
   a menu. A longer quote found several times, such as a title printed twice, is
   not weak. A running head says nothing about a record, but a model may quote one
   when it finds nothing better. Biotope flags such quotes instead of removing the
   lines from its text, so the text stays the one the extractor read and stored
-  offsets stay valid. With several occurrences `start` and `page` give only the first. `running_head` and `weak` are null for an
+  offsets stay valid. With several occurrences `start` and `page` give only the first. `weak` is null for an
   unaligned quote and a locator. A value
   read from a table quotes the table's whole row. A value whose quote cannot be
   found keeps `aligned: false` and is listed in the run report. A value with
@@ -247,11 +254,10 @@ with the project. Each line is one record:
 - **Supported.** `supported` is false when more than half of the record's
   non-null values are unaligned, have no evidence or are quoted only from running
   heads. Such a record usually means the extractor answered from memory or from
-  page furniture instead of from the document's content. Records stored before
-  biotope checked running heads keep their `supported` until their document is
-  extracted again. It is kept,
+  page furniture instead of from the document's content. It is kept,
   and the report lists it for review.
-- **Provenance.** The document's digest and media type, the schema's name and
+- **Provenance.** The document's digest and media type, the version of
+  biotope's conversion of the document to text (`conversion`), the schema's name and
   revision, and the extractor's name, version and settings. `redone: true` marks
   records extracted again with `--redo`.
 
@@ -276,8 +282,10 @@ records, including documents that gave none. Commit it.
 `.biotope/texts/<sha256>-<conversion>.txt`, which ignores itself in Git, because
 the texts can hold copyrighted full text. `<conversion>` numbers the version of
 biotope's conversion, so a biotope that converts differently makes new texts.
-Records stored before such a change keep offsets into the old text until the
-document is extracted again. Evidence offsets refer to this text. PDF pages are
+After such a change, the next run aligns the quotes of each reused record again
+to the new text, without a request, and records the new `conversion`. A missing
+document's records keep the offsets of the conversion their provenance names.
+Evidence offsets refer to this text. PDF pages are
 separated by a form feed. HTML is reduced to its visible text, one block per
 line, without `nav` elements and without the `header` and `footer` elements that
 are not inside `main`, `article` or `section`: a page's menus, breadcrumbs and
@@ -290,7 +298,7 @@ documents can build from the records but cannot check their quotes again.
 A document is extracted again only when its digest, the schema revision, or the
 extractor's name, version or settings change. Otherwise its stored records are
 reused without a request, also after `biotope mv` moved it. A registered document
-whose file is missing keeps its stored records. When the records file itself is
+whose file is missing, cannot be read or fails keeps its stored records. When the records file itself is
 missing, every document is extracted again. A document removed from its
 dataset, or a dataset left out of the command, loses its records.
 

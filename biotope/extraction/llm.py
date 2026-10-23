@@ -9,7 +9,7 @@ from typing import Any, cast
 import requests
 
 from biotope.extraction.contract import Document, ExtractionError
-from biotope.extraction.schema import Schema, answer
+from biotope.extraction.schema import Schema
 from biotope.graph.sources import digest
 
 
@@ -28,7 +28,6 @@ SYSTEM = (
     "When a value comes from a table, quote the table's whole row."
 )
 USER = "Document text:\n\n"
-SINGLE = "The document's record, or null when the document states none."
 RETRIED = frozenset({408, 429, 500, 502, 503, 504})
 ATTEMPTS = 4
 
@@ -55,7 +54,7 @@ class LLMExtractor:
             raise ValueError(f"Set the environment variable {variable}, which extraction.key_env names")
         self._key = key
         self.settings = {"endpoint": self.endpoint, "model": self.model}
-        self.version = digest({"system": SYSTEM, "quote": QUOTE, "user": USER, "single": SINGLE})[:12]
+        self.version = digest({"system": SYSTEM, "quote": QUOTE, "user": USER})[:12]
 
     def extract(self, document: Document, schema: Schema) -> list[dict[str, Any]]:
         payload = {
@@ -71,7 +70,6 @@ class LLMExtractor:
             },
         }
         problem = ""
-        answered_null = False
         for attempt in range(ATTEMPTS):
             if attempt:
                 time.sleep(2**attempt)
@@ -82,8 +80,7 @@ class LLMExtractor:
                 continue
             if records or schema.key:
                 return records
-            answered_null = True
-        if answered_null:
+        if not problem:
             return []
         raise ExtractionError(f"{problem} ({ATTEMPTS} attempts)")
 
@@ -142,6 +139,4 @@ def request_schema(schema: Schema) -> dict[str, Any]:
             properties[item.name] = {"type": "array", "description": item.description, "items": quoted}
         else:
             properties[item.name] = {**quoted, "description": item.description}
-    if schema.key:
-        return schema.wrap(properties)
-    return answer({"record": {"anyOf": [schema.record(properties), {"type": "null"}], "description": SINGLE}})
+    return schema.wrap(properties)

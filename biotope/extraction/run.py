@@ -11,16 +11,19 @@ from typing import Any, cast, get_type_hints
 
 from pydantic import TypeAdapter, ValidationError
 
+from biotope.extraction import text as conversion
 from biotope.extraction.contract import Document, ExtractionError, Extractor
+from biotope.extraction.describe import EVIDENCE
 from biotope.extraction.llm import LLMExtractor
 from biotope.extraction.loading import load_object
 from biotope.extraction.schema import Schema
-from biotope.extraction.text import CONVERSION, Searchable, convert, page, running_heads, squeeze
+from biotope.extraction.text import Searchable, convert, page, running_heads, squeeze
 from biotope.graph.sources import write_text_atomic
 
 
 TEXTS = Path(".biotope/texts")
 STATES = Path(".biotope/extraction")
+PROGRESS = Path(".biotope/progress")
 PARALLEL = 4
 SHORT = 10
 DISTINCTIVE = 30
@@ -84,17 +87,21 @@ def sha256(path: Path) -> str:
 
 
 def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str:
-    cached = cache / f"{digest}-{CONVERSION}.txt" if cache is not None else None
+    cached = cache / f"{digest}-{conversion.CONVERSION}.txt" if cache is not None else None
     if cached is not None and cached.is_file():
         return cached.read_text(encoding="utf-8")
     text = convert(path, kind)
     if cache is not None and cached is not None:
-        cache.mkdir(parents=True, exist_ok=True)
-        ignore = cache / ".gitignore"
-        if not ignore.is_file():
-            ignore.write_text("*\n", encoding="utf-8")
+        _ignored_directory(cache)
         write_text_atomic(cached, text)
     return text
+
+
+def _ignored_directory(directory: Path) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    ignore = directory / ".gitignore"
+    if not ignore.is_file():
+        ignore.write_text("*\n", encoding="utf-8")
 
 
 def extract_all(
@@ -136,6 +143,16 @@ def failure(exc: BaseException) -> str:
     return str(exc) if isinstance(exc, ExtractionError) else f"{type(exc).__name__}: {exc}"
 
 
+def document_status(records: list[dict[str, Any]]) -> tuple[str, str]:
+    count = sum(not record["supported"] for record in records)
+    if count:
+        return "unsupported", (
+            f"{count} of {len(records)} records unsupported: most of their values have no aligned evidence or are "
+            "found only in running heads, so the extractor may have answered from memory or from page furniture"
+        )
+    return ("extracted" if records else "empty"), ""
+
+
 def _prepare(
     extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None, redone: bool
 ) -> tuple[Document, dict[str, Any]]:
@@ -144,6 +161,7 @@ def _prepare(
     provenance: dict[str, Any] = {
         "document_sha256": digest,
         "media_type": source.media_type,
+        "conversion": conversion.CONVERSION,
         "schema": schema.name,
         "schema_revision": schema.revision,
         "extractor": identity(extractor),
@@ -162,7 +180,7 @@ def _extract_document(
         raise ExtractionError("the extractor returned no list of records")
     hints = get_type_hints(schema.cls)
     adapters = {entry.name: TypeAdapter[object](hints[entry.name]) for entry in schema.fields}
-    searchable = Searchable(document.text, running_heads(document.text, document.media_type))
+    searchable = _searchable(document.text, document.media_type)
     records: list[dict[str, Any]] = []
     for index, item in enumerate(cast(list[object], raw), 1):
         values, plain = _values(schema, document, searchable, item, index)
@@ -186,6 +204,10 @@ def _extract_document(
     return records
 
 
+def _searchable(text: str, kind: str) -> Searchable:
+    return Searchable(text, running_heads(text, kind))
+
+
 def _values(
     schema: Schema, document: Document, searchable: Searchable, item: object, index: int
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -200,55 +222,67 @@ def _values(
             if not isinstance(given[entry.name], list):
                 raise ExtractionError(f"record {index}, {entry.name}: expected a list")
             items = [
-                _evidenced(document, searchable, entry.name, part, index)
+                _evidenced(document.media_type, searchable, entry.name, part, index)
                 for part in cast(list[object], given[entry.name])
             ]
             values[entry.name] = items
             plain[entry.name] = [part["value"] for part in items]
         else:
-            values[entry.name] = _evidenced(document, searchable, entry.name, given[entry.name], index)
+            values[entry.name] = _evidenced(document.media_type, searchable, entry.name, given[entry.name], index)
             plain[entry.name] = values[entry.name]["value"]
     return values, plain
 
 
-def _evidenced(document: Document, searchable: Searchable, name: str, given: object, index: int) -> dict[str, Any]:
+def _evidenced(kind: str, searchable: Searchable, name: str, given: object, index: int) -> dict[str, Any]:
     if not isinstance(given, dict) or "value" not in given:
         raise ExtractionError(f"record {index}, {name}: expected an object with a value and its quote or locator")
     entry = cast(dict[str, Any], given)
     value, quote, locator = entry["value"], entry.get("quote"), entry.get("locator")
-    text = quote if isinstance(quote, str) and quote.strip() else None
     evidence: dict[str, Any] | None = None
     if locator is not None:
-        evidence = dict.fromkeys(
-            ("quote", "locator", "aligned", "start", "end", "page", "occurrences", "running_head", "weak")
-        )
+        evidence = dict.fromkeys(key for key, *_ in EVIDENCE)
         evidence["locator"] = str(locator)
-    elif text is not None:
-        span = searchable.align(text)
-        occurrences = searchable.count(text)
-        running_head = searchable.only_in_running_heads(text)
-        evidence = {
-            "quote": text,
-            "locator": None,
-            "aligned": span is not None,
-            "start": span[0] if span else None,
-            "end": span[1] if span else None,
-            "page": page(document.text, document.media_type, span[0]) if span else None,
-            "occurrences": occurrences,
-            "running_head": running_head if span else None,
-            "weak": bool(weaknesses(text, occurrences, running_head)) if span else None,
-        }
+    elif isinstance(quote, str) and quote.strip():
+        evidence = _aligned(kind, searchable, quote)
     return {"value": value, "evidence": evidence}
 
 
-def weaknesses(quote: str, occurrences: int, running_head: bool | None = False) -> list[str]:
+def _aligned(kind: str, searchable: Searchable, quote: str) -> dict[str, Any]:
+    span = searchable.align(quote)
+    occurrences = searchable.count(quote)
+    return {
+        "quote": quote,
+        "locator": None,
+        "aligned": span is not None,
+        "start": span[0] if span else None,
+        "end": span[1] if span else None,
+        "page": page(searchable.text, kind, span[0]) if span else None,
+        "occurrences": occurrences,
+        "weak": _weaknesses(quote, occurrences, searchable.only_in_running_heads(quote)) if span else None,
+    }
+
+
+def _weaknesses(quote: str, occurrences: int, running_head: bool) -> list[str]:
     length = len(squeeze(quote))
     found = (
         ("short", length < SHORT),
         ("repeated", occurrences > 1 and length < DISTINCTIVE),
-        ("running head", bool(running_head)),
+        ("running head", running_head),
     )
     return [reason for reason, weak in found if weak]
+
+
+def _realigned(record: dict[str, Any], kind: str, searchable: Searchable) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for name, given in cast(dict[str, Any], record["values"]).items():
+        items = [
+            {**item, "evidence": _aligned(kind, searchable, evidence["quote"])}
+            if (evidence := item["evidence"]) and evidence["locator"] is None
+            else item
+            for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given])
+        ]
+        values[name] = items if isinstance(given, list) else items[0]
+    return {**record, "values": values, "provenance": {**record["provenance"], "conversion": conversion.CONVERSION}}
 
 
 def record_id(schema: Schema, path: str, values: dict[str, Any]) -> str:
@@ -283,22 +317,12 @@ def unaligned(item: dict[str, Any]) -> bool:
 
 
 def in_running_head(item: dict[str, Any]) -> bool:
-    return bool(item["evidence"] and item["evidence"].get("running_head"))
+    return bool(item["evidence"]) and "running head" in (item["evidence"]["weak"] or [])
 
 
 def support(values: dict[str, Any]) -> tuple[int, int, int]:
     found = evidenced_values(values)
     return len(found), sum(unaligned(item) for _, item in found), sum(in_running_head(item) for _, item in found)
-
-
-def unsupported_reason(records: list[dict[str, Any]]) -> str:
-    count = sum(not record["supported"] for record in records)
-    if not count:
-        return ""
-    return (
-        f"{count} of {len(records)} records unsupported: most of their values have no aligned evidence or are "
-        "found only in running heads, so the extractor may have answered from memory or from page furniture"
-    )
 
 
 @dataclass
@@ -326,9 +350,8 @@ def review(records: list[dict[str, Any]]) -> Review:
                 found.counts["unaligned"] += 1
                 continue
             found.counts["aligned"] += bool(evidence["aligned"])
-            if evidence.get("weak"):
-                reasons = weaknesses(evidence["quote"], evidence["occurrences"], evidence.get("running_head"))
-                found.weak.append({**where, "reasons": reasons})
+            if evidence["weak"]:
+                found.weak.append({**where, "reasons": evidence["weak"]})
                 found.counts["weak"] += 1
     return found
 
@@ -340,6 +363,7 @@ def run(
     sources: list[Source],
     output: Path,
     state_path: Path,
+    progress: Path,
     redo: frozenset[str] = frozenset(),
     announce: Callable[[int, int, str], None] = lambda index, total, path: None,
     parallel: int = 1,
@@ -349,6 +373,9 @@ def run(
     by_document: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in previous:
         by_document[record["document"]].append(record)
+    for finished in _finished_documents(progress):
+        by_document[finished["document"]] = finished["records"]
+        previous_state[finished["document"]] = finished["state"]
     stamp = {"schema_revision": schema.revision, "extractor": identity(extractor)}
     registered = {source.path for source in sources}
     state: dict[str, Any] = {}
@@ -357,23 +384,29 @@ def run(
     moved: list[dict[str, str]] = []
     claimed: set[str] = set()
     work: list[tuple[int, Source]] = []
-    waiting: list[tuple[int, str, list[dict[str, Any]]]] = []
+    waiting: list[tuple[int, str]] = []
+
+    def keep(path: str) -> int:
+        if path in previous_state:
+            state[path] = previous_state[path]
+        kept = by_document.get(path, [])
+        records.extend(kept)
+        return len(kept)
+
     for number, source in enumerate(sources, 1):
         file = root / source.path
-        kept = by_document.get(source.path, [])
         if not file.is_file():
-            if source.path in previous_state:
-                state[source.path] = previous_state[source.path]
-                records += kept
-            outcomes.append(Outcome(source.path, "missing", "the file does not exist", records=len(kept)))
+            outcomes.append(Outcome(source.path, "missing", "the file does not exist", records=keep(source.path)))
             continue
-        digest = sha256(file)
-        wanted = {"sha256": digest, **stamp}
-        origin = None if source.path in redo else _origin(source.path, wanted, previous_state, registered | claimed)
-        if origin is not None:
-            reused = [
-                finish(schema, source.path, record["values"], record["provenance"]) for record in by_document[origin]
-            ]
+        try:
+            digest = sha256(file)
+            wanted = {"sha256": digest, **stamp}
+            origin = None if source.path in redo else _origin(source.path, wanted, previous_state, registered | claimed)
+            reused = None if origin is None else _reuse(root, schema, source, digest, by_document[origin])
+        except Exception as exc:
+            outcomes.append(Outcome(source.path, "failed", failure(exc), records=keep(source.path)))
+            continue
+        if origin is not None and reused is not None:
             relocated = origin != source.path and origin not in registered | claimed
             claimed.add(origin)
             if relocated:
@@ -387,32 +420,26 @@ def run(
             )
             continue
         work.append((number, source))
-        waiting.append((len(outcomes), digest, kept))
+        waiting.append((len(outcomes), digest))
         outcomes.append(Outcome(source.path, "extracted", sha256=digest))
-    stored_state = dict(previous_state)
-    stored = dict(by_document)
     for index, extracted in extract_all(
         extractor, schema, root, work, len(sources), root / TEXTS, redo, parallel, announce
     ):
-        position, digest, kept = waiting[index]
+        position, digest = waiting[index]
         path = outcomes[position].path
         if isinstance(extracted, BaseException):
-            if path in previous_state:
-                state[path] = previous_state[path]
-                records += kept
-            outcomes[position] = Outcome(path, "failed", failure(extracted), digest, len(kept))
+            outcomes[position] = Outcome(path, "failed", failure(extracted), digest, keep(path))
             continue
-        state[path] = stored_state[path] = {"sha256": digest, **stamp}
-        stored[path] = extracted
-        _store(output, state_path, schema, [record for found in stored.values() for record in found], stored_state)
+        state[path] = {"sha256": digest, **stamp}
+        _remember(root, progress, path, state[path], extracted)
         records += extracted
-        reason = unsupported_reason(extracted)
-        status = "unsupported" if reason else "extracted" if extracted else "empty"
+        status, reason = document_status(extracted)
         outcomes[position] = Outcome(path, status, reason, digest, len(extracted))
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}
     changed = _store(output, state_path, schema, records, state)
+    progress.unlink(missing_ok=True)
     return Result(
         outcomes,
         records,
@@ -421,6 +448,34 @@ def run(
         sorted(old - new - {pair["from"] for pair in moved}),
         moved,
     )
+
+
+def _reuse(
+    root: Path, schema: Schema, source: Source, digest: str, stored: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    if any(record["provenance"].get("conversion") != conversion.CONVERSION for record in stored):
+        searchable = _searchable(
+            document_text(root / source.path, source.media_type, digest, root / TEXTS), source.media_type
+        )
+        stored = [_realigned(record, source.media_type, searchable) for record in stored]
+    return [finish(schema, source.path, record["values"], record["provenance"]) for record in stored]
+
+
+def _remember(root: Path, progress: Path, path: str, state: dict[str, Any], records: list[dict[str, Any]]) -> None:
+    _ignored_directory(root / PROGRESS)
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    with progress.open("a", encoding="utf-8") as file:
+        file.write(json.dumps({"document": path, "state": state, "records": records}, ensure_ascii=False) + "\n")
+
+
+def _finished_documents(progress: Path) -> Iterator[dict[str, Any]]:
+    if not progress.is_file():
+        return
+    for line in progress.read_text(encoding="utf-8").splitlines():
+        try:
+            yield cast(dict[str, Any], json.loads(line))
+        except ValueError:
+            continue
 
 
 def _origin(path: str, wanted: dict[str, Any], previous: dict[str, Any], taken: set[str]) -> str | None:

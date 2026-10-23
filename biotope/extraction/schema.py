@@ -11,6 +11,7 @@ from biotope.graph.sources import digest
 
 JSON_TYPES: dict[object, str] = {str: "string", int: "integer", float: "number", bool: "boolean"}
 ALLOWED = "str, int, float, bool, a Literal of these, a list of one of them, or one of them | None"
+SINGLE = "The document's record, or null when the document states none."
 
 
 @dataclass(frozen=True)
@@ -67,18 +68,15 @@ class Schema:
         description = "" if doc.startswith(schema.__name__ + "(") else " ".join(doc.split())
         return cls(schema.__name__, schema, description, key, fields)
 
-    @property
-    def records_description(self) -> str:
-        if self.key:
-            return f"Every {self.name} record the document states, one per distinct {', '.join(self.key)}."
-        return f"The document's {self.name} record: at most one, none when the document states none."
-
     def json_schema(self) -> dict[str, Any]:
         return self.wrap({item.name: item.json_schema() for item in self.fields})
 
     def wrap(self, properties: dict[str, Any]) -> dict[str, Any]:
-        records = {"type": "array", "description": self.records_description, "items": self.record(properties)}
-        return answer({"records": records})
+        record = self.record(properties)
+        if not self.key:
+            return answer({"record": {"anyOf": [record, {"type": "null"}], "description": SINGLE}})
+        description = f"Every {self.name} record the document states, one per distinct {', '.join(self.key)}."
+        return answer({"records": {"type": "array", "description": description, "items": record}})
 
     def record(self, properties: dict[str, Any]) -> dict[str, Any]:
         return {

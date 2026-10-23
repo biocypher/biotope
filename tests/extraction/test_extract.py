@@ -13,6 +13,7 @@ from conftest import LIND as LIND_ANSWER
 from conftest import OKAFOR as OKAFOR_ANSWER
 
 from biotope.extraction import Schema, llm
+from biotope.extraction import text as converter
 
 
 PROFILE = "extraction/schemas.py:Profile"
@@ -21,6 +22,7 @@ LIND = "data/pages/lind.html"
 OKAFOR = "data/pages/okafor.html"
 CALL = "data/calls/call.pdf"
 REPORT = "data/reports/report.pdf"
+SUMMARY = "data/calls/summary.txt"
 
 
 def squeeze(text):
@@ -104,6 +106,9 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
             collect(item.get("subField", []))
 
     collect(manifest["recordSet"][0]["field"])
+    prefix = "profile.jsonl/values/name/evidence/"
+    described = {key.removeprefix(prefix) for key in descriptions if key.startswith(prefix)}
+    assert described == set(lind["values"]["name"]["evidence"])
     assert descriptions["profile.jsonl/values/name/value"] == "The researcher's full name, without academic titles."
     assert descriptions["profile.jsonl/values/methods/value"] == (
         "Each experimental or computational method the page lists."
@@ -336,6 +341,12 @@ def test_a_project_extractor_runs_by_configuration(study):
     assert statuses(report) == {LIND: "extracted", OKAFOR: "extracted"}
     assert study.endpoint.requests == []
 
+    study.configure(extractor="extraction/rules.py:LineExtractor", version="3", line=0)
+    tried = study.extract("try", PROFILE, LIND)[1]["documents"][0]
+    ran = study.extract("run", PROFILE, "data/pages")[1]["documents"][0]
+    assert tried["status"] == ran["status"] == "failed"
+    assert tried["reason"] == ran["reason"] == "ValueError: line numbers start at 1"
+
 
 def test_missing_configuration_stops_before_any_request_and_the_key_stays_secret(study, monkeypatch):
     study.configure(extractor="llm", endpoint=study.endpoint.url, key_env="OPENROUTER_API_KEY")
@@ -416,6 +427,10 @@ def test_schema_revision_and_refused_constructs(study, tmp_path):
     assert described["revision"] == study.extract("try", ROUND, CALL)[1]["schema"]["revision"]
     deadline = described["json_schema"]["properties"]["records"]["items"]["properties"]["deadline"]
     assert deadline["description"] == "The round's submission deadline, as written."
+    single = json.loads(study.run("extract", "schema", PROFILE).output)["json_schema"]["properties"]
+    assert list(single) == ["record"]
+    record, nothing = single["record"]["anyOf"]
+    assert list(record["properties"]) == ["name", "group", "methods"] and nothing == {"type": "null"}
     requests = len(study.endpoint.requests)
 
     (study.root / "extraction/schemas.py").write_text(
@@ -459,6 +474,12 @@ def test_a_null_record_is_retried_and_reported_as_empty(study, monkeypatch):
     assert shown.exit_code == 0 and "empty, 0 records" in " ".join(shown.output.split())
     tried, report = study.extract("try", PROFILE, OKAFOR, LIND)
     assert tried.exit_code == 0 and statuses(report) == {OKAFOR: "empty", LIND: "extracted"}
+
+    study.endpoint.reply("Mara Lind", 503)
+    study.endpoint.reply("Mara Lind", {"record": None}, times=1)
+    result, report = study.extract("run", PROFILE, "data/pages", "--redo", LIND)
+    assert result.exit_code != 0 and statuses(report)[LIND] == "failed" and "503" in report["documents"][0]["reason"]
+    assert [record["id"] for record in study.records("profile")] == [LIND]
 
 
 def test_parallel_extraction_changes_neither_output_nor_report(study):
@@ -532,10 +553,10 @@ def test_short_and_repeated_quotes_are_weak_evidence(study):
     assert result.exit_code == 0, result.output
     [record] = report["documents"][0]["records"]
     lung, uppsala, imaging = (item["evidence"] for item in record["values"]["methods"])
-    assert (lung["aligned"], lung["weak"], lung["occurrences"]) == (True, True, 2)
-    assert (uppsala["weak"], uppsala["occurrences"]) == (True, 1)
+    assert (lung["aligned"], lung["weak"], lung["occurrences"]) == (True, ["short", "repeated"], 2)
+    assert (uppsala["weak"], uppsala["occurrences"]) == (["short"], 1)
     assert (imaging["aligned"], imaging["weak"], imaging["occurrences"]) == (False, None, 0)
-    assert record["values"]["name"]["evidence"]["weak"] is False
+    assert record["values"]["name"]["evidence"]["weak"] == []
     assert report["weak"] == [
         {"record": LIND, "field": "methods", "quote": "lung", "reasons": ["short", "repeated"]},
         {"record": LIND, "field": "methods", "quote": "Uppsala", "reasons": ["short"]},
@@ -559,7 +580,7 @@ def test_short_and_repeated_quotes_are_weak_evidence(study):
     result, report = study.extract("try", PROFILE, "data/notes.txt")
     [record] = report["documents"][0]["records"]
     [evidence] = [item["evidence"] for item in record["values"]["methods"]]
-    assert (evidence["occurrences"], evidence["weak"]) == (2, False) and report["weak"] == []
+    assert (evidence["occurrences"], evidence["weak"]) == (2, []) and report["weak"] == []
 
 
 def test_quotes_found_only_in_running_heads_do_not_support_a_record(study):
@@ -585,8 +606,8 @@ def test_quotes_found_only_in_running_heads_do_not_support_a_record(study):
     assert report["unsupported"] == [{"record": REPORT, "values": 4, "unaligned": 0, "running_head": 3}]
     [record] = study.records("profile")
     name, group = (record["values"][field]["evidence"] for field in ("name", "group"))
-    assert (record["supported"], name["aligned"], name["running_head"], name["weak"]) == (False, True, True, True)
-    assert (group["aligned"], group["running_head"], group["occurrences"]) == (True, False, 5)
+    assert (record["supported"], name["aligned"], name["weak"]) == (False, True, ["repeated", "running head"])
+    assert (group["aligned"], group["weak"], group["occurrences"]) == (True, ["repeated"], 5)
     assert {
         "record": REPORT,
         "field": "name",
@@ -611,19 +632,33 @@ def test_quotes_found_only_in_running_heads_do_not_support_a_record(study):
     assert result.exit_code == 0 and statuses(report) == {REPORT: "extracted"} and report["unsupported"] == []
 
 
-def test_an_interrupted_run_keeps_the_documents_it_finished(study):
+def test_an_interrupted_run_changes_the_output_only_when_a_later_run_completes(study):
     study.configure(
         extractor="llm", endpoint=study.endpoint.url, model="test/model", key_env="OPENROUTER_API_KEY", parallel=1
     )
-    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
-    stored = ("extracted/profile.jsonl", ".biotope/extraction/extracted/profile.json")
-    uninterrupted = [(study.root / path).read_bytes() for path in stored]
-    for path in ("extracted", ".biotope/extraction", ".biotope/datasets/extracted"):
-        shutil.rmtree(study.root / path)
-    released = study.endpoint.hold("Chidi Okafor")
+    (study.root / SUMMARY).write_text("Bridge call\nBridge 1 June 2027\n")
+    assert study.run("add", "data/calls", "--rebake").exit_code == 0
+    study.endpoint.reply(
+        "Bridge call", {"records": [funding_round("Bridge", "1 June 2027", None, "Bridge 1 June 2027")]}
+    )
+    assert study.extract("run", ROUND, "data/calls")[0].exit_code == 0
+    stored = ("extracted/funding_round.jsonl", ".biotope/extraction/extracted/funding_round.json")
+    committed = [(study.root / path).read_bytes() for path in stored]
+
+    def untracked():
+        listed = ["git", "ls-files", "--others", "--exclude-standard"]
+        return subprocess.run(listed, cwd=study.root, capture_output=True, text=True).stdout
+
+    clean = untracked()
+    renamed = [*ROUNDS["records"][:2], funding_round("Extension", "1 March 2029", "750 000 EUR", ROWS["Renewal"])]
+    study.endpoint.reply("Open Atlas Fellowship", {"records": renamed})
+    study.configure(
+        extractor="llm", endpoint=study.endpoint.url, model="test/other", key_env="OPENROUTER_API_KEY", parallel=1
+    )
+    released = study.endpoint.hold("Bridge call")
     sent = len(study.endpoint.requests)
     process = subprocess.Popen(
-        [sys.executable, "-c", "from biotope.cli import cli; cli()", "extract", "run", PROFILE, "data/pages"],
+        [sys.executable, "-c", "from biotope.cli import cli; cli()", "extract", "run", ROUND, "data/calls"],
         cwd=study.root,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -635,12 +670,99 @@ def test_an_interrupted_run_keeps_the_documents_it_finished(study):
     process.wait()
     released.set()
     assert len(study.endpoint.requests) == sent + 2
-    assert [record["id"] for record in study.records("profile")] == [LIND]
+    assert [(study.root / path).read_bytes() for path in stored] == committed and untracked() == clean
 
+    result, report = study.extract("run", ROUND, "data/calls")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {CALL: "reused", SUMMARY: "extracted"} and len(study.endpoint.requests) == sent + 3
+    assert report["disappeared"] == ['data/calls/call.pdf#round="Renewal"']
+    assert report["appeared"] == ['data/calls/call.pdf#round="Extension"']
+    assert 'data/calls/call.pdf#round="Extension"' in {record["id"] for record in study.records("funding_round")}
+    assert untracked() == clean
+
+
+def test_documents_keep_their_records_when_they_cannot_be_read_or_lost_their_run_state(study, monkeypatch):
+    replace = os.replace
+
+    def interrupted(source, target):
+        if str(target).endswith("profile.json"):
+            raise OSError("interrupted")
+        replace(source, target)
+
+    monkeypatch.setattr(os, "replace", interrupted)
+    assert study.run("extract", "run", PROFILE, "data/pages").exit_code != 0
+    monkeypatch.setattr(os, "replace", replace)
+    assert [record["id"] for record in study.records("profile")] == [LIND, OKAFOR]
+    page = (study.root / LIND).read_bytes()
+    (study.root / LIND).unlink()
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code != 0 and statuses(report)[LIND] == "missing" and report["documents"][0]["records"] == 1
+    assert report["disappeared"] == [] and [record["id"] for record in study.records("profile")] == [LIND, OKAFOR]
+
+    (study.root / LIND).write_bytes(page)
+    (study.root / ".biotope/extraction/extracted/profile.json").unlink()
+    study.endpoint.reply("Mara Lind", 400)
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code != 0 and statuses(report)[LIND] == "failed" and report["documents"][0]["records"] == 1
+    assert report["disappeared"] == [] and [record["id"] for record in study.records("profile")] == [LIND, OKAFOR]
+
+    study.endpoint.reply("Mara Lind", LIND_ANSWER)
+    study.configure(extractor="llm", endpoint=study.endpoint.url, model="test/other", key_env="OPENROUTER_API_KEY")
+    (study.root / OKAFOR).chmod(0)
+    try:
+        result, report = study.extract("run", PROFILE, "data/pages")
+    finally:
+        (study.root / OKAFOR).chmod(0o644)
+    assert result.exit_code != 0
+    assert statuses(report) == {LIND: "extracted", OKAFOR: "failed"}
+    assert "PermissionError" in report["documents"][1]["reason"] and report["documents"][1]["records"] == 1
+    assert report["disappeared"] == [] and [record["id"] for record in study.records("profile")] == [LIND, OKAFOR]
+
+
+def test_a_conversion_change_aligns_reused_quotes_again(study, monkeypatch):
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    sent = len(study.endpoint.requests)
+    monkeypatch.setattr(converter, "HIDDEN_TAGS", converter.HIDDEN_TAGS - {"nav"})
+    monkeypatch.setattr(converter, "CONVERSION", converter.CONVERSION + 1)
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0, result.output
-    assert statuses(report) == {LIND: "reused", OKAFOR: "extracted"} and len(study.endpoint.requests) == sent + 3
-    assert [(study.root / path).read_bytes() for path in stored] == uninterrupted
+    assert statuses(report) == {LIND: "reused", OKAFOR: "reused"} and len(study.endpoint.requests) == sent
+    shutil.rmtree(study.root / ".biotope/texts")
+    checked = 0
+    for record in study.records("profile"):
+        assert record["provenance"]["conversion"] == converter.CONVERSION
+        shown = study.run("extract", "text", record["document"]).output
+        values = record["values"]
+        for value in [values["name"], values["group"], *values["methods"]]:
+            evidence = value["evidence"]
+            if evidence and evidence["aligned"]:
+                assert squeeze(shown[evidence["start"] : evidence["end"]]) == squeeze(evidence["quote"])
+                checked += 1
+    assert checked == 6
+    before = study.snapshot()
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert statuses(report) == {LIND: "reused", OKAFOR: "reused"} and study.snapshot() == before
+
+
+def test_quotes_align_where_case_folding_lengthens_the_text(study):
+    (study.root / "data/notes.txt").write_text("\u0130stanbul\nMara Lind\nSpatial Atlas Group\n")
+    study.endpoint.reply(
+        "\u0130stanbul",
+        {
+            "record": {
+                "name": quoted("Mara Lind", "mara lind"),
+                "group": quoted("Spatial Atlas Group", "spatial atlas group"),
+                "methods": [],
+            }
+        },
+    )
+    result, report = study.extract("try", PROFILE, "data/notes.txt")
+    assert result.exit_code == 0, result.output
+    [record] = report["documents"][0]["records"]
+    shown = study.run("extract", "text", "data/notes.txt").output
+    for name, expected in (("name", "Mara Lind"), ("group", "Spatial Atlas Group")):
+        evidence = record["values"][name]["evidence"]
+        assert evidence["aligned"] and shown[evidence["start"] : evidence["end"]] == expected
 
 
 def test_text_shows_what_the_extractor_reads(study):
@@ -649,9 +771,6 @@ def test_text_shows_what_the_extractor_reads(study):
     assert "Dr. Mara Lind" in page.output and "Research" in page.output
     for chrome in ("Open Atlases Portal", "Home", "Contact", "Spatial Biology", "2026 Institute"):
         assert chrome not in page.output
-    digest = hashlib.sha256((study.root / LIND).read_bytes()).hexdigest()
-    (study.root / ".biotope/texts").mkdir()
-    (study.root / ".biotope/texts" / f"{digest}.txt").write_text("Home People Contact\nDr. Mara Lind\n")
     assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
     asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests]
     [sent] = [text for text in asked if "Mara Lind" in text]
@@ -709,7 +828,7 @@ def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
     assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3, "running_head": 0}]
 
 
-def test_run_warns_when_the_schema_revision_was_never_tried(study):
+def test_run_warns_when_the_schema_revision_was_never_tried(study, monkeypatch):
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0, result.output
     [warning] = report["warnings"]
@@ -720,6 +839,12 @@ def test_run_warns_when_the_schema_revision_was_never_tried(study):
     assert study.extract("try", PROFILE, LIND)[0].exit_code == 0
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0 and report["warnings"] == []
+    checkout = study.root.parent / "checkout"
+    shutil.copytree(study.root, checkout)
+    monkeypatch.chdir(checkout)
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0 and report["warnings"] == []
+    monkeypatch.chdir(study.root)
 
     schemas = study.root / "extraction/schemas.py"
     schemas.write_text(schemas.read_text().replace("without academic titles", "as the page writes it"))
