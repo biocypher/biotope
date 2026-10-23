@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Profile:
     """A researcher's profile page on an institute website."""
 
@@ -11,7 +11,7 @@ class Profile:
     methods: list[str] = field(metadata={"description": "Each experimental or computational method the page lists."})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FundingRound:
     """One funding round of a call for proposals."""
 

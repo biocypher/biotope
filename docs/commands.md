@@ -29,6 +29,7 @@ Keep that output outside the input directory and `.biotope/datasets/`.
 | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `biotope extract try <module.py:Schema> <file>...`    | Show the records and evidence the configured extractor finds; change nothing. |
 | `biotope extract run <module.py:Schema> <dataset>...` | Extract registered documents, store the records and register them.            |
+| `biotope extract text <file>`                         | Print biotope's text of a document, which evidence offsets refer to.          |
 
 Extraction reads the extractor from `extraction` in `.biotope/config.yaml` and
 reuses stored records until a document, the schema or the extractor changes. See

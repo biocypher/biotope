@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -17,8 +18,20 @@ from biotope.commands._add_output import AddOutput
 from biotope.commands.add import _add_file, _default_overrides, _resolve_dataset_ref
 from biotope.extraction import Extractor, Schema
 from biotope.extraction.describe import describe
-from biotope.extraction.run import STATES, Outcome, Source, extract_file, identity, load_extractor, run, sha256
-from biotope.extraction.text import media_type
+from biotope.extraction.run import (
+    STATES,
+    Outcome,
+    Review,
+    Source,
+    extract_file,
+    identity,
+    load_extractor,
+    review,
+    run,
+    sha256,
+    weaknesses,
+)
+from biotope.extraction.text import convert, media_type
 from biotope.graph.sources import write_text_atomic
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
@@ -27,7 +40,7 @@ from biotope.metadata import (
     get_derived_from,
     resolve_content_url,
 )
-from biotope.utils import find_biotope_root, stage_git_changes
+from biotope.utils import find_biotope_root, is_git_repo, stage_git_changes
 
 
 class Output:
@@ -47,6 +60,9 @@ class Output:
         for line in detail.splitlines():
             table.add_row("", Text(line, style="dim"))
         self.console.print(table)
+
+    def progress(self, number: int, total: int, path: str) -> None:
+        click.echo(f"Extracting {number}/{total} {path}", err=True)
 
     def fail(self, message: str) -> None:
         if self.as_json:
@@ -84,8 +100,9 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
     output.report.update(schema=_schema_report(schema), extractor=named, documents=[])
     _header(output, "Try", schema, named)
     failed = False
-    for file in files:
+    for number, file in enumerate(files, 1):
         path = _project_path(root, file)
+        output.progress(number, len(files), path)
         entry: dict[str, Any] = {"path": path, "status": "extracted", "records": []}
         output.report["documents"].append(entry)
         kind = media_type(path)
@@ -102,6 +119,7 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
         output.row("OK", path, f"{count} {'record' if count == 1 else 'records'}")
         for record in entry["records"]:
             output.row("Record", record["id"], _shown(record))
+    _review(output, review([record for entry in output.report["documents"] for record in entry["records"]]))
     output.finish(failed)
 
 
@@ -113,8 +131,16 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
 @click.argument("schema_ref", metavar="SCHEMA")
 @click.argument("datasets", nargs=-1, required=True)
 @click.option("--out", type=click.Path(dir_okay=False, path_type=Path), help="Records file [extracted/<schema>.jsonl]")
+@click.option(
+    "--redo",
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Extract this document again although its inputs are unchanged; repeatable",
+)
 @click.option("--json", "as_json", is_flag=True, help="Write one JSON report to stdout")
-def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as_json: bool) -> None:
+def run_command(
+    schema_ref: str, datasets: tuple[str, ...], out: Path | None, redo: tuple[Path, ...], as_json: bool
+) -> None:
     output = Output(as_json)
     root, schema, extractor = _prepare(output, schema_ref)
     try:
@@ -123,6 +149,11 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
         output.fail(str(exc).replace("--derived-from ", ""))
         return
     sources = _sources(root, dataset_ids)
+    chosen = frozenset(_project_path(root, file) for file in redo)
+    strangers = sorted(chosen - {source.path for source in sources})
+    if strangers:
+        output.fail(f"{', '.join(strangers)} is not a document of {', '.join(datasets)}")
+        return
     target = out.resolve() if out is not None else root / "extracted" / f"{_snake(schema.name)}.jsonl"
     try:
         relative = target.relative_to(root)
@@ -132,17 +163,18 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
     named = identity(extractor)
     output.report.update(schema=_schema_report(schema), extractor=named, output=relative.as_posix())
     _header(output, "Extract", schema, named, relative.as_posix())
-    result = run(root, schema, extractor, sources, target, root / STATES / relative.with_suffix(".json"))
+    state = root / STATES / relative.with_suffix(".json")
+    result = run(root, schema, extractor, sources, target, state, chosen, output.progress)
     manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
     if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
     output.report.update(
         manifest=manifest.relative_to(root).as_posix(),
         documents=[_document_report(outcome) for outcome in result.documents],
-        unaligned=result.unaligned,
         appeared=result.appeared,
         disappeared=result.disappeared,
         moved=result.moved,
+        ignored=_ignored(root, [target, manifest, state]),
     )
     for outcome in result.documents:
         label = "OK" if outcome.status in {"extracted", "reused"} else "FAIL"
@@ -153,11 +185,7 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
         if outcome.reason:
             detail += f"\n{outcome.reason}"
         output.row(label, outcome.path, detail)
-    for item in result.unaligned:
-        problem = (
-            "no quote or locator" if item["quote"] is None else f"quote not found in the document: {item['quote']!r}"
-        )
-        output.row("WARN", item["record"], f"{item['field']}: {problem}")
+    _review(output, review(result.records))
     for pair in result.moved:
         output.row("Moved", pair["from"], f"now {pair['to']}")
     for record_id in result.disappeared:
@@ -165,7 +193,47 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
     for record_id in result.appeared:
         output.row("New", record_id)
     output.row("Saved", relative.as_posix(), f"registered as {manifest.relative_to(root).as_posix()}")
+    for path in output.report["ignored"]:
+        output.row("WARN", f"git ignores {path}", "Commit it with the project: add an exception to .gitignore.")
     output.finish(any(outcome.status in {"failed", "missing"} for outcome in result.documents))
+
+
+@extract_group.command(
+    "text",
+    help="Print biotope's text of FILE: what an extractor reads, and what evidence offsets and pages refer to. "
+    "PDF pages are separated by a form feed.",
+)
+@click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def text_command(file: Path) -> None:
+    kind = media_type(file.name)
+    if kind is None:
+        raise click.ClickException(f"{file} is not a PDF, HTML, text or Markdown document")
+    click.echo(convert(file, kind), nl=False)
+
+
+def _review(output: Output, found: Review) -> None:
+    counts = dict(found.counts)
+    output.report.update(counts=counts, unaligned=found.unaligned, weak=found.weak)
+    output.row(
+        "Values",
+        f"{counts['values']} non-null",
+        f"{counts['aligned']} aligned, {counts['unaligned']} unaligned, {counts['weak']} weak",
+    )
+    for item in found.unaligned:
+        problem = (
+            "no quote or locator" if item["quote"] is None else f"quote not found in the document: {item['quote']!r}"
+        )
+        output.row("WARN", item["record"], f"{item['field']}: {problem}")
+    for item in found.weak:
+        output.row("Weak", item["record"], f"{item['field']}: {' and '.join(item['reasons'])} quote {item['quote']!r}")
+
+
+def _ignored(root: Path, paths: list[Path]) -> list[str]:
+    if not is_git_repo(root):
+        return []
+    relative = [path.relative_to(root).as_posix() for path in paths]
+    checked = subprocess.run(["git", "check-ignore", "--", *relative], cwd=root, capture_output=True, text=True)
+    return sorted(checked.stdout.split())
 
 
 def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor]:
@@ -301,5 +369,9 @@ def _shown(record: dict[str, Any]) -> str:
                 where = f"characters {evidence['start']}-{evidence['end']}"
                 if evidence["page"] is not None:
                     where = f"page {evidence['page']}, {where}"
+                reasons = weaknesses(evidence["quote"], evidence["occurrences"]) if evidence.get("weak") else []
+                if reasons:
+                    found = f"found {evidence['occurrences']} times"
+                    where += f"; weak: {', '.join(found if reason == 'repeated' else reason for reason in reasons)}"
             lines.append(f"  {json.dumps(evidence['quote'], ensure_ascii=False)} ({where})")
     return "\n".join(lines)

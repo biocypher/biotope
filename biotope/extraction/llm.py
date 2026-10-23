@@ -9,7 +9,7 @@ from typing import Any, cast
 import requests
 
 from biotope.extraction.contract import Document, ExtractionError
-from biotope.extraction.schema import Schema
+from biotope.extraction.schema import Schema, answer
 from biotope.graph.sources import digest
 
 
@@ -28,8 +28,13 @@ SYSTEM = (
     "When a value comes from a table, quote the table's whole row."
 )
 USER = "Document text:\n\n"
+SINGLE = "The document's record, or null when the document states none."
 RETRIED = frozenset({408, 429, 500, 502, 503, 504})
-ATTEMPTS = 3
+ATTEMPTS = 4
+
+
+class Retry(ExtractionError):
+    pass
 
 
 class LLMExtractor:
@@ -50,7 +55,7 @@ class LLMExtractor:
             raise ValueError(f"Set the environment variable {variable}, which extraction.key_env names")
         self._key = key
         self.settings = {"endpoint": self.endpoint, "model": self.model}
-        self.version = digest({"system": SYSTEM, "quote": QUOTE, "user": USER})[:12]
+        self.version = digest({"system": SYSTEM, "quote": QUOTE, "user": USER, "single": SINGLE})[:12]
 
     def extract(self, document: Document, schema: Schema) -> list[dict[str, Any]]:
         payload = {
@@ -65,37 +70,53 @@ class LLMExtractor:
                 "json_schema": {"name": schema.name, "strict": True, "schema": request_schema(schema)},
             },
         }
-        answer = self._post(payload)
-        try:
-            content = answer["choices"][0]["message"]["content"]
-            records = json.loads(content)["records"]
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise ExtractionError(f"the model's answer is not the requested JSON: {self._clean(str(exc))}") from None
-        if not isinstance(records, list):
-            raise ExtractionError("the model's answer has no list of records")
-        return cast(list[dict[str, Any]], records)
-
-    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self.endpoint}/chat/completions"
-        headers = {"Authorization": f"Bearer {self._key}"}
         problem = ""
         for attempt in range(ATTEMPTS):
             if attempt:
                 time.sleep(2**attempt)
             try:
-                response = requests.post(url, json=payload, headers=headers, timeout=600)
-            except requests.RequestException as exc:
-                problem = f"{url} could not be reached: {type(exc).__name__}"
-                continue
-            if response.status_code == 200:
-                try:
-                    return cast(dict[str, Any], response.json())
-                except ValueError:
-                    raise ExtractionError(f"{url} answered with invalid JSON") from None
+                return self._records(self._post(payload), schema)
+            except Retry as exc:
+                problem = str(exc)
+        raise ExtractionError(f"{problem} ({ATTEMPTS} attempts)")
+
+    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self.endpoint}/chat/completions"
+        headers = {"Authorization": f"Bearer {self._key}"}
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=600)
+        except requests.RequestException as exc:
+            raise Retry(f"{url} could not be reached: {type(exc).__name__}") from None
+        if response.status_code != 200:
             problem = f"{url} answered {response.status_code}: {self._clean(response.text[:300])}"
-            if response.status_code not in RETRIED:
-                break
-        raise ExtractionError(problem)
+            raise (Retry if response.status_code in RETRIED else ExtractionError)(problem)
+        try:
+            return cast(dict[str, Any], response.json())
+        except ValueError:
+            raise Retry(f"{url} answered with invalid JSON") from None
+
+    def _records(self, answer: dict[str, Any], schema: Schema) -> list[dict[str, Any]]:
+        try:
+            content = answer["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise Retry("the endpoint's answer has no message") from None
+        if not isinstance(content, str) or not content.strip():
+            raise Retry("the model's answer was empty")
+        try:
+            parsed = json.loads(content)
+        except ValueError:
+            raise Retry(f"the model's answer is not JSON: {self._clean(content[:200])}") from None
+        if not isinstance(parsed, dict):
+            raise Retry("the model's answer is not a JSON object")
+        if not schema.key:
+            if "record" not in parsed:
+                raise Retry("the model's answer has no record")
+            record = cast(dict[str, Any], parsed)["record"]
+            return [] if record is None else [record]
+        records = cast(dict[str, Any], parsed).get("records")
+        if not isinstance(records, list):
+            raise Retry("the model's answer has no list of records")
+        return cast(list[dict[str, Any]], records)
 
     def _clean(self, text: str) -> str:
         return " ".join(text.replace(self._key, "***").split())
@@ -114,4 +135,6 @@ def request_schema(schema: Schema) -> dict[str, Any]:
             properties[item.name] = {"type": "array", "description": item.description, "items": quoted}
         else:
             properties[item.name] = {**quoted, "description": item.description}
-    return schema.wrap(properties)
+    if schema.key:
+        return schema.wrap(properties)
+    return answer({"record": {"anyOf": [schema.record(properties), {"type": "null"}], "description": SINGLE}})

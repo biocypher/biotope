@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast, get_type_hints
@@ -13,12 +14,13 @@ from biotope.extraction.contract import Document, ExtractionError, Extractor
 from biotope.extraction.llm import LLMExtractor
 from biotope.extraction.loading import load_object
 from biotope.extraction.schema import Schema
-from biotope.extraction.text import align, convert, page
+from biotope.extraction.text import Searchable, convert, page, squeeze
 from biotope.graph.sources import write_text_atomic
 
 
 TEXTS = Path(".biotope/texts")
 STATES = Path(".biotope/extraction")
+SHORT = 10
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,6 @@ class Result:
     documents: list[Outcome]
     records: list[dict[str, Any]]
     changed: bool
-    unaligned: list[dict[str, Any]] = field(default_factory=lambda: [])
     appeared: list[str] = field(default_factory=lambda: [])
     disappeared: list[str] = field(default_factory=lambda: [])
     moved: list[dict[str, str]] = field(default_factory=lambda: [])
@@ -86,17 +87,19 @@ def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str
 
 
 def extract_file(
-    extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None
+    extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None, redone: bool = False
 ) -> tuple[str, list[dict[str, Any]]]:
     file = root / source.path
     digest = sha256(file)
-    provenance = {
+    provenance: dict[str, Any] = {
         "document_sha256": digest,
         "media_type": source.media_type,
         "schema": schema.name,
         "schema_revision": schema.revision,
         "extractor": identity(extractor),
     }
+    if redone:
+        provenance["redone"] = True
     text = document_text(file, source.media_type, digest, cache)
     return digest, _extract_document(
         extractor, schema, Document(source.path, digest, source.media_type, text), provenance
@@ -111,9 +114,10 @@ def _extract_document(
         raise ExtractionError("the extractor returned no list of records")
     hints = get_type_hints(schema.cls)
     adapters = {entry.name: TypeAdapter[object](hints[entry.name]) for entry in schema.fields}
+    searchable = Searchable(document.text)
     records: list[dict[str, Any]] = []
     for index, item in enumerate(cast(list[object], raw), 1):
-        values, plain = _values(schema, document, item, index)
+        values, plain = _values(schema, document, searchable, item, index)
         for name, value in plain.items():
             try:
                 validated = adapters[name].validate_python(value, strict=True)
@@ -134,7 +138,9 @@ def _extract_document(
     return records
 
 
-def _values(schema: Schema, document: Document, item: object, index: int) -> tuple[dict[str, Any], dict[str, Any]]:
+def _values(
+    schema: Schema, document: Document, searchable: Searchable, item: object, index: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
     names = [entry.name for entry in schema.fields]
     if not isinstance(item, dict) or set(cast(dict[str, Any], item)) != set(names):
         raise ExtractionError(f"record {index} does not have exactly the fields {', '.join(names)}")
@@ -145,27 +151,31 @@ def _values(schema: Schema, document: Document, item: object, index: int) -> tup
         if entry.many:
             if not isinstance(given[entry.name], list):
                 raise ExtractionError(f"record {index}, {entry.name}: expected a list")
-            items = [_evidenced(document, entry.name, part, index) for part in cast(list[object], given[entry.name])]
+            items = [
+                _evidenced(document, searchable, entry.name, part, index)
+                for part in cast(list[object], given[entry.name])
+            ]
             values[entry.name] = items
             plain[entry.name] = [part["value"] for part in items]
         else:
-            values[entry.name] = _evidenced(document, entry.name, given[entry.name], index)
+            values[entry.name] = _evidenced(document, searchable, entry.name, given[entry.name], index)
             plain[entry.name] = values[entry.name]["value"]
     return values, plain
 
 
-def _evidenced(document: Document, name: str, given: object, index: int) -> dict[str, Any]:
+def _evidenced(document: Document, searchable: Searchable, name: str, given: object, index: int) -> dict[str, Any]:
     if not isinstance(given, dict) or "value" not in given:
         raise ExtractionError(f"record {index}, {name}: expected an object with a value and its quote or locator")
     entry = cast(dict[str, Any], given)
     value, quote, locator = entry["value"], entry.get("quote"), entry.get("locator")
     text = quote if isinstance(quote, str) and quote.strip() else None
+    evidence: dict[str, Any] | None = None
     if locator is not None:
-        evidence = {"quote": None, "locator": str(locator), "aligned": None, "start": None, "end": None, "page": None}
-    elif text is None:
-        evidence = None
-    else:
-        span = align(document.text, text)
+        evidence = dict.fromkeys(("quote", "locator", "aligned", "start", "end", "page", "occurrences", "weak"))
+        evidence["locator"] = str(locator)
+    elif text is not None:
+        span = searchable.align(text)
+        occurrences = searchable.count(text)
         evidence = {
             "quote": text,
             "locator": None,
@@ -173,8 +183,14 @@ def _evidenced(document: Document, name: str, given: object, index: int) -> dict
             "start": span[0] if span else None,
             "end": span[1] if span else None,
             "page": page(document.text, document.media_type, span[0]) if span else None,
+            "occurrences": occurrences,
+            "weak": bool(weaknesses(text, occurrences)) if span else None,
         }
     return {"value": value, "evidence": evidence}
+
+
+def weaknesses(quote: str, occurrences: int) -> list[str]:
+    return [reason for reason, weak in (("short", len(squeeze(quote)) < SHORT), ("repeated", occurrences > 1)) if weak]
 
 
 def record_id(schema: Schema, path: str, values: dict[str, Any]) -> str:
@@ -188,19 +204,43 @@ def finish(schema: Schema, path: str, values: dict[str, Any], provenance: dict[s
     return {"id": record_id(schema, path, values), "document": path, "values": values, "provenance": provenance}
 
 
-def unaligned(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    found: list[dict[str, Any]] = []
+@dataclass
+class Review:
+    unaligned: list[dict[str, Any]] = field(default_factory=lambda: [])
+    weak: list[dict[str, Any]] = field(default_factory=lambda: [])
+    counts: Counter[str] = field(default_factory=lambda: Counter(values=0, aligned=0, unaligned=0, weak=0))
+
+
+def review(records: list[dict[str, Any]]) -> Review:
+    found = Review()
     for record in records:
         for name, given in record["values"].items():
             for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given]):
                 evidence = item["evidence"]
-                if item["value"] is not None and (evidence is None or evidence["aligned"] is False):
-                    found.append({"record": record["id"], "field": name, "quote": evidence and evidence["quote"]})
+                if item["value"] is None:
+                    continue
+                found.counts["values"] += 1
+                where = {"record": record["id"], "field": name, "quote": evidence and evidence["quote"]}
+                if evidence is None or evidence["aligned"] is False:
+                    found.unaligned.append(where)
+                    found.counts["unaligned"] += 1
+                    continue
+                found.counts["aligned"] += bool(evidence["aligned"])
+                if evidence.get("weak"):
+                    found.weak.append({**where, "reasons": weaknesses(evidence["quote"], evidence["occurrences"])})
+                    found.counts["weak"] += 1
     return found
 
 
 def run(
-    root: Path, schema: Schema, extractor: Extractor, sources: list[Source], output: Path, state_path: Path
+    root: Path,
+    schema: Schema,
+    extractor: Extractor,
+    sources: list[Source],
+    output: Path,
+    state_path: Path,
+    redo: frozenset[str] = frozenset(),
+    announce: Callable[[int, int, str], None] = lambda index, total, path: None,
 ) -> Result:
     previous = _read_records(output)
     previous_state = cast(dict[str, Any], _read_json(state_path).get("documents", {})) if output.is_file() else {}
@@ -214,7 +254,7 @@ def run(
     outcomes: list[Outcome] = []
     moved: list[dict[str, str]] = []
     claimed: set[str] = set()
-    for source in sources:
+    for number, source in enumerate(sources, 1):
         file = root / source.path
         kept = by_document.get(source.path, [])
         if not file.is_file():
@@ -225,7 +265,7 @@ def run(
             continue
         digest = sha256(file)
         wanted = {"sha256": digest, **stamp}
-        origin = _origin(source.path, wanted, previous_state, registered | claimed)
+        origin = None if source.path in redo else _origin(source.path, wanted, previous_state, registered | claimed)
         if origin is not None:
             reused = [
                 finish(schema, source.path, record["values"], record["provenance"]) for record in by_document[origin]
@@ -242,8 +282,9 @@ def run(
                 )
             )
             continue
+        announce(number, len(sources), source.path)
         try:
-            digest, extracted = extract_file(extractor, schema, root, source, root / TEXTS)
+            digest, extracted = extract_file(extractor, schema, root, source, root / TEXTS, source.path in redo)
         except Exception as exc:
             reason = str(exc) if isinstance(exc, ExtractionError) else f"{type(exc).__name__}: {exc}"
             if source.path in previous_state:
@@ -263,7 +304,6 @@ def run(
         outcomes,
         records,
         changed,
-        unaligned(records),
         sorted(new - old - {pair["to"] for pair in moved}),
         sorted(old - new - {pair["from"] for pair in moved}),
         moved,

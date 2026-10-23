@@ -16,7 +16,9 @@ them. Send only public documents to an external model.
 ```bash
 biotope add data/pages
 biotope extract try extraction/schemas.py:Profile data/pages/lind.html
+biotope extract text data/pages/lind.html
 biotope extract run extraction/schemas.py:Profile data/pages
+biotope extract run extraction/schemas.py:Profile data/pages --redo data/pages/lind.html
 biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/sources
 ```
 
@@ -28,7 +30,16 @@ biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/s
   `--out PATH`) and registers that file as a dataset with status `processed`,
   derived from the input datasets. A dataset is named as for `--derived-from`: by
   its data path, its manifest path or its name.
-- Both take `--json` and then write one versioned JSON report to stdout.
+- `--redo FILE`, repeatable, extracts that document of the given datasets again
+  although its inputs are unchanged, for example after the model missed or
+  misread it. Its new records replace the old ones and carry `"redone": true` in
+  their provenance; later runs reuse them.
+- `biotope extract text FILE` prints biotope's text of a document: exactly what an
+  extractor reads, and what the evidence's `start`, `end` and `page` refer to. PDF
+  pages are separated by a form feed. Use it to check a value against its context.
+- `try` and `run` take `--json` and then write one versioned JSON report to
+  stdout. Both print `Extracting <n>/<total> <path>` to stderr before each
+  document they send to the extractor, also with `--json`.
 
 A document is a FileObject of a dataset whose path ends in `.pdf`, `.html`, `.htm`,
 `.txt`, `.md` or `.markdown`. Other files of the dataset are left alone.
@@ -58,9 +69,17 @@ missing.
 
 The built-in extractor sends each document's text in one request to
 `<endpoint>/chat/completions` with a strict `json_schema` response format,
-temperature 0, and a request for each value's verbatim quote. It retries
-timeouts, rate limits and server errors twice. Its version is a digest of its
-prompt, so a changed prompt extracts every document again.
+temperature 0, and a request for each value's verbatim quote. For a schema with
+a record key it asks for a list of records; without one, for a single record or
+null, so the model cannot return two. It makes up to four attempts, waiting 2, 4
+and 8 seconds between them, when the endpoint times out, limits the rate, has a
+server error, or answers with an empty, non-JSON or wrongly shaped message. Its
+version is a digest of its prompt, so a changed prompt extracts every document
+again.
+
+Temperature 0 does not make a model's values reproducible: two runs on the same
+document can differ. The stored records and their reuse keep a project stable;
+re-extract a document with `--redo` only when its records are wrong.
 
 ## Extraction schemas
 
@@ -74,7 +93,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FundingRound:
     """One funding round of a call for proposals."""
 
@@ -86,7 +105,9 @@ class FundingRound:
 ```
 
 A field's type is `str`, `int`, `float`, `bool` or a `Literal` of one of them,
-optionally `| None`, or a list of one of them; an empty list means none. Biotope
+optionally `| None`, or a list of one of them; an empty list means none. Declare
+the class with `kw_only=True`, so that a field with a default can come before one
+without; biotope ignores defaults. Biotope
 refuses any other type before a request is sent, naming the field. Strict
 structured output cannot express mappings, tuples, sets or `Any`; nested classes
 are not supported either, so one record per item with a record key takes their
@@ -178,13 +199,20 @@ with the project. Each line is one record:
 - **Evidence.** `quote` is the extractor's quote and `locator` its locator.
   `aligned` says whether biotope found the quote in its text of the document,
   first exactly and then ignoring whitespace, hyphens and case. `start` and `end`
-  are character offsets into that text and `page` is the PDF page, from 1. A value
+  are character offsets into that text and `page` is the PDF page, from 1.
+  `occurrences` counts how often the quote occurs in the text, with the same
+  matching. `weak` is true for an aligned quote that is short (under 10
+  characters, ignoring whitespace and hyphens) or occurs more than once: it is
+  found, but it may not show that the value is right, and with several
+  occurrences `start` and `page` give only the first. `weak` is null for an
+  unaligned quote and a locator. A value
   read from a table quotes the table's whole row. A value whose quote cannot be
   found keeps `aligned: false` and is listed in the run report. A value with
   neither a quote nor a locator has `evidence: null`; when the value is not null,
   it is kept and listed in the run report with the unaligned values.
 - **Provenance.** The document's digest and media type, the schema's name and
-  revision, and the extractor's name, version and settings.
+  revision, and the extractor's name, version and settings. `redone: true` marks
+  records extracted again with `--redo`.
 
 **Registered dataset.** The records file is registered at
 `.biotope/datasets/extracted/<schema>.jsonld`, with status `processed`,
@@ -219,6 +247,10 @@ dataset, or a dataset left out of the command, loses its records.
 
 The report lists each document as `extracted`, `reused`, `failed` or `missing`,
 with its reason; every non-null value whose quote is unaligned or that has no
-evidence; the record IDs that disappeared and appeared; and each old ID with its
-new one for documents that moved. A failed document keeps the records it had, and the others are stored. The
+evidence (`unaligned`); every value with weak evidence and its reasons, `short`
+or `repeated` (`weak`); the number of non-null values and how many are aligned,
+unaligned and weak (`counts`); the record IDs that disappeared and appeared; each
+old ID with its new one for documents that moved; and the output files that Git
+ignores (`ignored`), which should be committed with the project. `try` reports
+`unaligned`, `weak` and `counts` for its files as well. A failed document keeps the records it had, and the others are stored. The
 run exits nonzero when a document failed or is missing.

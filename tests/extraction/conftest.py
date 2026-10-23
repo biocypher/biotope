@@ -26,8 +26,18 @@ class Endpoint:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_port}/v1"
 
-    def reply(self, marker: str, answer: object) -> None:
-        self.rules.insert(0, (marker, answer))
+    def reply(self, marker: str, answer: object, times: int | None = None) -> None:
+        self.rules.insert(0, [marker, answer, times])
+
+    def answer(self, text: str) -> object:
+        rule = next((rule for rule in self.rules if rule[0] in text), None)
+        if rule is None:
+            return 500
+        if rule[2] is not None:
+            rule[2] -= 1
+            if rule[2] == 0:
+                self.rules.remove(rule)
+        return rule[1]
 
     def _handler(self):
         endpoint = self
@@ -41,14 +51,14 @@ class Endpoint:
                 endpoint.requests.append(
                     {"path": self.path, "body": body, "authorization": self.headers.get("Authorization")}
                 )
-                text = body["messages"][-1]["content"]
-                answer = next((answer for marker, answer in endpoint.rules if marker in text), 500)
+                answer = endpoint.answer(body["messages"][-1]["content"])
                 if isinstance(answer, int):
                     self.send_response(answer)
                     self.end_headers()
                     self.wfile.write(b'{"error": {"message": "refused by the fake endpoint"}}')
                     return
-                payload = {"choices": [{"message": {"role": "assistant", "content": json.dumps(answer)}}]}
+                content = answer if answer is None or isinstance(answer, str) else json.dumps(answer)
+                payload = {"choices": [{"message": {"role": "assistant", "content": content}}]}
                 data = json.dumps(payload).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -64,22 +74,18 @@ def quoted(value, quote=None):
 
 
 LIND = {
-    "records": [
-        {
-            "name": quoted("Mara Lind", "Dr. Mara Lind"),
-            "group": quoted("Spatial Atlas Group"),
-            "methods": [quoted("spatial transcriptomics"), quoted("single-cell RNA sequencing")],
-        }
-    ]
+    "record": {
+        "name": quoted("Mara Lind", "Dr. Mara Lind"),
+        "group": quoted("Spatial Atlas Group"),
+        "methods": [quoted("spatial transcriptomics"), quoted("single-cell RNA sequencing")],
+    }
 }
 OKAFOR = {
-    "records": [
-        {
-            "name": quoted("Chidi Okafor"),
-            "group": quoted("Machine Learning for Tissues Group", "Machine Learning for Tissues Lab"),
-            "methods": [quoted("graph neural networks")],
-        }
-    ]
+    "record": {
+        "name": quoted("Chidi Okafor"),
+        "group": quoted("Machine Learning for Tissues Group", "Machine Learning for Tissues Lab"),
+        "methods": [quoted("graph neural networks")],
+    }
 }
 ROWS = {
     "Pre-proposal": "Pre-proposal 15 January 2027 no funding",

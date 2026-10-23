@@ -77,23 +77,25 @@ class Schema:
         return self.wrap({item.name: item.json_schema() for item in self.fields})
 
     def wrap(self, properties: dict[str, Any]) -> dict[str, Any]:
-        record = {
+        records = {"type": "array", "description": self.records_description, "items": self.record(properties)}
+        return answer({"records": records})
+
+    def record(self, properties: dict[str, Any]) -> dict[str, Any]:
+        return {
             "type": "object",
             "description": self.description,
             "properties": properties,
             "required": list(properties),
             "additionalProperties": False,
         }
-        return {
-            "type": "object",
-            "properties": {"records": {"type": "array", "description": self.records_description, "items": record}},
-            "required": ["records"],
-            "additionalProperties": False,
-        }
 
     @property
     def revision(self) -> str:
         return digest(self.json_schema())
+
+
+def answer(properties: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
 
 
 def _field(owner: str, name: str, annotation: object, description: object) -> Field:

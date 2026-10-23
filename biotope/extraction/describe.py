@@ -13,6 +13,12 @@ EVIDENCE = (
     ("start", "sc:Integer", "Offset of the quote's first character in biotope's text of the document."),
     ("end", "sc:Integer", "Offset just after the quote's last character in biotope's text of the document."),
     ("page", "sc:Integer", "The PDF page the quote is on, counting from 1."),
+    ("occurrences", "sc:Integer", "How often the quote occurs in biotope's text of the document."),
+    (
+        "weak",
+        "sc:Boolean",
+        "Whether an aligned quote is short or occurs more than once, so it may not prove its value.",
+    ),
 )
 
 
@@ -93,6 +99,11 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
         column("provenance/schema", "The extraction schema's class name.", "sc:Text", nullable=False),
         column("provenance/schema_revision", "Digest of the schema's derived JSON Schema.", "sc:Text", nullable=False),
         column("provenance/extractor", "The extractor that produced the record.", nullable=False, children=extractor),
+        column(
+            "provenance/redone",
+            "True when the document was extracted again on request although its inputs were unchanged.",
+            "sc:Boolean",
+        ),
     ]
     fields = [
         column("id", "The record ID: the document's path, then the record key's values.", "sc:Text", nullable=False),

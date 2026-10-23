@@ -80,16 +80,30 @@ class _TextParser(HTMLParser):
             self.parts.append(data)
 
 
-def align(text: str, quote: str) -> tuple[int, int] | None:
-    start = text.find(quote)
-    if quote.strip() and start >= 0:
-        return start, start + len(quote)
-    kept = [(index, char.lower()) for index, char in enumerate(text) if not IGNORED.match(char)]
-    needle = "".join(char.lower() for char in quote if not IGNORED.match(char))
-    found = "".join(char for _, char in kept).find(needle) if needle else -1
-    if found < 0:
-        return None
-    return kept[found][0], kept[found + len(needle) - 1][0] + 1
+class Searchable:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        kept = [(index, char.lower()) for index, char in enumerate(text) if not IGNORED.match(char)]
+        self.positions = [index for index, _ in kept]
+        self.squeezed = "".join(char for _, char in kept)
+
+    def align(self, quote: str) -> tuple[int, int] | None:
+        start = self.text.find(quote)
+        if quote.strip() and start >= 0:
+            return start, start + len(quote)
+        needle = squeeze(quote)
+        found = self.squeezed.find(needle) if needle else -1
+        if found < 0:
+            return None
+        return self.positions[found], self.positions[found + len(needle) - 1] + 1
+
+    def count(self, quote: str) -> int:
+        needle = squeeze(quote)
+        return self.squeezed.count(needle) if needle else 0
+
+
+def squeeze(text: str) -> str:
+    return "".join(char.lower() for char in text if not IGNORED.match(char))
 
 
 def page(text: str, kind: str, start: int) -> int | None:
