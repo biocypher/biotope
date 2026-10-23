@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -16,6 +17,7 @@ MEDIA_TYPES = {
     ".md": "text/markdown",
     ".markdown": "text/markdown",
 }
+RUNNING_HEAD_PAGES = 3
 IGNORED = re.compile(r"[\s\-\u2010-\u2015\u2212\u00ad\ufffe]")
 HIDDEN_TAGS = frozenset({"head", "script", "style", "noscript", "template", "svg", "nav"})
 PAGE_TAGS = frozenset({"header", "footer"})
@@ -94,12 +96,25 @@ class _TextParser(HTMLParser):
             self.parts.append(data)
 
 
+def running_heads(text: str, kind: str) -> list[str]:
+    pages = [page.split("\n") for page in text.split("\f")] if kind == PDF else []
+    if len(pages) < RUNNING_HEAD_PAGES:
+        return []
+    shapes = Counter(shape for lines in pages for shape in {_shape(line) for line in lines})
+    return [line for lines in pages for line in lines if shapes[_shape(line)] * 2 > len(pages)]
+
+
+def _shape(line: str) -> str:
+    return re.sub(r"\d+", "0", squeeze(line))
+
+
 class Searchable:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, heads: list[str] | None = None) -> None:
         self.text = text
         kept = [(index, char.lower()) for index, char in enumerate(text) if not IGNORED.match(char)]
         self.positions = [index for index, _ in kept]
         self.squeezed = "".join(char for _, char in kept)
+        self.heads = "\0".join(squeeze(line) for line in heads or [])
 
     def align(self, quote: str) -> tuple[int, int] | None:
         start = self.text.find(quote)
@@ -114,6 +129,10 @@ class Searchable:
     def count(self, quote: str) -> int:
         needle = squeeze(quote)
         return self.squeezed.count(needle) if needle else 0
+
+    def only_in_running_heads(self, quote: str) -> bool:
+        needle = squeeze(quote)
+        return bool(needle) and 0 < self.squeezed.count(needle) == self.heads.count(needle)
 
 
 def squeeze(text: str) -> str:

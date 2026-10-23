@@ -106,12 +106,12 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
     _header(output, "Try", schema, named)
     paths = [_project_path(root, file) for file in files]
     work = [(number, Source(path, kind)) for number, path in enumerate(paths, 1) if (kind := media_type(path))]
-    done = dict(
-        zip(
-            (source.path for _, source in work),
-            extract_all(extractor, schema, root, work, len(paths), None, frozenset(), parallel, output.progress),
+    done = {
+        work[index][1].path: extracted
+        for index, extracted in extract_all(
+            extractor, schema, root, work, len(paths), None, frozenset(), parallel, output.progress
         )
-    )
+    }
     failed = False
     for path in paths:
         extracted = done.get(path, ValueError("not a PDF, HTML, text or Markdown document"))
@@ -276,7 +276,8 @@ def _review(output: Output, found: Review) -> None:
         output.row(
             "Review",
             item["record"],
-            f"unsupported: {item['unaligned']} of {item['values']} values have no aligned evidence",
+            f"unsupported: {item['unaligned']} of {item['values']} values have no aligned evidence, "
+            f"{item['running_head']} are found only in running heads",
         )
 
 
@@ -430,7 +431,11 @@ def _shown(record: dict[str, Any]) -> str:
                 where = f"characters {evidence['start']}-{evidence['end']}"
                 if evidence["page"] is not None:
                     where = f"page {evidence['page']}, {where}"
-                reasons = weaknesses(evidence["quote"], evidence["occurrences"]) if evidence.get("weak") else []
+                reasons = (
+                    weaknesses(evidence["quote"], evidence["occurrences"], evidence.get("running_head"))
+                    if evidence.get("weak")
+                    else []
+                )
                 if reasons:
                     found = f"found {evidence['occurrences']} times"
                     where += f"; weak: {', '.join(found if reason == 'repeated' else reason for reason in reasons)}"

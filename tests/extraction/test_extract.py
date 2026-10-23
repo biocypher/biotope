@@ -4,6 +4,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import time
 
 import pytest
 from conftest import FIXTURES, KEY, LIVE_KEY, ROUNDS, ROWS, funding_round, quoted
@@ -18,6 +20,7 @@ ROUND = "extraction/schemas.py:FundingRound"
 LIND = "data/pages/lind.html"
 OKAFOR = "data/pages/okafor.html"
 CALL = "data/calls/call.pdf"
+REPORT = "data/reports/report.pdf"
 
 
 def squeeze(text):
@@ -559,6 +562,87 @@ def test_short_and_repeated_quotes_are_weak_evidence(study):
     assert (evidence["occurrences"], evidence["weak"]) == (2, False) and report["weak"] == []
 
 
+def test_quotes_found_only_in_running_heads_do_not_support_a_record(study):
+    (study.root / "data/reports").mkdir()
+    shutil.copy(FIXTURES / "report.pdf", study.root / REPORT)
+    assert study.run("add", "data/reports").exit_code == 0
+    study.endpoint.reply(
+        "Ines Navarro",
+        {
+            "record": {
+                "name": quoted("Annual Report", "ANNUAL REPORT 2026"),
+                "group": quoted("Spatial Atlas Group"),
+                "methods": [
+                    quoted("reporting", "ANNUAL REPORT 2026 | Spatial Atlas Group"),
+                    quoted("pagination", "Page 2 of 3"),
+                ],
+            }
+        },
+    )
+    result, report = study.extract("run", PROFILE, "data/reports")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {REPORT: "unsupported"}
+    assert report["unsupported"] == [{"record": REPORT, "values": 4, "unaligned": 0, "running_head": 3}]
+    [record] = study.records("profile")
+    name, group = (record["values"][field]["evidence"] for field in ("name", "group"))
+    assert (record["supported"], name["aligned"], name["running_head"], name["weak"]) == (False, True, True, True)
+    assert (group["aligned"], group["running_head"], group["occurrences"]) == (True, False, 5)
+    assert {
+        "record": REPORT,
+        "field": "name",
+        "quote": "ANNUAL REPORT 2026",
+        "reasons": ["repeated", "running head"],
+    } in report["weak"]
+    shown = " ".join(study.run("extract", "try", PROFILE, REPORT).output.split())
+    assert re.search(r'"Page 2 of 3" \(page 2, characters \d+-\d+; weak: short, running head\)', shown)
+    assert "unsupported: 0 of 4 values have no aligned evidence, 3 are found only in running heads" in shown
+
+    study.endpoint.reply(
+        "Ines Navarro",
+        {
+            "record": {
+                "name": quoted("Ines Navarro", "Dr. Ines Navarro"),
+                "group": quoted("Spatial Atlas Group"),
+                "methods": [quoted("spatial transcriptomics")],
+            }
+        },
+    )
+    result, report = study.extract("run", PROFILE, "data/reports", "--redo", REPORT)
+    assert result.exit_code == 0 and statuses(report) == {REPORT: "extracted"} and report["unsupported"] == []
+
+
+def test_an_interrupted_run_keeps_the_documents_it_finished(study):
+    study.configure(
+        extractor="llm", endpoint=study.endpoint.url, model="test/model", key_env="OPENROUTER_API_KEY", parallel=1
+    )
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    stored = ("extracted/profile.jsonl", ".biotope/extraction/extracted/profile.json")
+    uninterrupted = [(study.root / path).read_bytes() for path in stored]
+    for path in ("extracted", ".biotope/extraction", ".biotope/datasets/extracted"):
+        shutil.rmtree(study.root / path)
+    released = study.endpoint.hold("Chidi Okafor")
+    sent = len(study.endpoint.requests)
+    process = subprocess.Popen(
+        [sys.executable, "-c", "from biotope.cli import cli; cli()", "extract", "run", PROFILE, "data/pages"],
+        cwd=study.root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + 60
+    while len(study.endpoint.requests) < sent + 2 and process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    process.kill()
+    process.wait()
+    released.set()
+    assert len(study.endpoint.requests) == sent + 2
+    assert [record["id"] for record in study.records("profile")] == [LIND]
+
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {LIND: "reused", OKAFOR: "extracted"} and len(study.endpoint.requests) == sent + 3
+    assert [(study.root / path).read_bytes() for path in stored] == uninterrupted
+
+
 def test_text_shows_what_the_extractor_reads(study):
     page = study.run("extract", "text", LIND)
     assert page.exit_code == 0, page.output
@@ -611,7 +695,7 @@ def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
     assert result.exit_code == 0, result.output
     assert statuses(report) == {LIND: "unsupported", OKAFOR: "extracted"}
     assert "1 of 1 records" in report["documents"][0]["reason"]
-    assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3}]
+    assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3, "running_head": 0}]
     lind, okafor = study.records("profile")
     assert (lind["supported"], okafor["supported"]) == (False, True)
     assert lind["values"]["group"]["value"] == "Cancer Imaging Group"
@@ -622,7 +706,7 @@ def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
     assert "Review data/pages/lind.html unsupported: 3 of 4 values have no aligned evidence" in shown
     tried, report = study.extract("try", PROFILE, LIND)
     assert tried.exit_code == 0 and statuses(report) == {LIND: "unsupported"}
-    assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3}]
+    assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3, "running_head": 0}]
 
 
 def test_run_warns_when_the_schema_revision_was_never_tried(study):

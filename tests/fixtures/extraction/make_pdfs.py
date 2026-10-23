@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-PAGES = [
+CALL = [
     [
         (72, 760, 18, "Open Atlas Fellowship 2027"),
         (72, 730, 11, "Call for proposals issued by the Lindqvist Foundation for Open Science."),
@@ -35,15 +35,36 @@ def content(lines: list[tuple[int, int, int, str]]) -> bytes:
     return "\n".join(commands).encode("latin-1")
 
 
-def build() -> bytes:
-    page_ids = [3 + 2 * index for index in range(len(PAGES))]
-    font_id = 3 + 2 * len(PAGES)
+REPORT = [
+    [
+        (72, 770, 9, "ANNUAL REPORT 2026 | Spatial Atlas Group"),
+        (72, 730, 16, "Annual report of the Spatial Atlas Group"),
+        (72, 700, 11, "Dr. Ines Navarro leads the Spatial Atlas Group at the Lindqvist Institute."),
+        (72, 685, 11, "The group maps human lung tissue with spatial transcriptomics."),
+        (300, 40, 9, "Page 1 of 3"),
+    ],
+    [
+        (72, 770, 9, "ANNUAL REPORT 2026 | Spatial Atlas Group"),
+        (72, 730, 11, "In 2026 the group released an atlas of 120 lung samples."),
+        (300, 40, 9, "Page 2 of 3"),
+    ],
+    [
+        (72, 770, 9, "ANNUAL REPORT 2026 | Spatial Atlas Group"),
+        (72, 730, 11, "The group thanks the Lindqvist Foundation for Open Science for its support."),
+        (300, 40, 9, "Page 3 of 3"),
+    ],
+]
+
+
+def build(pages: list[list[tuple[int, int, int, str]]]) -> bytes:
+    page_ids = [3 + 2 * index for index in range(len(pages))]
+    font_id = 3 + 2 * len(pages)
     objects: dict[int, bytes] = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
-        2: f"<< /Type /Pages /Kids [{' '.join(f'{i} 0 R' for i in page_ids)}] /Count {len(PAGES)} >>".encode(),
+        2: f"<< /Type /Pages /Kids [{' '.join(f'{i} 0 R' for i in page_ids)}] /Count {len(pages)} >>".encode(),
         font_id: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     }
-    for page_id, lines in zip(page_ids, PAGES):
+    for page_id, lines in zip(page_ids, pages):
         stream = content(lines)
         objects[page_id] = (
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {page_id + 1} 0 R "
@@ -63,4 +84,5 @@ def build() -> bytes:
 
 
 if __name__ == "__main__":
-    (Path(__file__).parent / "call.pdf").write_bytes(build())
+    (Path(__file__).parent / "call.pdf").write_bytes(build(CALL))
+    (Path(__file__).parent / "report.pdf").write_bytes(build(REPORT))

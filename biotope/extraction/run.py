@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import threading
 from collections import Counter, defaultdict
-from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from collections.abc import Callable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast, get_type_hints
@@ -16,7 +15,7 @@ from biotope.extraction.contract import Document, ExtractionError, Extractor
 from biotope.extraction.llm import LLMExtractor
 from biotope.extraction.loading import load_object
 from biotope.extraction.schema import Schema
-from biotope.extraction.text import CONVERSION, Searchable, convert, page, squeeze
+from biotope.extraction.text import CONVERSION, Searchable, convert, page, running_heads, squeeze
 from biotope.graph.sources import write_text_atomic
 
 
@@ -108,23 +107,29 @@ def extract_all(
     redo: frozenset[str],
     parallel: int,
     announce: Callable[[int, int, str], None],
-) -> list[list[dict[str, Any]] | BaseException]:
-    slots = threading.Semaphore(parallel)
-    pending: list[Future[list[dict[str, Any]]] | BaseException] = []
+) -> Iterator[tuple[int, list[dict[str, Any]] | BaseException]]:
+    running: dict[Future[list[dict[str, Any]]], int] = {}
     with ThreadPoolExecutor(parallel) as pool:
-        for number, source in work:
-            slots.acquire()
+        for position, (number, source) in enumerate(work):
+            if len(running) == parallel:
+                yield from _finished(running)
             announce(number, total, source.path)
             try:
                 document, provenance = _prepare(extractor, schema, root, source, cache, source.path in redo)
             except Exception as exc:
-                slots.release()
-                pending.append(exc)
+                yield position, exc
                 continue
-            future = pool.submit(_extract_document, extractor, schema, document, provenance)
-            future.add_done_callback(lambda _: slots.release())
-            pending.append(future)
-    return [item if isinstance(item, BaseException) else item.exception() or item.result() for item in pending]
+            running[pool.submit(_extract_document, extractor, schema, document, provenance)] = position
+        while running:
+            yield from _finished(running)
+
+
+def _finished(
+    running: dict[Future[list[dict[str, Any]]], int],
+) -> Iterator[tuple[int, list[dict[str, Any]] | BaseException]]:
+    done, _ = wait(running, return_when=FIRST_COMPLETED)
+    for future in done:
+        yield running.pop(future), future.exception() or future.result()
 
 
 def failure(exc: BaseException) -> str:
@@ -157,7 +162,7 @@ def _extract_document(
         raise ExtractionError("the extractor returned no list of records")
     hints = get_type_hints(schema.cls)
     adapters = {entry.name: TypeAdapter[object](hints[entry.name]) for entry in schema.fields}
-    searchable = Searchable(document.text)
+    searchable = Searchable(document.text, running_heads(document.text, document.media_type))
     records: list[dict[str, Any]] = []
     for index, item in enumerate(cast(list[object], raw), 1):
         values, plain = _values(schema, document, searchable, item, index)
@@ -214,11 +219,14 @@ def _evidenced(document: Document, searchable: Searchable, name: str, given: obj
     text = quote if isinstance(quote, str) and quote.strip() else None
     evidence: dict[str, Any] | None = None
     if locator is not None:
-        evidence = dict.fromkeys(("quote", "locator", "aligned", "start", "end", "page", "occurrences", "weak"))
+        evidence = dict.fromkeys(
+            ("quote", "locator", "aligned", "start", "end", "page", "occurrences", "running_head", "weak")
+        )
         evidence["locator"] = str(locator)
     elif text is not None:
         span = searchable.align(text)
         occurrences = searchable.count(text)
+        running_head = searchable.only_in_running_heads(text)
         evidence = {
             "quote": text,
             "locator": None,
@@ -227,14 +235,19 @@ def _evidenced(document: Document, searchable: Searchable, name: str, given: obj
             "end": span[1] if span else None,
             "page": page(document.text, document.media_type, span[0]) if span else None,
             "occurrences": occurrences,
-            "weak": bool(weaknesses(text, occurrences)) if span else None,
+            "running_head": running_head if span else None,
+            "weak": bool(weaknesses(text, occurrences, running_head)) if span else None,
         }
     return {"value": value, "evidence": evidence}
 
 
-def weaknesses(quote: str, occurrences: int) -> list[str]:
+def weaknesses(quote: str, occurrences: int, running_head: bool | None = False) -> list[str]:
     length = len(squeeze(quote))
-    found = (("short", length < SHORT), ("repeated", occurrences > 1 and length < DISTINCTIVE))
+    found = (
+        ("short", length < SHORT),
+        ("repeated", occurrences > 1 and length < DISTINCTIVE),
+        ("running head", bool(running_head)),
+    )
     return [reason for reason, weak in found if weak]
 
 
@@ -246,11 +259,11 @@ def record_id(schema: Schema, path: str, values: dict[str, Any]) -> str:
 
 
 def finish(schema: Schema, path: str, values: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
-    total, unaligned = support(values)
+    total, unaligned, heads = support(values)
     return {
         "id": record_id(schema, path, values),
         "document": path,
-        "supported": unaligned * 2 <= total,
+        "supported": (unaligned + heads) * 2 <= total,
         "values": values,
         "provenance": provenance,
     }
@@ -269,9 +282,13 @@ def unaligned(item: dict[str, Any]) -> bool:
     return item["evidence"] is None or item["evidence"]["aligned"] is False
 
 
-def support(values: dict[str, Any]) -> tuple[int, int]:
+def in_running_head(item: dict[str, Any]) -> bool:
+    return bool(item["evidence"] and item["evidence"].get("running_head"))
+
+
+def support(values: dict[str, Any]) -> tuple[int, int, int]:
     found = evidenced_values(values)
-    return len(found), sum(unaligned(item) for _, item in found)
+    return len(found), sum(unaligned(item) for _, item in found), sum(in_running_head(item) for _, item in found)
 
 
 def unsupported_reason(records: list[dict[str, Any]]) -> str:
@@ -279,8 +296,8 @@ def unsupported_reason(records: list[dict[str, Any]]) -> str:
     if not count:
         return ""
     return (
-        f"{count} of {len(records)} records unsupported: most of their values have no aligned evidence, "
-        "so the extractor may have answered from memory"
+        f"{count} of {len(records)} records unsupported: most of their values have no aligned evidence or are "
+        "found only in running heads, so the extractor may have answered from memory or from page furniture"
     )
 
 
@@ -296,8 +313,10 @@ def review(records: list[dict[str, Any]]) -> Review:
     found = Review()
     for record in records:
         if not record["supported"]:
-            total, missing = support(record["values"])
-            found.unsupported.append({"record": record["id"], "values": total, "unaligned": missing})
+            total, missing, heads = support(record["values"])
+            found.unsupported.append(
+                {"record": record["id"], "values": total, "unaligned": missing, "running_head": heads}
+            )
         for name, item in evidenced_values(record["values"]):
             evidence = item["evidence"]
             found.counts["values"] += 1
@@ -308,7 +327,8 @@ def review(records: list[dict[str, Any]]) -> Review:
                 continue
             found.counts["aligned"] += bool(evidence["aligned"])
             if evidence.get("weak"):
-                found.weak.append({**where, "reasons": weaknesses(evidence["quote"], evidence["occurrences"])})
+                reasons = weaknesses(evidence["quote"], evidence["occurrences"], evidence.get("running_head"))
+                found.weak.append({**where, "reasons": reasons})
                 found.counts["weak"] += 1
     return found
 
@@ -369,8 +389,12 @@ def run(
         work.append((number, source))
         waiting.append((len(outcomes), digest, kept))
         outcomes.append(Outcome(source.path, "extracted", sha256=digest))
-    done = extract_all(extractor, schema, root, work, len(sources), root / TEXTS, redo, parallel, announce)
-    for (position, digest, kept), extracted in zip(waiting, done):
+    stored_state = dict(previous_state)
+    stored = dict(by_document)
+    for index, extracted in extract_all(
+        extractor, schema, root, work, len(sources), root / TEXTS, redo, parallel, announce
+    ):
+        position, digest, kept = waiting[index]
         path = outcomes[position].path
         if isinstance(extracted, BaseException):
             if path in previous_state:
@@ -378,7 +402,9 @@ def run(
                 records += kept
             outcomes[position] = Outcome(path, "failed", failure(extracted), digest, len(kept))
             continue
-        state[path] = {"sha256": digest, **stamp}
+        state[path] = stored_state[path] = {"sha256": digest, **stamp}
+        stored[path] = extracted
+        _store(output, state_path, schema, [record for found in stored.values() for record in found], stored_state)
         records += extracted
         reason = unsupported_reason(extracted)
         status = "unsupported" if reason else "extracted" if extracted else "empty"
@@ -386,8 +412,7 @@ def run(
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}
-    changed = _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
-    _write(state_path, json.dumps({"schema": schema.name, "documents": dict(sorted(state.items()))}, indent=2) + "\n")
+    changed = _store(output, state_path, schema, records, state)
     return Result(
         outcomes,
         records,
@@ -423,6 +448,15 @@ def _read_records(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     return [cast(dict[str, Any], json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _store(
+    output: Path, state_path: Path, schema: Schema, records: list[dict[str, Any]], state: dict[str, Any]
+) -> bool:
+    ordered = sorted(records, key=lambda record: record["id"])
+    changed = _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in ordered))
+    _write(state_path, json.dumps({"schema": schema.name, "documents": dict(sorted(state.items()))}, indent=2) + "\n")
+    return changed
 
 
 def _write(path: Path, text: str) -> bool:

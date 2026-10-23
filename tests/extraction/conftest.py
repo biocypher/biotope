@@ -26,12 +26,17 @@ class Endpoint:
         self.busy = 0
         self.most_busy = 0
         self.lock = threading.Lock()
+        self.held: dict[str, threading.Event] = {}
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_port}/v1"
 
     def reply(self, marker: str, answer: object, times: int | None = None) -> None:
         self.rules.insert(0, [marker, answer, times])
+
+    def hold(self, marker: str) -> threading.Event:
+        self.held[marker] = threading.Event()
+        return self.held[marker]
 
     def answer(self, text: str) -> object:
         with self.lock:
@@ -65,7 +70,11 @@ class Endpoint:
                     endpoint.requests.append(
                         {"path": self.path, "body": body, "authorization": self.headers.get("Authorization")}
                     )
-                answer = endpoint.answer(body["messages"][-1]["content"])
+                content = body["messages"][-1]["content"]
+                for marker, released in list(endpoint.held.items()):
+                    if marker in content:
+                        released.wait()
+                answer = endpoint.answer(content)
                 if isinstance(answer, int):
                     self.send_response(answer)
                     self.end_headers()
@@ -164,6 +173,8 @@ def endpoint():
     served.reply("Chidi Okafor", OKAFOR)
     served.reply("Funding rounds", ROUNDS)
     yield served
+    for released in served.held.values():
+        released.set()
     served.server.shutdown()
 
 

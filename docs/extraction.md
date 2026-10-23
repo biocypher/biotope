@@ -35,7 +35,10 @@ biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/s
 - `biotope extract run SCHEMA DATASET...` extracts every document of the given
   registered datasets, stores the records in `extracted/<schema>.jsonl` (or
   `--out PATH`) and registers that file as a dataset with status `processed`,
-  derived from the input datasets. A dataset is named as for `--derived-from`: by
+  derived from the input datasets. It stores each document's records as soon as
+  that document is extracted, so a run that is interrupted keeps the documents it
+  finished, and the next run reuses them and gives the same output as an
+  uninterrupted run. A dataset is named as for `--derived-from`: by
   its data path, its manifest path or its name. When `try` never showed the
   schema's current revision in this project on this machine, `run` warns before
   extracting and lists the warning under `warnings` in its report; it still runs.
@@ -223,21 +226,30 @@ with the project. Each line is one record:
   first exactly and then ignoring whitespace, hyphens and case. `start` and `end`
   are character offsets into that text and `page` is the PDF page, from 1.
   `occurrences` counts how often the quote occurs in the text, with the same
-  matching. `weak` is true for an aligned quote that is `short`, under 10
-  characters ignoring whitespace and hyphens, or `repeated`, under 30 such
-  characters and found more than once. Such a quote is found, but it may not show
+  matching. `running_head` is true for an aligned quote of a PDF found only in
+  lines that recur, digits aside, on more than half of its pages, when it has at
+  least three: running heads, footers, page numbers and mastheads. `weak` is true
+  for an aligned quote that is `short`, under 10 characters ignoring whitespace
+  and hyphens, `repeated`, under 30 such characters and found more than once, or
+  a `running head`. Such a quote is found, but it may not show
   that the value is right: a short quote, such as a label, can support many
   values, and a repeated one may come from another part of the document, such as
   a menu. A longer quote found several times, such as a title printed twice, is
-  not weak. With several occurrences `start` and `page` give only the first. `weak` is null for an
+  not weak. A running head says nothing about a record, but a model may quote one
+  when it finds nothing better. Biotope flags such quotes instead of removing the
+  lines from its text, so the text stays the one the extractor read and stored
+  offsets stay valid. With several occurrences `start` and `page` give only the first. `running_head` and `weak` are null for an
   unaligned quote and a locator. A value
   read from a table quotes the table's whole row. A value whose quote cannot be
   found keeps `aligned: false` and is listed in the run report. A value with
   neither a quote nor a locator has `evidence: null`; when the value is not null,
   it is kept and listed in the run report with the unaligned values.
 - **Supported.** `supported` is false when more than half of the record's
-  non-null values are unaligned or have no evidence. Such a record usually means
-  the extractor answered from memory instead of from the document. It is kept,
+  non-null values are unaligned, have no evidence or are quoted only from running
+  heads. Such a record usually means the extractor answered from memory or from
+  page furniture instead of from the document's content. Records stored before
+  biotope checked running heads keep their `supported` until their document is
+  extracted again. It is kept,
   and the report lists it for review.
 - **Provenance.** The document's digest and media type, the schema's name and
   revision, and the extractor's name, version and settings. `redone: true` marks
@@ -286,9 +298,9 @@ The report lists each document as `extracted`, `empty` (extracted, but the
 extractor returned no record), `unsupported` (extracted, but at least one record
 is not `supported`), `reused`, `failed` or `missing`, with its reason; every record
 that is not supported, with its number of non-null values and how many of them are
-unaligned (`unsupported`); every non-null value whose quote is unaligned or that has no
-evidence (`unaligned`); every value with weak evidence and its reasons, `short`
-or `repeated` (`weak`); the number of non-null values and how many are aligned,
+unaligned or quoted only from running heads (`unsupported`); every non-null value whose quote is unaligned or that has no
+evidence (`unaligned`); every value with weak evidence and its reasons, `short`,
+`repeated` or `running head` (`weak`); the number of non-null values and how many are aligned,
 unaligned and weak (`counts`); the record IDs that disappeared and appeared; each
 old ID with its new one for documents that moved; and the output files that Git
 ignores (`ignored`), which should be committed with the project. `try` reports
