@@ -14,7 +14,7 @@ This roadmap records the premises and decisions from the alignment of 22 October
 - **Extraction schema:** the fields extraction fills for one kind of document. It is not the topology: the mapping from extracted records to topology objects is ordinary mapping.
 - **Extractor:** a swappable implementation of extraction. The first calls an LLM; a later one applies rules an agent writes.
 - **Release:** one immutable build of a project, with its manifest, provenance and the problems and conflicts it found.
-- **Committed state:** files a project commits and every build reads and extends: stable IDs, human decisions and release history.
+- **Committed state:** files a project commits and every build reads and extends: the ID registry and the release history. Human decisions are an input dataset, which a project may commit.
 - **Human decision:** a person's judgement on a record, such as accepting or rejecting a match, overriding a field or excluding a link. It is an input to the build.
 
 ## Lifecycle
@@ -24,7 +24,7 @@ local documents ── extraction ── extracted records ─┐
                                                     ├─ croissant-baker ── reviewed sources
 local structured files ─────────────────────────────┘                          │
                                                                                ▼
-committed state (IDs, decisions, history) ──► alignment, precedence, mappings ──► release
+IDs, release history, decisions ────────────► alignment, precedence, mappings ──► release
                                                                                │
                                                              graph, SQLite, project apps
 ```
@@ -42,9 +42,9 @@ An **evolving project** meets two kinds of change. New rows in a known source ne
 5. **The LLM extractor calls an OpenAI-compatible API.** OpenRouter and the HMGU endpoint both serve one. The endpoint URL is project configuration and may be written literally, since it is not a secret. The key always comes from an environment variable that the configuration names. The model is chosen after research, not by default.
 6. **Public inputs only in this version.** Only public documents go to an external model: public HTML pages, public ERC calls and InTRAC's published papers. Internal sources, such as presentations and contracts, come later and will need a per-source policy.
 7. **People review artefacts, not records.** An agent proposes the extraction schemas, the topology and the mapping priorities and conflict resolution from the project's purpose, and a person reviews them. The rest follows the `biotope-croissant` skill: the user owns scientific decisions, the agent engineering ones, and the agent stops and asks before merging identities without a shared accession.
-8. **Builds are pure.** A build is a function of its inputs and the project's committed files. Stable IDs, human decisions and release history are committed files that biotope defines generically and every build reads and extends. Biotope keeps no hidden state.
+8. **Builds are pure.** A build is a function of its inputs and the project's committed files. The ID registry and the release history are committed files that biotope defines generically and every build reads and extends. Human decisions are an input dataset whose shape biotope defines, and each project chooses whether to commit it: REACH reads Anna's from Airtable at each build, so names and emails stay out of git (Vlad, 23 October 2026: "ok" to "decisions such as Anna's corrections are an input dataset"). Biotope keeps no hidden state.
 9. **Identity and precedence are explicit.** Today the build refuses conflicting values and leaves resolution to Python in the mappings, and `alignment/` is an empty template. The new version makes both explicit, reviewable artefacts. Matching rules stay project code.
-10. **Stable IDs where outside things point.** Entities with natural keys, such as genes, cell types and DOIs, keep them. Entities without one that something outside the build refers to get a registered ID that never changes and is never reused, with aliases and the date each was first seen.
+10. **Stable IDs where outside things point.** Entities with natural keys, such as genes, cell types and DOIs, keep them. Entities without one that something outside the build refers to get a registered ID that never changes and is never reused, with aliases and the date each was first seen. For kinds a project registers, natural keys are aliases of the persistent ID.
 11. **Human decisions survive change.** A decision is a record about a thing that keeps changing. Biotope applies these rules for every project:
     - a rejected match stays rejected when the sources propose it again;
     - a decision follows its target when that target's ID is merged into another;
@@ -54,7 +54,7 @@ An **evolving project** meets two kinds of change. New rows in a known source ne
     - an invalid decision drops only itself and is reported with its reason.
 
     Interfaces for making decisions, such as REACH's Airtable tables and field sync, stay in the project.
-12. **Releases have history.** Every build produces a release with a manifest and a diff against the previous one. Any past release can be rebuilt from its inputs and the committed state at that point.
+12. **Releases have history.** Every build produces a release with a manifest and a diff against the previous one. A release records its exact inputs through what Croissant already holds, each file's sha256 and size, and the build refuses or flags an input file that no longer matches its manifest. A past release can be rebuilt from its inputs and the committed state at that point while the project keeps those input files; biotope stores no raw snapshots (Vlad, 23 October 2026: "wouldn't it be too much? And doesn't croissant already do that? Let's not overbuild this part, reuse existing tools if possible").
 13. **Breaking 0.10 is allowed.** Biotope is before 1.0. Each break gets a note in `migration.md`. biotope-bench is updated separately.
 14. **Public fixtures.** Tests and examples in this repo use only public material.
 
@@ -63,8 +63,8 @@ An **evolving project** meets two kinds of change. New rows in a known source ne
 Biotope:
 
 - **B1 Extraction.** The extraction stage, the extractor contract and the LLM extractor. Schemas are proposed from the purpose and reviewed. Tested on InTRAC's six papers, REACH's CHC pages and two or three ERC calls.
-- **B2 Identity and precedence.** Explicit, reviewable identity (keys, aliases, match decisions) and field precedence with listed conflicts.
-- **B3 Committed state.** The ID registry, human decisions under decision 11, and release history with diffs.
+- **B2 Identity and precedence.** Explicit, reviewable identity (declared keys and aliases, merges on shared keys, contradictions flagged) and field precedence with listed conflicts. B2 stores nothing.
+- **B3 Committed state.** The ID registry, human decisions (match decisions, overrides and link edits) under decision 11, and release history with diffs and input checks under decision 12.
 - **B4 Evolving projects.** A topology change carries IDs and decisions across. Biotope reports what changed in sources, extraction and contracts, and what needs review.
 
 REACH, in its own repo:
