@@ -91,6 +91,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
 
     manifest = json.loads((study.root / ".biotope/datasets/extracted/profile.jsonld").read_text())
     assert manifest["biotope:status"] == "processed"
+    assert "creator" not in manifest and "license" not in manifest
     assert manifest["prov:wasDerivedFrom"] == [{"@id": "data/pages"}]
     descriptions = {}
 
@@ -113,8 +114,15 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     assert len(texts) == 3
     ignored = subprocess.run(["git", "check-ignore", *texts], cwd=study.root, capture_output=True, text=True)
     assert sorted(ignored.stdout.split()) == sorted(texts)
-    tracked = ["extracted/profile.jsonl", ".biotope/datasets/extracted/profile.jsonld"]
+    tracked = [
+        "extracted/profile.jsonl",
+        ".biotope/datasets/extracted/profile.jsonld",
+        ".biotope/datasets/data/pages.jsonld",
+        ".biotope/datasets/data/calls.jsonld",
+    ]
     assert subprocess.run(["git", "check-ignore", *tracked], cwd=study.root).returncode == 1
+    documents = subprocess.run(["git", "check-ignore", LIND, CALL], cwd=study.root, capture_output=True, text=True)
+    assert documents.stdout.split() == [LIND, CALL]
 
 
 def test_run_reuses_stored_records_until_an_input_changes(study, monkeypatch):
@@ -244,7 +252,8 @@ def test_record_ids_follow_the_record_key(study):
     assert result.exit_code != 0 and document["status"] == "failed" and "number" in document["reason"]
 
 
-def test_failed_missing_and_removed_documents(study):
+def test_failed_missing_and_removed_documents(study, monkeypatch):
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
     study.endpoint.reply("Chidi Okafor", 400)
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code != 0
@@ -272,7 +281,7 @@ def test_failed_missing_and_removed_documents(study):
     assert study.run("add", "data/pages", "--rebake").exit_code == 0
     study.endpoint.reply("Chidi Okafor", {"record": None})
     result, report = study.extract("run", PROFILE, "data/pages")
-    assert result.exit_code == 0 and statuses(report) == {LIND: "reused", OKAFOR: "extracted"}
+    assert result.exit_code == 0 and statuses(report) == {LIND: "reused", OKAFOR: "empty"}
     (study.root / LIND).unlink()
     rebaked = study.run("add", "data/pages", "--rebake")
     assert rebaked.exit_code == 0, rebaked.output
@@ -307,19 +316,19 @@ def test_a_project_extractor_runs_by_configuration(study):
     (study.root / "extraction/rules.py").write_text(
         (FIXTURES / "rules.py").read_text(encoding="utf-8"), encoding="utf-8"
     )
-    study.configure(extractor="extraction/rules.py:LineExtractor", version="1", line=2)
+    study.configure(extractor="extraction/rules.py:LineExtractor", version="1", line=1)
     tried = study.run("extract", "try", PROFILE, LIND)
     assert tried.exit_code == 0, tried.output
-    assert "Mara Lind" in tried.output and "line 2" in tried.output
+    assert "Mara Lind" in tried.output and "line 1" in tried.output
 
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0, result.output
     lind = study.records("profile")[0]
     assert lind["values"]["name"]["value"] == "Dr. Mara Lind"
-    assert lind["values"]["name"]["evidence"]["locator"] == "line 2"
-    assert lind["provenance"]["extractor"] == {"name": "lines", "version": "1", "settings": {"line": 2}}
+    assert lind["values"]["name"]["evidence"]["locator"] == "line 1"
+    assert lind["provenance"]["extractor"] == {"name": "lines", "version": "1", "settings": {"line": 1}}
 
-    study.configure(extractor="extraction/rules.py:LineExtractor", version="2", line=2)
+    study.configure(extractor="extraction/rules.py:LineExtractor", version="2", line=1)
     result, report = study.extract("run", PROFILE, "data/pages")
     assert statuses(report) == {LIND: "extracted", OKAFOR: "extracted"}
     assert study.endpoint.requests == []
@@ -397,12 +406,22 @@ def test_schema_revision_and_refused_constructs(study, tmp_path):
     with pytest.raises(ValueError, match="missing"):
         schema(bad_key, "FundingRound")
 
+    shown = study.run("extract", "schema", ROUND)
+    assert shown.exit_code == 0, shown.output
+    described = json.loads(shown.output)
+    assert (described["name"], described["key"]) == ("FundingRound", ["round"])
+    assert described["revision"] == study.extract("try", ROUND, CALL)[1]["schema"]["revision"]
+    deadline = described["json_schema"]["properties"]["records"]["items"]["properties"]["deadline"]
+    assert deadline["description"] == "The round's submission deadline, as written."
+    requests = len(study.endpoint.requests)
+
     (study.root / "extraction/schemas.py").write_text(
         source.replace("    methods: list[str]", "    links: dict[str, str]")
     )
-    result = study.run("extract", "try", PROFILE, LIND)
-    assert result.exit_code != 0 and "links" in result.output
-    assert study.endpoint.requests == []
+    for command in (["try", PROFILE, LIND], ["schema", PROFILE]):
+        result = study.run("extract", *command)
+        assert result.exit_code != 0 and "links" in result.output
+    assert len(study.endpoint.requests) == requests
 
 
 def test_empty_or_invalid_answers_are_retried(study, monkeypatch):
@@ -418,8 +437,60 @@ def test_empty_or_invalid_answers_are_retried(study, monkeypatch):
     asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests]
     assert sum("Mara Lind" in text for text in asked) == 3
     assert sum("Chidi Okafor" in text for text in asked) == llm.ATTEMPTS
-    assert len(waits) == llm.ATTEMPTS + 1 and 0 < waits[0] < waits[1]
+    assert sorted(waits) == [2, 2, 4, 4, 8]
     assert [record["id"] for record in study.records("profile")] == [LIND]
+
+
+def test_a_null_record_is_retried_and_reported_as_empty(study, monkeypatch):
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
+    study.endpoint.reply("Mara Lind", {"record": None}, times=1)
+    study.endpoint.reply("Chidi Okafor", {"record": None})
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {LIND: "extracted", OKAFOR: "empty"}
+    asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests]
+    assert sum("Mara Lind" in text for text in asked) == 2
+    assert sum("Chidi Okafor" in text for text in asked) == llm.ATTEMPTS
+    assert [record["id"] for record in study.records("profile")] == [LIND]
+    shown = study.run("extract", "run", PROFILE, "data/pages", "--redo", OKAFOR)
+    assert shown.exit_code == 0 and "empty, 0 records" in " ".join(shown.output.split())
+    tried, report = study.extract("try", PROFILE, OKAFOR, LIND)
+    assert tried.exit_code == 0 and statuses(report) == {OKAFOR: "empty", LIND: "extracted"}
+
+
+def test_parallel_extraction_changes_neither_output_nor_report(study):
+    study.endpoint.delay = 0.3
+    outcomes = []
+    for parallel in (1, 2):
+        study.configure(
+            extractor="llm",
+            endpoint=study.endpoint.url,
+            model="test/model",
+            key_env="OPENROUTER_API_KEY",
+            parallel=parallel,
+        )
+        for stored in ("extracted", ".biotope/extraction", ".biotope/datasets/extracted"):
+            shutil.rmtree(study.root / stored, ignore_errors=True)
+        study.endpoint.most_busy = 0
+        result, report = study.extract("run", PROFILE, "data/pages")
+        assert result.exit_code == 0, result.output
+        tried, attempt = study.extract("try", PROFILE, LIND, OKAFOR)
+        assert tried.exit_code == 0, tried.output
+        assert study.endpoint.most_busy == parallel
+        outcomes.append((study.records("profile"), report, result.stderr, attempt, tried.stderr))
+    assert outcomes[0] == outcomes[1]
+    assert outcomes[0][2].index(f"Extracting 1/2 {LIND}") < outcomes[0][2].index(f"Extracting 2/2 {OKAFOR}")
+    sent = len(study.endpoint.requests)
+    study.configure(
+        extractor="llm", endpoint=study.endpoint.url, model="test/model", key_env="OPENROUTER_API_KEY", parallel=3
+    )
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert statuses(report) == {LIND: "reused", OKAFOR: "reused"} and len(study.endpoint.requests) == sent
+    study.configure(
+        extractor="llm", endpoint=study.endpoint.url, model="test/model", key_env="OPENROUTER_API_KEY", parallel=0
+    )
+    result = study.run("extract", "run", PROFILE, "data/pages")
+    assert result.exit_code != 0 and "extraction.parallel" in result.output
 
 
 def test_redo_extracts_chosen_documents_again(study):
@@ -476,8 +547,31 @@ def test_short_and_repeated_quotes_are_weak_evidence(study):
     assert [item["quote"] for item in report["weak"]] == ["lung", "Uppsala", "Chidi Okafor", "graph neural networks"]
     assert report["counts"]["weak"] == 4 and len(report["unaligned"]) == 2
 
+    sentence = "The atlas covers adult human lung tissue."
+    (study.root / "data/notes.txt").write_text(f"{sentence}\nAtlas notes\n{sentence}\n")
+    study.endpoint.reply(
+        "Atlas notes",
+        {"record": {"name": quoted("Atlas notes"), "group": quoted(None), "methods": [quoted(sentence)]}},
+    )
+    result, report = study.extract("try", PROFILE, "data/notes.txt")
+    [record] = report["documents"][0]["records"]
+    [evidence] = [item["evidence"] for item in record["values"]["methods"]]
+    assert (evidence["occurrences"], evidence["weak"]) == (2, False) and report["weak"] == []
+
 
 def test_text_shows_what_the_extractor_reads(study):
+    page = study.run("extract", "text", LIND)
+    assert page.exit_code == 0, page.output
+    assert "Dr. Mara Lind" in page.output and "Research" in page.output
+    for chrome in ("Open Atlases Portal", "Home", "Contact", "Spatial Biology", "2026 Institute"):
+        assert chrome not in page.output
+    digest = hashlib.sha256((study.root / LIND).read_bytes()).hexdigest()
+    (study.root / ".biotope/texts").mkdir()
+    (study.root / ".biotope/texts" / f"{digest}.txt").write_text("Home People Contact\nDr. Mara Lind\n")
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests]
+    [sent] = [text for text in asked if "Mara Lind" in text]
+    assert sent.endswith(page.output) and "Home" not in sent
     assert study.extract("run", ROUND, "data/calls")[0].exit_code == 0
     before = study.snapshot()
     shown = study.run("extract", "text", CALL)

@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 
+CONVERSION = 2
 PDF = "application/pdf"
 HTML = "text/html"
 MEDIA_TYPES = {
@@ -16,7 +17,9 @@ MEDIA_TYPES = {
     ".markdown": "text/markdown",
 }
 IGNORED = re.compile(r"[\s\-\u2010-\u2015\u2212\u00ad\ufffe]")
-HIDDEN_TAGS = frozenset({"head", "script", "style", "noscript", "template", "svg"})
+HIDDEN_TAGS = frozenset({"head", "script", "style", "noscript", "template", "svg", "nav"})
+PAGE_TAGS = frozenset({"header", "footer"})
+CONTENT_TAGS = frozenset({"main", "article", "section"})
 BLOCK_TAGS = frozenset(
     "address article aside blockquote br dd div dl dt figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr "
     "li main nav ol p pre section table tbody tfoot thead tr ul".split()
@@ -60,8 +63,15 @@ class _TextParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.hidden = 0
+        self.content = 0
+        self.page_parts: list[bool] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in PAGE_TAGS:
+            self.page_parts.append(not self.content)
+            self.hidden += not self.content
+        if tag in CONTENT_TAGS:
+            self.content += 1
         if tag in HIDDEN_TAGS:
             self.hidden += 1
         elif tag in BLOCK_TAGS:
@@ -70,6 +80,10 @@ class _TextParser(HTMLParser):
             self.parts.append(" ")
 
     def handle_endtag(self, tag: str) -> None:
+        if tag in PAGE_TAGS and self.page_parts:
+            self.hidden = max(0, self.hidden - self.page_parts.pop())
+        if tag in CONTENT_TAGS:
+            self.content = max(0, self.content - 1)
         if tag in HIDDEN_TAGS:
             self.hidden = max(0, self.hidden - 1)
         elif tag in BLOCK_TAGS:

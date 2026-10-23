@@ -23,9 +23,11 @@ from biotope.extraction.run import (
     Outcome,
     Review,
     Source,
-    extract_file,
+    extract_all,
+    failure,
     identity,
     load_extractor,
+    parallelism,
     review,
     run,
     sha256,
@@ -95,29 +97,31 @@ def extract_group() -> None:
 @click.option("--json", "as_json", is_flag=True, help="Write one JSON report to stdout")
 def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None:
     output = Output(as_json)
-    root, schema, extractor = _prepare(output, schema_ref)
+    root, schema, extractor, parallel = _prepare(output, schema_ref)
     named = identity(extractor)
     output.report.update(schema=_schema_report(schema), extractor=named, documents=[])
     _header(output, "Try", schema, named)
+    paths = [_project_path(root, file) for file in files]
+    work = [(number, Source(path, kind)) for number, path in enumerate(paths, 1) if (kind := media_type(path))]
+    done = dict(
+        zip(
+            (source.path for _, source in work),
+            extract_all(extractor, schema, root, work, len(paths), None, frozenset(), parallel, output.progress),
+        )
+    )
     failed = False
-    for number, file in enumerate(files, 1):
-        path = _project_path(root, file)
-        output.progress(number, len(files), path)
-        entry: dict[str, Any] = {"path": path, "status": "extracted", "records": []}
-        output.report["documents"].append(entry)
-        kind = media_type(path)
-        try:
-            if kind is None:
-                raise ValueError("not a PDF, HTML, text or Markdown document")
-            entry["records"] = extract_file(extractor, schema, root, Source(path, kind), None)[1]
-        except Exception as exc:
+    for path in paths:
+        extracted = done.get(path, ValueError("not a PDF, HTML, text or Markdown document"))
+        if isinstance(extracted, BaseException):
             failed = True
-            entry.update(status="failed", reason=str(exc))
-            output.row("FAIL", path, str(exc))
+            reason = str(extracted) if isinstance(extracted, ValueError) else failure(extracted)
+            output.report["documents"].append({"path": path, "status": "failed", "records": [], "reason": reason})
+            output.row("FAIL", path, reason)
             continue
-        count = len(entry["records"])
-        output.row("OK", path, f"{count} {'record' if count == 1 else 'records'}")
-        for record in entry["records"]:
+        status = "extracted" if extracted else "empty"
+        output.report["documents"].append({"path": path, "status": status, "records": extracted})
+        output.row("OK" if extracted else "WARN", path, f"{status}, {_count(len(extracted))}")
+        for record in extracted:
             output.row("Record", record["id"], _shown(record))
     _review(output, review([record for entry in output.report["documents"] for record in entry["records"]]))
     output.finish(failed)
@@ -142,7 +146,7 @@ def run_command(
     schema_ref: str, datasets: tuple[str, ...], out: Path | None, redo: tuple[Path, ...], as_json: bool
 ) -> None:
     output = Output(as_json)
-    root, schema, extractor = _prepare(output, schema_ref)
+    root, schema, extractor, parallel = _prepare(output, schema_ref)
     try:
         dataset_ids = [_resolve_dataset_ref(reference, root) for reference in datasets]
     except ValueError as exc:
@@ -164,7 +168,7 @@ def run_command(
     output.report.update(schema=_schema_report(schema), extractor=named, output=relative.as_posix())
     _header(output, "Extract", schema, named, relative.as_posix())
     state = root / STATES / relative.with_suffix(".json")
-    result = run(root, schema, extractor, sources, target, state, chosen, output.progress)
+    result = run(root, schema, extractor, sources, target, state, chosen, output.progress, parallel)
     manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
     if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
@@ -177,9 +181,8 @@ def run_command(
         ignored=_ignored(root, [target, manifest, state]),
     )
     for outcome in result.documents:
-        label = "OK" if outcome.status in {"extracted", "reused"} else "FAIL"
-        count = f"{outcome.records} {'record' if outcome.records == 1 else 'records'}"
-        detail = f"{outcome.status}, {count}"
+        label = "FAIL" if outcome.status in {"failed", "missing"} else "OK" if outcome.records else "WARN"
+        detail = f"{outcome.status}, {_count(outcome.records)}"
         if outcome.moved_from:
             detail += f", moved from {outcome.moved_from}"
         if outcome.reason:
@@ -211,6 +214,25 @@ def text_command(file: Path) -> None:
     click.echo(convert(file, kind), nl=False)
 
 
+@extract_group.command(
+    "schema",
+    help="Print the JSON Schema biotope derives from SCHEMA (path/to/module.py:Class), with the schema's name, "
+    "record key and revision, as JSON.",
+)
+@click.argument("schema_ref", metavar="SCHEMA")
+def schema_command(schema_ref: str) -> None:
+    try:
+        schema = Schema.load(schema_ref, find_biotope_root() or Path.cwd())
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+    described = {**_schema_report(schema), "json_schema": schema.json_schema()}
+    click.echo(json.dumps(described, indent=2, ensure_ascii=False))
+
+
+def _count(records: int) -> str:
+    return f"{records} {'record' if records == 1 else 'records'}"
+
+
 def _review(output: Output, found: Review) -> None:
     counts = dict(found.counts)
     output.report.update(counts=counts, unaligned=found.unaligned, weak=found.weak)
@@ -236,7 +258,7 @@ def _ignored(root: Path, paths: list[Path]) -> list[str]:
     return sorted(checked.stdout.split())
 
 
-def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor]:
+def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor, int]:
     root = find_biotope_root()
     if root is None:
         output.fail("Not in a biotope project. Run 'biotope init' first.")
@@ -246,10 +268,11 @@ def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor]:
     try:
         schema = Schema.load(schema_ref, root)
         extractor = load_extractor(root, config or {})
+        parallel = parallelism(config or {})
     except Exception as exc:
         output.fail(str(exc))
         raise SystemExit(1) from exc
-    return root, schema, extractor
+    return root, schema, extractor, parallel
 
 
 def _sources(root: Path, dataset_ids: list[str]) -> list[Source]:
@@ -289,6 +312,8 @@ def _register(
     if not _add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
     metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    for unknown in ("creator", "license"):
+        metadata.pop(unknown, None)
     file_object = _file_object(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")

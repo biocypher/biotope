@@ -71,13 +71,20 @@ class LLMExtractor:
             },
         }
         problem = ""
+        answered_null = False
         for attempt in range(ATTEMPTS):
             if attempt:
                 time.sleep(2**attempt)
             try:
-                return self._records(self._post(payload), schema)
+                records = self._records(self._post(payload), schema)
             except Retry as exc:
                 problem = str(exc)
+                continue
+            if records or schema.key:
+                return records
+            answered_null = True
+        if answered_null:
+            return []
         raise ExtractionError(f"{problem} ({ATTEMPTS} attempts)")
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:

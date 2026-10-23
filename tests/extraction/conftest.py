@@ -22,6 +22,10 @@ class Endpoint:
     def __init__(self) -> None:
         self.rules: list[tuple[str, object]] = []
         self.requests: list[dict] = []
+        self.delay = 0.0
+        self.busy = 0
+        self.most_busy = 0
+        self.lock = threading.Lock()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_port}/v1"
@@ -30,14 +34,20 @@ class Endpoint:
         self.rules.insert(0, [marker, answer, times])
 
     def answer(self, text: str) -> object:
-        rule = next((rule for rule in self.rules if rule[0] in text), None)
-        if rule is None:
-            return 500
-        if rule[2] is not None:
-            rule[2] -= 1
-            if rule[2] == 0:
-                self.rules.remove(rule)
-        return rule[1]
+        with self.lock:
+            rule = next((rule for rule in self.rules if rule[0] in text), None)
+            if rule is None:
+                return 500
+            if rule[2] is not None:
+                rule[2] -= 1
+                if rule[2] == 0:
+                    self.rules.remove(rule)
+            return rule[1]
+
+    def serving(self, change: int) -> None:
+        with self.lock:
+            self.busy += change
+            self.most_busy = max(self.most_busy, self.busy)
 
     def _handler(self):
         endpoint = self
@@ -48,9 +58,13 @@ class Endpoint:
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                endpoint.requests.append(
-                    {"path": self.path, "body": body, "authorization": self.headers.get("Authorization")}
-                )
+                endpoint.serving(1)
+                threading.Event().wait(endpoint.delay)
+                endpoint.serving(-1)
+                with endpoint.lock:
+                    endpoint.requests.append(
+                        {"path": self.path, "body": body, "authorization": self.headers.get("Authorization")}
+                    )
                 answer = endpoint.answer(body["messages"][-1]["content"])
                 if isinstance(answer, int):
                     self.send_response(answer)
@@ -132,7 +146,8 @@ class Study:
 
     def text(self, document: str) -> str:
         digest = hashlib.sha256((self.root / document).read_bytes()).hexdigest()
-        return (self.root / ".biotope/texts" / f"{digest}.txt").read_text(encoding="utf-8")
+        [cached] = (self.root / ".biotope/texts").glob(f"{digest}*.txt")
+        return cached.read_text(encoding="utf-8")
 
     def snapshot(self) -> dict[str, bytes]:
         return {

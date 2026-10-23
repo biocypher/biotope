@@ -15,6 +15,7 @@ them. Send only public documents to an external model.
 
 ```bash
 biotope add data/pages
+biotope extract schema extraction/schemas.py:Profile
 biotope extract try extraction/schemas.py:Profile data/pages/lind.html
 biotope extract text data/pages/lind.html
 biotope extract run extraction/schemas.py:Profile data/pages
@@ -22,6 +23,10 @@ biotope extract run extraction/schemas.py:Profile data/pages --redo data/pages/l
 biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/sources
 ```
 
+- `biotope extract schema SCHEMA` prints, as JSON, the schema's `name`, record
+  `key` and `revision` and the `json_schema` biotope derives from the class: what
+  the extractor is asked for. It refuses a schema biotope cannot use, naming the
+  field, and calls no extractor.
 - `biotope extract try SCHEMA FILE...` runs the configured extractor on the given
   files and shows each record with its values and their evidence. It changes no
   file in the project. Use it to review a schema on sample documents.
@@ -38,8 +43,9 @@ biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/s
   extractor reads, and what the evidence's `start`, `end` and `page` refer to. PDF
   pages are separated by a form feed. Use it to check a value against its context.
 - `try` and `run` take `--json` and then write one versioned JSON report to
-  stdout. Both print `Extracting <n>/<total> <path>` to stderr before each
-  document they send to the extractor, also with `--json`.
+  stdout. Both print `Extracting <n>/<total> <path>` to stderr when they send a
+  document to the extractor, also with `--json`. The lines come in document
+  order.
 
 A document is a FileObject of a dataset whose path ends in `.pdf`, `.html`, `.htm`,
 `.txt`, `.md` or `.markdown`. Other files of the dataset are left alone.
@@ -54,6 +60,7 @@ extraction:
   endpoint: https://openrouter.ai/api/v1
   model: deepseek/deepseek-v4.1-flash
   key_env: OPENROUTER_API_KEY
+  parallel: 4
 ```
 
 - `extractor`: `llm` for the built-in extractor, or a project extractor named as
@@ -61,6 +68,11 @@ extraction:
 - `endpoint`, `model`, `key_env`: the built-in extractor's settings, all
   required. `endpoint` is the base URL of an OpenAI-compatible API. `key_env` names
   the environment variable that holds the API key. Biotope has no default model.
+- `parallel`: how many documents `try` and `run` hand to the extractor at once,
+  a whole number of at least 1; the default is 4. Set 1 for an endpoint with a
+  tight rate limit. It changes neither the records, the report nor the order of
+  the progress lines, and it is not an extractor setting, so changing it extracts
+  nothing again.
 
 Every other key under `extraction` is passed to a project extractor. The key's
 value is never written to a file or shown in output. Without a model, or with an
@@ -73,7 +85,10 @@ temperature 0, and a request for each value's verbatim quote. For a schema with
 a record key it asks for a list of records; without one, for a single record or
 null, so the model cannot return two. It makes up to four attempts, waiting 2, 4
 and 8 seconds between them, when the endpoint times out, limits the rate, has a
-server error, or answers with an empty, non-JSON or wrongly shaped message. Its
+server error, or answers with an empty, non-JSON or wrongly shaped message. A
+null record is asked again in the same way, because a model that misses a
+document often answers null; when every attempt gives null, the document has no
+record and the report lists it as `empty`. Its
 version is a digest of its prompt, so a changed prompt extracts every document
 again.
 
@@ -156,6 +171,8 @@ class Extractor(Protocol):
   value found by position, and a list field to a list of such objects. A quote is
   text copied from `document.text`. A locator is the extractor's own notation,
   such as `line 2`. A null value needs no evidence.
+- With `parallel` above 1, `extract` is called for several documents at once
+  from different threads, so it must not share unguarded state between calls.
 - It raises `biotope.extraction.ExtractionError` with a reason when a document
   cannot be extracted. Biotope validates the records against the schema and
   aligns the quotes; an extractor never computes positions.
@@ -201,10 +218,13 @@ with the project. Each line is one record:
   first exactly and then ignoring whitespace, hyphens and case. `start` and `end`
   are character offsets into that text and `page` is the PDF page, from 1.
   `occurrences` counts how often the quote occurs in the text, with the same
-  matching. `weak` is true for an aligned quote that is short (under 10
-  characters, ignoring whitespace and hyphens) or occurs more than once: it is
-  found, but it may not show that the value is right, and with several
-  occurrences `start` and `page` give only the first. `weak` is null for an
+  matching. `weak` is true for an aligned quote that is `short`, under 10
+  characters ignoring whitespace and hyphens, or `repeated`, under 30 such
+  characters and found more than once. Such a quote is found, but it may not show
+  that the value is right: a short quote, such as a label, can support many
+  values, and a repeated one may come from another part of the document, such as
+  a menu. A longer quote found several times, such as a title printed twice, is
+  not weak. With several occurrences `start` and `page` give only the first. `weak` is null for an
   unaligned quote and a locator. A value
   read from a table quotes the table's whole row. A value whose quote cannot be
   found keeps `aligned: false` and is listed in the run report. A value with
@@ -216,7 +236,9 @@ with the project. Each line is one record:
 
 **Registered dataset.** The records file is registered at
 `.biotope/datasets/extracted/<schema>.jsonld`, with status `processed`,
-`prov:wasDerivedFrom` the input datasets and a RecordSet keyed by `id`.
+`prov:wasDerivedFrom` the input datasets and a RecordSet keyed by `id`. It has no
+`creator` or `license`: biotope cannot know them, and the placeholders the baker
+would write describe nothing.
 Croissant-baker describes the file. Biotope then writes the RecordSet's fields from
 the schema, because the baker infers fields from the values present: it would drop
 a field that is null in every record and describe lists as opaque arrays. Each
@@ -230,9 +252,15 @@ document, the digest, schema revision and extractor that produced its stored
 records, including documents that gave none. Commit it.
 
 **Document texts.** Biotope's text of each document is cached in
-`.biotope/texts/<sha256>.txt`, which ignores itself in Git, because the texts can
-hold copyrighted full text. Evidence offsets refer to this text. PDF pages are
-separated by a form feed; HTML is reduced to its visible text, one block per line.
+`.biotope/texts/<sha256>-<conversion>.txt`, which ignores itself in Git, because
+the texts can hold copyrighted full text. `<conversion>` numbers the version of
+biotope's conversion, so a biotope that converts differently makes new texts.
+Records stored before such a change keep offsets into the old text until the
+document is extracted again. Evidence offsets refer to this text. PDF pages are
+separated by a form feed. HTML is reduced to its visible text, one block per
+line, without `nav` elements and without the `header` and `footer` elements that
+are not inside `main`, `article` or `section`: a page's menus, breadcrumbs and
+footer are not content, and a model would quote them as values.
 A deleted cache is made again from the documents when needed. A clone without the
 documents can build from the records but cannot check their quotes again.
 
@@ -245,12 +273,14 @@ whose file is missing keeps its stored records. When the records file itself is
 missing, every document is extracted again. A document removed from its
 dataset, or a dataset left out of the command, loses its records.
 
-The report lists each document as `extracted`, `reused`, `failed` or `missing`,
-with its reason; every non-null value whose quote is unaligned or that has no
+The report lists each document as `extracted`, `empty` (extracted, but the
+extractor returned no record), `reused`, `failed` or `missing`, with its reason; every non-null value whose quote is unaligned or that has no
 evidence (`unaligned`); every value with weak evidence and its reasons, `short`
 or `repeated` (`weak`); the number of non-null values and how many are aligned,
 unaligned and weak (`counts`); the record IDs that disappeared and appeared; each
 old ID with its new one for documents that moved; and the output files that Git
 ignores (`ignored`), which should be committed with the project. `try` reports
-`unaligned`, `weak` and `counts` for its files as well. A failed document keeps the records it had, and the others are stored. The
+`unaligned`, `weak` and `counts` for its files as well, and lists a file as
+`extracted`, `empty` or `failed`. Check every `empty` document: a model's miss
+looks the same as a document that states nothing, and `--redo` asks again. A failed document keeps the records it had, and the others are stored. The
 run exits nonzero when a document failed or is missing.

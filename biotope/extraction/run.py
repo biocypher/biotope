@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from collections import Counter, defaultdict
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast, get_type_hints
@@ -14,13 +16,15 @@ from biotope.extraction.contract import Document, ExtractionError, Extractor
 from biotope.extraction.llm import LLMExtractor
 from biotope.extraction.loading import load_object
 from biotope.extraction.schema import Schema
-from biotope.extraction.text import Searchable, convert, page, squeeze
+from biotope.extraction.text import CONVERSION, Searchable, convert, page, squeeze
 from biotope.graph.sources import write_text_atomic
 
 
 TEXTS = Path(".biotope/texts")
 STATES = Path(".biotope/extraction")
+PARALLEL = 4
 SHORT = 10
+DISTINCTIVE = 30
 
 
 @dataclass(frozen=True)
@@ -54,13 +58,21 @@ def load_extractor(root: Path, config: dict[str, Any]) -> Extractor:
     reference = options.get("extractor")
     if not reference:
         raise ValueError("Set extraction.extractor in .biotope/config.yaml to llm or to path/to/module.py:Class")
-    settings = {key: value for key, value in options.items() if key != "extractor"}
+    settings = {key: value for key, value in options.items() if key not in {"extractor", "parallel"}}
     if reference == "llm":
         return LLMExtractor(settings)
     factory = load_object(str(reference), root)
     if not callable(factory):
         raise ValueError(f"{reference!r} is not a class")
     return cast(Extractor, factory(settings))
+
+
+def parallelism(config: dict[str, Any]) -> int:
+    options = cast(dict[str, Any], config.get("extraction") or {})
+    parallel = options.get("parallel", PARALLEL)
+    if not isinstance(parallel, int) or isinstance(parallel, bool) or parallel < 1:
+        raise ValueError("Set extraction.parallel in .biotope/config.yaml to a whole number of at least 1")
+    return parallel
 
 
 def identity(extractor: Extractor) -> dict[str, Any]:
@@ -73,7 +85,7 @@ def sha256(path: Path) -> str:
 
 
 def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str:
-    cached = cache / f"{digest}.txt" if cache is not None else None
+    cached = cache / f"{digest}-{CONVERSION}.txt" if cache is not None else None
     if cached is not None and cached.is_file():
         return cached.read_text(encoding="utf-8")
     text = convert(path, kind)
@@ -86,9 +98,42 @@ def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str
     return text
 
 
-def extract_file(
-    extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None, redone: bool = False
-) -> tuple[str, list[dict[str, Any]]]:
+def extract_all(
+    extractor: Extractor,
+    schema: Schema,
+    root: Path,
+    work: list[tuple[int, Source]],
+    total: int,
+    cache: Path | None,
+    redo: frozenset[str],
+    parallel: int,
+    announce: Callable[[int, int, str], None],
+) -> list[list[dict[str, Any]] | BaseException]:
+    slots = threading.Semaphore(parallel)
+    pending: list[Future[list[dict[str, Any]]] | BaseException] = []
+    with ThreadPoolExecutor(parallel) as pool:
+        for number, source in work:
+            slots.acquire()
+            announce(number, total, source.path)
+            try:
+                document, provenance = _prepare(extractor, schema, root, source, cache, source.path in redo)
+            except Exception as exc:
+                slots.release()
+                pending.append(exc)
+                continue
+            future = pool.submit(_extract_document, extractor, schema, document, provenance)
+            future.add_done_callback(lambda _: slots.release())
+            pending.append(future)
+    return [item if isinstance(item, BaseException) else item.exception() or item.result() for item in pending]
+
+
+def failure(exc: BaseException) -> str:
+    return str(exc) if isinstance(exc, ExtractionError) else f"{type(exc).__name__}: {exc}"
+
+
+def _prepare(
+    extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None, redone: bool
+) -> tuple[Document, dict[str, Any]]:
     file = root / source.path
     digest = sha256(file)
     provenance: dict[str, Any] = {
@@ -101,9 +146,7 @@ def extract_file(
     if redone:
         provenance["redone"] = True
     text = document_text(file, source.media_type, digest, cache)
-    return digest, _extract_document(
-        extractor, schema, Document(source.path, digest, source.media_type, text), provenance
-    )
+    return Document(source.path, digest, source.media_type, text), provenance
 
 
 def _extract_document(
@@ -190,7 +233,9 @@ def _evidenced(document: Document, searchable: Searchable, name: str, given: obj
 
 
 def weaknesses(quote: str, occurrences: int) -> list[str]:
-    return [reason for reason, weak in (("short", len(squeeze(quote)) < SHORT), ("repeated", occurrences > 1)) if weak]
+    length = len(squeeze(quote))
+    found = (("short", length < SHORT), ("repeated", occurrences > 1 and length < DISTINCTIVE))
+    return [reason for reason, weak in found if weak]
 
 
 def record_id(schema: Schema, path: str, values: dict[str, Any]) -> str:
@@ -241,6 +286,7 @@ def run(
     state_path: Path,
     redo: frozenset[str] = frozenset(),
     announce: Callable[[int, int, str], None] = lambda index, total, path: None,
+    parallel: int = 1,
 ) -> Result:
     previous = _read_records(output)
     previous_state = cast(dict[str, Any], _read_json(state_path).get("documents", {})) if output.is_file() else {}
@@ -254,6 +300,8 @@ def run(
     outcomes: list[Outcome] = []
     moved: list[dict[str, str]] = []
     claimed: set[str] = set()
+    work: list[tuple[int, Source]] = []
+    waiting: list[tuple[int, str, list[dict[str, Any]]]] = []
     for number, source in enumerate(sources, 1):
         file = root / source.path
         kept = by_document.get(source.path, [])
@@ -282,19 +330,21 @@ def run(
                 )
             )
             continue
-        announce(number, len(sources), source.path)
-        try:
-            digest, extracted = extract_file(extractor, schema, root, source, root / TEXTS, source.path in redo)
-        except Exception as exc:
-            reason = str(exc) if isinstance(exc, ExtractionError) else f"{type(exc).__name__}: {exc}"
-            if source.path in previous_state:
-                state[source.path] = previous_state[source.path]
+        work.append((number, source))
+        waiting.append((len(outcomes), digest, kept))
+        outcomes.append(Outcome(source.path, "extracted", sha256=digest))
+    done = extract_all(extractor, schema, root, work, len(sources), root / TEXTS, redo, parallel, announce)
+    for (position, digest, kept), extracted in zip(waiting, done):
+        path = outcomes[position].path
+        if isinstance(extracted, BaseException):
+            if path in previous_state:
+                state[path] = previous_state[path]
                 records += kept
-            outcomes.append(Outcome(source.path, "failed", reason, digest, len(kept)))
+            outcomes[position] = Outcome(path, "failed", failure(extracted), digest, len(kept))
             continue
-        state[source.path] = wanted
+        state[path] = {"sha256": digest, **stamp}
         records += extracted
-        outcomes.append(Outcome(source.path, "extracted", sha256=digest, records=len(extracted)))
+        outcomes[position] = Outcome(path, "extracted" if extracted else "empty", sha256=digest, records=len(extracted))
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}
