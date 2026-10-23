@@ -16,7 +16,16 @@ from biotope.commands._add_output import AddOutput
 from biotope.commands.add import _add_file, _resolve_dataset_ref
 from biotope.extraction import Document, Schema
 from biotope.extraction.describe import describe
-from biotope.extraction.run import STATES, Source, document_text, extract_document, identity, load_extractor, run, sha256
+from biotope.extraction.run import (
+    STATES,
+    Source,
+    document_text,
+    extract_document,
+    identity,
+    load_extractor,
+    run,
+    sha256,
+)
 from biotope.extraction.text import media_type
 from biotope.graph.sources import write_text_atomic
 from biotope.metadata import (

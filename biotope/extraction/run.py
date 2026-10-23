@@ -88,7 +88,7 @@ def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str
 def extract_document(
     extractor: Extractor, schema: Schema, document: Document, provenance: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    raw: object = extractor.extract(document, schema)
+    raw = cast(object, extractor.extract(document, schema))
     if not isinstance(raw, list):
         raise ExtractionError("the extractor returned no list of records")
     hints = get_type_hints(schema.cls)
@@ -105,7 +105,9 @@ def extract_document(
     for record_id, count in Counter(record["id"] for record in records).items():
         if count > 1:
             key = ", ".join(schema.key) or "none"
-            raise ExtractionError(f"{count} records have the ID {record_id}; the record key ({key}) must tell them apart")
+            raise ExtractionError(
+                f"{count} records have the ID {record_id}; the record key ({key}) must tell them apart"
+            )
     return records
 
 
@@ -167,7 +169,7 @@ def unaligned(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for record in records:
         for name, given in record["values"].items():
-            for item in given if isinstance(given, list) else [given]:
+            for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given]):
                 evidence = item["evidence"]
                 if item["value"] is not None and evidence is not None and evidence["aligned"] is False:
                     found.append({"record": record["id"], "field": name, "quote": evidence["quote"]})
@@ -201,14 +203,18 @@ def run(
         wanted = {"sha256": digest, **stamp}
         origin = _origin(source.path, wanted, previous_state, registered)
         if origin is not None:
-            reused = [finish(schema, source.path, record["values"], record["provenance"]) for record in by_document[origin]]
+            reused = [
+                finish(schema, source.path, record["values"], record["provenance"]) for record in by_document[origin]
+            ]
             relocated = origin != source.path and origin not in registered
             if relocated:
                 moved += [{"from": old["id"], "to": new["id"]} for old, new in zip(by_document[origin], reused)]
             state[source.path] = wanted
             records += reused
             outcomes.append(
-                Outcome(source.path, "reused", sha256=digest, records=len(reused), moved_from=origin if relocated else None)
+                Outcome(
+                    source.path, "reused", sha256=digest, records=len(reused), moved_from=origin if relocated else None
+                )
             )
             continue
         provenance = {"document_sha256": digest, "media_type": source.media_type, "schema": schema.name, **stamp}

@@ -115,7 +115,7 @@ def _scalar(annotation: object, refusal: ValueError) -> tuple[str, tuple[object,
         return JSON_TYPES[annotation], None
     if get_origin(annotation) is Literal:
         choices = get_args(annotation)
-        kinds = {JSON_TYPES.get(type(choice)) for choice in choices}
+        kinds = {JSON_TYPES.get(type(cast(object, choice))) for choice in choices}
         if len(kinds) == 1 and None not in kinds:
             return cast(str, kinds.pop()), choices
     raise refusal

@@ -55,9 +55,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     unaligned = okafor["values"]["group"]
     assert unaligned["value"] == "Machine Learning for Tissues Group"
     assert unaligned["evidence"]["aligned"] is False and unaligned["evidence"]["start"] is None
-    assert report["unaligned"] == [
-        {"record": OKAFOR, "field": "group", "quote": "Machine Learning for Tissues Lab"}
-    ]
+    assert report["unaligned"] == [{"record": OKAFOR, "field": "group", "quote": "Machine Learning for Tissues Lab"}]
     assert sorted(report["appeared"]) == [LIND, OKAFOR] and report["disappeared"] == []
 
     result, report = study.extract("run", ROUND, "data/calls")
@@ -83,9 +81,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     assert descriptions["profile.jsonl/values/methods/value"] == (
         "Each experimental or computational method the page lists."
     )
-    generated = study.run(
-        "source", "generate", ".biotope/datasets/extracted/profile.jsonld", "--out", "graph/sources"
-    )
+    generated = study.run("source", "generate", ".biotope/datasets/extracted/profile.jsonld", "--out", "graph/sources")
     assert generated.exit_code == 0, generated.output
     schema = next((study.root / "graph/sources").rglob("schema.py")).read_text()
     assert "UnknownValue" not in schema and re.search(r"methods: list\[\w+ \| None\]", schema)
@@ -171,7 +167,9 @@ def test_record_ids_follow_the_record_key(study):
     assert [record["id"] for record in study.records("funding_round")] == [record["id"] for record in first]
     assert report["appeared"] == [] and report["disappeared"] == []
 
-    renamed = {"records": [*ROUNDS["records"][:2], funding_round("Extension", "1 March 2029", "750 000 EUR", ROWS["Renewal"])]}
+    renamed = {
+        "records": [*ROUNDS["records"][:2], funding_round("Extension", "1 March 2029", "750 000 EUR", ROWS["Renewal"])]
+    }
     study.endpoint.reply("Funding rounds", renamed)
     study.configure(extractor="llm", endpoint=study.endpoint.url, model="test/third", key_env="OPENROUTER_API_KEY")
     result, report = study.extract("run", ROUND, "data/calls")
@@ -182,7 +180,10 @@ def test_record_ids_follow_the_record_key(study):
     for duplicate in (ROUNDS["records"][1], funding_round(None, "1 May 2027", None, ROWS["Full proposal"])):
         study.endpoint.reply("Funding rounds", {"records": [*ROUNDS["records"], duplicate, duplicate]})
         study.configure(
-            extractor="llm", endpoint=study.endpoint.url, model=f"test/{len(study.endpoint.requests)}", key_env="OPENROUTER_API_KEY"
+            extractor="llm",
+            endpoint=study.endpoint.url,
+            model=f"test/{len(study.endpoint.requests)}",
+            key_env="OPENROUTER_API_KEY",
         )
         result, report = study.extract("run", ROUND, "data/calls")
         assert result.exit_code != 0
@@ -208,9 +209,11 @@ def test_failed_missing_and_removed_documents(study):
     assert [record["id"] for record in study.records("profile")] == [LIND]
 
     shutil.copy(FIXTURES / "lind.html", study.root / LIND)
+    shutil.copy(FIXTURES / "okafor.html", study.root / OKAFOR)
+    assert study.run("add", "data/pages", "--rebake").exit_code == 0
     study.endpoint.reply("Chidi Okafor", {"records": []})
-    shutil.copy(FIXTURES / "okafor.html", study.root / "data/pages/okafor.html")
-    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0 and statuses(report) == {LIND: "reused", OKAFOR: "extracted"}
     (study.root / LIND).unlink()
     rebaked = study.run("add", "data/pages", "--rebake")
     assert rebaked.exit_code == 0, rebaked.output
@@ -259,7 +262,7 @@ def test_missing_configuration_stops_before_any_request_and_the_key_stays_secret
     outputs.append(study.run("extract", "run", PROFILE, "data/pages", "--json"))
     assert all(result.exit_code == 0 for result in outputs)
     assert {request["authorization"] for request in study.endpoint.requests} == {f"Bearer {KEY}"}
-    assert not any(KEY in result.stdout + result.stderr for result in outputs)
+    assert not any(KEY in result.output for result in outputs)
     assert not any(KEY.encode() in content for content in study.snapshot().values())
     assert not any(KEY.encode() in path.read_bytes() for path in (study.root / ".git").rglob("*") if path.is_file())
 
@@ -271,8 +274,8 @@ def test_try_shows_records_and_changes_nothing(study):
     for shown in ("Mara Lind", '"Dr. Mara Lind"', "single-cell RNA sequencing", "Machine Learning for Tissues Lab"):
         assert shown in result.output
     assert "unaligned" in result.output
-    rounds = study.run("extract", "try", ROUND, CALL, "--json")
-    report = json.loads(rounds.stdout)
+    rounds, report = study.extract("try", ROUND, CALL)
+    assert rounds.exit_code == 0
     [document] = report["documents"]
     assert {record["id"] for record in document["records"]} >= {'data/calls/call.pdf#round="Renewal"'}
     assert study.snapshot() == before
@@ -290,7 +293,8 @@ def test_schema_revision_and_refused_constructs(study, tmp_path):
     assert schema(source).revision == revision == Schema.load(f"{FIXTURES / 'schemas.py'}:Profile").revision
     described = source.replace("without academic titles", "as the page writes it")
     added = source.replace(
-        "    methods: list[str]", '    email: str | None = field(metadata={"description": "Email."})\n    methods: list[str]'
+        "    methods: list[str]",
+        '    email: str | None = field(metadata={"description": "Email."})\n    methods: list[str]',
     )
     assert len({revision, schema(described).revision, schema(added).revision}) == 3
 
@@ -341,13 +345,16 @@ def test_live_extraction_aligns_values(study, monkeypatch):
     for name in ("profile", "funding_round"):
         for record in study.records(name):
             for value in record["values"].values():
-                values += [item for item in (value if isinstance(value, list) else [value]) if item["value"] is not None]
+                values += [
+                    item for item in (value if isinstance(value, list) else [value]) if item["value"] is not None
+                ]
     aligned = sum(item["evidence"]["aligned"] for item in values)
     print(f"aligned {aligned} of {len(values)} non-null values ({aligned / len(values):.0%})")
     assert aligned >= 0.9 * len(values)
     full = next(
-        record for record in study.records("funding_round") if "Full proposal" in str(record["values"]["round"]["value"])
+        record
+        for record in study.records("funding_round")
+        if "Full proposal" in str(record["values"]["round"]["value"])
     )
     evidence = full["values"]["deadline"]["evidence"]
     assert evidence["page"] == 2 and squeeze(ROWS["Full proposal"]) in squeeze(evidence["quote"])
-

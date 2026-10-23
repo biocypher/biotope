@@ -22,8 +22,13 @@ class ExtractionError(Exception):
 
 
 class Extractor(Protocol):
-    name: str
-    version: str
-    settings: Mapping[str, object]
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
+
+    @property
+    def settings(self) -> Mapping[str, object]: ...
 
     def extract(self, document: Document, schema: Schema) -> list[dict[str, Any]]: ...

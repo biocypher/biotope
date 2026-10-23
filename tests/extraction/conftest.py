@@ -108,10 +108,10 @@ class Study:
         self.endpoint = endpoint
 
     def run(self, *args: str):
-        return CliRunner(mix_stderr=False).invoke(cli, list(args))
+        return CliRunner().invoke(cli, list(args))
 
     def extract(self, *args: str):
-        result = self.run("extract", *args, "--json")
+        result = CliRunner(mix_stderr=False).invoke(cli, ["extract", *args, "--json"])
         return result, json.loads(result.stdout)
 
     def configure(self, **settings):

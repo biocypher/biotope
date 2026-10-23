@@ -52,7 +52,9 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
             many=many,
             children=[
                 column(f"{path}/value", entry_description, data_type, nullable=nullable),
-                column(f"{path}/evidence", "The value's evidence; null for a null value without any.", children=evidence),
+                column(
+                    f"{path}/evidence", "The value's evidence; null for a null value without any.", children=evidence
+                ),
             ],
         )
 
@@ -97,7 +99,7 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
         column("provenance", "How the record was extracted.", nullable=False, children=provenance),
     ]
     record_sets = cast(list[dict[str, Any]], metadata.setdefault("recordSet", []))
-    record_set = next((item for item in record_sets if item.get("@id") == name), None)
+    record_set: dict[str, Any] | None = next((item for item in record_sets if item.get("@id") == name), None)
     if record_set is None:
         record_set = {"@type": "cr:RecordSet", "@id": name, "name": name}
         record_sets.append(record_set)
