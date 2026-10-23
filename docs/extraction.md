@@ -59,7 +59,8 @@ missing.
 The built-in extractor sends each document's text in one request to
 `<endpoint>/chat/completions` with a strict `json_schema` response format,
 temperature 0, and a request for each value's verbatim quote. It retries
-timeouts, rate limits and server errors twice.
+timeouts, rate limits and server errors twice. Its version is a digest of its
+prompt, so a changed prompt extracts every document again.
 
 ## Extraction schemas
 
@@ -160,14 +161,15 @@ with the project. Each line is one record:
     "media_type": "application/pdf",
     "schema": "FundingRound",
     "schema_revision": "065fb9fb…",
-    "extractor": {"name": "llm", "version": "1",
+    "extractor": {"name": "llm", "version": "5c0d81e2a7f4",
                   "settings": {"endpoint": "https://openrouter.ai/api/v1", "model": "deepseek/deepseek-v4.1-flash"}}
   }
 }
 ```
 
 - **ID.** The document's path, then `#` and each key field as
-  `name=<JSON value>`, joined by `;`. Without a record key, the path alone. An ID
+  `name=<JSON value>`, joined by `;`, with each value as the schema types it, so
+  `1` and `1.0` of a `float` field are one key. Without a record key, the path alone. An ID
   depends only on the path and the key values, never on a record's position, so it
   stays the same when the same key values return in another order. After a
   document moves, its records' IDs follow the new path.
@@ -178,8 +180,9 @@ with the project. Each line is one record:
   first exactly and then ignoring whitespace, hyphens and case. `start` and `end`
   are character offsets into that text and `page` is the PDF page, from 1. A value
   read from a table quotes the table's whole row. A value whose quote cannot be
-  found keeps `aligned: false` and is listed in the run report. A null value
-  without evidence has `evidence: null`.
+  found keeps `aligned: false` and is listed in the run report. A value with
+  neither a quote nor a locator has `evidence: null`; when the value is not null,
+  it is kept and listed in the run report with the unaligned values.
 - **Provenance.** The document's digest and media type, the schema's name and
   revision, and the extractor's name, version and settings.
 
@@ -191,8 +194,8 @@ the schema, because the baker infers fields from the values present: it would dr
 a field that is null in every record and describe lists as opaque arrays. Each
 value field carries the schema's description, type and nullability, and lists are
 marked `cr:isArray`, so `biotope source generate` produces typed, nested record
-classes. Do not edit this manifest by hand: the next run that changes the records
-writes it again.
+classes. Do not edit this manifest by hand: the next run that finds it no longer
+describes the records or the schema writes it again.
 
 **Run state.** `.biotope/extraction/extracted/<schema>.json` records, per
 document, the digest, schema revision and extractor that produced its stored
@@ -210,11 +213,12 @@ documents can build from the records but cannot check their quotes again.
 A document is extracted again only when its digest, the schema revision, or the
 extractor's name, version or settings change. Otherwise its stored records are
 reused without a request, also after `biotope mv` moved it. A registered document
-whose file is missing keeps its stored records. A document removed from its
+whose file is missing keeps its stored records. When the records file itself is
+missing, every document is extracted again. A document removed from its
 dataset, or a dataset left out of the command, loses its records.
 
 The report lists each document as `extracted`, `reused`, `failed` or `missing`,
-with its reason; every value whose quote is unaligned; the record IDs that
-disappeared and appeared; and each old ID with its new one for documents that
-moved. A failed document keeps the records it had, and the others are stored. The
+with its reason; every non-null value whose quote is unaligned or that has no
+evidence; the record IDs that disappeared and appeared; and each old ID with its
+new one for documents that moved. A failed document keeps the records it had, and the others are stored. The
 run exits nonzero when a document failed or is missing.

@@ -1,12 +1,16 @@
+import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 
 import pytest
-from conftest import FIXTURES, KEY, LIVE_KEY, ROUNDS, ROWS, funding_round
+from conftest import FIXTURES, KEY, LIVE_KEY, ROUNDS, ROWS, funding_round, quoted
+from conftest import LIND as LIND_ANSWER
+from conftest import OKAFOR as OKAFOR_ANSWER
 
-from biotope.extraction import Schema
+from biotope.extraction import Schema, llm
 
 
 PROFILE = "extraction/schemas.py:Profile"
@@ -25,9 +29,15 @@ def statuses(report):
 
 
 def test_run_stores_records_with_evidence_and_registers_them(study):
+    (study.root / "data/pages/fetch.ksh").write_text("echo Mara Lind\n")
+    assert study.run("add", "data/pages", "--rebake").exit_code == 0
+    answer = json.loads(json.dumps(OKAFOR_ANSWER))
+    answer["records"][0]["methods"].append({"value": "tissue imaging"})
+    study.endpoint.reply("Chidi Okafor", answer)
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0, result.output
     assert statuses(report) == {LIND: "extracted", OKAFOR: "extracted"}
+    assert len(study.endpoint.requests) == 2
     lind, okafor = study.records("profile")
     assert (lind["id"], lind["document"], okafor["id"]) == (LIND, LIND, OKAFOR)
     assert lind["values"]["name"]["value"] == "Mara Lind"
@@ -49,13 +59,21 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
         values = record["values"]
         for value in [values["name"], values["group"], *values["methods"]]:
             evidence = value["evidence"]
-            if evidence["aligned"]:
+            if evidence and evidence["aligned"]:
                 assert squeeze(text[evidence["start"] : evidence["end"]]) == squeeze(evidence["quote"])
                 assert evidence["page"] is None
     unaligned = okafor["values"]["group"]
     assert unaligned["value"] == "Machine Learning for Tissues Group"
     assert unaligned["evidence"]["aligned"] is False and unaligned["evidence"]["start"] is None
-    assert report["unaligned"] == [{"record": OKAFOR, "field": "group", "quote": "Machine Learning for Tissues Lab"}]
+    assert okafor["values"]["methods"][1] == {"value": "tissue imaging", "evidence": None}
+    assert report["unaligned"] == [
+        {"record": OKAFOR, "field": "group", "quote": "Machine Learning for Tissues Lab"},
+        {"record": OKAFOR, "field": "methods", "quote": None},
+    ]
+    shown = study.run("extract", "run", PROFILE, "data/pages")
+    assert shown.exit_code == 0 and "methods: no quote or locator" in shown.output
+    tried = study.run("extract", "try", PROFILE, OKAFOR)
+    assert tried.exit_code == 0 and re.search(r'methods: "tissue imaging"\s+no quote or locator', tried.output)
     assert sorted(report["appeared"]) == [LIND, OKAFOR] and report["disappeared"] == []
 
     result, report = study.extract("run", ROUND, "data/calls")
@@ -84,7 +102,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     generated = study.run("source", "generate", ".biotope/datasets/extracted/profile.jsonld", "--out", "graph/sources")
     assert generated.exit_code == 0, generated.output
     schema = next((study.root / "graph/sources").rglob("schema.py")).read_text()
-    assert "UnknownValue" not in schema and re.search(r"methods: list\[\w+ \| None\]", schema)
+    assert "UnknownValue" not in schema and re.search(r"methods: list\[ProfileJsonlValuesMethods\b", schema)
 
     texts = [str(path.relative_to(study.root)) for path in (study.root / ".biotope/texts").glob("*.txt")]
     assert len(texts) == 3
@@ -94,17 +112,29 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     assert subprocess.run(["git", "check-ignore", *tracked], cwd=study.root).returncode == 1
 
 
-def test_run_reuses_stored_records_until_an_input_changes(study):
+def test_run_reuses_stored_records_until_an_input_changes(study, monkeypatch):
     assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
     sent = len(study.endpoint.requests)
     before = study.snapshot()
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0 and len(study.endpoint.requests) == sent
     assert statuses(report) == {LIND: "reused", OKAFOR: "reused"} and study.snapshot() == before
+    monkeypatch.chdir(study.root / "data")
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0 and report["output"] == "extracted/profile.jsonl" and study.snapshot() == before
+    monkeypatch.chdir(study.root)
     shutil.rmtree(study.root / ".biotope/texts")
     before = study.snapshot()
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0 and len(study.endpoint.requests) == sent and study.snapshot() == before
+
+    stored = study.records("profile")
+    (study.root / "extracted/profile.jsonl").unlink()
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {LIND: "extracted", OKAFOR: "extracted"} and len(study.endpoint.requests) == sent + 2
+    assert study.records("profile") == stored
+    sent = len(study.endpoint.requests)
 
     page = study.root / OKAFOR
     page.write_text(page.read_text().replace("tissue images", "stained tissue images"))
@@ -124,6 +154,7 @@ def test_run_reuses_stored_records_until_an_input_changes(study):
         lambda: (study.root / "extraction/schemas.py").write_text(
             (study.root / "extraction/schemas.py").read_text().replace("without academic titles", "as written")
         ),
+        lambda: monkeypatch.setattr(llm, "SYSTEM", llm.SYSTEM + " Be brief."),
     ]
     for change in changes:
         change()
@@ -134,6 +165,8 @@ def test_run_reuses_stored_records_until_an_input_changes(study):
         assert len(study.endpoint.requests) == sent + 2
     assert study.endpoint.requests[-1]["path"] == "/v2/chat/completions"
 
+    shutil.copy(study.root / LIND, study.root / OKAFOR)
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
     moved = study.run("mv", "-r", "data/pages", "data/profiles")
     assert moved.exit_code == 0, moved.output
     sent = len(study.endpoint.requests)
@@ -190,6 +223,21 @@ def test_record_ids_follow_the_record_key(study):
         [document] = report["documents"]
         assert document["status"] == "failed" and "round" in document["reason"]
 
+    (study.root / "extraction/readings.py").write_text(
+        "from dataclasses import dataclass\nfrom typing import ClassVar\n\n\n@dataclass(frozen=True)\n"
+        "class Reading:\n    __record_key__: ClassVar[tuple[str, ...]] = ('number',)\n\n    number: float\n"
+    )
+    (study.root / "data/readings.txt").write_text("Readings: 1 and 1.0\n")
+    ids = []
+    for numbers in ([1], [1.0], [1, 1.0]):
+        records = [{"number": quoted(number, "1")} for number in numbers]
+        study.endpoint.reply("Readings", {"records": records})
+        result, report = study.extract("try", "extraction/readings.py:Reading", "data/readings.txt")
+        [document] = report["documents"]
+        ids.append([record["id"] for record in document["records"]])
+    assert ids[0] == ids[1] == ["data/readings.txt#number=1.0"]
+    assert result.exit_code != 0 and document["status"] == "failed" and "number" in document["reason"]
+
 
 def test_failed_missing_and_removed_documents(study):
     study.endpoint.reply("Chidi Okafor", 400)
@@ -202,10 +250,16 @@ def test_failed_missing_and_removed_documents(study):
     (study.root / OKAFOR).unlink()
     rebaked = study.run("add", "data/pages", "--rebake")
     assert rebaked.exit_code == 0, rebaked.output
+    manifest = study.root / ".biotope/datasets/data/pages.jsonld"
+    metadata = json.loads(manifest.read_text())
+    for entry in metadata["distribution"]:
+        if entry.get("contentUrl") == LIND:
+            entry["contentUrl"] = "lind.html"
+    manifest.write_text(json.dumps(metadata, indent=2))
     (study.root / LIND).unlink()
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code != 0
-    assert statuses(report) == {LIND: "missing"}
+    assert statuses(report) == {LIND: "missing"} and report["disappeared"] == []
     assert [record["id"] for record in study.records("profile")] == [LIND]
 
     shutil.copy(FIXTURES / "lind.html", study.root / LIND)
@@ -221,6 +275,27 @@ def test_failed_missing_and_removed_documents(study):
     assert result.exit_code == 0, result.output
     assert report["disappeared"] == [LIND] and statuses(report) == {OKAFOR: "reused"}
     assert study.records("profile") == []
+
+
+def test_a_rerun_registers_records_an_interrupted_run_stored(study, monkeypatch):
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    study.endpoint.reply("Mara Lind", {"records": [{**LIND_ANSWER["records"][0], "group": quoted(None)}]})
+    study.configure(extractor="llm", endpoint=study.endpoint.url, model="test/other", key_env="OPENROUTER_API_KEY")
+    replace = os.replace
+
+    def interrupted(source, target):
+        if str(target).endswith("profile.jsonld"):
+            raise OSError("interrupted")
+        replace(source, target)
+
+    monkeypatch.setattr(os, "replace", interrupted)
+    assert study.run("extract", "run", PROFILE, "data/pages").exit_code != 0
+    monkeypatch.setattr(os, "replace", replace)
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((study.root / ".biotope/datasets/extracted/profile.jsonld").read_text())
+    [stored] = [entry for entry in manifest["distribution"] if entry.get("contentUrl") == "extracted/profile.jsonl"]
+    assert stored["sha256"] == hashlib.sha256((study.root / "extracted/profile.jsonl").read_bytes()).hexdigest()
 
 
 def test_a_project_extractor_runs_by_configuration(study):
@@ -348,7 +423,7 @@ def test_live_extraction_aligns_values(study, monkeypatch):
                 values += [
                     item for item in (value if isinstance(value, list) else [value]) if item["value"] is not None
                 ]
-    aligned = sum(item["evidence"]["aligned"] for item in values)
+    aligned = sum(bool(item["evidence"] and item["evidence"]["aligned"]) for item in values)
     print(f"aligned {aligned} of {len(values)} non-null values ({aligned / len(values):.0%})")
     assert aligned >= 0.9 * len(values)
     full = next(

@@ -10,6 +10,7 @@ import requests
 
 from biotope.extraction.contract import Document, ExtractionError
 from biotope.extraction.schema import Schema
+from biotope.graph.sources import digest
 
 
 QUOTE = {
@@ -26,13 +27,13 @@ SYSTEM = (
     "Give every value with its quote: text copied exactly from the document. "
     "When a value comes from a table, quote the table's whole row."
 )
+USER = "Document text:\n\n"
 RETRIED = frozenset({408, 429, 500, 502, 503, 504})
 ATTEMPTS = 3
 
 
 class LLMExtractor:
     name = "llm"
-    version = "1"
 
     def __init__(self, options: Mapping[str, object]) -> None:
         missing = [key for key in ("endpoint", "model", "key_env") if not options.get(key)]
@@ -49,6 +50,7 @@ class LLMExtractor:
             raise ValueError(f"Set the environment variable {variable}, which extraction.key_env names")
         self._key = key
         self.settings = {"endpoint": self.endpoint, "model": self.model}
+        self.version = digest({"system": SYSTEM, "quote": QUOTE, "user": USER})[:12]
 
     def extract(self, document: Document, schema: Schema) -> list[dict[str, Any]]:
         payload = {
@@ -56,7 +58,7 @@ class LLMExtractor:
             "temperature": 0,
             "messages": [
                 {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": f"Document text:\n\n{document.text}"},
+                {"role": "user", "content": USER + document.text},
             ],
             "response_format": {
                 "type": "json_schema",

@@ -85,7 +85,25 @@ def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str
     return text
 
 
-def extract_document(
+def extract_file(
+    extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None
+) -> tuple[str, list[dict[str, Any]]]:
+    file = root / source.path
+    digest = sha256(file)
+    provenance = {
+        "document_sha256": digest,
+        "media_type": source.media_type,
+        "schema": schema.name,
+        "schema_revision": schema.revision,
+        "extractor": identity(extractor),
+    }
+    text = document_text(file, source.media_type, digest, cache)
+    return digest, _extract_document(
+        extractor, schema, Document(source.path, digest, source.media_type, text), provenance
+    )
+
+
+def _extract_document(
     extractor: Extractor, schema: Schema, document: Document, provenance: dict[str, Any]
 ) -> list[dict[str, Any]]:
     raw = cast(object, extractor.extract(document, schema))
@@ -98,9 +116,14 @@ def extract_document(
         values, plain = _values(schema, document, item, index)
         for name, value in plain.items():
             try:
-                adapters[name].validate_python(value, strict=True)
+                validated = adapters[name].validate_python(value, strict=True)
             except ValidationError as exc:
                 raise ExtractionError(f"record {index}, {name}: {exc.errors()[0]['msg']}") from None
+            given = values[name]
+            parts = cast(list[dict[str, Any]], given if isinstance(given, list) else [given])
+            normals = cast(list[object], validated if isinstance(given, list) else [validated])
+            for part, normal in zip(parts, normals):
+                part["value"] = normal
         records.append(finish(schema, document.path, values, provenance))
     for record_id, count in Counter(record["id"] for record in records).items():
         if count > 1:
@@ -136,13 +159,13 @@ def _evidenced(document: Document, name: str, given: object, index: int) -> dict
         raise ExtractionError(f"record {index}, {name}: expected an object with a value and its quote or locator")
     entry = cast(dict[str, Any], given)
     value, quote, locator = entry["value"], entry.get("quote"), entry.get("locator")
+    text = quote if isinstance(quote, str) and quote.strip() else None
     if locator is not None:
         evidence = {"quote": None, "locator": str(locator), "aligned": None, "start": None, "end": None, "page": None}
-    elif value is None and not quote:
+    elif text is None:
         evidence = None
     else:
-        text = quote if isinstance(quote, str) and quote.strip() else None
-        span = align(document.text, text) if text else None
+        span = align(document.text, text)
         evidence = {
             "quote": text,
             "locator": None,
@@ -171,16 +194,16 @@ def unaligned(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for name, given in record["values"].items():
             for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given]):
                 evidence = item["evidence"]
-                if item["value"] is not None and evidence is not None and evidence["aligned"] is False:
-                    found.append({"record": record["id"], "field": name, "quote": evidence["quote"]})
+                if item["value"] is not None and (evidence is None or evidence["aligned"] is False):
+                    found.append({"record": record["id"], "field": name, "quote": evidence and evidence["quote"]})
     return found
 
 
 def run(
     root: Path, schema: Schema, extractor: Extractor, sources: list[Source], output: Path, state_path: Path
 ) -> Result:
-    previous_state = cast(dict[str, Any], _read_json(state_path).get("documents", {}))
     previous = _read_records(output)
+    previous_state = cast(dict[str, Any], _read_json(state_path).get("documents", {})) if output.is_file() else {}
     by_document: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in previous:
         by_document[record["document"]].append(record)
@@ -190,6 +213,7 @@ def run(
     records: list[dict[str, Any]] = []
     outcomes: list[Outcome] = []
     moved: list[dict[str, str]] = []
+    claimed: set[str] = set()
     for source in sources:
         file = root / source.path
         kept = by_document.get(source.path, [])
@@ -201,12 +225,13 @@ def run(
             continue
         digest = sha256(file)
         wanted = {"sha256": digest, **stamp}
-        origin = _origin(source.path, wanted, previous_state, registered)
+        origin = _origin(source.path, wanted, previous_state, registered | claimed)
         if origin is not None:
             reused = [
                 finish(schema, source.path, record["values"], record["provenance"]) for record in by_document[origin]
             ]
-            relocated = origin != source.path and origin not in registered
+            relocated = origin != source.path and origin not in registered | claimed
+            claimed.add(origin)
             if relocated:
                 moved += [{"from": old["id"], "to": new["id"]} for old, new in zip(by_document[origin], reused)]
             state[source.path] = wanted
@@ -217,12 +242,8 @@ def run(
                 )
             )
             continue
-        provenance = {"document_sha256": digest, "media_type": source.media_type, "schema": schema.name, **stamp}
         try:
-            text = document_text(file, source.media_type, digest, root / TEXTS)
-            extracted = extract_document(
-                extractor, schema, Document(source.path, digest, source.media_type, text), provenance
-            )
+            digest, extracted = extract_file(extractor, schema, root, source, root / TEXTS)
         except Exception as exc:
             reason = str(exc) if isinstance(exc, ExtractionError) else f"{type(exc).__name__}: {exc}"
             if source.path in previous_state:
@@ -249,11 +270,21 @@ def run(
     )
 
 
-def _origin(path: str, wanted: dict[str, Any], previous: dict[str, Any], registered: set[str]) -> str | None:
+def _origin(path: str, wanted: dict[str, Any], previous: dict[str, Any], taken: set[str]) -> str | None:
     if previous.get(path) == wanted:
         return path
     matches = [other for other, entry in previous.items() if entry == wanted]
-    return next((other for other in matches if other not in registered), matches[0] if matches else None)
+    free = [other for other in matches if other not in taken]
+    return max(free or matches, key=lambda other: _shared_tail(path, other), default=None)
+
+
+def _shared_tail(path: str, other: str) -> int:
+    count = 0
+    for mine, theirs in zip(reversed(path.split("/")), reversed(other.split("/"))):
+        if mine != theirs:
+            break
+        count += 1
+    return count
 
 
 def _read_json(path: Path) -> dict[str, Any]:

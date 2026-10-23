@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import copy
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 import yaml
@@ -13,20 +14,10 @@ from rich.table import Table
 from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
-from biotope.commands.add import _add_file, _resolve_dataset_ref
-from biotope.extraction import Document, Extractor, Schema
+from biotope.commands.add import _add_file, _default_overrides, _resolve_dataset_ref
+from biotope.extraction import Extractor, Schema
 from biotope.extraction.describe import describe
-from biotope.extraction.run import (
-    STATES,
-    Outcome,
-    Source,
-    document_text,
-    extract_document,
-    identity,
-    load_extractor,
-    run,
-    sha256,
-)
+from biotope.extraction.run import STATES, Outcome, Source, extract_file, identity, load_extractor, run, sha256
 from biotope.extraction.text import media_type
 from biotope.graph.sources import write_text_atomic
 from biotope.metadata import (
@@ -101,11 +92,7 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
         try:
             if kind is None:
                 raise ValueError("not a PDF, HTML, text or Markdown document")
-            digest = sha256(file)
-            provenance = {"document_sha256": digest, "media_type": kind, "schema": schema.name}
-            provenance.update(schema_revision=schema.revision, extractor=named)
-            document = Document(path, digest, kind, document_text(file, kind, digest, None))
-            entry["records"] = extract_document(extractor, schema, document, provenance)
+            entry["records"] = extract_file(extractor, schema, root, Source(path, kind), None)[1]
         except Exception as exc:
             failed = True
             entry.update(status="failed", reason=str(exc))
@@ -136,7 +123,7 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
         output.fail(str(exc).replace("--derived-from ", ""))
         return
     sources = _sources(root, dataset_ids)
-    target = (out if out is not None else Path("extracted") / f"{_snake(schema.name)}.jsonl").resolve()
+    target = out.resolve() if out is not None else root / "extracted" / f"{_snake(schema.name)}.jsonl"
     try:
         relative = target.relative_to(root)
     except ValueError:
@@ -147,7 +134,7 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
     _header(output, "Extract", schema, named, relative.as_posix())
     result = run(root, schema, extractor, sources, target, root / STATES / relative.with_suffix(".json"))
     manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
-    if result.changed or not manifest.is_file() or _derived(manifest) != dataset_ids:
+    if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
     output.report.update(
         manifest=manifest.relative_to(root).as_posix(),
@@ -167,7 +154,10 @@ def run_command(schema_ref: str, datasets: tuple[str, ...], out: Path | None, as
             detail += f"\n{outcome.reason}"
         output.row(label, outcome.path, detail)
     for item in result.unaligned:
-        output.row("WARN", item["record"], f"{item['field']}: quote not found in the document: {item['quote']!r}")
+        problem = (
+            "no quote or locator" if item["quote"] is None else f"quote not found in the document: {item['quote']!r}"
+        )
+        output.row("WARN", item["record"], f"{item['field']}: {problem}")
     for pair in result.moved:
         output.row("Moved", pair["from"], f"now {pair['to']}")
     for record_id in result.disappeared:
@@ -204,11 +194,15 @@ def _sources(root: Path, dataset_ids: list[str]) -> list[Source]:
             url = entry.get("contentUrl")
             if entry.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
                 continue
-            kind = media_type(url, entry.get("encodingFormat"))
+            kind = media_type(url)
             if kind is None:
                 continue
             located = resolve_content_url(url, dataset_dir, root)
-            path = located.resolve().relative_to(root).as_posix() if located is not None else Path(url).as_posix()
+            if located is None:
+                located = (
+                    root / url if (root / url).resolve().is_relative_to(dataset_dir.resolve()) else dataset_dir / url
+                )
+            path = located.resolve().relative_to(root).as_posix()
             found.setdefault(path, Source(path, kind))
     return [found[path] for path in sorted(found)]
 
@@ -217,19 +211,9 @@ def _register(
     root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
 ) -> None:
     overrides = {
+        **_default_overrides(),
         "name": target.relative_to(root).as_posix(),
         "description": f"{schema.name} records extracted from {', '.join(dataset_ids)}. {schema.description}".strip(),
-        "license": None,
-        "creator": None,
-        "creator_email": None,
-        "url": None,
-        "citation": None,
-        "version": None,
-        "keywords": [],
-        "access_restrictions": None,
-        "legal_obligations": None,
-        "collaboration_partner": None,
-        "rai_fields": {},
         "status_override": STATUS_PROCESSED,
         "derived_from": dataset_ids,
     }
@@ -237,19 +221,35 @@ def _register(
     if not _add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
     metadata = json.loads(manifest.read_text(encoding="utf-8"))
-    relative = target.relative_to(root).as_posix()
-    file_id = next(
-        entry["@id"]
-        for entry in metadata.get("distribution", [])
-        if entry.get("@type") == FILE_OBJECT_TYPE and entry.get("contentUrl") == relative
-    )
-    describe(metadata, schema, file_id, target.name, records)
+    file_object = _file_object(root, target, metadata)
+    if file_object is None:
+        raise click.ClickException(f"{manifest} does not list {target}")
+    describe(metadata, schema, file_object["@id"], target.name, records)
     write_text_atomic(manifest, json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
     stage_git_changes(root)
 
 
-def _derived(manifest: Path) -> list[str]:
-    return get_derived_from(json.loads(manifest.read_text(encoding="utf-8")))
+def _registered(
+    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
+) -> bool:
+    if not manifest.is_file():
+        return False
+    metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    file_object = _file_object(root, target, metadata)
+    if file_object is None or file_object.get("sha256") != sha256(target) or get_derived_from(metadata) != dataset_ids:
+        return False
+    described = copy.deepcopy(metadata)
+    describe(described, schema, file_object["@id"], target.name, records)
+    return described == metadata
+
+
+def _file_object(root: Path, target: Path, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    relative = target.relative_to(root).as_posix()
+    entries = cast(list[dict[str, Any]], metadata.get("distribution", []))
+    return next(
+        (entry for entry in entries if entry.get("@type") == FILE_OBJECT_TYPE and entry.get("contentUrl") == relative),
+        None,
+    )
 
 
 def _project_path(root: Path, file: Path) -> str:
@@ -290,6 +290,8 @@ def _shown(record: dict[str, Any]) -> str:
             lines.append(f"{name}: {json.dumps(item['value'], ensure_ascii=False)}")
             evidence = item["evidence"]
             if evidence is None:
+                if item["value"] is not None:
+                    lines.append("  no quote or locator")
                 continue
             if evidence["locator"] is not None:
                 lines.append(f"  at {evidence['locator']}")

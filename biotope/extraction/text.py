@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import mimetypes
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -24,14 +23,8 @@ BLOCK_TAGS = frozenset(
 )
 
 
-def media_type(path: str, declared: object = None) -> str | None:
-    suffix = Path(path).suffix.lower()
-    if suffix in MEDIA_TYPES:
-        return MEDIA_TYPES[suffix]
-    if isinstance(declared, str) and declared in MEDIA_TYPES.values():
-        return declared
-    guessed = mimetypes.guess_type(path)[0]
-    return guessed if guessed in MEDIA_TYPES.values() else None
+def media_type(path: str) -> str | None:
+    return MEDIA_TYPES.get(Path(path).suffix.lower())
 
 
 def convert(path: Path, kind: str) -> str:

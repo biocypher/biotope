@@ -53,7 +53,9 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
             children=[
                 column(f"{path}/value", entry_description, data_type, nullable=nullable),
                 column(
-                    f"{path}/evidence", "The value's evidence; null for a null value without any.", children=evidence
+                    f"{path}/evidence",
+                    "The value's evidence; null when the extractor gave neither a quote nor a locator.",
+                    children=evidence,
                 ),
             ],
         )
