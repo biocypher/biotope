@@ -246,34 +246,70 @@ def record_id(schema: Schema, path: str, values: dict[str, Any]) -> str:
 
 
 def finish(schema: Schema, path: str, values: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
-    return {"id": record_id(schema, path, values), "document": path, "values": values, "provenance": provenance}
+    total, unaligned = support(values)
+    return {
+        "id": record_id(schema, path, values),
+        "document": path,
+        "supported": unaligned * 2 <= total,
+        "values": values,
+        "provenance": provenance,
+    }
+
+
+def evidenced_values(values: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    return [
+        (name, item)
+        for name, given in values.items()
+        for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given])
+        if item["value"] is not None
+    ]
+
+
+def unaligned(item: dict[str, Any]) -> bool:
+    return item["evidence"] is None or item["evidence"]["aligned"] is False
+
+
+def support(values: dict[str, Any]) -> tuple[int, int]:
+    found = evidenced_values(values)
+    return len(found), sum(unaligned(item) for _, item in found)
+
+
+def unsupported_reason(records: list[dict[str, Any]]) -> str:
+    count = sum(not record["supported"] for record in records)
+    if not count:
+        return ""
+    return (
+        f"{count} of {len(records)} records unsupported: most of their values have no aligned evidence, "
+        "so the extractor may have answered from memory"
+    )
 
 
 @dataclass
 class Review:
     unaligned: list[dict[str, Any]] = field(default_factory=lambda: [])
     weak: list[dict[str, Any]] = field(default_factory=lambda: [])
+    unsupported: list[dict[str, Any]] = field(default_factory=lambda: [])
     counts: Counter[str] = field(default_factory=lambda: Counter(values=0, aligned=0, unaligned=0, weak=0))
 
 
 def review(records: list[dict[str, Any]]) -> Review:
     found = Review()
     for record in records:
-        for name, given in record["values"].items():
-            for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given]):
-                evidence = item["evidence"]
-                if item["value"] is None:
-                    continue
-                found.counts["values"] += 1
-                where = {"record": record["id"], "field": name, "quote": evidence and evidence["quote"]}
-                if evidence is None or evidence["aligned"] is False:
-                    found.unaligned.append(where)
-                    found.counts["unaligned"] += 1
-                    continue
-                found.counts["aligned"] += bool(evidence["aligned"])
-                if evidence.get("weak"):
-                    found.weak.append({**where, "reasons": weaknesses(evidence["quote"], evidence["occurrences"])})
-                    found.counts["weak"] += 1
+        if not record["supported"]:
+            total, missing = support(record["values"])
+            found.unsupported.append({"record": record["id"], "values": total, "unaligned": missing})
+        for name, item in evidenced_values(record["values"]):
+            evidence = item["evidence"]
+            found.counts["values"] += 1
+            where = {"record": record["id"], "field": name, "quote": evidence and evidence["quote"]}
+            if unaligned(item):
+                found.unaligned.append(where)
+                found.counts["unaligned"] += 1
+                continue
+            found.counts["aligned"] += bool(evidence["aligned"])
+            if evidence.get("weak"):
+                found.weak.append({**where, "reasons": weaknesses(evidence["quote"], evidence["occurrences"])})
+                found.counts["weak"] += 1
     return found
 
 
@@ -344,7 +380,9 @@ def run(
             continue
         state[path] = {"sha256": digest, **stamp}
         records += extracted
-        outcomes[position] = Outcome(path, "extracted" if extracted else "empty", sha256=digest, records=len(extracted))
+        reason = unsupported_reason(extracted)
+        status = "unsupported" if reason else "extracted" if extracted else "empty"
+        outcomes[position] = Outcome(path, status, reason, digest, len(extracted))
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}

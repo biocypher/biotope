@@ -29,12 +29,16 @@ biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/s
   field, and calls no extractor.
 - `biotope extract try SCHEMA FILE...` runs the configured extractor on the given
   files and shows each record with its values and their evidence. It changes no
-  file in the project. Use it to review a schema on sample documents.
+  file in the project. Use it to review a schema on sample documents. When it
+  shows records, it notes the schema revision as tried in this project, outside
+  the project in `$XDG_CACHE_HOME/biotope/tried/` (by default `~/.cache`).
 - `biotope extract run SCHEMA DATASET...` extracts every document of the given
   registered datasets, stores the records in `extracted/<schema>.jsonl` (or
   `--out PATH`) and registers that file as a dataset with status `processed`,
   derived from the input datasets. A dataset is named as for `--derived-from`: by
-  its data path, its manifest path or its name.
+  its data path, its manifest path or its name. When `try` never showed the
+  schema's current revision in this project on this machine, `run` warns before
+  extracting and lists the warning under `warnings` in its report; it still runs.
 - `--redo FILE`, repeatable, extracts that document of the given datasets again
   although its inputs are unchanged, for example after the model missed or
   misread it. Its new records replace the old ones and carry `"redone": true` in
@@ -187,6 +191,7 @@ with the project. Each line is one record:
 {
   "id": "data/calls/call.pdf#round=\"Full proposal\"",
   "document": "data/calls/call.pdf",
+  "supported": true,
   "values": {
     "deadline": {
       "value": "30 April 2027",
@@ -230,6 +235,10 @@ with the project. Each line is one record:
   found keeps `aligned: false` and is listed in the run report. A value with
   neither a quote nor a locator has `evidence: null`; when the value is not null,
   it is kept and listed in the run report with the unaligned values.
+- **Supported.** `supported` is false when more than half of the record's
+  non-null values are unaligned or have no evidence. Such a record usually means
+  the extractor answered from memory instead of from the document. It is kept,
+  and the report lists it for review.
 - **Provenance.** The document's digest and media type, the schema's name and
   revision, and the extractor's name, version and settings. `redone: true` marks
   records extracted again with `--redo`.
@@ -274,13 +283,18 @@ missing, every document is extracted again. A document removed from its
 dataset, or a dataset left out of the command, loses its records.
 
 The report lists each document as `extracted`, `empty` (extracted, but the
-extractor returned no record), `reused`, `failed` or `missing`, with its reason; every non-null value whose quote is unaligned or that has no
+extractor returned no record), `unsupported` (extracted, but at least one record
+is not `supported`), `reused`, `failed` or `missing`, with its reason; every record
+that is not supported, with its number of non-null values and how many of them are
+unaligned (`unsupported`); every non-null value whose quote is unaligned or that has no
 evidence (`unaligned`); every value with weak evidence and its reasons, `short`
 or `repeated` (`weak`); the number of non-null values and how many are aligned,
 unaligned and weak (`counts`); the record IDs that disappeared and appeared; each
 old ID with its new one for documents that moved; and the output files that Git
 ignores (`ignored`), which should be committed with the project. `try` reports
-`unaligned`, `weak` and `counts` for its files as well, and lists a file as
-`extracted`, `empty` or `failed`. Check every `empty` document: a model's miss
+`unaligned`, `weak`, `unsupported` and `counts` for its files as well, and lists
+a file as `extracted`, `empty`, `unsupported` or `failed`. `run` also reports
+`warnings`, such as a schema revision `try` never showed. Redo or drop every
+`unsupported` document: its stored records stay until you do. Check every `empty` document: a model's miss
 looks the same as a document that states nothing, and `--redo` asks again. A failed document keeps the records it had, and the others are stored. The
 run exits nonzero when a document failed or is missing.

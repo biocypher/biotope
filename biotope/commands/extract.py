@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -31,6 +33,7 @@ from biotope.extraction.run import (
     review,
     run,
     sha256,
+    unsupported_reason,
     weaknesses,
 )
 from biotope.extraction.text import convert, media_type
@@ -118,11 +121,18 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
             output.report["documents"].append({"path": path, "status": "failed", "records": [], "reason": reason})
             output.row("FAIL", path, reason)
             continue
-        status = "extracted" if extracted else "empty"
-        output.report["documents"].append({"path": path, "status": status, "records": extracted})
-        output.row("OK" if extracted else "WARN", path, f"{status}, {_count(len(extracted))}")
+        reason = unsupported_reason(extracted)
+        status = "unsupported" if reason else "extracted" if extracted else "empty"
+        entry = {"path": path, "status": status, "records": extracted}
+        output.report["documents"].append({**entry, "reason": reason} if reason else entry)
+        label = "OK" if status == "extracted" else "WARN"
+        output.row(label, path, f"{status}, {_count(len(extracted))}" + (f"\n{reason}" if reason else ""))
         for record in extracted:
             output.row("Record", record["id"], _shown(record))
+    if any(not isinstance(extracted, BaseException) for extracted in done.values()):
+        marker = _tried(root, schema)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
     _review(output, review([record for entry in output.report["documents"] for record in entry["records"]]))
     output.finish(failed)
 
@@ -167,6 +177,14 @@ def run_command(
     named = identity(extractor)
     output.report.update(schema=_schema_report(schema), extractor=named, output=relative.as_posix())
     _header(output, "Extract", schema, named, relative.as_posix())
+    output.report["warnings"] = []
+    if not _tried(root, schema).is_file():
+        warning = (
+            f"Schema revision {schema.revision[:12]} of {schema.name} was never shown with biotope extract try "
+            "in this project. Run try on sample documents and have the user approve the records before a full run."
+        )
+        output.report["warnings"].append(warning)
+        output.row("WARN", "untried schema", warning)
     state = root / STATES / relative.with_suffix(".json")
     result = run(root, schema, extractor, sources, target, state, chosen, output.progress, parallel)
     manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
@@ -181,7 +199,13 @@ def run_command(
         ignored=_ignored(root, [target, manifest, state]),
     )
     for outcome in result.documents:
-        label = "FAIL" if outcome.status in {"failed", "missing"} else "OK" if outcome.records else "WARN"
+        label = (
+            "FAIL"
+            if outcome.status in {"failed", "missing"}
+            else "OK"
+            if outcome.records and outcome.status != "unsupported"
+            else "WARN"
+        )
         detail = f"{outcome.status}, {_count(outcome.records)}"
         if outcome.moved_from:
             detail += f", moved from {outcome.moved_from}"
@@ -235,7 +259,7 @@ def _count(records: int) -> str:
 
 def _review(output: Output, found: Review) -> None:
     counts = dict(found.counts)
-    output.report.update(counts=counts, unaligned=found.unaligned, weak=found.weak)
+    output.report.update(counts=counts, unaligned=found.unaligned, weak=found.weak, unsupported=found.unsupported)
     output.row(
         "Values",
         f"{counts['values']} non-null",
@@ -248,6 +272,18 @@ def _review(output: Output, found: Review) -> None:
         output.row("WARN", item["record"], f"{item['field']}: {problem}")
     for item in found.weak:
         output.row("Weak", item["record"], f"{item['field']}: {' and '.join(item['reasons'])} quote {item['quote']!r}")
+    for item in found.unsupported:
+        output.row(
+            "Review",
+            item["record"],
+            f"unsupported: {item['unaligned']} of {item['values']} values have no aligned evidence",
+        )
+
+
+def _tried(root: Path, schema: Schema) -> Path:
+    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    project = hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:16]
+    return cache / "biotope/tried" / project / schema.revision
 
 
 def _ignored(root: Path, paths: list[Path]) -> list[str]:

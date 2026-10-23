@@ -469,7 +469,7 @@ def test_parallel_extraction_changes_neither_output_nor_report(study):
             key_env="OPENROUTER_API_KEY",
             parallel=parallel,
         )
-        for stored in ("extracted", ".biotope/extraction", ".biotope/datasets/extracted"):
+        for stored in ("extracted", ".biotope/extraction", ".biotope/datasets/extracted", "../cache"):
             shutil.rmtree(study.root / stored, ignore_errors=True)
         study.endpoint.most_busy = 0
         result, report = study.extract("run", PROFILE, "data/pages")
@@ -594,6 +594,53 @@ def test_run_warns_when_git_ignores_its_output(study):
     ]
     shown = study.run("extract", "run", PROFILE, "data/pages")
     assert "git ignores extracted/profile.jsonl" in " ".join(shown.output.split())
+
+
+def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
+    study.endpoint.reply(
+        "Mara Lind",
+        {
+            "record": {
+                "name": quoted("Mara Lind"),
+                "group": quoted("Cancer Imaging Group"),
+                "methods": [quoted("image analysis"), {"value": "deep learning"}],
+            }
+        },
+    )
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {LIND: "unsupported", OKAFOR: "extracted"}
+    assert "1 of 1 records" in report["documents"][0]["reason"]
+    assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3}]
+    lind, okafor = study.records("profile")
+    assert (lind["supported"], okafor["supported"]) == (False, True)
+    assert lind["values"]["group"]["value"] == "Cancer Imaging Group"
+    manifest = json.loads((study.root / ".biotope/datasets/extracted/profile.jsonld").read_text())
+    assert "profile.jsonl/supported" in {item["@id"] for item in manifest["recordSet"][0]["field"]}
+
+    shown = " ".join(study.run("extract", "run", PROFILE, "data/pages").output.split())
+    assert "Review data/pages/lind.html unsupported: 3 of 4 values have no aligned evidence" in shown
+    tried, report = study.extract("try", PROFILE, LIND)
+    assert tried.exit_code == 0 and statuses(report) == {LIND: "unsupported"}
+    assert report["unsupported"] == [{"record": LIND, "values": 4, "unaligned": 3}]
+
+
+def test_run_warns_when_the_schema_revision_was_never_tried(study):
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    [warning] = report["warnings"]
+    assert report["schema"]["revision"][:12] in warning and "biotope extract try" in warning
+    shown = " ".join(study.run("extract", "run", PROFILE, "data/pages").output.split())
+    assert "WARN untried schema" in shown and "never shown with biotope extract try" in shown
+
+    assert study.extract("try", PROFILE, LIND)[0].exit_code == 0
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0 and report["warnings"] == []
+
+    schemas = study.root / "extraction/schemas.py"
+    schemas.write_text(schemas.read_text().replace("without academic titles", "as the page writes it"))
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0 and len(report["warnings"]) == 1
 
 
 @pytest.mark.live

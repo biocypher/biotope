@@ -177,6 +177,7 @@ def study(tmp_path, monkeypatch, endpoint):
     ):
         monkeypatch.setenv(variable, value)
     monkeypatch.setenv("OPENROUTER_API_KEY", KEY)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     root = tmp_path / "study"
     project = Study(root, endpoint)
     created = project.run("init", "study", "--dir", str(tmp_path), "--no-prompt")

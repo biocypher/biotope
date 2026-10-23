@@ -108,6 +108,13 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
     fields = [
         column("id", "The record ID: the document's path, then the record key's values.", "sc:Text", nullable=False),
         column("document", "The document's path in the project.", "sc:Text", nullable=False),
+        column(
+            "supported",
+            "False when more than half of the record's non-null values have no aligned quote or locator: "
+            "the extractor may have answered from memory, so the record needs review.",
+            "sc:Boolean",
+            nullable=False,
+        ),
         column("values", f"{schema.name} values. {schema.description}".strip(), nullable=False, children=values),
         column("provenance", "How the record was extracted.", nullable=False, children=provenance),
     ]
