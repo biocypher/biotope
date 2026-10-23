@@ -8,6 +8,7 @@ from biotope.commands.annotate import annotate as annotate_cmd
 from biotope.commands.check_data import check_data as check_data_cmd
 from biotope.commands.commit import commit as commit_cmd
 from biotope.commands.config import config as config_cmd
+from biotope.commands.extract import extract_group
 from biotope.commands.graph import graph_group
 from biotope.commands.init import init as init_cmd
 from biotope.commands.log import log as log_cmd
@@ -38,6 +39,7 @@ cli.add_command(init_cmd, "init")
 cli.add_command(map_cmd, "map")
 
 # Content-level workflow
+cli.add_command(extract_group, "extract")
 cli.add_command(source_group, "source")
 cli.add_command(graph_group, "graph")
 cli.add_command(queue_cmd, "queue")
