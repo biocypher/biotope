@@ -19,10 +19,10 @@ The milestone respects these roadmap decisions:
 
 ## Scope
 
-- An identity declaration and a precedence declaration per entity kind, written in the project's graph code next to the topology.
+- An identity declaration per entity kind and a precedence declaration per entity kind and relation type, written in the project's graph code next to the topology.
 - Merging of records that share a value of a declared key, transitively, with networkx's `UnionFind` (already installed through mlcroissant), and a contradiction check on each merged group.
 - Match links from project matchers, read as an input dataset and applied like a declared key, each merge marked automatic.
-- Relation endpoints given by any declared key, resolved to entity IDs.
+- Relation endpoints given by any declared key, resolved to entity IDs, and one relation from the copies several sources give.
 - Field precedence applied by biotope, with conflicts listed.
 - Entities, contradictions, conflicts and automatic merges in the check, quality and build reports and in `run.json`.
 - The `biotope-croissant` skill: the agent proposes both declarations from the project's purpose and sample records and shows the user the merges, contradictions and conflicts before they are adopted.
@@ -44,9 +44,9 @@ The milestone respects these roadmap decisions:
 
 **Precedence declaration.** For each field that several sources may fill, the project gives an ordered list of sources, and the entity takes the value of the first source that has one. A list field may instead combine the values of all sources, deduplicated in a stable order. When two sources, or two records of one source, give different values, biotope lists a conflict and chooses deterministically. When sources disagree on a field without a declaration, the build stops and names the entity, the field and the values, as today.
 
-**Relation endpoints.** A mapping may give a relation's endpoint by any declared key value or record ID of the endpoint's kind, and biotope resolves it to the entity ID.
+**Relations.** A mapping may give a relation's endpoint by any declared key value or record ID of the endpoint's kind, and biotope resolves it to the entity ID. The copies of a relation that several sources give, identified by its type and resolved endpoints, become one relation with every copy's provenance. Precedence and the conflict list apply to its fields as to entity fields.
 
-**What later stages read.** One merged record per entity, with its ID, the records that formed it, its key values and, per field, the chosen value and its source; and each relation with its endpoints' entity IDs. Exported objects keep the provenance of every member record. The build's output lists, with their values, the contradictions, the conflicts (entity, field, each source's value and the chosen one) and the automatic merges. B3's committed release manifest keeps only their entity IDs, counts and the names of fields and sources.
+**What later stages read.** One merged record per entity, with its ID, the records that formed it, its key values and, per field, the chosen value and its source; and each relation with its endpoints' entity IDs and, per field, the chosen value and its source. Exported objects keep the provenance of every member record. The build's output lists, with their values, the contradictions, the conflicts (entity or relation, field, each source's value and the chosen one) and the automatic merges. B3's committed release manifest keeps only their entity IDs, counts and the names of fields and sources.
 
 ## Acceptance criteria
 
@@ -57,7 +57,7 @@ Unit fixtures: two small gene tables shaped like InTRAC's studies, with public E
 - **AC-3** (unit) Two people, each formed from several sources by shared emails and ORCIDs and each with its own single-valued record ID, stay whole when a new record arrives whose email is the first person's and whose ORCID is the second's. Only the new record stays apart, the contradiction lists the key, its values, both entities and that record, and the build completes.
 - **AC-4** (unit) A record of a B1 extracted dataset joins an entity through a declared key, such as an ORCID quoted on a profile page, and the merged entity's provenance names the document and the evidence alongside the structured records.
 - **AC-5** (unit) A matcher outside the `biotope` package writes match links between people with similar names, justified `semapv:LexicalMatching`. The linked records merge, each merge is marked automatic in the entity and the build's output, and a link that bridges two values of a single-valued key is kept apart as in AC-3.
-- **AC-6** (unit) A combined list field holds every source's values once, in a stable order. Sources that disagree on a field without a declaration stop the build with a message naming the entity, the field and the values.
+- **AC-6** (unit) A combined list field holds every source's values once, in a stable order. Two sources that give the same relation between one person and one paper with different values of a field give one relation with both sources' provenance, the value of the first source in the declared order, and a listed conflict. Sources that disagree on a field without a declaration stop the build with a message naming the entity, the field and the values.
 - **AC-7** (manual) Vlad reads the `biotope-croissant` skill and confirms that the agent proposes both declarations and any matcher from the project's purpose, shows the merges, contradictions and conflicts before adopting them, and stops to ask before any merge without a shared key. With declarations an agent proposed and Vlad approved, a build of the InTRAC project at `/home/vladsam42/Projects/biotope_project/scratch/intrac_test/` merges genes of at least two studies by Ensembl ID, and Vlad judges its conflict list.
 
 ## Freedom to operate
