@@ -89,11 +89,12 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
         )
         for entry in schema.fields
     ]
-    settings: dict[str, str] = {}
+    kinds: dict[str, set[str | None]] = {}
     for record in records:
         for key, value in cast(dict[str, Any], record["provenance"]["extractor"]["settings"]).items():
-            if not isinstance(value, dict | list):
-                settings.setdefault(key, _croissant_type(value))
+            if value is not None:
+                kinds.setdefault(key, set()).add(_croissant_type(value))
+    settings = {key: kind for key, found in kinds.items() if (kind := _common_type(found))}
     extractor = [
         column("provenance/extractor/name", "The extractor's name.", "sc:Text", nullable=False),
         column("provenance/extractor/version", "The extractor's version.", "sc:Text", nullable=False),
@@ -152,9 +153,17 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
     record_set["field"] = fields
 
 
-def _croissant_type(value: object) -> str:
+def _croissant_type(value: object) -> str | None:
+    if isinstance(value, dict | list):
+        return None
     if isinstance(value, bool):
         return "sc:Boolean"
     if isinstance(value, int):
         return "sc:Integer"
     return "sc:Float" if isinstance(value, float) else "sc:Text"
+
+
+def _common_type(kinds: set[str | None]) -> str | None:
+    if kinds == {"sc:Integer", "sc:Float"}:
+        return "sc:Float"
+    return next(iter(kinds)) if len(kinds) == 1 else None

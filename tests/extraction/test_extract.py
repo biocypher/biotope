@@ -363,27 +363,50 @@ def decoded(annotation, value):
     if is_dataclass(annotation):
         hints = get_type_hints(annotation)
         return annotation(**{item.name: decoded(hints[item.name], value.get(item.name)) for item in fields(annotation)})
-    return value
+    return float(value) if annotation is float else value
+
+
+FIRST_LINE = "extraction/rules.py:FirstLineExtractor"
 
 
 @pytest.mark.parametrize(
-    "extractor",
+    "runs,described",
     [
-        {},
-        {"extractor": "extraction/rules.py:FirstLineExtractor", "recorded": {}},
-        {
-            "extractor": "extraction/rules.py:FirstLineExtractor",
-            "recorded": {"line": 1, "pages": [1, 2], "options": {"strict": True}},
-        },
+        ([{}], {"endpoint": "sc:Text", "model": "sc:Text"}),
+        ([{"extractor": FIRST_LINE, "recorded": {}}], None),
+        (
+            [{"extractor": FIRST_LINE, "recorded": {"line": 1, "pages": [1, 2], "options": {"strict": True}}}],
+            {"line": "sc:Integer"},
+        ),
+        (
+            [
+                {
+                    "extractor": FIRST_LINE,
+                    "recorded": {"line": 1, "pages": 1, "threshold": 0, "mode": None, "unit": "mm"},
+                },
+                {
+                    "extractor": FIRST_LINE,
+                    "recorded": {"line": 1, "pages": [1, 2], "threshold": 0.5, "mode": 3, "unit": 2},
+                    "fail": "lind",
+                },
+            ],
+            {"line": "sc:Integer", "threshold": "sc:Float", "mode": "sc:Integer"},
+        ),
     ],
-    ids=["llm", "no settings", "structured settings"],
+    ids=["llm", "no settings", "structured settings", "settings changed shape"],
 )
-def test_generated_sources_load_extracted_records(study, monkeypatch, extractor):
-    if extractor:
-        shutil.copy(FIXTURES / "rules.py", study.root / "extraction/rules.py")
-        study.configure(**extractor)
-    result, _ = study.extract("run", PROFILE, "data/pages")
-    assert result.exit_code == 0, result.output
+def test_generated_sources_load_extracted_records(study, monkeypatch, runs, described):
+    for extractor in runs:
+        if extractor:
+            shutil.copy(FIXTURES / "rules.py", study.root / "extraction/rules.py")
+            study.configure(**extractor)
+        result, _ = study.extract("run", PROFILE, "data/pages")
+        assert (result.exit_code == 0) != ("fail" in extractor), result.output
+    manifest = json.loads((study.root / ".biotope/datasets/extracted/profile.jsonld").read_text())
+    [provenance] = [item for item in manifest["recordSet"][0]["field"] if item["name"] == "provenance"]
+    [extractor_field] = [item for item in provenance["subField"] if item["name"] == "extractor"]
+    settings = [item for item in extractor_field["subField"] if item["name"] == "settings"]
+    assert ({item["name"]: item["dataType"] for item in settings[0]["subField"]} if settings else None) == described
     generated = study.run("source", "generate", ".biotope/datasets/extracted/profile.jsonld", "--out", "graph/sources")
     assert generated.exit_code == 0, generated.output
 
