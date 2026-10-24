@@ -24,8 +24,9 @@ Local data ── croissant-baker ── reviewed Croissant ── source invent
 | BioCypher           | Writing the graph files used for database import                            |
 
 The project owns identities, units, null handling, join cardinality and exclusions.
-Biotope supplies contracts for recording and checking those decisions. It does not
-infer biological equivalence or decide which records answer a research question.
+Biotope supplies contracts for recording and checking those decisions, and merges
+records only on the keys and match links the project declares. It does not infer
+biological equivalence or decide which records answer a research question.
 
 ## Metadata and source records
 
@@ -53,8 +54,10 @@ descriptions, and runs Pyright. It does not invoke loaders or mappings. Project
 modules must therefore avoid reading data or executing work during import.
 
 `biotope graph quality` and `biotope graph build` each check and execute the
-selected pipeline once. They validate source values, emitted objects, identity
-conflicts and endpoint references. Quality prints an assessment without exporting;
+selected pipeline once. They validate source values and emitted objects, then
+merge the emitted copies into entities by the project's identity and precedence
+declarations, list contradictions, conflicts and automatic merges, and resolve
+endpoint references. See [identity and precedence](identity.md). Quality prints an assessment without exporting;
 build also writes BioCypher files into `graph/build/`, replacing the previous build
 only after success.
 
@@ -65,7 +68,8 @@ do not make the accumulated graph disk-backed.
 ## Output and review
 
 A build writes graph files, the export schema with every concept and property
-description, a shared provenance catalog and `run.json`. The run record identifies
+description, a shared provenance catalog, `entities.json` with every merged entity
+and relation, and `run.json`. The run record identifies
 source metadata, code, dependencies, scope, policies, settings, exclusions and
 audits. Every exported object carries `biotope_provenance_id`, an index into
 `provenance.json`.

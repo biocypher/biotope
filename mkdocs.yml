@@ -53,6 +53,7 @@ nav:
   - Extraction: extraction.md
   - Typed graph projects:
       - Authoring: mapping.md
+      - Identity and precedence: identity.md
       - Technical notes: mapping_sidenotes.md
   - Architecture: architecture.md
   - Annotation policies:

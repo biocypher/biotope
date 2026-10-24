@@ -34,7 +34,7 @@ package-relative imports for portability.
 | `graph/sources/<manifest>/<source>/loader.py`   | Authored physical reader, created as a placeholder when absent  |
 | `graph/sources/inventory.py`                    | Generated `INVENTORY` of every source package                   |
 | `graph/sources/__init__.py`                     | Authored `SOURCES` selection and reasoned `EXCLUDED_SOURCES`    |
-| `graph/alignment/`                              | Cross-source identity resolution, run before mappings           |
+| `graph/alignment/`                              | Identity and precedence declarations for the build              |
 | `graph/topology/<concept>/`                     | Node and relation dataclasses, collected in `TOPOLOGY`          |
 | `graph/mappings/<concept>/`                     | Typed transformations, collected in `MAPPINGS`                  |
 | `graph/pipelines/`                              | `compose.py` stage sequence; `build_graph.py` `PIPELINE`        |
@@ -141,7 +141,8 @@ class Person:
 
 Mint namespaced IDs such as `study-a:person-17` explicitly. Static ID types prevent
 accidental endpoint swaps; they do not establish uniqueness or shared biological
-identity. Runtime checks reject conflicting objects with the same ID and resolve
+identity. The build merges objects that share an ID or a declared key, stops on
+fields that disagree without a declared precedence, and resolves
 edges against the declared endpoint types.
 
 Concept docstrings and property descriptions are exported in `schema_config.yaml`,
@@ -191,12 +192,14 @@ join keys, cardinality, unmatched policy and output grain. Account for omitted
 records through exclusions or audits. Every graph object enters through a
 registered mapping; there is no direct emission API.
 
-Resolve cross-source identity in `graph/alignment/` before any mapping admits a
-record: gather every source's identifiers first, so the result does not depend on
-read order, and keep each resolution's contributing rows as evidence. Write the
+Declare in `graph/alignment/` which keys identify each concept and which source
+wins for each field. Mappings then emit one copy per source record, and the build
+merges the copies after the pipeline has run, independent of read order, keeping
+every copy's evidence; see [identity and precedence](identity.md). Write the
 stage sequence in `pipelines/compose.py`, then complete the `Pipeline` in
 `pipelines/build_graph.py` with scope, policies, settings and code paths; the
-scaffold already wires `SOURCES`, `INVENTORY`, `EXCLUDED_SOURCES` and `TERMS`. Bind purpose requirements with `entity:<exact intent text>` or
+scaffold already wires `SOURCES`, `INVENTORY`, `EXCLUDED_SOURCES`, `TERMS`,
+`IDENTITIES` and `PRECEDENCE`. Bind purpose requirements with `entity:<exact intent text>` or
 `relation:<exact intent text>` keys, or record a reason in `deferrals`.
 
 Imports must contain declarations only. Source access and execution belong inside

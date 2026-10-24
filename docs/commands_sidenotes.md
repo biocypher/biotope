@@ -44,5 +44,10 @@ the assessment in `graph/build/run.json`; a failed rebuild writes
 `graph/build/last_failure.json` and keeps the previous build. Metagraph JSON writes
 no HTML and cannot be combined with `--out`.
 
+Quality and build reports hold an `identity` section with the entity counts,
+contradictions, conflicts, automatic merges and unresolved match links, and a
+build writes `graph/build/entities.json`; check reports list the declarations
+under `identity` and `precedence`. See [identity and precedence](identity.md).
+
 See [typed graph technical notes](mapping_sidenotes.md) for measurement limits,
 provenance and export artifacts.
