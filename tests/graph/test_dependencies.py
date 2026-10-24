@@ -6,7 +6,8 @@ from biotope.graph import build
 
 
 def test_imported_reader_libraries_must_be_declared_and_are_recorded(project, tmp_path, monkeypatch):
-    (project.graph / "alignment/__init__.py").write_text("import json\nimport yaml\nfrom yaml import safe_load\n")
+    alignment = project.graph / "alignment/__init__.py"
+    alignment.write_text(alignment.read_text() + "import json\nimport yaml\nfrom yaml import safe_load\n")
     report = project.report()
     assert report["imports"]["yaml"] == ["pyyaml"] and "json" not in report["imports"]
     [finding] = [f for f in report["findings"] if f["code"] == "dependencies.undeclared"]
