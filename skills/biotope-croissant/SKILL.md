@@ -1,6 +1,6 @@
 ---
 name: biotope-croissant
-description: Builds typed knowledge-graph projects with Biotope from local data described in Croissant. Covers registering and curating manifests for tables and documents, extracting records from papers, web pages and other documents under a reviewed extraction schema, generating the complete source inventory, authoring source schemas, loaders, shared terms, identity alignment, topology with descriptions, mappings and the pipeline, then checking and exporting through BioCypher. Use whenever the user works in a project with a `.biotope/` directory or a `graph/` workspace, runs or asks about `biotope add`, `biotope extract`, `biotope source generate`, `biotope graph check` or `biotope graph build`, wants to turn CSV, Excel, Parquet or other data files and papers into a knowledge graph, needs to resolve inventory or `source.drift` findings after a metadata change, or migrates a Biotope 0.9 project, even if they do not name Biotope or Croissant.
+description: Builds typed knowledge-graph projects with Biotope from local data described in Croissant. Covers registering and curating manifests for tables and documents, extracting records from papers, web pages and other documents under a reviewed extraction schema, generating the complete source inventory, authoring source schemas, loaders, shared terms, identity and precedence declarations, topology with descriptions, mappings and the pipeline, then checking and exporting through BioCypher. Use whenever the user works in a project with a `.biotope/` directory or a `graph/` workspace, runs or asks about `biotope add`, `biotope extract`, `biotope source generate`, `biotope graph check` or `biotope graph build`, wants to turn CSV, Excel, Parquet or other data files and papers into a knowledge graph, needs to resolve inventory or `source.drift` findings after a metadata change, or migrates a Biotope 0.9 project, even if they do not name Biotope or Croissant.
 ---
 
 # Biotope graph projects
@@ -11,7 +11,7 @@ description: Builds typed knowledge-graph projects with Biotope from local data 
 - **Source**: one input the graph may read — a RecordSet, or a file no RecordSet reads (a paper, notes, an image). Each source has a **package**, `graph/sources/<manifest>/<source>/`, holding its schema, `SOURCE` registration and loader.
 - **Revision**: a digest of one source's contract in the manifest. A schema's `__source_digest__` records the revision you reviewed.
 
-**What you deliver.** `graph/build/`: BioCypher import files, `schema_config.yaml` with every concept and property description, `provenance.json`, and `run.json` with the scope, policies, bindings, counts and exclusions. The consumer gets the graph and `graph/build/`, never this repository or your reasoning, so everything needed to read a value correctly belongs in a description, a policy or the scope.
+**What you deliver.** `graph/build/`: BioCypher import files, `schema_config.yaml` with every concept and property description, `provenance.json`, `entities.json` with every merged entity, and `run.json` with the scope, policies, bindings, counts, exclusions, contradictions and conflicts. The consumer gets the graph and `graph/build/`, never this repository or your reasoning, so everything needed to read a value correctly belongs in a description, a policy or the scope.
 
 **Ownership.** The user owns scientific decisions; you own engineering ones. Reuse decisions already made. Ask about missing ones that change selection or identity; when no one can answer, apply the default this skill names and record the question in `graph/ASSUMPTIONS.md` and the hand-over. Never settle a scientific question silently.
 
@@ -29,7 +29,7 @@ Biotope graph project:
 - [ ] Step 4: Generate the inventory and decide exclusions
 - [ ] Step 5: Author schemas and terms, then loaders
 - [ ] Step 6: Declare the topology by concept
-- [ ] Step 7: Align identities, then write mappings and the pipeline
+- [ ] Step 7: Declare identity and precedence, then write mappings and the pipeline
 - [ ] Step 8: Check, fix, build
 - [ ] Step 9: Review and hand over
 ```
@@ -75,11 +75,11 @@ Biotope graph project:
 
 - Write `graph/topology/<concept>/`: one node dataclass and its outgoing relations. Describe every concept in its docstring and every property with `field(metadata={"description": ...})`: what it measures, against which reference, and what it does not establish. Descriptions are the only interpretation that travels with the export; see [interpretation.md](./references/interpretation.md) and [modeling.md](./references/modeling.md).
 - **Stop and ask** when two readings of a statistic are both defensible and change which records exist. Present both and the record cost of admitting their union. The default is to admit the union.
-- **Stop and ask** before merging identities across sources that do not jointly establish the match. A shared accession establishes it; a matching name, symbol or label does not. The default is separate nodes in source-specific namespaces, such as `symbol:<source>/<symbol>`, so that counting sources never counts one name twice. The rule covers every way records come to compare as one thing: a shared node, or a normalised value such as one common analyte or cell-type label. A match that looks obvious, such as a spelling variant, is still the user's decision. Keep each source's own label, and record the candidate match as an explicit, described link or property, not as the join itself.
+- **Stop and ask** before merging identities across sources that do not jointly establish the match. A shared accession establishes it; a matching name, symbol or label does not, and neither does a matcher's similarity score. The default is separate entities: declare as keys only identifiers that establish a match, so a record without one stays an entity of its own and counting sources never counts one name twice. The rule covers every way records come to compare as one thing: a shared node, or a normalised value such as one common analyte or cell-type label. A match that looks obvious, such as a spelling variant, is still the user's decision. Keep each source's own label, and record the candidate match as an explicit, described link or property, not as the join itself.
 
-**Step 7: Align identities, then write mappings and the pipeline.**
+**Step 7: Declare identity and precedence, then write mappings and the pipeline.**
 
-- In `graph/alignment/`, gather identity evidence from every participating source first, then resolve it. Identity comes before admission, an unambiguous resolution must not depend on the order sources were read, and each resolved identity keeps its contributing rows as evidence.
+- In `graph/alignment/__init__.py`, propose an `Identity` for each node concept that several sources or records describe and a `Precedence` for each field several sources fill, from the purpose and sample records, and any matcher the purpose needs. Mappings emit one copy per source record with that record's ID, and biotope merges the copies after the run. Build, then show the user the declarations with the merges, contradictions, conflicts and automatic merges they produce, and adopt them only after the user approves. Ask whether each key is single-valued. Never merge without a shared key, by a key or a matcher, without the user's approval. Follow [identity.md](./references/identity.md).
 
 - Write `graph/mappings/<concept>/` and the stage sequence in `graph/pipelines/compose.py`. Mappings select, join and construct. Send every record you do not emit through `context.exclude(...)`, against a policy declared in `Pipeline.policies`. Put aggregate losses into `context.record_audit(...)` counts.
 
@@ -114,6 +114,7 @@ Biotope derives the export schema from the topology: write no project adapter or
 | `topology.undescribed`, `topology.undescribed_property`, `topology.examples` | A consumer would see only a label, or a placeholder concept is registered                                                                                                                | Step 6                    |
 | `requirements.*`, `intent.*`                                                 | A purpose requirement is neither bound nor deferred, or the intent is missing                                                                                                            | Step 2                    |
 | `python.*`, `mapping.contract`                                               | Authored code is wrong                                                                                                                                                                   | Step 7                    |
+| `identity.invalid`                                                           | An identity or precedence declaration names a missing concept, field or source, or a key of the wrong type                                                                               | Step 7                    |
 | `dependencies.undeclared`                                                    | Graph code imports a library that `graph/pyproject.toml` does not declare                                                                                                                | Step 5                    |
 
 **Step 9: Review and hand over.**
@@ -124,6 +125,7 @@ Checks establish structure, not scientific correctness: a dropped eligible recor
 Build: graph/build/   Sources: <n> selected / <n> excluded
 Excluded sources: <name> — <reason>; ...
 Excluded records: <policy> <count>; ...
+Identity: <concept> <entities> from <records> records, <merged> merged; contradictions <n>; conflicts <n>; automatic merges <n>; approved by the user on <date>
 Deferred: <requirement key> — <reason>
 Independent reads: <claim> — <source of the expectation> — <agrees | differs: ...>
 Open questions: see graph/ASSUMPTIONS.md
@@ -156,7 +158,8 @@ After code changes, rerun Step 8. During requested cleanup, remove generated out
 
 ## References
 
-- [example.md](./references/example.md): read before Step 5, for a complete checked project: terms, schemas, loaders for a table and a document, topology, alignment, mappings and the pipeline.
+- [example.md](./references/example.md): read before Step 5, for a complete checked project: terms, schemas, loaders for a table and a document, topology, identity and precedence declarations, mappings and the pipeline.
+- [identity.md](./references/identity.md): read in Step 7, before declaring identity or precedence or adopting a matcher: who decides what, the review of merges, contradictions and conflicts, and reading the result.
 - [extraction.md](./references/extraction.md): read in Step 3, before extracting records from documents: who decides what, the schema review with `biotope extract try`, and the run.
 - [curation.md](./references/curation.md): read in Step 3, when correcting, re-baking or registering a manifest, adding a document by hand, or describing a structured file Baker cannot parse.
 - [authoring.md](./references/authoring.md): read in Steps 4, 5 and 7, for the file layout, schema bindings, loader and mapping contracts and `RunContext`.

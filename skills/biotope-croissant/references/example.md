@@ -182,16 +182,16 @@ GeneId = NewType("GeneId", str)
 class Gene:
     """A gene as the sources identify it; no identity is inferred from a matching symbol.
 
-    `ensembl:<accession>` when a source supplied the accession, shared by every source
-    that did. `symbol:<source>/<symbol>` when a source gave only a symbol: it stays
-    local to that source, so one gene can appear under several ids.
+    `ensembl:<accession>` when a source supplied the accession, shared by every study
+    that did. A gene a study gave only by its symbol keeps an ID biotope derives from
+    that study's record, so one gene can appear under several IDs.
     """
 
     schema_id: ClassVar[str] = "af:gene"
     id: GeneId
-    symbols: list[str] = field(metadata={"description": "Every symbol a source reported for this identity, sorted."})
-    accession: str | None = field(
-        default=None, metadata={"description": "Ensembl gene accession a source supplied; None for a symbol-only node."}
+    symbols: list[str] = field(metadata={"description": "Every symbol a study reported for this gene."})
+    ensembl: str | None = field(
+        default=None, metadata={"description": "Ensembl gene accession a study supplied; None for a symbol-only gene."}
     )
 ```
 
@@ -233,54 +233,30 @@ class ResultReportsGene:
 
 ## Alignment
 
-Every row contributes identity evidence before any row is admitted, and the result does not depend on read order. Two rows share a gene only when both supply the same accession; a matching symbol is not enough, so `PLN`, which `study_b` gives without an accession, stays `symbol:study_b/PLN`. Whether it may be merged is a question for the user, recorded in `graph/ASSUMPTIONS.md`.
+Two rows are one gene only when both supply the same accession; a matching symbol is not enough, so `PLN`, which `study_b` gives without an accession, stays a gene of its own. Whether it may be merged is a question for the user, recorded in `graph/ASSUMPTIONS.md`. The declarations say exactly that, and biotope merges after the pipeline has run, so the result does not depend on read order:
 
 ```python
-# graph/alignment/genes.py
-@dataclass(frozen=True)
-class GeneIdentity:
-    """A resolved gene identity and every symbol reported for it."""
-
-    gene_id: str
-    accession: str | None
-    symbols: tuple[str, ...]
-
-
-def gene_key(row: StudyA | StudyB) -> str:
-    if row.gene_accession:
-        return f"ensembl:{row.gene_accession}"
-    return f"symbol:{type(row).__record_set__}/{row.gene_symbol}"
-
-
-def resolve_genes(rows: list[SourceRecord[StudyA] | SourceRecord[StudyB]]) -> dict[str, SourceRecord[GeneIdentity]]:
-    symbols: dict[str, set[str]] = {}
-    evidence: dict[str, set[Evidence]] = {}
-    for row in rows:
-        key = gene_key(row.value)
-        symbols.setdefault(key, set()).add(row.value.gene_symbol)
-        evidence.setdefault(key, set()).update(row.evidence)
-    identities: dict[str, SourceRecord[GeneIdentity]] = {}
-    for key in sorted(symbols):
-        accession = key.removeprefix("ensembl:") if key.startswith("ensembl:") else None
-        identity = GeneIdentity(gene_id=key, accession=accession, symbols=tuple(sorted(symbols[key])))
-        identities[key] = SourceRecord(identity, tuple(sorted(evidence[key])))
-    return identities
+# graph/alignment/__init__.py
+IDENTITIES = (Identity(Gene, keys=(Key("ensembl", single=True),), natural="ensembl"),)
+PRECEDENCE = (Precedence(Gene, combine=("symbols",)),)
 ```
 
-Because both schemas name their fields after the shared terms, `row.gene_accession` reads either study without a branch.
+Every row gives a copy of its gene with the row's record ID, `<study>:<symbol>`. Copies that share an accession become one gene with the ID `ensembl:<accession>` and every study's symbols; `run.json` lists any field the studies disagree on. Because both schemas name their fields after the shared terms, `row.gene_accession` reads either study without a branch.
 
 ## Mappings
 
 ```python
 # graph/mappings/result/__init__.py
-def make_gene(identity: SourceRecord[GeneIdentity]) -> Iterator[Gene]:
-    gene = identity.value
-    yield Gene(id=GeneId(gene.gene_id), symbols=list(gene.symbols), accession=gene.accession)
+def record_id(value: StudyA | StudyB) -> GeneId:
+    return GeneId(f"{type(value).__record_set__}:{value.gene_symbol}")
 
 
-def make_result(
-    row: SourceRecord[StudyA | StudyB], gene: SourceRecord[GeneIdentity], facts: SourceRecord[Facts]
-) -> Iterator[Result | ResultReportsGene]:
+def make_gene(row: SourceRecord[StudyA | StudyB]) -> Iterator[Gene]:
+    value = row.value
+    yield Gene(id=record_id(value), symbols=[value.gene_symbol], ensembl=value.gene_accession)
+
+
+def make_result(row: SourceRecord[StudyA | StudyB], facts: SourceRecord[Facts]) -> Iterator[Result | ResultReportsGene]:
     """Both schemas bind the same terms, so one mapping reads either study's rows."""
     value = row.value
     if value.adjusted_p_value is None:
@@ -288,7 +264,7 @@ def make_result(
     study = type(value).__record_set__
     # A natural key: a second row with the same key and other values fails the build.
     group = f"{value.cluster}/" if isinstance(value, StudyB) else ""
-    result_id = ResultId(f"result:{study}/{group}{gene.value.gene_id}")
+    result_id = ResultId(f"result:{study}/{group}{value.gene_symbol}")
     yield Result(
         id=result_id,
         study=study,
@@ -297,7 +273,8 @@ def make_result(
         case_group=facts.value.case_group,
         reference_group=facts.value.reference_group,
     )
-    yield ResultReportsGene(source=result_id, target=GeneId(gene.value.gene_id))
+    # The endpoint names the gene by its record ID; biotope resolves it to the gene's ID.
+    yield ResultReportsGene(source=result_id, target=record_id(value))
 
 
 GENES = Mapping(name="af:gene", function=make_gene, requirements=("entity:gene",))
@@ -318,26 +295,20 @@ RESULTS = Mapping(
 def run(context: RunContext) -> None:
     facts = {record.value.study: record for record in load_methods(context)}
     rows: list[SourceRecord[StudyA] | SourceRecord[StudyB]] = [*load_study_a(context), *load_study_b(context)]
-    # Identity comes before admission: every row contributes evidence, admitted or not.
-    genes = resolve_genes(rows)
-    reported: set[str] = set()
     admitted = 0
     for row in rows:
         if row.value.adjusted_p_value is None:
             context.exclude("untested_gene", row.evidence)
             continue
         admitted += 1
-        key = gene_key(row.value)
-        reported.add(key)
-        context.map(RESULTS, row, genes[key], facts[type(row.value).__record_set__])
-    for key in sorted(reported):
-        context.map(GENES, genes[key])
+        context.map(GENES, row)
+        context.map(RESULTS, row, facts[type(row.value).__record_set__])
     context.record_audit(
         "results",
         inputs="every row of study_a and study_b",
-        outputs="one Result and one ResultReportsGene per tested row; one Gene per identity they report",
+        outputs="one Result, one ResultReportsGene and a copy of its Gene per tested row",
         selection="Admit every row with an adjusted p-value; significance is a query filter.",
-        counts={"rows": len(rows), "admitted": admitted, "genes": len(reported)},
+        counts={"rows": len(rows), "admitted": admitted},
     )
 ```
 
@@ -347,7 +318,7 @@ In `graph/pipelines/build_graph.py`, only these scaffolded fields change:
     name="af-expression",
     scope=(
         "Every tested gene in study_a and study_b, one Result per row; rows filtered before testing are "
-        "excluded. Genes keep the identity their source supplied; symbols are not merged into accessions."
+        "excluded. Genes merge only on a shared Ensembl accession; symbols are never matched."
     ),
     requirements={
         "entity:gene": "af:gene",
@@ -360,7 +331,7 @@ In `graph/pipelines/build_graph.py`, only these scaffolded fields change:
 ## What the check and build report
 
 - `biotope graph check --json`: state `checked`, no findings.
-- `biotope graph build`: 4 genes, 6 results and 6 edges, and `Excluded 1: untested_gene`. `NPPA` and `MYH6` are one gene each, because both studies supply their accessions.
+- `biotope graph build`: 4 genes, 6 results and 6 edges, and `Excluded 1: untested_gene`. `NPPA` and `MYH6` are one gene each, because both studies supply their accessions; `run.json`'s `identity` counts them as merged, and `entities.json` lists each gene's records, accession and symbols.
 - `run.json`, `definitions.standardization`: `adjusted_p_value` is bound to `study_a/padj` and `study_b/FDR`, and so on for each term. `cluster` is listed as a preserved field.
 
 ## Strict typing patterns

@@ -27,10 +27,10 @@
 | `graph/sources/<m>/__init__.py`          | Generated root: collects the packages of one manifest                |
 | `graph/sources/inventory.py`             | Generated `INVENTORY` of every root                                  |
 | `graph/sources/__init__.py`              | Authored `SOURCES` and reasoned `EXCLUDED_SOURCES`                   |
-| `graph/alignment/`                       | Cross-source identity resolution, run before mappings                |
+| `graph/alignment/`                       | `IDENTITIES` and `PRECEDENCE` declarations                           |
 | `graph/topology/<concept>/`              | Node dataclass, identifier type, outgoing relation modules           |
 | `graph/mappings/<concept>/`              | Typed transformation functions; `MAPPINGS` in `mappings/__init__.py` |
-| `graph/pipelines/compose.py`             | The stage sequence: load, align, map                                 |
+| `graph/pipelines/compose.py`             | The stage sequence: load, then map                                   |
 | `graph/pipelines/build_graph.py`         | `PIPELINE`: registries, scope, policies and settings                 |
 | `graph/ASSUMPTIONS.md`                   | Open scientific questions and the interpretations they affect        |
 | `graph/pyproject.toml`                   | Graph dependencies, including project reader libraries               |
@@ -113,11 +113,11 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 
 ## Compose execution through `RunContext`
 
-`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `requirements`, `deferrals`, `dependencies`, `variability`, `terms`, `source_inventory` and `excluded_sources`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY` and `excluded_sources=EXCLUDED_SOURCES`. List `standardization.py`, `alignment`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Its `run` receives a `RunContext`:
+`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `requirements`, `deferrals`, `dependencies`, `variability`, `terms`, `source_inventory`, `excluded_sources`, `identities` and `precedence`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY`, `excluded_sources=EXCLUDED_SOURCES`, `identities=IDENTITIES` and `precedence=PRECEDENCE`. List `standardization.py`, `alignment`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Its `run` receives a `RunContext`:
 
 - `context.load(contract, loader, config)` invokes a registered loader and validates its records without coercion. A selected source's loader must run to completion during the build.
 - `context.apply(mapping, *records, **keywords)` checks the call against the mapping's signature and returns typed, evidence-bearing outputs.
-- `context.map(mapping, *records, **keywords)` makes the same checks and collects graph objects. It accepts only mappings whose outputs declare a `schema_id`.
+- `context.map(mapping, *records, **keywords)` makes the same checks and collects graph objects, and `Match` links for a concept with an identity declaration. It accepts only mappings whose outputs declare a `schema_id` or are `Match`. The build merges the collected copies after `run` returns.
 - `context.exclude(policy_key, evidence, count=1)` records an excluded record against a declared pipeline policy.
 - `context.record_audit(stage, inputs=..., outputs=..., selection=..., counts=...)` records one stage's grains, its admission rule and named non-negative counts. Stage names are unique and counts are project-defined, so name them by the source and population they measure.
 
@@ -127,7 +127,7 @@ A `list[SourceRecord[Measurement]]` keeps its element type, so the later `contex
 
 ## Joins and conflicts are project Python
 
-Declare keys, cardinality, unmatched behaviour and output grain. Exact duplicates combine evidence; conflicting values for one ID fail the build. Edges without an explicit ID use concept, source and target identity, so parallel edges need explicit IDs. The engine holds graph objects and evidence in memory and project joins may hold more; assess that against the agreed scope.
+Declare keys, cardinality, unmatched behaviour and output grain. Copies with one ID, or one value of a declared key, merge with combined evidence; a field on which they give different values fails the build unless its precedence is declared, and `None`, `""` or `[]` give way to a value. Edges without an explicit ID use concept, source and target identity, so parallel edges need explicit IDs. The engine holds graph objects and evidence in memory and project joins may hold more; assess that against the agreed scope.
 
 ## Requirement keys repeat the intent text exactly
 

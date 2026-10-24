@@ -33,8 +33,13 @@ version 1 reports.
 | `audits`                        | Stage input/output grains, selection rules and named counts           |
 | Findings with `kind: exclusion` | Policy counts and bounded evidence                                    |
 | `graph_objects`, `graph_digest` | What was exported, and a deterministic fingerprint of it              |
+| `identity`                      | Entity counts, contradictions, conflicts and automatic merges         |
 | `exporter`                      | Verified writer version and physical format                           |
 | `dependencies`                  | Installed versions of Biotope, its tools and every imported library   |
+
+`graph/build/entities.json` holds every merged entity with its records, keys and
+the chosen value and sources of each field, and every relation with its resolved
+endpoints. Review it with `identity` as in [identity.md](./identity.md).
 
 A failed rebuild leaves the previous build in place and writes
 `graph/build/last_failure.json` beside it; the next success removes it. A build
