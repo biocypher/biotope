@@ -21,6 +21,7 @@ TOPOLOGY = MEASURED_PIPELINE.topology
 def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     context = RunContext(MEASURED_PIPELINE)
     emit_measured(context)
+    context.resolve()
     quality = analyze_quality(context.stores()).to_json()
     source = {
         "schema_version": 1,

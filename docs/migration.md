@@ -6,6 +6,38 @@ scaffolded once and then authored; a changed description is reported as drift;
 and interpretation travels in descriptions, policies and scope instead of a query
 context. Project validation callbacks are retired.
 
+## After 0.10: identity and precedence
+
+The next release merges entities on declared keys and applies field precedence
+([identity and precedence](identity.md)). Existing projects keep building without
+declarations, with these changes:
+
+1. **Merging runs after the pipeline.** Mappings emit copies, and
+   `RunContext.resolve()`, which replaces `RunContext.validate_references()`,
+   merges them and fills `context.nodes` and `context.edges`. `graph build` and
+   `graph quality` call it; code that drives a `RunContext` itself calls it
+   before reading the stores or exporting.
+1. **Conflicts are named, and empty values give way.** Two objects with one ID
+   and different values no longer stop the build in the mapping that emitted the
+   second. After the run, a field on which they give different values stops the
+   build with a message naming the object, the field and each value with its
+   source, unless the field has a precedence declaration. A field that one of
+   them leaves `None`, `""` or `[]` now takes the other's value instead of
+   stopping the build.
+1. **New outputs.** A build writes `entities.jsonl` and `relations.jsonl`;
+   `run.json` and the quality report have an `identity` section; the check
+   report lists `identity` and `precedence` declarations.
+1. **Staging is cleaned.** A build removes the staging directories,
+   `.<output name>-<8 characters>` and `…-previous` beside its output, that a
+   killed build left. Do not run two builds into one output at once.
+1. **Declarations.** `Pipeline` takes `identities=` and `precedence=`, and a new
+   scaffold defines `IDENTITIES` and `PRECEDENCE` in `graph/alignment/__init__.py`.
+   Replace Python in `alignment/` or the mappings that maps aliases to one ID with
+   declared keys, emit one copy per source record with the record's ID, and give
+   relation endpoints by key value. Keep fuzzy matching as a script that writes
+   SSSOM match links.
+1. **Dependency.** Biotope declares `networkx` directly.
+
 ## What 0.10 no longer does
 
 These are deliberate reductions. Plan for them before upgrading.

@@ -1,0 +1,677 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field, replace
+from itertools import combinations
+from typing import Any, cast
+
+import networkx as nx
+from networkx.utils import UnionFind
+
+from biotope.graph.contracts import Evidence, GraphRecord, Identity, Match, Pipeline, Precedence
+from biotope.graph.sources import digest
+from biotope.graph.topology import ConceptSchema, concept_id, field_names, hints, identifier, property_type
+
+
+Check = Callable[[str, object, ConceptSchema], None]
+KeyValue = tuple[str, str]
+Node = tuple[str, str]
+Report = dict[str, Any]
+
+
+@dataclass
+class Copy:
+    value: object
+    record: str | None
+    evidence: set[Evidence]
+    mappings: set[str]
+    sources: set[str]
+
+
+@dataclass(eq=False)
+class Link:
+    match: Match
+    evidence: set[Evidence]
+    mappings: set[str]
+    subject: list[str] = field(default_factory=list[str])
+    object: list[str] = field(default_factory=list[str])
+
+    def describe(self) -> dict[str, str]:
+        return {
+            "subject_id": self.match.subject_id,
+            "object_id": self.match.object_id,
+            "mapping_justification": self.match.mapping_justification,
+        }
+
+
+@dataclass
+class Entity:
+    concept: str
+    copies: list[Copy]
+    keys: dict[str, set[str]]
+    kept_apart: bool = False
+    automatic: list[Link] = field(default_factory=list[Link])
+    id: str = ""
+    derived: bool = False
+
+    @property
+    def records(self) -> list[str]:
+        return sorted({copy.record for copy in self.copies if copy.record is not None})
+
+
+@dataclass
+class Contradiction:
+    concept: str
+    keys: dict[str, list[str]]
+    whole: list[Entity]
+    apart: list[Entity]
+    links: list[Link]
+
+    def describe(self) -> Report:
+        return {
+            "concept": self.concept,
+            "keys": self.keys,
+            "entities": sorted(entity.id for entity in self.whole),
+            "apart": [
+                *({"record": entity.records[0], "entity": entity.id} for entity in self.apart),
+                *({"link": link.describe()} for link in self.links),
+            ],
+        }
+
+
+@dataclass
+class Resolution:
+    nodes: dict[str, GraphRecord]
+    edges: dict[str, GraphRecord]
+    report: Report
+    entities: list[Report]
+    relations: list[Report]
+
+
+def frozen(value: object) -> object:
+    return tuple(cast(list[object], value)) if isinstance(value, list) else value
+
+
+def given(value: object) -> bool:
+    return value is not None and value != "" and value != []
+
+
+def key_values(value: object, name: str) -> set[str]:
+    found: object = getattr(value, name)
+    items = cast(list[object], found) if isinstance(found, list) else [found]
+    return {item for item in items if isinstance(item, str) and item}
+
+
+def rank(copy: Copy, order: tuple[str, ...]) -> int | None:
+    return min((order.index(source) for source in copy.sources if source in order), default=None)
+
+
+def label(copy: Copy, order: tuple[str, ...]) -> str:
+    place = rank(copy, order)
+    return order[place] if place is not None else ", ".join(sorted(copy.sources)) or "an untracked source"
+
+
+def ordered(copies: Iterable[Copy], order: tuple[str, ...] = ()) -> list[Copy]:
+    def position(copy: Copy) -> tuple[object, ...]:
+        place = rank(copy, order)
+        values = [frozen(getattr(copy.value, name)) for name in field_names(type(copy.value))]
+        return (len(order) if place is None else place, copy.record or "", sorted(copy.mappings), repr(values))
+
+    return sorted(copies, key=position)
+
+
+class Fields:
+    def __init__(self, subject: Report, named: str, rule: Precedence | None, conflicts: list[Report]) -> None:
+        self.subject = subject
+        self.named = named
+        self.rule = rule
+        self.conflicts = conflicts
+
+    def merge(self, copies: list[Copy], fixed: tuple[str, ...]) -> tuple[dict[str, object], dict[str, list[Copy]]]:
+        chosen: dict[str, object] = {}
+        holders: dict[str, list[Copy]] = {}
+        for name in field_names(type(copies[0].value)):
+            if name not in fixed:
+                chosen[name], holders[name] = self.choose(name, copies)
+        return chosen, holders
+
+    def choose(self, name: str, copies: list[Copy]) -> tuple[object, list[Copy]]:
+        rule = self.rule
+        order = tuple(source.name for source in rule.fields.get(name, ())) if rule is not None else ()
+        ranked = ordered(copies, order)
+        holders = [copy for copy in ranked if given(getattr(copy.value, name))]
+        if not holders:
+            return getattr(ranked[0].value, name), []
+        if rule is not None and name in rule.combine:
+            items: list[object] = []
+            for copy in holders:
+                items.extend(item for item in cast(list[object], getattr(copy.value, name)) if item not in items)
+            return items, holders
+        value = getattr(holders[0].value, name)
+        agreeing = [copy for copy in holders if frozen(getattr(copy.value, name)) == frozen(value)]
+        if len(agreeing) < len(holders):
+            self.conflict(name, order, holders, value)
+        return value, agreeing
+
+    def conflict(self, name: str, order: tuple[str, ...], holders: list[Copy], value: object) -> None:
+        entity = "entity" in self.subject
+        values = sorted(
+            {
+                (label(copy, order), copy.record or "", repr(frozen(getattr(copy.value, name)))): {
+                    "source": label(copy, order),
+                    **({"record": copy.record} if entity else {}),
+                    "value": getattr(copy.value, name),
+                }
+                for copy in holders
+            }.items()
+        )
+        listed = [item for _, item in values]
+        shown = "; ".join(
+            f"{item['value']!r} from {item['source']}" + (f" ({item['record']})" if entity else "") for item in listed
+        )
+        if not order:
+            raise ValueError(
+                f"{self.named}: sources disagree on {name!r} and no precedence is declared for it: {shown}. "
+                "Declare the field's precedence in graph/alignment"
+            )
+        unlisted = sorted({label(copy, order) for copy in holders if rank(copy, order) is None})
+        if unlisted:
+            raise ValueError(
+                f"{self.named}: {', '.join(unlisted)} give a value of {name!r} but are not in its precedence "
+                f"list ({', '.join(order)}): {shown}"
+            )
+        self.conflicts.append(
+            {
+                **self.subject,
+                "field": name,
+                "values": listed,
+                "chosen": value,
+                "chosen_source": label(holders[0], order),
+            }
+        )
+
+
+class Partition:
+    def __init__(self, keys: dict[str, set[KeyValue]], single: set[str]) -> None:
+        self.keys = keys
+        self.single = single
+
+    def parts(self, records: Iterable[str], links: Iterable[Link]) -> list[set[str]]:
+        kept = sorted(records)
+        found = UnionFind(kept)
+        holders: dict[KeyValue, list[str]] = {}
+        for record in kept:
+            for item in self.keys[record]:
+                holders.setdefault(item, []).append(record)
+        for group in holders.values():
+            found.union(*group)
+        present = set(kept)
+        for link in links:
+            ends = [
+                next((record for record in side if record in present), None) for side in (link.subject, link.object)
+            ]
+            if ends[0] is not None and ends[1] is not None:
+                found.union(ends[0], ends[1])
+        return sorted((set(group) for group in found.to_sets()), key=min)
+
+    def contradicted(self, group: Iterable[str]) -> dict[str, list[str]]:
+        found: dict[str, list[str]] = {}
+        for name in sorted(self.single):
+            values = sorted({value for record in group for key, value in self.keys[record] if key == name})
+            if len(values) > 1:
+                found[name] = values
+        return found
+
+    def score(self, groups: list[set[str]]) -> int:
+        return sum(len(values) - 1 for group in groups for values in self.contradicted(group).values())
+
+    def anchored(self, record: str) -> bool:
+        return any(key in self.single for key, _ in self.keys[record])
+
+    def clash(self, first: str, second: str) -> bool:
+        own = {key: value for key, value in self.keys[first] if key in self.single}
+        return any(key in own and own[key] != value for key, value in self.keys[second] if key in self.single)
+
+    def clashes(self, record: str, records: set[str]) -> int:
+        return sum(self.clash(record, other) for other in records - {record} if self.keys[other] & self.keys[record])
+
+    def split(self, group: set[str], links: list[Link]) -> tuple[list[set[str]], list[str], list[Link]]:
+        apart = self.untangle({record for record in group if self.anchored(record)})
+        records = set(group) - apart
+        loose, dropped = self.unbridge(records, links)
+        kept = [link for link in links if link not in dropped]
+        return self.parts(records - loose, kept), sorted(apart | loose), dropped
+
+    def untangle(self, records: set[str]) -> set[str]:
+        apart: set[str] = set()
+        while True:
+            contradicted = [part for part in self.parts(records, []) if self.contradicted(part)]
+            if not contradicted:
+                return apart
+            options: dict[str, tuple[int, int, int]] = {}
+            for record in sorted({record for part in contradicted for record in part}):
+                after = self.parts(records - {record}, [])
+                options[record] = (self.score(after), -self.clashes(record, records), -pairs(after))
+            best = min(options.values())
+            tier = {record for record, rank in options.items() if rank == best}
+            records -= tier
+            apart |= tier
+
+    def unbridge(self, records: set[str], links: list[Link]) -> tuple[set[str], list[Link]]:
+        cores = self.parts({record for record in records if self.anchored(record)}, [])
+        home = {record: ("core", str(index)) for index, core in enumerate(cores) for record in core}
+        owner = {item: home[record] for record in home for item in self.keys[record]}
+        loose: set[str] = set()
+        dropped: set[int] = set()
+        while True:
+            adjacency: dict[Node, set[Node]] = {}
+            for record in sorted(records - loose - set(home)):
+                adjacency[("record", record)] = {
+                    owner.get(item, ("value", "\0".join(item))) for item in self.keys[record]
+                }
+            for index, link in enumerate(links):
+                ends = {home.get(record, ("record", record)) for record in self.present(link, records - loose)}
+                if index not in dropped and ends:
+                    adjacency[("link", str(index))] = ends
+            conflict = self.conflict(adjacency, cores)
+            if conflict is None:
+                return loose, [link for index, link in enumerate(links) if index in dropped]
+            for kind, name in cut(adjacency, conflict):
+                if kind == "record":
+                    loose.add(name)
+                else:
+                    dropped.add(int(name))
+
+    def present(self, link: Link, records: set[str]) -> list[str]:
+        ends = [[record for record in side if record in records] for side in (link.subject, link.object)]
+        return [*ends[0], *ends[1]] if ends[0] and ends[1] else []
+
+    def conflict(self, adjacency: dict[Node, set[Node]], cores: list[set[str]]) -> tuple[Node, Node] | None:
+        joined: UnionFind[Node] = UnionFind()
+        for node, others in adjacency.items():
+            joined.union(node, *others)
+        found: list[tuple[int, int]] = []
+        for group in joined.to_sets():
+            inside = sorted(int(name) for kind, name in group if kind == "core")
+            found += [pair for pair in combinations(inside, 2) if self.contradicted(cores[pair[0]] | cores[pair[1]])]
+        if not found:
+            return None
+        first, second = min(found)
+        return ("core", str(first)), ("core", str(second))
+
+
+def cut(adjacency: dict[Node, set[Node]], ends: tuple[Node, Node]) -> set[Node]:
+    unit = len(adjacency) + 1
+    flow: nx.DiGraph[object] = nx.DiGraph()
+    for node, others in adjacency.items():
+        flow.add_edge(("in", node), ("out", node), capacity=unit + (node[0] == "record"))
+        for other in others:
+            flow.add_edge(("out", node), other if other not in adjacency else ("in", other))
+            flow.add_edge(other if other not in adjacency else ("out", other), ("in", node))
+    found: set[Node] = set()
+    for source, target in (ends, ends[::-1]):
+        result = nx.minimum_cut(flow, source, target)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        near = cast(set[object], result[1][0])
+        found |= {node for node in adjacency if ("in", node) in near and ("out", node) not in near}
+    return found
+
+
+def pairs(groups: list[set[str]]) -> int:
+    return sum(len(group) * (len(group) - 1) // 2 for group in groups)
+
+
+def cited(names: dict[str, list[str]], every: list[str]) -> dict[str, list[str]]:
+    return {name: holders for name, holders in names.items() if holders and holders != every}
+
+
+def joining(entity: Entity, declared: Identity) -> set[str]:
+    holders: dict[KeyValue, set[str | None]] = {}
+    for copy in entity.copies:
+        for key in declared.keys:
+            for value in key_values(copy.value, key.name):
+                holders.setdefault((key.name, value), set()).add(copy.record)
+    return {name for (name, _), records in holders.items() if len(records) > 1}
+
+
+class Resolver:
+    def __init__(self, pipeline: Pipeline, schema: dict[str, ConceptSchema], check: Check | None) -> None:
+        self.schema = schema
+        self.identities = {concept_id(item.concept): item for item in pipeline.identities}
+        self.precedence = {concept_id(item.concept): item for item in pipeline.precedence}
+        self.check = check
+        self.conflicts: list[Report] = []
+        self.contradictions: list[Contradiction] = []
+        self.unresolved: list[Report] = []
+        self.ambiguous: dict[tuple[str, str, str, str], Report] = {}
+        self.references: dict[str, dict[str, list[Entity]]] = {}
+
+    def resolve(self, nodes: list[Copy], edges: list[Copy], links: list[Link]) -> Resolution:
+        by_concept: dict[str, list[Copy]] = {}
+        for copy in nodes:
+            by_concept.setdefault(concept_id(type(copy.value)), []).append(copy)
+        entities: list[Entity] = []
+        for concept in sorted(set(by_concept) | set(self.identities)):
+            declared = self.identities.get(concept)
+            copies = by_concept.get(concept, [])
+            if declared is None:
+                entities.extend(self.plain(concept, copies))
+            else:
+                concept_links = [link for link in links if link.match.concept == concept]
+                entities.extend(self.identified(concept, declared, copies, concept_links))
+        owners: dict[str, str] = {}
+        for entity in entities:
+            if entity.id in owners:
+                raise ValueError(
+                    f"{entity.id}: two entities share this ID, of {owners[entity.id]} and {entity.concept}"
+                )
+            owners[entity.id] = entity.concept
+            table = self.references.setdefault(entity.concept, {})
+            keys = (f"{key}:{value}" for key, values in entity.keys.items() for value in values)
+            for name in {entity.id, *entity.records, *keys}:
+                table.setdefault(name, []).append(entity)
+        merged_nodes, described = self.nodes(entities)
+        merged_edges, relations = self.edges(edges)
+        return Resolution(merged_nodes, merged_edges, self.report(entities), described, relations)
+
+    def report(self, entities: list[Entity]) -> Report:
+        summary: dict[str, dict[str, int]] = {}
+        by_key: dict[str, dict[str, int]] = {}
+        for entity in entities:
+            counts = summary.setdefault(entity.concept, {"entities": 0, "records": 0, "merged": 0, "derived_ids": 0})
+            counts["entities"] += 1
+            counts["records"] += len(entity.records)
+            counts["merged"] += len(entity.records) > 1
+            counts["derived_ids"] += entity.derived
+            declared = self.identities.get(entity.concept)
+            if declared is not None:
+                joined = by_key.setdefault(entity.concept, {key.name: 0 for key in declared.keys})
+                for name in joining(entity, declared) if len(entity.records) > 1 else ():
+                    joined[name] += 1
+        automatic = [
+            {"concept": entity.concept, "entity": entity.id, **link.describe()}
+            for entity in entities
+            for link in entity.automatic
+        ]
+        return {
+            "entities": {
+                concept: {**counts, **({"merged_by_key": by_key[concept]} if concept in by_key else {})}
+                for concept, counts in sorted(summary.items())
+            },
+            "contradictions": sorted(
+                (item.describe() for item in self.contradictions), key=lambda item: (item["concept"], item["entities"])
+            ),
+            "conflicts": sorted(
+                self.conflicts,
+                key=lambda item: (item["concept"], repr(item.get("entity")), repr(item.get("relation")), item["field"]),
+            ),
+            "automatic_merges": sorted(automatic, key=lambda item: sorted(item.items())),
+            "unresolved_links": sorted(self.unresolved, key=lambda item: sorted(item.items())),
+            "ambiguous_endpoints": [
+                {**item, "sources": sorted(item["sources"])} for _, item in sorted(self.ambiguous.items())
+            ],
+        }
+
+    def plain(self, concept: str, copies: list[Copy]) -> list[Entity]:
+        records: dict[str, list[Copy]] = {}
+        for copy in copies:
+            records.setdefault(copy.record or "", []).append(copy)
+        return [Entity(concept, group, {}, id=record) for record, group in sorted(records.items())]
+
+    def identified(self, concept: str, declared: Identity, copies: list[Copy], links: list[Link]) -> list[Entity]:
+        records: dict[str, list[Copy]] = {}
+        for copy in copies:
+            records.setdefault(copy.record or "", []).append(copy)
+        keys = {
+            record: {
+                (key.name, value)
+                for copy in group
+                for key in declared.keys
+                for value in key_values(copy.value, key.name)
+            }
+            for record, group in records.items()
+        }
+        references: dict[str, list[str]] = {record: [record] for record in records}
+        for record, items in sorted(keys.items()):
+            for name, value in sorted(items):
+                references.setdefault(f"{name}:{value}", []).append(record)
+        applied: list[Link] = []
+        for link in sorted(links, key=lambda item: sorted(item.describe().items())):
+            subject, target = references.get(link.match.subject_id), references.get(link.match.object_id)
+            if subject is None or target is None:
+                missing = [
+                    name
+                    for name, found in ((link.match.subject_id, subject), (link.match.object_id, target))
+                    if not found
+                ]
+                self.unresolved.append({"concept": concept, **link.describe(), "missing": missing})
+            else:
+                applied.append(replace(link, subject=subject, object=target))
+        partition = Partition(keys, {key.name for key in declared.keys if key.single})
+        by_keys = {record: index for index, group in enumerate(partition.parts(records, [])) for record in group}
+        result: list[Entity] = []
+        for group in partition.parts(records, applied):
+            inside = [link for link in applied if link.subject[0] in group]
+            contradicted = partition.contradicted(group)
+            parts, apart, dropped = partition.split(group, inside) if contradicted else ([group], [], [])
+            whole = [self.entity(concept, part, records, keys) for part in parts]
+            for entity in whole:
+                for link in inside:
+                    first = next((record for record in link.subject if record in entity.records), None)
+                    second = next((record for record in link.object if record in entity.records), None)
+                    if link in dropped or first is None or second is None:
+                        continue
+                    if by_keys[first] != by_keys[second]:
+                        entity.automatic.append(link)
+            separate = [self.entity(concept, {record}, records, keys, kept_apart=True) for record in apart]
+            result += [*whole, *separate]
+            if contradicted:
+                self.contradictions.append(Contradiction(concept, contradicted, whole, separate, dropped))
+        for entity in result:
+            natural = sorted(entity.keys.get(declared.natural, set())) if declared.natural else []
+            if len(natural) == 1 and not entity.kept_apart:
+                entity.id = identifier(f"{declared.natural}:{natural[0]}")
+            else:
+                entity.id, entity.derived = f"{concept}-{digest(entity.records)[:16]}", True
+        return result
+
+    def entity(
+        self,
+        concept: str,
+        group: set[str],
+        records: dict[str, list[Copy]],
+        keys: dict[str, set[KeyValue]],
+        *,
+        kept_apart: bool = False,
+    ) -> Entity:
+        values: dict[str, set[str]] = {}
+        for name, value in (item for record in group for item in keys[record]):
+            values.setdefault(name, set()).add(value)
+        copies = [copy for record in sorted(group) for copy in records[record]]
+        return Entity(concept, copies, values, kept_apart=kept_apart)
+
+    def lookup(self, concept: str, reference: str) -> list[Entity]:
+        found = self.references.get(concept, {}).get(reference, [])
+        return [entity for entity in found if not entity.kept_apart] or found
+
+    def nodes(self, entities: list[Entity]) -> tuple[dict[str, GraphRecord], list[Report]]:
+        stored: dict[str, GraphRecord] = {}
+        described: list[Report] = []
+        for entity in sorted(entities, key=lambda item: (item.concept, item.id)):
+            subject = {"concept": entity.concept, "entity": entity.id}
+            fields = Fields(
+                subject, f"{entity.concept} {entity.id}", self.precedence.get(entity.concept), self.conflicts
+            )
+            chosen, holders = fields.merge(entity.copies, ("id",))
+            value = replace(cast(Any, ordered(entity.copies)[0].value), id=entity.id, **chosen)
+            if self.check is not None and entity.concept in self.identities:
+                self.check(entity.id, value, self.schema[entity.concept])
+            parts = [*entity.copies, *entity.automatic]
+            evidence = {item for part in parts for item in part.evidence}
+            stored[entity.id] = GraphRecord(value, evidence, {item for part in parts for item in part.mappings})
+            item: Report = {
+                "concept": entity.concept,
+                "id": entity.id,
+                "records": [
+                    {
+                        "id": record,
+                        "sources": sorted({s for copy in entity.copies if copy.record == record for s in copy.sources}),
+                        "mappings": sorted(
+                            {m for copy in entity.copies if copy.record == record for m in copy.mappings}
+                        ),
+                    }
+                    for record in entity.records
+                ],
+                "keys": {name: sorted(values) for name, values in sorted(entity.keys.items())},
+                "fields": chosen,
+            }
+            records = {
+                name: sorted({copy.record for copy in copies if copy.record is not None})
+                for name, copies in holders.items()
+            }
+            if partial := cited(records, entity.records):
+                item["from"] = partial
+            if entity.derived:
+                item["derived"] = True
+            if entity.kept_apart:
+                item["kept_apart"] = True
+            if entity.automatic:
+                item["automatic"] = sorted(
+                    (link.describe() for link in entity.automatic), key=lambda link: sorted(link.items())
+                )
+            described.append(item)
+        return stored, described
+
+    def endpoints(self, copy: Copy) -> tuple[str, str] | None:
+        semantic = concept_id(type(copy.value))
+        ends: list[str] = []
+        for endpoint in ("source", "target"):
+            expected = self.schema[semantic][endpoint] or ""
+            reference = getattr(copy.value, endpoint)
+            found = self.lookup(expected, reference)
+            if not found:
+                raise ValueError(f"{semantic} {reference}: unresolved {endpoint} {reference!r}; expected {expected}")
+            if len(found) > 1:
+                relation = {"source": getattr(copy.value, "source"), "target": getattr(copy.value, "target")}
+                listed = self.ambiguous.setdefault(
+                    (semantic, relation["source"], relation["target"], endpoint),
+                    {
+                        "concept": semantic,
+                        "relation": relation,
+                        "endpoint": endpoint,
+                        "entities": sorted(entity.id for entity in found),
+                        "sources": set[str](),
+                    },
+                )
+                listed["sources"] |= copy.sources
+                return None
+            ends.append(found[0].id)
+        return ends[0], ends[1]
+
+    def edges(self, edges: list[Copy]) -> tuple[dict[str, GraphRecord], list[Report]]:
+        groups: dict[tuple[str, str], list[tuple[tuple[str, str], Copy]]] = {}
+        for copy in edges:
+            ends = self.endpoints(copy)
+            if ends is None:
+                continue
+            semantic = concept_id(type(copy.value))
+            keyed = "id" in field_names(type(copy.value))
+            identity = identifier(getattr(copy.value, "id")) if keyed else "edge:" + digest([semantic, *ends])
+            groups.setdefault((semantic, identity), []).append((ends, copy))
+        stored: dict[str, GraphRecord] = {}
+        relations: list[Report] = []
+        for (semantic, identity), group in sorted(groups.items()):
+            if identity in stored:
+                owner = concept_id(type(stored[identity].value))
+                raise ValueError(f"{identity}: two relations share this ID, of {owner} and {semantic}")
+            (source, target), copies = group[0][0], [copy for _, copy in group]
+            if any(ends != (source, target) for ends, _ in group):
+                found = sorted({ends for ends, _ in group})
+                raise ValueError(f"{semantic} {identity}: its copies resolve to different endpoints: {found}")
+            keyed = "id" in field_names(type(copies[0].value))
+            named = f"{semantic} {source} -> {target}"
+            relation: Report = {"source": source, "target": target}
+            if keyed:
+                relation = {"id": identity, **relation}
+            fields = Fields(
+                {"concept": semantic, "relation": relation}, named, self.precedence.get(semantic), self.conflicts
+            )
+            chosen, holders = fields.merge(copies, ("id", "source", "target"))
+            value = replace(cast(Any, ordered(copies)[0].value), source=source, target=target, **chosen)
+            if self.check is not None:
+                self.check(identity, value, self.schema[semantic])
+            evidence = {item for copy in copies for item in copy.evidence}
+            stored[identity] = GraphRecord(value, evidence, {item for copy in copies for item in copy.mappings})
+            every = sorted({item for copy in copies for item in copy.sources})
+            sources = {name: sorted({s for copy in found for s in copy.sources}) for name, found in holders.items()}
+            described: Report = {"concept": semantic, **relation, "sources": every, "fields": chosen}
+            if partial := cited(sources, every):
+                described["from"] = partial
+            relations.append(described)
+        return stored, relations
+
+
+@dataclass
+class Alignment:
+    identities: dict[str, Report] = field(default_factory=dict[str, Report])
+    precedence: dict[str, Report] = field(default_factory=dict[str, Report])
+    problems: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+
+
+def kind(cls: type, name: str) -> str | None:
+    try:
+        return property_type(hints(cls)[name])
+    except (KeyError, ValueError):
+        return None
+
+
+def check_alignment(pipeline: Pipeline) -> Alignment:
+    found = Alignment()
+    nodes, edges = pipeline.topology.nodes, pipeline.topology.edges
+    for declared in pipeline.identities:
+        concept = str(getattr(declared.concept, "schema_id", declared.concept))
+        problems: list[str] = []
+        if declared.concept not in nodes:
+            problems.append("an identity declaration needs a node concept of the topology")
+        elif concept in found.identities:
+            problems.append("has two identity declarations")
+        names = [key.name for key in declared.keys]
+        problems += [f"key {name!r} is declared twice" for name in sorted({n for n in names if names.count(n) > 1})]
+        for key in declared.keys:
+            if key.name == "id" or key.name not in field_names(declared.concept):
+                problems.append(f"key {key.name!r} names no field of {declared.concept.__name__}; keys are fields")
+            elif kind(declared.concept, key.name) not in (("str",) if key.single else ("str", "str[]")):
+                allowed = "a str or str | None field" if key.single else "a str or list[str] field, or either | None"
+                problems.append(f"key {key.name!r} is {'single' if key.single else 'multi'}-valued and needs {allowed}")
+        if declared.natural is not None and declared.natural not in [key.name for key in declared.keys if key.single]:
+            problems.append(f"natural key {declared.natural!r} must be one of its single-valued keys")
+        found.problems += [(concept, f"{concept}: {problem}") for problem in problems]
+        found.identities[concept] = {
+            "keys": {key.name: "single" if key.single else "multiple" for key in declared.keys},
+            "natural": declared.natural,
+        }
+    for declared in pipeline.precedence:
+        concept = str(getattr(declared.concept, "schema_id", declared.concept))
+        problems = []
+        if declared.concept not in (*nodes, *edges):
+            problems.append("a precedence declaration needs a concept of the topology")
+        elif concept in found.precedence:
+            problems.append("has two precedence declarations")
+        fixed = ("id", "source", "target") if declared.concept in edges else ("id",)
+        properties = [name for name in field_names(declared.concept) if name not in fixed]
+        for name, order in declared.fields.items():
+            if name not in properties:
+                problems.append(f"field {name!r} is not a property of {declared.concept.__name__}")
+            unselected = [source.name for source in order if source not in pipeline.sources]
+            if unselected:
+                problems.append(f"field {name!r} lists sources the pipeline does not select: {', '.join(unselected)}")
+            if len({source.name for source in order}) != len(order):
+                problems.append(f"field {name!r} lists a source twice")
+        for name in declared.combine:
+            if name not in properties or kind(declared.concept, name) != "str[]":
+                problems.append(f"combined field {name!r} needs a list[str] property")
+        found.problems += [(concept, f"{concept}: {problem}") for problem in problems]
+        found.precedence[concept] = {
+            "fields": {name: [source.name for source in order] for name, order in declared.fields.items()},
+            "combine": list(declared.combine),
+        }
+    return found

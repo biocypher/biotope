@@ -2,6 +2,7 @@
 
 from biotope.graph import Pipeline
 
+from ..alignment import IDENTITIES, PRECEDENCE
 from ..mappings import MAPPINGS
 from ..paths import GRAPH_ROOT
 from ..sources import EXCLUDED_SOURCES, SOURCES
@@ -34,6 +35,8 @@ PIPELINE = Pipeline(
     terms=TERMS,
     source_inventory=INVENTORY,
     excluded_sources=EXCLUDED_SOURCES,
+    identities=IDENTITIES,
+    precedence=PRECEDENCE,
     # Existing project intent is discovered when checking from the project root.
     requirements={},
     deferrals={},

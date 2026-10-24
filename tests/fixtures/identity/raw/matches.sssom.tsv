@@ -1,0 +1,8 @@
+# curie_map:
+#   directory: https://example.org/directory/
+#   roster: https://example.org/roster/
+#   semapv: https://w3id.org/semapv/vocab/
+#   skos: http://www.w3.org/2004/02/skos/core#
+# mapping_set_id: https://example.org/identity-fixture/similar-names
+# license: https://creativecommons.org/publicdomain/zero/1.0/
+subject_id	predicate_id	object_id	mapping_justification	confidence

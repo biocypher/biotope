@@ -17,7 +17,7 @@ graph/
         __init__.py      SOURCE registration
         schema.py        typed records and field bindings; yours to edit
         loader.py        decoding into the schema; starts as a placeholder
-  alignment/             cross-source identity resolution, before mappings
+  alignment/             identity and precedence declarations
   topology/<concept>/    node dataclasses and their outgoing relations
   mappings/<concept>/    selection, joins and graph-object construction
   pipelines/
@@ -66,7 +66,8 @@ purpose file and the managed `.biotope/datasets/` live. `paths.py` supplies
    docstring and every property with `field(metadata={"description": ...})`;
    the descriptions travel with the export.
 
-1. Resolve identities in `alignment/`, then write mappings and the stage
+1. Declare in `alignment/` the keys that identify each node concept and the
+   source that wins for each field, then write mappings and the stage
    sequence in `pipelines/compose.py`. Report excluded records through
    `context.exclude` and stage accounts through `context.record_audit`.
 
@@ -87,13 +88,15 @@ its `__source_digest__` to the revision the finding names.
 A successful build replaces `graph/build/` from staging; a failed rebuild keeps
 the previous graph and writes `build/last_failure.json`.
 
-| Artifact                | Purpose                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `schema_config.yaml`    | Labels, properties, descriptions and constraints                             |
-| `biocypher_config.yaml` | Export settings                                                              |
-| `run.json`              | Inputs, code fingerprints, settings, bindings, counts, exclusions and checks |
-| `provenance.json`       | Shared source and contributor evidence                                       |
-| `biocypher/`            | Import data, headers and script                                              |
+| Artifact                | Purpose                                                                  |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `schema_config.yaml`    | Labels, properties, descriptions and constraints                         |
+| `biocypher_config.yaml` | Export settings                                                          |
+| `run.json`              | Inputs, code, settings, counts, exclusions, checks, conflicts and merges |
+| `provenance.json`       | Shared source and contributor evidence                                   |
+| `entities.jsonl`        | Each entity, one per line, with its records, keys and chosen values      |
+| `relations.jsonl`       | Each relation, one per line, with its endpoints and chosen values        |
+| `biocypher/`            | Import data, headers and script                                          |
 
 Every exported node and edge carries `biotope_provenance_id`, an index into
 `provenance.json`, so distribute `graph/build/` with the graph. Checks establish

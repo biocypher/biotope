@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from types import MappingProxyType
 from typing import ParamSpec, TypeVar, cast
 
@@ -17,20 +17,25 @@ from biotope.graph.contracts import (
     Loader,
     Mapping,
     MappingEntry,
+    Match,
     Pipeline,
     SourceContract,
     SourceRecord,
 )
+from biotope.graph.identity import Copy, Link, Resolver
 from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
 from biotope.graph.standardization import validate_terms
 from biotope.graph.topology import ConceptSchema, concept_id, field_names, identifier, validate_value
 
 
+CopyKey = tuple[str, str, str, frozenset[str]]
+
+
 C = TypeVar("C")
 T = TypeVar("T")
 E = TypeVar("E")
-G = TypeVar("G", bound=GraphObject)
+G = TypeVar("G", bound=GraphObject | Match)
 P = ParamSpec("P")
 
 EVIDENCE_SAMPLE = 10
@@ -63,8 +68,13 @@ class RunContext:
             for semantic, item in self.schema.items()
             if any(kind.endswith("[]") for kind in item["properties"].values())
         }
-        self.nodes: dict[str, GraphRecord] = {}
-        self.edges: dict[str, GraphRecord] = {}
+        self.nodes: dict[str, GraphRecord]
+        self.edges: dict[str, GraphRecord]
+        self.identity: dict[str, object] = {}
+        self.entities: list[dict[str, object]] = []
+        self.relations: list[dict[str, object]] = []
+        self._copies: dict[CopyKey, Copy] = {}
+        self._links: dict[tuple[str, ...], Link] = {}
         self._exclusions: dict[str, ExclusionFinding] = {}
         self._audits: dict[str, Audit] = {}
         self.loaded: dict[str, int] = {}
@@ -116,7 +126,7 @@ class RunContext:
                         f"{source.name} {record.evidence}: evidence does not identify record set {record_set}"
                     )
                 self.loaded[source.name] = self.loaded.get(source.name, 0) + 1
-                yield record
+                yield replace(record, sources=frozenset({source.name}))
             self.loaded.setdefault(source.name, 0)
             self.completed_sources.add(source.name)
         except Exception as exc:
@@ -127,17 +137,17 @@ class RunContext:
     def apply(self, mapping: Mapping[P, E], /, *args: P.args, **kwargs: P.kwargs) -> Iterator[SourceRecord[E]]:
         """Check the call against the mapping's signature; retain all its inputs on every output."""
         resolved = self._resolve(mapping)
-        evidence = self._bind(resolved, args, kwargs)
+        evidence, sources = self._bind(resolved, args, kwargs)
         for output in mapping.function(*args, **kwargs):
             if type(output) not in resolved.outputs:
                 raise ValueError(f"{resolved.name}: undeclared output {type(output).__name__}")
             validate_value(output, type(output), f"{resolved.name} output", evidence)
-            yield SourceRecord(output, evidence)
+            yield SourceRecord(output, evidence, sources)
 
     def map(self, mapping: Mapping[P, G], /, *args: P.args, **kwargs: P.kwargs) -> None:
         """Apply a mapping that produces final graph objects and collect its outputs."""
         for output in self.apply(mapping, *args, **kwargs):
-            self._collect(output.value, output.evidence, mapping.name)
+            self._collect(output.value, output.evidence, output.sources, mapping.name)
 
     def _resolve(self, mapping: MappingEntry) -> MappingContract:
         if mapping not in self.pipeline.mappings:
@@ -146,7 +156,7 @@ class RunContext:
 
     def _bind(
         self, resolved: MappingContract, args: tuple[object, ...], kwargs: dict[str, object]
-    ) -> tuple[Evidence, ...]:
+    ) -> tuple[tuple[Evidence, ...], frozenset[str]]:
         """Validate the arguments and their values, then combine their contributors."""
         try:
             bound = resolved.signature.bind(*args, **kwargs)
@@ -169,7 +179,8 @@ class RunContext:
                 )
             validate_value(record.value, accepted, subject, record.evidence)
             records.append(record)
-        return tuple(sorted({item for record in records for item in record.evidence}))
+        evidence = tuple(sorted({item for record in records for item in record.evidence}))
+        return evidence, frozenset(name for record in records for name in record.sources)
 
     def _evidence(self, evidence: tuple[Evidence, ...], subject: str = "") -> None:
         if not evidence or any(
@@ -183,8 +194,10 @@ class RunContext:
 
         self.source_versions.update((item.artifact, item.version) for item in evidence)
 
-    def _collect(self, value: GraphObject, evidence: tuple[Evidence, ...], mapping: str) -> None:
-        """Collect a graph object that apply has validated; exact duplicates combine evidence."""
+    def _collect(self, value: object, evidence: tuple[Evidence, ...], sources: frozenset[str], mapping: str) -> None:
+        if isinstance(value, Match):
+            self._match(value, evidence, mapping)
+            return
         cls = type(value)
         if cls not in (*self.pipeline.topology.nodes, *self.pipeline.topology.edges):
             raise ValueError(f"{cls}: output is absent from topology")
@@ -198,27 +211,39 @@ class RunContext:
                 if hasattr(value, "id")
                 else "edge:" + digest([semantic, source, target])
             )
-            store = self.edges
         else:
             identity = identifier(getattr(value, "id"))
-            store = self.nodes
-        existing = store.get(identity)
+        key = (
+            semantic,
+            identity,
+            digest([repr(getattr(value, name)) for name in field_names(cls)]),
+            sources,
+        )
+        existing = self._copies.get(key)
         if existing is not None:
-            if existing.value != value:
-                raise ValueError(
-                    f"Conflicting values for {semantic} {identity}; "
-                    "resolve the conflict explicitly in the project pipeline"
-                )
             existing.evidence.update(evidence)
             existing.mappings.add(mapping)
-        else:
-            if self.check is not None:
-                try:
-                    self.check(identity, value, self.schema[semantic])
-                except ValueError as exc:
-                    raise ValueError(f"{mapping}: {exc}") from exc
-            stored = deepcopy(value) if semantic in self._mutable else value
-            store[identity] = GraphRecord(stored, set(evidence), {mapping})
+            return
+        if self.check is not None:
+            try:
+                self.check(identity, value, self.schema[semantic])
+            except ValueError as exc:
+                raise ValueError(f"{mapping}: {exc}") from exc
+        stored = deepcopy(value) if semantic in self._mutable else value
+        self._copies[key] = Copy(stored, None if edge else identity, set(evidence), {mapping}, set(sources))
+
+    def _match(self, value: Match, evidence: tuple[Evidence, ...], mapping: str) -> None:
+        if value.concept not in {concept_id(item.concept) for item in self.pipeline.identities}:
+            raise ValueError(f"{mapping}: a match link names {value.concept!r}, which has no identity declaration")
+        if value.predicate_id != "skos:exactMatch":
+            raise ValueError(f"{mapping}: a match link must use skos:exactMatch, not {value.predicate_id!r}")
+        for name in ("subject_id", "object_id", "mapping_justification"):
+            if not getattr(value, name).strip():
+                raise ValueError(f"{mapping}: a match link needs a {name}")
+        key = (value.concept, value.subject_id, value.object_id, value.mapping_justification, value.predicate_id)
+        link = self._links.setdefault(key, Link(value, set(), set()))
+        link.evidence.update(evidence)
+        link.mappings.add(mapping)
 
     def exclude(self, reason: str, evidence: tuple[Evidence, ...], *, count: int = 1) -> None:
         """Report a declared exclusion/unmatched-input policy and its source context."""
@@ -293,12 +318,13 @@ class RunContext:
             for policy, finding in sorted(self._exclusions.items())
         ]
 
-    def validate_references(self) -> None:
-        """Require every emitted edge endpoint to resolve to its declared node kind."""
-        for identity, record in self.edges.items():
-            schema = self.schema[concept_id(type(record.value))]
-            for endpoint in ("source", "target"):
-                node_id = getattr(record.value, endpoint)
-                node = self.nodes.get(node_id)
-                if node is None or concept_id(type(node.value)) != schema[endpoint]:
-                    raise ValueError(f"{identity}: unresolved {endpoint} {node_id!r}; expected {schema[endpoint]}")
+    def resolve(self) -> None:
+        copies = list(self._copies.values())
+        edges = tuple(self.pipeline.topology.edges)
+        resolution = Resolver(self.pipeline, self.schema, self.check).resolve(
+            [copy for copy in copies if type(copy.value) not in edges],
+            [copy for copy in copies if type(copy.value) in edges],
+            list(self._links.values()),
+        )
+        self.nodes, self.edges = resolution.nodes, resolution.edges
+        self.identity, self.entities, self.relations = resolution.report, resolution.entities, resolution.relations

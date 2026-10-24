@@ -1,0 +1,6 @@
+name: identity-fixture
+purpose: >-
+  Find which invented people wrote which invented papers, and which genes two
+  studies share, with one entity per person and per gene across sources.
+required_entities: [gene, person, paper]
+required_relations: [authored]

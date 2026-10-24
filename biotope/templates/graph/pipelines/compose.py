@@ -4,5 +4,5 @@ from biotope.graph import RunContext
 
 
 def run(context: RunContext) -> None:
-    """Load each selected source once, resolve identities in alignment/, then call the concept mappings."""
+    """Load each selected source once and call the concept mappings; the build merges entities by alignment/."""
     raise NotImplementedError("Author the stage sequence in graph/pipelines/compose.py")

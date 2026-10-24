@@ -15,6 +15,7 @@ def contributed_twice() -> RunContext:
     context = RunContext(RESULTS_PIPELINE)
     emit_results(context, ("a", "b"))
     context.map(RESULTS, result_row("a", artifact="paper.pdf"))
+    context.resolve()
     return context
 
 

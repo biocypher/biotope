@@ -14,7 +14,7 @@ from biotope.graph.runtime import RunContext
 def test_quality_counts_evidence_and_empty_denominators():
     context = RunContext(MEASURED_PIPELINE)
     emit_measured(context)
-    context.validate_references()
+    context.resolve()
     report = analyze_quality(context.stores()).to_json()
     m = report["measurements"]
     assert m["population"] == {"test:node": 4, "test:unused": 0, "test:link": 3}
@@ -39,6 +39,7 @@ def test_quality_counts_evidence_and_empty_denominators():
     }
 
     context.map(NODES, node(4, None, ["v" * 200] * 8))
+    context.resolve()
     bounded = analyze_quality(GraphStores(context.schema, context.nodes, context.edges, {})).to_json()
     values = bounded["measurements"]["properties"]["test:node"]["tags"]["examples"]
     assert values[-1] == {"value": ["v" * 160] * 5, "truncated": True}

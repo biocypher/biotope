@@ -44,6 +44,7 @@ dependencies = [
     "croissant-baker>=0.5,<1",
     "tomli>=1.1; python_version < '3.11'",
     "pypdfium2>=5.14,<6",
+    "networkx>=3.2,<4",
 ]
 
 [project.optional-dependencies]

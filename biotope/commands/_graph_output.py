@@ -147,6 +147,8 @@ class GraphOutput:
                 audit["stage"],
                 f"{audit['inputs']} -> {audit['outputs']}\n{audit['selection']}\n{counts}",
             )
+        if report.get("identity"):
+            self.identity(report["identity"])
         quality = report.get("quality", {})
         if quality.get("measurements"):
             self.quality(quality["measurements"])
@@ -164,6 +166,48 @@ class GraphOutput:
             self.row("Done", report.get("state", "complete"))
         elif not errors:
             self.row("FAIL", "failed", report.get("error", ""))
+
+    def identity(self, identity: dict[str, Any]) -> None:
+        for concept, counts in identity.get("entities", {}).items():
+            if counts["merged"] or counts["derived_ids"]:
+                by_key = ", ".join(f"{key} {count}" for key, count in sorted(counts.get("merged_by_key", {}).items()))
+                self.row(
+                    "Entities",
+                    concept,
+                    f"{counts['entities']} from {counts['records']} records · {counts['merged']} merged"
+                    + (f": {by_key}" if by_key else "")
+                    + f" · {counts['derived_ids']} derived IDs",
+                )
+        for item in identity.get("contradictions", []):
+            values = "; ".join(f"{key}: {', '.join(values)}" for key, values in item["keys"].items())
+            apart = ", ".join(
+                part["record"]
+                if "record" in part
+                else f"link {part['link']['subject_id']} = {part['link']['object_id']}"
+                for part in item["apart"]
+            )
+            self.row("WARN", f"Contradiction in {item['concept']}", f"{values}\nKept apart: {apart}")
+        for item in identity.get("automatic_merges", []):
+            self.row(
+                "Matched",
+                item["entity"],
+                f"{item['subject_id']} = {item['object_id']} ({item['mapping_justification']})",
+            )
+        for item in identity.get("unresolved_links", []):
+            self.row("WARN", f"Unresolved match link in {item['concept']}", ", ".join(item["missing"]))
+        for item in identity.get("ambiguous_endpoints", []):
+            self.row(
+                "WARN",
+                f"Relation left out in {item['concept']}",
+                f"{item['endpoint']} {item['relation'][item['endpoint']]!r} names several entities: "
+                + ", ".join(item["entities"]),
+            )
+        conflicts = identity.get("conflicts", [])
+        for item in conflicts[:10]:
+            subject = item.get("entity") or f"{item['relation']['source']} -> {item['relation']['target']}"
+            self.row("Conflict", f"{subject}.{item['field']}", f"chose {item['chosen']!r} from {item['chosen_source']}")
+        if len(conflicts) > 10:
+            self.row("Conflict", f"{len(conflicts) - 10} more; see identity.conflicts in the report")
 
     def quality(self, measurements: dict[str, Any]) -> None:
         for name, value in measurements.items():

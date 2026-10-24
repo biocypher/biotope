@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import platform
+import re
 import shutil
 import tempfile
 from dataclasses import asdict
@@ -44,6 +45,10 @@ def run_pipeline(
     output = output.absolute()
     check_build_destination(output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    left = re.compile(rf"\.{re.escape(output.name)}-[a-z0-9_]{{8}}(-previous)?")
+    for stale in output.parent.iterdir():
+        if left.fullmatch(stale.name) and stale.is_dir() and not stale.is_symlink():
+            shutil.rmtree(stale)
     staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
     backup = staging.with_name(staging.name + "-previous")
     try:
@@ -127,7 +132,8 @@ def _execute(
             return
         report["audits"] = [asdict(item) for item in context.audits]
         report["loaded_records"] = context.loaded
-        report["graph_objects"] = {"nodes": len(context.nodes), "edges": len(context.edges)}
+        if hasattr(context, "nodes"):
+            report["graph_objects"] = {"nodes": len(context.nodes), "edges": len(context.edges)}
         report["source_versions"] = sorted(context.source_versions)
         kept: list[Any] = [item for item in report["findings"] if item.get("kind") != "exclusion"]
         report["findings"] = [*kept, *context.findings]
@@ -154,9 +160,10 @@ def _execute(
         if unfinished:
             raise ValueError(f"Selected source loaders did not finish: {sorted(unfinished)}")
         if phase:
-            phase("Checking references")
+            phase("Merging entities and checking references")
         stage = "integrity"
-        context.validate_references()
+        context.resolve()
+        report["identity"] = context.identity
         collect()
         stage = "quality"
         report["quality"] = analyze_quality(context.stores(), phase=phase, on_finding=on_finding).to_json()
@@ -165,7 +172,7 @@ def _execute(
             if phase:
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
-            report["outputs"] = exporter.write(context, output)
+            report["outputs"] = sorted({*write_entities(context, output), *exporter.write(context, output)})
             report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
     except Exception as exc:
@@ -182,6 +189,16 @@ def _execute(
         collect()
         save()
     return report
+
+
+def write_entities(context: RunContext, output: Path) -> list[str]:
+    files = {"entities.jsonl": context.entities, "relations.jsonl": context.relations}
+    for name, items in files.items():
+        with (output / name).open("w", encoding="utf-8", newline="\n") as stream:
+            for item in items:
+                line = json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+                stream.write(line + "\n")
+    return list(files)
 
 
 def _version(package: str) -> str:

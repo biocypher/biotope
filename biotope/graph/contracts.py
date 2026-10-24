@@ -37,6 +37,7 @@ class SourceRecord(Generic[T]):
 
     value: T
     evidence: tuple[Evidence, ...]
+    sources: frozenset[str] = field(default=frozenset[str](), compare=False)
 
 
 class Loader(Protocol[C, T]):
@@ -139,6 +140,37 @@ class GraphStores:
 
 
 @dataclass(frozen=True)
+class Key:
+    name: str
+    single: bool = False
+
+
+@dataclass(frozen=True)
+class Identity:
+    concept: type
+    keys: tuple[Key, ...]
+    natural: str | None = None
+
+
+@dataclass(frozen=True)
+class Precedence:
+    concept: type
+    fields: collections.abc.Mapping[str, tuple[SourceContract, ...]] = field(
+        default_factory=dict[str, tuple[SourceContract, ...]]
+    )
+    combine: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Match:
+    concept: str
+    subject_id: str
+    object_id: str
+    mapping_justification: str
+    predicate_id: str = "skos:exactMatch"
+
+
+@dataclass(frozen=True)
 class Pipeline:
     """Explicit project composition; imports must not load data or execute mappings.
 
@@ -164,6 +196,8 @@ class Pipeline:
     terms: tuple[Term, ...] = ()
     source_inventory: tuple[SourceContract, ...] = ()
     excluded_sources: dict[str, str] = field(default_factory=dict[str, str])
+    identities: tuple[Identity, ...] = ()
+    precedence: tuple[Precedence, ...] = ()
 
 
 @dataclass

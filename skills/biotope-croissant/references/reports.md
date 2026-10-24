@@ -33,11 +33,19 @@ version 1 reports.
 | `audits`                        | Stage input/output grains, selection rules and named counts           |
 | Findings with `kind: exclusion` | Policy counts and bounded evidence                                    |
 | `graph_objects`, `graph_digest` | What was exported, and a deterministic fingerprint of it              |
+| `identity`                      | Entity and per-key merge counts, contradictions, conflicts, merges    |
 | `exporter`                      | Verified writer version and physical format                           |
 | `dependencies`                  | Installed versions of Biotope, its tools and every imported library   |
 
+`graph/build/entities.jsonl` holds every merged entity, one per line, with its
+records, keys and the chosen value of each field, and `from`, the records that
+give a value where not every record does. `relations.jsonl` holds every relation
+with its resolved endpoints. Review them with `identity` as in
+[identity.md](./identity.md).
+
 A failed rebuild leaves the previous build in place and writes
 `graph/build/last_failure.json` beside it; the next success removes it. A build
+first removes the staging directories a killed build left beside `graph/build/`. A build
 replaces `graph/build/` only when it recognizes every file there.
 
 ## Quality observations

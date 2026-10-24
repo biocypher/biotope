@@ -41,8 +41,16 @@ Every finding has a stable `code`, a `severity`, a `subject`, a `message` and an
 optional `location`. A `source.drift` finding lists every JSON-pointer difference
 in its `examples`. Quality prints its assessment and writes no file. Build records
 the assessment in `graph/build/run.json`; a failed rebuild writes
-`graph/build/last_failure.json` and keeps the previous build. Metagraph JSON writes
+`graph/build/last_failure.json` and keeps the previous build. A build first
+removes the staging directories, `graph/.build-<8 characters>`, that a killed
+build left beside its output. Metagraph JSON writes
 no HTML and cannot be combined with `--out`.
+
+Quality and build reports hold an `identity` section with the entity counts,
+contradictions, conflicts, automatic merges, unresolved match links and
+relations left out for an ambiguous endpoint, and a build writes
+`graph/build/entities.jsonl` and `relations.jsonl`; check reports list the declarations
+under `identity` and `precedence`. See [identity and precedence](identity.md).
 
 See [typed graph technical notes](mapping_sidenotes.md) for measurement limits,
 provenance and export artifacts.

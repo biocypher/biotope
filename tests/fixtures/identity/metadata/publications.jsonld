@@ -1,0 +1,149 @@
+{
+  "@context": {
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "biotope": "https://biocypher.org/biotope/"
+  },
+  "name": "publications",
+  "version": "fixture-v1",
+  "distribution": [
+    {
+      "@id": "push-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/push.csv",
+      "encodingFormat": "text/csv"
+    },
+    {
+      "@id": "openalex-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/openalex.csv",
+      "encodingFormat": "text/csv"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "push",
+      "name": "push",
+      "field": [
+        {
+          "@id": "push/doi",
+          "name": "doi",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "push-file"
+            },
+            "extract": {
+              "column": "doi"
+            }
+          }
+        },
+        {
+          "@id": "push/title",
+          "name": "title",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "push-file"
+            },
+            "extract": {
+              "column": "title"
+            }
+          }
+        },
+        {
+          "@id": "push/orcid",
+          "name": "orcid",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "push-file"
+            },
+            "extract": {
+              "column": "orcid"
+            }
+          }
+        },
+        {
+          "@id": "push/position",
+          "name": "position",
+          "dataType": "sc:Integer",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "push-file"
+            },
+            "extract": {
+              "column": "position"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "@id": "openalex",
+      "name": "openalex",
+      "field": [
+        {
+          "@id": "openalex/doi",
+          "name": "doi",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "openalex-file"
+            },
+            "extract": {
+              "column": "doi"
+            }
+          }
+        },
+        {
+          "@id": "openalex/title",
+          "name": "title",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "openalex-file"
+            },
+            "extract": {
+              "column": "title"
+            }
+          }
+        },
+        {
+          "@id": "openalex/orcid",
+          "name": "orcid",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "openalex-file"
+            },
+            "extract": {
+              "column": "orcid"
+            }
+          }
+        },
+        {
+          "@id": "openalex/position",
+          "name": "position",
+          "dataType": "sc:Integer",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "openalex-file"
+            },
+            "extract": {
+              "column": "position"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
