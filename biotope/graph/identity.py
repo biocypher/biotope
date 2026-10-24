@@ -196,9 +196,8 @@ class Fields:
 
 
 class Partition:
-    def __init__(self, keys: dict[str, set[KeyValue]], links: list[Link], single: set[str]) -> None:
+    def __init__(self, keys: dict[str, set[KeyValue]], single: set[str]) -> None:
         self.keys = keys
-        self.links = links
         self.single = single
 
     def parts(self, records: Iterable[str], links: Iterable[Link]) -> list[set[str]]:
@@ -385,7 +384,7 @@ class Resolver:
                 self.unresolved.append({"concept": concept, **link.describe(), "missing": missing})
             else:
                 applied.append(replace(link, subject=subject, object=target))
-        partition = Partition(keys, applied, {key.name for key in declared.keys if key.single})
+        partition = Partition(keys, {key.name for key in declared.keys if key.single})
         by_keys = {record: index for index, group in enumerate(partition.parts(records, [])) for record in group}
         result: list[Entity] = []
         for group in partition.parts(records, applied):
