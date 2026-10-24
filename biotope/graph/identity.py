@@ -301,13 +301,14 @@ class Resolver:
         for copy in nodes:
             by_concept.setdefault(concept_id(type(copy.value)), []).append(copy)
         entities: list[Entity] = []
-        for concept in sorted(by_concept):
+        for concept in sorted(set(by_concept) | set(self.identities)):
             declared = self.identities.get(concept)
-            concept_links = [link for link in links if link.match.concept == concept]
+            copies = by_concept.get(concept, [])
             if declared is None:
-                entities.extend(self.plain(concept, by_concept[concept]))
+                entities.extend(self.plain(concept, copies))
             else:
-                entities.extend(self.identified(concept, declared, by_concept[concept], concept_links))
+                concept_links = [link for link in links if link.match.concept == concept]
+                entities.extend(self.identified(concept, declared, copies, concept_links))
         owners: dict[str, str] = {}
         for entity in entities:
             if entity.id in owners:
