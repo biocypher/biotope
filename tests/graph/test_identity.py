@@ -12,7 +12,6 @@ import pytest
 from click.testing import CliRunner
 
 from biotope.cli import cli
-from biotope.graph import check
 from biotope.graph.inventory import generate_source_packages
 from biotope.graph.sources import register_metadata
 
@@ -33,7 +32,6 @@ PAPER = "doi:10.5555/reach.0001"
 @pytest.fixture
 def root(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
-    monkeypatch.setattr(check, "check_types", lambda pipeline, on_finding=None: {"filesAnalyzed": 0})
     root = tmp_path / "project"
     shutil.copytree(FIXTURE, root, ignore=shutil.ignore_patterns("__pycache__", "build"))
     (root / ".biotope").mkdir()
@@ -94,7 +92,7 @@ def test_genes_merge_on_ensembl_ids_and_take_the_symbol_of_the_first_study(root)
     assert members(egfr) == ["study_a:3", "study_b:1"]
     assert [member["sources"] for member in egfr["records"]] == [["genes/study_a"], ["genes/study_b"]]
     assert egfr["keys"] == {"ensembl": ["ENSG00000146648"]}
-    assert egfr["fields"]["symbol"] == {"value": "EGFR", "source": "genes/study_a", "record": "study_a:3"}
+    assert egfr["fields"]["symbol"] == {"value": "EGFR", "sources": ["genes/study_a"], "records": ["study_a:3"]}
     [conflict] = [item for item in identity["conflicts"] if item.get("entity") == EGFR]
     assert conflict == {
         "concept": "fixture:gene",
@@ -114,7 +112,7 @@ def test_genes_merge_on_ensembl_ids_and_take_the_symbol_of_the_first_study(root)
     edit(root / "graph/alignment/__init__.py", "(STUDY_A, STUDY_B)", "(STUDY_B, STUDY_A)")
     reversed_identity, reversed_entities = built(root, "reversed")
     assert holding(reversed_entities, "study_a:4")["id"] == unmapped["id"]
-    egfr["fields"]["symbol"] = {"value": "ERBB1", "source": "genes/study_b", "record": "study_b:1"}
+    egfr["fields"]["symbol"] = {"value": "ERBB1", "sources": ["genes/study_b"], "records": ["study_b:1"]}
     assert reversed_entities["entities"] == entities["entities"]
     conflict.update(chosen="ERBB1", chosen_source="genes/study_b")
     assert reversed_identity["conflicts"] == identity["conflicts"]
@@ -145,8 +143,8 @@ def test_people_merge_transitively_and_every_build_gives_the_same_entities(root)
     ]
     assert jonas["fields"]["name"] == {
         "value": "Jonas Keller",
-        "source": "people/roster",
-        "record": "roster:recJonas0002",
+        "sources": ["people/roster", "profile/profile_jsonl"],
+        "records": ["profile:data/pages/jonas.html", "roster:recJonas0002"],
     }
     assert {"concept": "fixture:person", "entity": jonas["id"], "field": "name"}.items() <= next(
         item for item in identity["conflicts"] if item.get("entity") == jonas["id"]
@@ -254,12 +252,13 @@ def test_combined_lists_one_relation_from_two_sources_and_undeclared_disagreemen
     ilse = holding(entities, "roster:recIlse0001")
     assert ilse["fields"]["emails"] == {
         "value": ["ilse.brandt@example.org", "i.brandt@example.org", "ilse@lab.example.org"],
-        "combined": ["people/roster", "people/directory", "profile/profile_jsonl"],
+        "sources": ["people/directory", "people/roster", "profile/profile_jsonl"],
+        "records": ["directory:i.brandt@example.org", "profile:data/pages/ilse.html", "roster:recIlse0001"],
     }
     assert not [item for item in report["identity"]["conflicts"] if item.get("field") == "emails"]
     [relation] = [item for item in entities["relations"] if item["source"] == ilse["id"]]
     assert relation["sources"] == ["publications/openalex", "publications/push"]
-    assert relation["fields"]["position"] == {"value": 1, "source": "publications/push"}
+    assert relation["fields"]["position"] == {"value": 1, "sources": ["publications/push"]}
     [conflict] = [item for item in report["identity"]["conflicts"] if item.get("field") == "position"]
     assert conflict == {
         "concept": "fixture:authored",
@@ -276,7 +275,7 @@ def test_combined_lists_one_relation_from_two_sources_and_undeclared_disagreemen
     assert edge["position:long"] == "1"
     assert {item["artifact"] for item in evidence(output, edge)} == {"raw/push.csv", "raw/openalex.csv"}
 
-    edit(root / "graph/alignment/__init__.py", '    Precedence(Paper, fields={"title": (PUSH, OPENALEX)}),\n', "")
+    edit(root / "graph/alignment/__init__.py", '{"title": (PUSH, OPENALEX)}', "{}")
     failed, _ = build(root, "undeclared")
     assert failed["state"] == "failed"
     for named in (PAPER, "title", "'Identity across sources'", "'Identity Across Sources'"):
@@ -284,6 +283,17 @@ def test_combined_lists_one_relation_from_two_sources_and_undeclared_disagreemen
 
 
 def test_check_names_declarations_that_do_not_fit_the_topology_or_sources(root):
+    result = CliRunner(mix_stderr=False).invoke(cli, ["graph", "check", "--json"])
+    assert result.exit_code == 0, result.stdout
+    report = json.loads(result.stdout)
+    assert report["identity"]["fixture:person"] == {
+        "keys": {"roster": "single", "orcid": "single", "emails": "multiple"},
+        "natural": None,
+    }
+    assert report["precedence"]["fixture:authored"] == {
+        "fields": {"position": ["publications/push", "publications/openalex"]},
+        "combine": [],
+    }
     alignment = root / "graph/alignment/__init__.py"
     edit(alignment, 'Key("emails")', 'Key("mail")')
     edit(alignment, '"title": (PUSH, OPENALEX)', '"headline": (PUSH, OPENALEX)')
@@ -295,19 +305,3 @@ def test_check_names_declarations_that_do_not_fit_the_topology_or_sources(root):
     assert any("fixture:person" in message and "mail" in message for message in messages)
     assert any("fixture:paper" in message and "headline" in message for message in messages)
     assert any("emails" in message and "single" in message for message in messages)
-
-
-def test_the_fixture_project_type_checks(tmp_path, monkeypatch):
-    project = tmp_path / "project"
-    shutil.copytree(FIXTURE, project, ignore=shutil.ignore_patterns("__pycache__", "build"))
-    (project / ".biotope").mkdir()
-    for name, path in MANIFESTS.items():
-        generate_source_packages(
-            register_metadata(project, project / path, name, reason="fixture"), project / "graph/sources"
-        )
-    result = subprocess.run(
-        [sys.executable, "-m", "biotope.cli", "graph", "check", "--json"], cwd=project, text=True, capture_output=True
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    report = json.loads(result.stdout)
-    assert report["identity"]["fixture:person"]["keys"] == {"roster": "single", "orcid": "single", "emails": "multiple"}

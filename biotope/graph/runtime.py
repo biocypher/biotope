@@ -17,20 +17,25 @@ from biotope.graph.contracts import (
     Loader,
     Mapping,
     MappingEntry,
+    Match,
     Pipeline,
     SourceContract,
     SourceRecord,
 )
+from biotope.graph.identity import Copy, Link, Resolver
 from biotope.graph.signatures import MappingContract, contract
 from biotope.graph.sources import digest
 from biotope.graph.standardization import validate_terms
 from biotope.graph.topology import ConceptSchema, concept_id, field_names, identifier, validate_value
 
 
+CopyKey = tuple[str, str, str, frozenset[str]]
+
+
 C = TypeVar("C")
 T = TypeVar("T")
 E = TypeVar("E")
-G = TypeVar("G", bound=GraphObject)
+G = TypeVar("G", bound=GraphObject | Match)
 P = ParamSpec("P")
 
 EVIDENCE_SAMPLE = 10
@@ -65,6 +70,12 @@ class RunContext:
         }
         self.nodes: dict[str, GraphRecord] = {}
         self.edges: dict[str, GraphRecord] = {}
+        self.identity: dict[str, object] = {}
+        self.entities: list[dict[str, object]] = []
+        self.relations: list[dict[str, object]] = []
+        self._copies: dict[CopyKey, Copy] = {}
+        self._links: list[Link] = []
+        self._origins: dict[Evidence, set[str]] = {}
         self._exclusions: dict[str, ExclusionFinding] = {}
         self._audits: dict[str, Audit] = {}
         self.loaded: dict[str, int] = {}
@@ -108,6 +119,8 @@ class RunContext:
                 if type(record.value) not in source.records:
                     raise ValueError(f"{source.name}: loader returned an undeclared record type {type(record.value)}")
                 self._evidence(record.evidence)
+                for item in record.evidence:
+                    self._origins.setdefault(item, set()).add(source.name)
                 validate_value(record.value, type(record.value), source.name, record.evidence)
                 validate_terms(record.value)
                 record_set = getattr(type(record.value), "__record_set__", None)
@@ -183,8 +196,10 @@ class RunContext:
 
         self.source_versions.update((item.artifact, item.version) for item in evidence)
 
-    def _collect(self, value: GraphObject, evidence: tuple[Evidence, ...], mapping: str) -> None:
-        """Collect a graph object that apply has validated; exact duplicates combine evidence."""
+    def _collect(self, value: object, evidence: tuple[Evidence, ...], mapping: str) -> None:
+        if isinstance(value, Match):
+            self._match(value, evidence, mapping)
+            return
         cls = type(value)
         if cls not in (*self.pipeline.topology.nodes, *self.pipeline.topology.edges):
             raise ValueError(f"{cls}: output is absent from topology")
@@ -198,27 +213,37 @@ class RunContext:
                 if hasattr(value, "id")
                 else "edge:" + digest([semantic, source, target])
             )
-            store = self.edges
         else:
             identity = identifier(getattr(value, "id"))
-            store = self.nodes
-        existing = store.get(identity)
+        sources = {name for item in evidence for name in self._origins.get(item, ())}
+        key = (
+            semantic,
+            identity,
+            digest([repr(getattr(value, name)) for name in field_names(cls)]),
+            frozenset(sources),
+        )
+        existing = self._copies.get(key)
         if existing is not None:
-            if existing.value != value:
-                raise ValueError(
-                    f"Conflicting values for {semantic} {identity}; "
-                    "resolve the conflict explicitly in the project pipeline"
-                )
             existing.evidence.update(evidence)
             existing.mappings.add(mapping)
-        else:
-            if self.check is not None:
-                try:
-                    self.check(identity, value, self.schema[semantic])
-                except ValueError as exc:
-                    raise ValueError(f"{mapping}: {exc}") from exc
-            stored = deepcopy(value) if semantic in self._mutable else value
-            store[identity] = GraphRecord(stored, set(evidence), {mapping})
+            return
+        if self.check is not None:
+            try:
+                self.check(identity, value, self.schema[semantic])
+            except ValueError as exc:
+                raise ValueError(f"{mapping}: {exc}") from exc
+        stored = deepcopy(value) if semantic in self._mutable else value
+        self._copies[key] = Copy(stored, None if edge else identity, set(evidence), {mapping}, sources)
+
+    def _match(self, value: Match, evidence: tuple[Evidence, ...], mapping: str) -> None:
+        if value.concept not in {concept_id(item.concept) for item in self.pipeline.identities}:
+            raise ValueError(f"{mapping}: a match link names {value.concept!r}, which has no identity declaration")
+        if value.predicate_id != "skos:exactMatch":
+            raise ValueError(f"{mapping}: a match link must use skos:exactMatch, not {value.predicate_id!r}")
+        for name in ("subject_id", "object_id", "mapping_justification"):
+            if not getattr(value, name).strip():
+                raise ValueError(f"{mapping}: a match link needs a {name}")
+        self._links.append(Link(value, set(evidence), {mapping}))
 
     def exclude(self, reason: str, evidence: tuple[Evidence, ...], *, count: int = 1) -> None:
         """Report a declared exclusion/unmatched-input policy and its source context."""
@@ -293,12 +318,13 @@ class RunContext:
             for policy, finding in sorted(self._exclusions.items())
         ]
 
-    def validate_references(self) -> None:
-        """Require every emitted edge endpoint to resolve to its declared node kind."""
-        for identity, record in self.edges.items():
-            schema = self.schema[concept_id(type(record.value))]
-            for endpoint in ("source", "target"):
-                node_id = getattr(record.value, endpoint)
-                node = self.nodes.get(node_id)
-                if node is None or concept_id(type(node.value)) != schema[endpoint]:
-                    raise ValueError(f"{identity}: unresolved {endpoint} {node_id!r}; expected {schema[endpoint]}")
+    def resolve(self) -> None:
+        copies = list(self._copies.values())
+        edges = tuple(self.pipeline.topology.edges)
+        resolution = Resolver(self.pipeline, self.schema, self.check).resolve(
+            [copy for copy in copies if type(copy.value) not in edges],
+            [copy for copy in copies if type(copy.value) in edges],
+            self._links,
+        )
+        self.nodes, self.edges = resolution.nodes, resolution.edges
+        self.identity, self.entities, self.relations = resolution.report, resolution.entities, resolution.relations

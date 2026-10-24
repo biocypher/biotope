@@ -85,6 +85,7 @@ def test_biocypher_labels_and_string_values_round_trip(tmp_path):
     context = RunContext(EXPORT)
     value = ItemRow("item:1", 'Text "quoted", and | delimited', ['alias "quoted"', "with, comma"])
     context.map(ITEMS, SourceRecord(value, EVIDENCE))
+    context.resolve()
     BioCypherWriter().write(context, tmp_path / "readable")
     part = tmp_path / "readable/biocypher/Item-part000.csv"
     with part.open() as stream:
@@ -96,6 +97,7 @@ def test_biocypher_labels_and_string_values_round_trip(tmp_path):
     colliding = RunContext(replace(EXPORT, topology=Topology((Item, Other), ())))
     colliding.map(ITEMS, SourceRecord(value, EVIDENCE))
     colliding.map(OTHERS, SourceRecord(replace(value, identity="other:1"), EVIDENCE))
+    colliding.resolve()
     BioCypherWriter().write(colliding, tmp_path / "colliding")
     schema = yaml.safe_load((tmp_path / "colliding/schema_config.yaml").read_text())
     labels = {item["input_label"]: label for label, item in schema.items()}
@@ -115,6 +117,7 @@ def test_a_collected_object_keeps_the_list_its_mapping_changes_later():
     context = RunContext(EXPORT)
     context.map(ITEMS, SourceRecord(ItemRow("item:1", "label", aliases), EVIDENCE))
     aliases.append("later")
+    context.resolve()
     assert context.nodes["item:1"].value == Item(ItemId("item:1"), "label", ["first"])
 
 
@@ -143,6 +146,7 @@ def test_export_refuses_a_value_it_cannot_represent(tmp_path, unchecked_definiti
 
     collected = RunContext(pipeline)
     collected.map(mapping, SourceRecord(value, EVIDENCE))
+    collected.resolve()
     with pytest.raises(ValueError, match=message):
         BioCypherWriter().write(collected, tmp_path / "written")
 
@@ -203,6 +207,7 @@ def test_export_refuses_output_the_declared_format_does_not_cover(tmp_path, monk
     monkeypatch.setattr("biocypher.BioCypher", ParquetWriter)
     context = RunContext(RESULTS_PIPELINE)
     RESULTS_PIPELINE.run(context)
+    context.resolve()
     with pytest.raises(ValueError, match="declared neo4j-admin-csv contract does not cover"):
         BioCypherWriter("csv").write(context, tmp_path / "mismatch")
 
@@ -258,6 +263,7 @@ def test_an_empty_graph_builds_and_replaces_the_previous_build(tmp_path, file_fo
     assert sorted(path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()) == [
         "biocypher/neo4j-admin-import-call.sh",
         "biocypher_config.yaml",
+        "entities.json",
         "provenance.json",
         "run.json",
         "schema_config.yaml",

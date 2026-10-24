@@ -75,7 +75,7 @@ def test_multi_stage_execution_combines_evidence_and_deduplicates():
 
     context = RunContext(PIPELINE)
     build(context)
-    context.validate_references()
+    context.resolve()
     assert len(context.nodes) == 5
     assert len(context.edges) == 3
     donor = context.nodes["fixture:donor:d1"]

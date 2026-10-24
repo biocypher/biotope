@@ -1,5 +1,3 @@
-from collections.abc import Iterator
-
 from biotope.graph import Mapping, SourceRecord
 
 from ...sources.publications.openalex.schema import Openalex

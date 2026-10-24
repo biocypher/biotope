@@ -16,6 +16,7 @@ from typing import Any, get_type_hints
 from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
 from biotope.graph.dependencies import declared_distributions, imported_distributions
+from biotope.graph.identity import check_alignment
 from biotope.graph.reports import (
     CheckFailed,
     CheckResult,
@@ -188,11 +189,11 @@ def check_pipeline(
     def warning(code: str, subject: str, message: str) -> None:
         add_finding(Finding(code, "warning", subject, message))
 
-    def identity() -> None:
+    def named() -> None:
         if not pipeline.name.strip() or not pipeline.scope.strip():
             raise ValueError("Pipeline needs a stable name and explicit selected scope")
 
-    stage("pipeline", identity)
+    stage("pipeline", named)
 
     def topology() -> dict[str, Any]:
         described = pipeline.topology.describe()
@@ -382,6 +383,14 @@ def check_pipeline(
                 error("mapping.contract", entry.name, str(exc))
 
     stage("mappings", mappings)
+
+    def identity() -> None:
+        found = check_alignment(pipeline)
+        report.data["identity"], report.data["precedence"] = found.identities, found.precedence
+        for subject, message in found.problems:
+            error("identity.invalid", subject, message)
+
+    stage("identity", identity)
 
     def declarations() -> None:
         for item in (*pipeline.topology.nodes, *pipeline.topology.edges, pipeline.run):

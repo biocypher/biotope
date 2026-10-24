@@ -4,7 +4,7 @@ from typing import Any
 
 from biotope.graph import Evidence, RunContext, SourceRecord
 
-from ...paths import PROJECT_ROOT
+from ....paths import PROJECT_ROOT
 from . import SOURCE
 from .schema import (
     ProfileJsonl,

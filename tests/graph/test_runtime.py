@@ -81,7 +81,12 @@ def reserved_names(*, mapping: SourceRecord[PersonRow], self: SourceRecord[Sampl
     )
 
 
+def make_sample(row: SourceRecord[SampleRow]) -> Iterator[Sample]:
+    yield Sample(SampleId(f"study:sample:{row.value.sample_id}"))
+
+
 PEOPLE = Mapping(name="people", function=make_person)
+SAMPLES = Mapping(name="samples", function=make_sample)
 MISTYPED_PROPERTY = Mapping(name="mistyped-property", function=mistyped_property)
 UNNAMESPACED_IDENTIFIER = Mapping(name="unnamespaced-identifier", function=unnamespaced_identifier)
 UNDECLARED_OUTPUT = Mapping(name="undeclared-output", function=undeclared_output)
@@ -128,10 +133,12 @@ def test_topology_semantics_and_value_integrity():
     run = context(PEOPLE, MISTYPED_PROPERTY, UNNAMESPACED_IDENTIFIER, UNDECLARED_OUTPUT)
     run.map(PEOPLE, person("1", "Ada"))
     run.map(PEOPLE, person("1", "Ada", artifact="other.csv", version="v2"))
+    run.resolve()
     assert len(run.nodes) == 1
     assert len(next(iter(run.nodes.values())).evidence) == 2
-    with pytest.raises(ValueError, match="Conflicting"):
-        run.map(PEOPLE, person("1", "Changed"))
+    run.map(PEOPLE, person("1", "Changed"))
+    with pytest.raises(ValueError, match="study:person:1: sources disagree on 'name'.*'Ada'.*'Changed'"):
+        run.resolve()
     with pytest.raises(ValueError, match="name"):
         run.map(MISTYPED_PROPERTY, person("2", "Ada"))
     with pytest.raises(ValueError, match="identifier"):
@@ -144,7 +151,7 @@ def test_topology_semantics_and_value_integrity():
     edges = context(JOIN)
     edges.map(JOIN, person("1", "Ada"), SourceRecord(SampleRow("1", "s1"), (Evidence("s.csv", "v1", "samples", "1"),)))
     with pytest.raises(ValueError, match="unresolved"):
-        edges.validate_references()
+        edges.resolve()
 
 
 def test_mapping_checks_its_call_and_keeps_combined_evidence():
@@ -185,12 +192,15 @@ def test_every_input_needs_its_own_evidence():
 
 
 def test_mappings_may_use_the_composition_helpers_own_parameter_names():
-    run = context(RESERVED)
+    run = context(RESERVED, PEOPLE, SAMPLES)
     ada = SourceRecord(PersonRow("1", "Ada"), (Evidence("a", "v1", "people", "1"),))
     sample = SourceRecord(SampleRow("1", "s2"), (Evidence("b", "v1", "samples", "2"),))
     outputs = list(run.apply(RESERVED, mapping=ada, self=sample))
     assert outputs[0].value == FromPerson(SampleId("study:sample:s2"), PersonId("study:person:1"))
     run.map(RESERVED, mapping=ada, self=sample)
+    run.map(PEOPLE, ada)
+    run.map(SAMPLES, sample)
+    run.resolve()
     assert len(run.edges) == 1
 
 
@@ -248,6 +258,7 @@ def test_load_and_map_refuse_values_outside_their_declarations_by_path():
             list(run.load(source, lambda config: iter((record,)), None))
         with pytest.raises(ValueError, match=message):
             run.map(measured, record)
+    run.resolve()
     assert len(run.nodes) == 1
 
 

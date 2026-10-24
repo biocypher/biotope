@@ -15,6 +15,7 @@ from typing import Any
 from biotope.graph.artifacts import RUN_REPORT, check_build_destination, record_failed_build, report_text, save_report
 from biotope.graph.check import check_pipeline
 from biotope.graph.contracts import Pipeline
+from biotope.graph.entities import ENTITIES, write_entities
 from biotope.graph.output import BioCypherWriter, GraphWriter
 from biotope.graph.quality import analyze_quality
 from biotope.graph.reports import REPORT_SCHEMA_VERSION, CheckFailed, Finding, FindingSink, Phase
@@ -154,9 +155,10 @@ def _execute(
         if unfinished:
             raise ValueError(f"Selected source loaders did not finish: {sorted(unfinished)}")
         if phase:
-            phase("Checking references")
+            phase("Merging entities and checking references")
         stage = "integrity"
-        context.validate_references()
+        context.resolve()
+        report["identity"] = context.identity
         collect()
         stage = "quality"
         report["quality"] = analyze_quality(context.stores(), phase=phase, on_finding=on_finding).to_json()
@@ -165,7 +167,8 @@ def _execute(
             if phase:
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
-            report["outputs"] = exporter.write(context, output)
+            write_entities(output / ENTITIES, context)
+            report["outputs"] = sorted({ENTITIES, *exporter.write(context, output)})
             report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
     except Exception as exc:

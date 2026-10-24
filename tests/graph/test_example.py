@@ -45,6 +45,7 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     assert {path.name for path in (root / "graph/build/first").iterdir()} == {
         "schema_config.yaml",
         "biocypher_config.yaml",
+        "entities.json",
         "run.json",
         "provenance.json",
         "biocypher",
