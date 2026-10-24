@@ -130,9 +130,18 @@ def check(graph_path: Path, as_json: bool) -> None:
     type=click.Path(path_type=Path),
     help="Build directory; defaults to <graph>/build and replaces a generated build.",
 )
-def build(graph_path: Path, as_json: bool, out: Path | None) -> None:
-    """Run loaders, mappings and quality checks, then export through BioCypher."""
+@click.option(
+    "--format",
+    "export_format",
+    type=click.Choice(["csv", "parquet", "sqlite"]),
+    default="csv",
+    show_default=True,
+    help="Neo4j import files through BioCypher (csv, parquet), or one SQLite database (sqlite).",
+)
+def build(graph_path: Path, as_json: bool, out: Path | None, export_format: str) -> None:
+    """Run loaders, mappings and quality checks, then export the graph."""
     from biotope.graph.build import run_pipeline
+    from biotope.graph.output import BioCypherWriter, SQLiteWriter
 
     destination = (out if out is not None else graph_path / "build").absolute()
 
@@ -142,7 +151,12 @@ def build(graph_path: Path, as_json: bool, out: Path | None) -> None:
             with select_workspace(root) as workspace:
                 pipeline = workspace.pipeline()
                 return run_pipeline(
-                    pipeline, destination, workspace=workspace, phase=output.phase, on_finding=output.on_finding
+                    pipeline,
+                    destination,
+                    workspace=workspace,
+                    writer=SQLiteWriter() if export_format == "sqlite" else BioCypherWriter(export_format),
+                    phase=output.phase,
+                    on_finding=output.on_finding,
                 )
         except WorkspaceLoadFailed as exc:
             report = load_failure("build", root, exc)
