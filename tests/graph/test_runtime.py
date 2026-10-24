@@ -133,6 +133,8 @@ def test_topology_semantics_and_value_integrity():
     run = context(PEOPLE, MISTYPED_PROPERTY, UNNAMESPACED_IDENTIFIER, UNDECLARED_OUTPUT)
     run.map(PEOPLE, person("1", "Ada"))
     run.map(PEOPLE, person("1", "Ada", artifact="other.csv", version="v2"))
+    with pytest.raises(AttributeError, match="nodes"):
+        run.stores()
     run.resolve()
     assert len(run.nodes) == 1
     assert len(next(iter(run.nodes.values())).evidence) == 2

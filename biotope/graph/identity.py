@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
+from itertools import combinations
 from typing import Any, cast
 
+import networkx as nx
 from networkx.utils import UnionFind
 
 from biotope.graph.contracts import Evidence, GraphRecord, Identity, Match, Pipeline, Precedence
@@ -13,6 +15,7 @@ from biotope.graph.topology import ConceptSchema, concept_id, field_names, hints
 
 Check = Callable[[str, object, ConceptSchema], None]
 KeyValue = tuple[str, str]
+Node = tuple[str, str]
 Report = dict[str, Any]
 
 
@@ -229,55 +232,95 @@ class Partition:
     def score(self, groups: list[set[str]]) -> int:
         return sum(len(values) - 1 for group in groups for values in self.contradicted(group).values())
 
+    def anchored(self, record: str) -> bool:
+        return any(key in self.single for key, _ in self.keys[record])
+
     def clash(self, first: str, second: str) -> bool:
         own = {key: value for key, value in self.keys[first] if key in self.single}
         return any(key in own and own[key] != value for key, value in self.keys[second] if key in self.single)
 
-    def ends(self, link: Link, records: set[str]) -> tuple[list[str], list[str]]:
-        return [r for r in link.subject if r in records], [r for r in link.object if r in records]
-
-    def clashes(self, choice: Link | str, records: set[str], links: list[Link]) -> int:
-        if isinstance(choice, Link):
-            subject, target = self.ends(choice, records)
-            return int(any(self.clash(first, second) for first in subject for second in target))
-        neighbours = {other for other in records if self.keys[other] & self.keys[choice]}
-        for link in links:
-            subject, target = self.ends(link, records)
-            if choice in subject or choice in target:
-                neighbours.update(subject[:1] + target[:1])
-        return sum(self.clash(choice, other) for other in neighbours - {choice})
+    def clashes(self, record: str, records: set[str]) -> int:
+        return sum(self.clash(record, other) for other in records - {record} if self.keys[other] & self.keys[record])
 
     def split(self, group: set[str], links: list[Link]) -> tuple[list[set[str]], list[str], list[Link]]:
-        records, kept = set(group), list(links)
-        apart: list[str] = []
-        dropped: list[Link] = []
+        apart = self.untangle({record for record in group if self.anchored(record)})
+        records = set(group) - apart
+        loose, dropped = self.unbridge(records, links)
+        kept = [link for link in links if link not in dropped]
+        return self.parts(records - loose, kept), sorted(apart | loose), dropped
+
+    def untangle(self, records: set[str]) -> set[str]:
+        apart: set[str] = set()
         while True:
-            current = self.parts(records, kept)
-            total = self.score(current)
-            if total == 0:
-                return current, sorted(apart), dropped
-            options: list[tuple[tuple[int, int, int, int, str], Link | str]] = []
-            for link in kept:
-                after = self.parts(records, [item for item in kept if item is not link])
-                name = f"{link.match.subject_id} {link.match.object_id}"
-                rank = (self.score(after), -self.clashes(link, records, kept), 0, -pairs(after), name)
-                options.append((rank, link))
-            for record in sorted(records):
-                after = self.parts(records - {record}, kept)
-                rank = (self.score(after), -self.clashes(record, records, kept), 1, -pairs(after), record)
-                options.append((rank, record))
-            best, choice = min(options, key=lambda option: option[0])
-            if best[0] >= total:
-                for part in current:
-                    if self.contradicted(part):
-                        apart.extend(part)
-                        records -= part
-            elif isinstance(choice, Link):
-                kept.remove(choice)
-                dropped.append(choice)
-            else:
-                records.remove(choice)
-                apart.append(choice)
+            contradicted = [part for part in self.parts(records, []) if self.contradicted(part)]
+            if not contradicted:
+                return apart
+            options: dict[str, tuple[int, int, int]] = {}
+            for record in sorted({record for part in contradicted for record in part}):
+                after = self.parts(records - {record}, [])
+                options[record] = (self.score(after), -self.clashes(record, records), -pairs(after))
+            best = min(options.values())
+            tier = {record for record, rank in options.items() if rank == best}
+            records -= tier
+            apart |= tier
+
+    def unbridge(self, records: set[str], links: list[Link]) -> tuple[set[str], list[Link]]:
+        cores = self.parts({record for record in records if self.anchored(record)}, [])
+        home = {record: ("core", str(index)) for index, core in enumerate(cores) for record in core}
+        owner = {item: home[record] for record in home for item in self.keys[record]}
+        loose: set[str] = set()
+        dropped: set[int] = set()
+        while True:
+            adjacency: dict[Node, set[Node]] = {}
+            for record in sorted(records - loose - set(home)):
+                adjacency[("record", record)] = {
+                    owner.get(item, ("value", "\0".join(item))) for item in self.keys[record]
+                }
+            for index, link in enumerate(links):
+                ends = {home.get(record, ("record", record)) for record in self.present(link, records - loose)}
+                if index not in dropped and ends:
+                    adjacency[("link", str(index))] = ends
+            conflict = self.conflict(adjacency, cores)
+            if conflict is None:
+                return loose, [link for index, link in enumerate(links) if index in dropped]
+            for kind, name in cut(adjacency, conflict):
+                if kind == "record":
+                    loose.add(name)
+                else:
+                    dropped.add(int(name))
+
+    def present(self, link: Link, records: set[str]) -> list[str]:
+        ends = [[record for record in side if record in records] for side in (link.subject, link.object)]
+        return [*ends[0], *ends[1]] if ends[0] and ends[1] else []
+
+    def conflict(self, adjacency: dict[Node, set[Node]], cores: list[set[str]]) -> tuple[Node, Node] | None:
+        joined: UnionFind[Node] = UnionFind()
+        for node, others in adjacency.items():
+            joined.union(node, *others)
+        found: list[tuple[int, int]] = []
+        for group in joined.to_sets():
+            inside = sorted(int(name) for kind, name in group if kind == "core")
+            found += [pair for pair in combinations(inside, 2) if self.contradicted(cores[pair[0]] | cores[pair[1]])]
+        if not found:
+            return None
+        first, second = min(found)
+        return ("core", str(first)), ("core", str(second))
+
+
+def cut(adjacency: dict[Node, set[Node]], ends: tuple[Node, Node]) -> set[Node]:
+    unit = len(adjacency) + 1
+    flow: nx.DiGraph[object] = nx.DiGraph()
+    for node, others in adjacency.items():
+        flow.add_edge(("in", node), ("out", node), capacity=unit + (node[0] == "record"))
+        for other in others:
+            flow.add_edge(("out", node), other if other not in adjacency else ("in", other))
+            flow.add_edge(other if other not in adjacency else ("out", other), ("in", node))
+    found: set[Node] = set()
+    for source, target in (ends, ends[::-1]):
+        result = nx.minimum_cut(flow, source, target)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        near = cast(set[object], result[1][0])
+        found |= {node for node in adjacency if ("in", node) in near and ("out", node) not in near}
+    return found
 
 
 def pairs(groups: list[set[str]]) -> int:
@@ -491,25 +534,28 @@ class Resolver:
         return ends[0], ends[1]
 
     def edges(self, edges: list[Copy]) -> tuple[dict[str, GraphRecord], list[Report]]:
-        groups: dict[str, list[tuple[tuple[str, str], Copy]]] = {}
+        groups: dict[tuple[str, str], list[tuple[tuple[str, str], Copy]]] = {}
         for copy in edges:
             ends = self.endpoints(copy)
             semantic = concept_id(type(copy.value))
             keyed = "id" in field_names(type(copy.value))
             identity = identifier(getattr(copy.value, "id")) if keyed else "edge:" + digest([semantic, *ends])
-            groups.setdefault(identity, []).append((ends, copy))
+            groups.setdefault((semantic, identity), []).append((ends, copy))
         stored: dict[str, GraphRecord] = {}
         relations: list[Report] = []
-        for identity, group in sorted(groups.items()):
+        for (semantic, identity), group in sorted(groups.items()):
+            if identity in stored:
+                owner = concept_id(type(stored[identity].value))
+                raise ValueError(f"{identity}: two relations share this ID, of {owner} and {semantic}")
             (source, target), copies = group[0][0], [copy for _, copy in group]
-            semantic = concept_id(type(copies[0].value))
             if any(ends != (source, target) for ends, _ in group):
                 found = sorted({ends for ends, _ in group})
                 raise ValueError(f"{semantic} {identity}: its copies resolve to different endpoints: {found}")
-            relation: Report = {"source": source, "target": target}
-            if "id" in field_names(type(copies[0].value)):
-                relation = {"id": identity, **relation}
+            keyed = "id" in field_names(type(copies[0].value))
             named = f"{semantic} {source} -> {target}"
+            relation: Report = {"source": source, "target": target}
+            if keyed:
+                relation = {"id": identity, **relation}
             fields = Fields(
                 {"concept": semantic, "relation": relation}, named, self.precedence.get(semantic), self.conflicts
             )

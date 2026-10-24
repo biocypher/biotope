@@ -92,12 +92,18 @@ page, and another person formed the same way, each with its own roster record ID
 stay whole when a new roster row arrives whose email is the first person's and
 whose ORCID is the second's. Only the new row is kept apart.
 
-Biotope removes one record or link at a time until no single-valued key holds two
-values in any group. It removes the one that leaves the fewest contradictions;
-among equals, the one whose own values clash with the records it touches directly;
-then a link before a record; then the one that keeps more records together; then
-by ID. When no single removal helps, every record of the group that still
-contradicts is kept apart.
+Biotope finds them in two steps, and no step depends on how records are named:
+
+1. Records that hold a value of a single-valued key form groups through the values
+   they share. While a group holds two values of a single-valued key, biotope
+   keeps apart the record whose removal leaves the fewest contradictions; among
+   equals, the one whose own values clash with more records it shares a value
+   with, then the one that keeps more records together. Records that tie on all
+   three are kept apart together.
+1. The other records and the match links only join those groups. Where they would
+   join two groups whose values contradict, biotope keeps apart the fewest of them
+   that separate the two groups, links before records. When several such sets are
+   equally small, it keeps apart those next to either group.
 
 A record kept apart becomes an entity of its own with a derived ID and
 `kept_apart: true`. A link kept apart is not applied.
@@ -152,9 +158,11 @@ will override a link.
 concept, which source wins for each field that several sources may fill.
 
 - **Sources** are the `SourceContract` registrations the pipeline selects. A copy's
-  source is the source its records were loaded from with `context.load`. A copy
-  that a mapping built from records of several sources ranks by the best placed of
-  them.
+  source is the source whose loader read the records its mapping received:
+  `context.load` marks each record with its source in `SourceRecord.sources`, and
+  `context.apply` passes the marks on to its outputs. Evidence that two sources
+  share does not change a copy's source. A copy that a mapping built from records
+  of several sources ranks by the best placed of them.
 - **First source wins.** For a field in `fields`, the entity takes the value of the
   first source in the list that has one; `None`, `""` and `[]` are no value. When
   two sources, or two records of one source, give different values, biotope lists
@@ -187,8 +195,9 @@ apart answers to its own key values only where no other entity holds them.
 
 The copies of a relation that several sources give, identified by its type and
 resolved endpoints, or by its `id` field when it has one, become one relation
-with every copy's provenance. Precedence and the conflict list apply to its fields
-as to an entity's.
+with every copy's provenance. Two relations of different types with one `id` stop
+the build. Precedence and the conflict list apply to a relation's fields as to an
+entity's.
 
 ## What a build writes
 
@@ -208,7 +217,7 @@ as to an entity's.
 - `unresolved_links`: links that named no record, with what was `missing`.
 
 A build also writes `graph/build/entities.json`, the merged record of every entity
-and relation, one per line and sorted, with no timestamps, so two builds of the
+and relation, sorted, with no timestamps, so two builds of the
 same inputs give the same file:
 
 - each entity's `concept`, `id`, whether the ID is `derived`, whether it was

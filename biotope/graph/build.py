@@ -15,12 +15,11 @@ from typing import Any
 from biotope.graph.artifacts import RUN_REPORT, check_build_destination, record_failed_build, report_text, save_report
 from biotope.graph.check import check_pipeline
 from biotope.graph.contracts import Pipeline
-from biotope.graph.entities import ENTITIES, write_entities
 from biotope.graph.output import BioCypherWriter, GraphWriter
 from biotope.graph.quality import analyze_quality
 from biotope.graph.reports import REPORT_SCHEMA_VERSION, CheckFailed, Finding, FindingSink, Phase
 from biotope.graph.runtime import RunContext
-from biotope.graph.sources import digest
+from biotope.graph.sources import digest, write_text_atomic
 from biotope.graph.workspace import Workspace
 
 
@@ -128,7 +127,8 @@ def _execute(
             return
         report["audits"] = [asdict(item) for item in context.audits]
         report["loaded_records"] = context.loaded
-        report["graph_objects"] = {"nodes": len(context.nodes), "edges": len(context.edges)}
+        if hasattr(context, "nodes"):
+            report["graph_objects"] = {"nodes": len(context.nodes), "edges": len(context.edges)}
         report["source_versions"] = sorted(context.source_versions)
         kept: list[Any] = [item for item in report["findings"] if item.get("kind") != "exclusion"]
         report["findings"] = [*kept, *context.findings]
@@ -167,8 +167,12 @@ def _execute(
             if phase:
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
-            write_entities(output / ENTITIES, context)
-            report["outputs"] = sorted({ENTITIES, *exporter.write(context, output)})
+            entities = {"entities": context.entities, "relations": context.relations}
+            write_text_atomic(
+                output / "entities.json",
+                report_text({"schema_version": 1, "report_kind": "biotope.entities", **entities}),
+            )
+            report["outputs"] = sorted({"entities.json", *exporter.write(context, output)})
             report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
     except Exception as exc:

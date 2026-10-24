@@ -37,6 +37,7 @@ class SourceRecord(Generic[T]):
 
     value: T
     evidence: tuple[Evidence, ...]
+    sources: frozenset[str] = field(default=frozenset[str](), compare=False)
 
 
 class Loader(Protocol[C, T]):

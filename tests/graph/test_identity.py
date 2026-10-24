@@ -1,5 +1,3 @@
-"""Identity and precedence on an invented project: genes of two studies, people from four sources."""
-
 import csv
 import json
 import random
@@ -265,6 +263,79 @@ def test_a_bridging_record_and_a_bridging_link_in_one_group_leave_every_person_w
     ]
 
 
+def test_records_without_values_of_their_own_that_bridge_two_people_stay_apart_and_both_stay_whole(root):
+    edit(root / "graph/mappings/person/__init__.py", "[account.upn]", 'account.upn.split(";")')
+    _, before = built(root, "before")
+    with (root / "raw/directory.csv").open("a") as stream:
+        stream.write("ilse.brandt@example.org;jonas.keller@example.org,Bridge One,\n")
+        stream.write("i.brandt@example.org;jonas.keller@example.org,Bridge Two,\n")
+    identity, entities = built(root, "after")
+    for record in ("roster:recIlse0001", "roster:recJonas0002"):
+        assert holding(entities, record) == holding(before, record)
+    bridges = [
+        "directory:i.brandt@example.org;jonas.keller@example.org",
+        "directory:ilse.brandt@example.org;jonas.keller@example.org",
+    ]
+    [contradiction] = identity["contradictions"]
+    assert [part["record"] for part in contradiction["apart"]] == bridges
+    assert all(holding(entities, record)["kept_apart"] for record in bridges)
+
+
+def test_a_person_whose_records_share_an_office_email_with_others_is_split_like_every_other(root):
+    with (root / "raw/roster.csv").open("a") as stream:
+        for number in (1, 2, 3):
+            stream.write(f"recOffice{number},Office Person {number},office@example.org,\n")
+    with (root / "raw/directory.csv").open("a") as stream:
+        for number in (1, 2, 3):
+            stream.write(f"office{number}@example.org,Office Person {number},recOffice{number}\n")
+    identity, entities = built(root)
+    for number in (1, 2, 3):
+        assert holding(entities, f"roster:recOffice{number}")["kept_apart"]
+        assert members(holding(entities, f"directory:office{number}@example.org")) == [
+            f"directory:office{number}@example.org"
+        ]
+    [contradiction] = identity["contradictions"]
+    assert [part["record"] for part in contradiction["apart"]] == [f"roster:recOffice{n}" for n in (1, 2, 3)]
+
+
+def test_duplicate_match_links_count_once_and_keep_the_evidence_of_every_row(root):
+    subprocess.run([sys.executable, "matchers/similar_names.py"], cwd=root, check=True)
+    matches = root / "raw/matches.sssom.tsv"
+    lines = matches.read_text().splitlines()
+    header = next(index for index, line in enumerate(lines) if line.startswith("subject_id"))
+    rows = lines[header + 1 :]
+    matches.write_text("\n".join([*lines, *rows]) + "\n")
+    identity, entities = built(root)
+    grete = holding(entities, "roster:recGrete0003")
+    assert members(grete) == ["directory:grete.hansen@example.org", "roster:recGrete0003"]
+    assert len(grete["automatic"]) == 1 and len(identity["automatic_merges"]) == 1
+    jonas, jon = holding(entities, "roster:recJonas0002"), holding(entities, "roster:recJon0004")
+    assert len(members(jonas)) == 3 and members(jon) == ["roster:recJon0004"]
+    [contradiction] = identity["contradictions"]
+    assert [part["link"]["subject_id"] for part in contradiction["apart"]] == ["roster:recJon0004"]
+    first = 2 + next(index for index, row in enumerate(rows) if row.startswith("roster:recGrete0003"))
+    output = root / "graph/build/first"
+    cited = {item["location"] for item in evidence(output, exported(output, "Person")[grete["id"]])}
+    assert {f"row:{first}", f"row:{first + len(rows)}"} <= cited
+
+
+def test_a_records_source_is_the_loader_that_read_it_even_when_it_cites_another_sources_evidence(root):
+    edit(
+        root / "graph/sources/people/directory/loader.py",
+        '(Evidence("raw/directory.csv", "fixture-v1", "directory", f"line:{number}"),)',
+        '(Evidence("raw/directory.csv", "fixture-v1", "directory", f"line:{number}"), '
+        'Evidence("raw/roster.csv", "fixture-v1", "roster", "line:3"))',
+    )
+    _, entities = built(root)
+    jonas = holding(entities, "roster:recJonas0002")
+    assert jonas["fields"]["name"]["value"] == "Jonas Keller"
+    assert [member["sources"] for member in jonas["records"]] == [
+        ["people/directory"],
+        ["profile/profile_jsonl"],
+        ["people/roster"],
+    ]
+
+
 def test_combined_lists_one_relation_from_two_sources_and_undeclared_disagreement(root):
     report, output = build(root)
     entities = json.loads((output / "entities.json").read_text())
@@ -371,3 +442,41 @@ def test_a_link_that_names_no_record_is_listed_and_changes_nothing():
             "missing": ["thing:gone", "alias:old"],
         }
     ]
+
+
+@dataclass(frozen=True)
+class Knows:
+    schema_id: ClassVar[str] = "test:knows"
+    id: str
+    source: ThingId
+    target: ThingId
+
+
+@dataclass(frozen=True)
+class Likes:
+    schema_id: ClassVar[str] = "test:likes"
+    id: str
+    source: ThingId
+    target: ThingId
+
+
+def related(row: SourceRecord[LinkRow]) -> list[Thing | Knows | Likes]:
+    ends = ThingId(row.value.subject), ThingId(row.value.target)
+    return [Thing(ends[0], None), Thing(ends[1], None), Knows("edge:1", *ends), Likes("edge:1", *ends)]
+
+
+def test_two_relations_of_different_types_may_not_share_an_id():
+    relations = Mapping(name="relations", function=related)
+    pipeline = Pipeline(
+        "relations",
+        Topology((Thing,), (Knows, Likes)),
+        (),
+        (relations,),
+        lambda context: None,
+        scope="two relation types",
+        code_paths=(__file__,),
+    )
+    context = RunContext(pipeline)
+    context.map(relations, SourceRecord(LinkRow("thing:a", "thing:b"), (Evidence("r.tsv", "v1", "r", "2"),)))
+    with pytest.raises(ValueError, match="edge:1.*test:knows.*test:likes"):
+        context.resolve()
