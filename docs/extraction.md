@@ -271,8 +271,12 @@ the schema, because the baker infers fields from the values present: it would dr
 a field that is null in every record and describe lists as opaque arrays. Each
 value field carries the schema's description, type and nullability, and lists are
 marked `cr:isArray`, so `biotope source generate` produces typed, nested record
-classes. Do not edit this manifest by hand: the next run that finds it no longer
-describes the records or the schema writes it again.
+classes into which the stored records load unchanged. The extractor's settings are
+described when they hold a single value, such as text or a number; a setting that
+holds a list or an object stays in the records without a field, and an extractor
+without such settings gets no `settings` field. Do not edit this manifest by hand:
+the next run that finds it no longer describes the records or the schema writes it
+again.
 
 **Run state.** `.biotope/extraction/extracted/<schema>.json` records, per
 document, the digest, schema revision and extractor that produced its stored

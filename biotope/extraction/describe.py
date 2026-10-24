@@ -92,20 +92,24 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
     settings: dict[str, str] = {}
     for record in records:
         for key, value in cast(dict[str, Any], record["provenance"]["extractor"]["settings"]).items():
-            settings.setdefault(key, _croissant_type(value))
+            if not isinstance(value, dict | list):
+                settings.setdefault(key, _croissant_type(value))
     extractor = [
         column("provenance/extractor/name", "The extractor's name.", "sc:Text", nullable=False),
         column("provenance/extractor/version", "The extractor's version.", "sc:Text", nullable=False),
-        column(
-            "provenance/extractor/settings",
-            "The extractor's non-secret settings, such as the model and the endpoint.",
-            nullable=False,
-            children=[
-                column(f"provenance/extractor/settings/{key}", f"The extractor setting {key}.", kind)
-                for key, kind in sorted(settings.items())
-            ],
-        ),
     ]
+    if settings:
+        extractor.append(
+            column(
+                "provenance/extractor/settings",
+                "The extractor's non-secret settings, such as the model and the endpoint.",
+                nullable=False,
+                children=[
+                    column(f"provenance/extractor/settings/{key}", f"The extractor setting {key}.", kind)
+                    for key, kind in sorted(settings.items())
+                ],
+            )
+        )
     provenance = [
         column("provenance/document_sha256", "SHA-256 digest of the document file.", "sc:Text", nullable=False),
         column("provenance/media_type", "The document's media type.", "sc:Text", nullable=False),

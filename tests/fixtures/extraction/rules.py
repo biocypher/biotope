@@ -11,3 +11,9 @@ class LineExtractor:
             raise ValueError("line numbers start at 1")
         text = document.text.splitlines()[self.line - 1]
         return [{"name": {"value": text, "locator": f"line {self.line}"}, "group": {"value": None}, "methods": []}]
+
+
+class FirstLineExtractor(LineExtractor):
+    def __init__(self, settings):
+        super().__init__({"version": "1", "line": 1})
+        self.settings = settings["recorded"]
