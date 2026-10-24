@@ -1,0 +1,217 @@
+{
+  "@context": {
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "biotope": "https://biocypher.org/biotope/"
+  },
+  "name": "people",
+  "version": "fixture-v1",
+  "distribution": [
+    {
+      "@id": "roster-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/roster.csv",
+      "encodingFormat": "text/csv"
+    },
+    {
+      "@id": "directory-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/directory.csv",
+      "encodingFormat": "text/csv"
+    },
+    {
+      "@id": "matches-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/matches.sssom.tsv",
+      "encodingFormat": "text/tab-separated-values"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "roster",
+      "name": "roster",
+      "field": [
+        {
+          "@id": "roster/record",
+          "name": "record",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "roster-file"
+            },
+            "extract": {
+              "column": "record"
+            }
+          }
+        },
+        {
+          "@id": "roster/name",
+          "name": "name",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "roster-file"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        },
+        {
+          "@id": "roster/email",
+          "name": "email",
+          "dataType": "sc:Text",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "roster-file"
+            },
+            "extract": {
+              "column": "email"
+            }
+          }
+        },
+        {
+          "@id": "roster/orcid",
+          "name": "orcid",
+          "dataType": "sc:Text",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "roster-file"
+            },
+            "extract": {
+              "column": "orcid"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "@id": "directory",
+      "name": "directory",
+      "field": [
+        {
+          "@id": "directory/upn",
+          "name": "upn",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "directory-file"
+            },
+            "extract": {
+              "column": "upn"
+            }
+          }
+        },
+        {
+          "@id": "directory/name",
+          "name": "name",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "directory-file"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        },
+        {
+          "@id": "directory/roster",
+          "name": "roster",
+          "dataType": "sc:Text",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "directory-file"
+            },
+            "extract": {
+              "column": "roster"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "@id": "matches",
+      "name": "matches",
+      "field": [
+        {
+          "@id": "matches/subject_id",
+          "name": "subject_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "matches-file"
+            },
+            "extract": {
+              "column": "subject_id"
+            }
+          }
+        },
+        {
+          "@id": "matches/predicate_id",
+          "name": "predicate_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "matches-file"
+            },
+            "extract": {
+              "column": "predicate_id"
+            }
+          }
+        },
+        {
+          "@id": "matches/object_id",
+          "name": "object_id",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "matches-file"
+            },
+            "extract": {
+              "column": "object_id"
+            }
+          }
+        },
+        {
+          "@id": "matches/mapping_justification",
+          "name": "mapping_justification",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "matches-file"
+            },
+            "extract": {
+              "column": "mapping_justification"
+            }
+          }
+        },
+        {
+          "@id": "matches/confidence",
+          "name": "confidence",
+          "dataType": "sc:Float",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "matches-file"
+            },
+            "extract": {
+              "column": "confidence"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

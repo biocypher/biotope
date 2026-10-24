@@ -1,0 +1,5 @@
+record,name,email,orcid
+recIlse0001,Ilse Brandt,ilse.brandt@example.org,0000-0004-1234-5671
+recJonas0002,Jonas Keller,jonas.keller@example.org,0000-0004-7890-1239
+recGrete0003,Grete Hansen,,
+recJon0004,Jon Keller,,0000-0005-6789-0121

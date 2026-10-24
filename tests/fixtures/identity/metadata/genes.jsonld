@@ -1,0 +1,121 @@
+{
+  "@context": {
+    "sc": "https://schema.org/",
+    "cr": "http://mlcommons.org/croissant/",
+    "biotope": "https://biocypher.org/biotope/"
+  },
+  "name": "genes",
+  "version": "fixture-v1",
+  "distribution": [
+    {
+      "@id": "study_a-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/study_a.csv",
+      "encodingFormat": "text/csv"
+    },
+    {
+      "@id": "study_b-file",
+      "@type": "cr:FileObject",
+      "contentUrl": "raw/study_b.csv",
+      "encodingFormat": "text/csv"
+    }
+  ],
+  "recordSet": [
+    {
+      "@id": "study_a",
+      "name": "study_a",
+      "field": [
+        {
+          "@id": "study_a/row",
+          "name": "row",
+          "dataType": "sc:Integer",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "study_a-file"
+            },
+            "extract": {
+              "column": "row"
+            }
+          }
+        },
+        {
+          "@id": "study_a/ensembl",
+          "name": "ensembl",
+          "dataType": "sc:Text",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "study_a-file"
+            },
+            "extract": {
+              "column": "ensembl"
+            }
+          }
+        },
+        {
+          "@id": "study_a/symbol",
+          "name": "symbol",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "study_a-file"
+            },
+            "extract": {
+              "column": "symbol"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "@id": "study_b",
+      "name": "study_b",
+      "field": [
+        {
+          "@id": "study_b/row",
+          "name": "row",
+          "dataType": "sc:Integer",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "study_b-file"
+            },
+            "extract": {
+              "column": "row"
+            }
+          }
+        },
+        {
+          "@id": "study_b/ensembl",
+          "name": "ensembl",
+          "dataType": "sc:Text",
+          "biotope:nullable": true,
+          "source": {
+            "fileObject": {
+              "@id": "study_b-file"
+            },
+            "extract": {
+              "column": "ensembl"
+            }
+          }
+        },
+        {
+          "@id": "study_b/symbol",
+          "name": "symbol",
+          "dataType": "sc:Text",
+          "biotope:nullable": false,
+          "source": {
+            "fileObject": {
+              "@id": "study_b-file"
+            },
+            "extract": {
+              "column": "symbol"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

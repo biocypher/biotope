@@ -1,0 +1,17 @@
+from biotope.graph import MappingEntry
+
+from .gene import STUDY_A_GENES, STUDY_B_GENES
+from .paper import OPENALEX_PAPERS, PUSH_PAPERS
+from .person import DIRECTORY_PEOPLE, PEOPLE_MATCHES, PROFILE_PEOPLE, ROSTER_PEOPLE
+
+
+MAPPINGS: tuple[MappingEntry, ...] = (
+    STUDY_A_GENES,
+    STUDY_B_GENES,
+    ROSTER_PEOPLE,
+    DIRECTORY_PEOPLE,
+    PROFILE_PEOPLE,
+    PEOPLE_MATCHES,
+    PUSH_PAPERS,
+    OPENALEX_PAPERS,
+)

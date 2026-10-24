@@ -1,0 +1,836 @@
+{
+  "@context": {
+    "@language": "en",
+    "@vocab": "https://schema.org/",
+    "citeAs": "cr:citeAs",
+    "column": "cr:column",
+    "conformsTo": "dct:conformsTo",
+    "cr": "http://mlcommons.org/croissant/",
+    "rai": "http://mlcommons.org/croissant/RAI/",
+    "data": {
+      "@id": "cr:data",
+      "@type": "@json"
+    },
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "dct": "http://purl.org/dc/terms/",
+    "equivalentProperty": "cr:equivalentProperty",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
+    "extract": "cr:extract",
+    "field": "cr:field",
+    "fileProperty": "cr:fileProperty",
+    "fileObject": "cr:fileObject",
+    "fileSet": "cr:fileSet",
+    "format": "cr:format",
+    "includes": "cr:includes",
+    "isLiveDataset": "cr:isLiveDataset",
+    "jsonPath": "cr:jsonPath",
+    "key": "cr:key",
+    "md5": "cr:md5",
+    "parentField": "cr:parentField",
+    "path": "cr:path",
+    "recordSet": "cr:recordSet",
+    "references": "cr:references",
+    "regex": "cr:regex",
+    "repeated": "cr:repeated",
+    "replace": "cr:replace",
+    "samplingRate": "cr:samplingRate",
+    "sc": "https://schema.org/",
+    "separator": "cr:separator",
+    "source": "cr:source",
+    "subField": "cr:subField",
+    "transform": "cr:transform"
+  },
+  "@type": "sc:Dataset",
+  "name": "extracted/profile.jsonl",
+  "description": "Profile records extracted from data/pages. A researcher's profile page on an institute website.",
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "file_0",
+      "name": "profile.jsonl",
+      "contentSize": "1977",
+      "contentUrl": "extracted/profile.jsonl",
+      "encodingFormat": "application/jsonl",
+      "sha256": "c12990c948ae6dcec93dd0531a6b0886090cf6af2c1f54757ef38378a793508a"
+    }
+  ],
+  "dateCreated": "2026-10-24T10:34:49.870472+00:00",
+  "conformsTo": "http://mlcommons.org/croissant/1.1",
+  "version": "1.0.0",
+  "recordSet": [
+    {
+      "@type": "cr:RecordSet",
+      "@id": "profile.jsonl",
+      "name": "profile.jsonl",
+      "description": "Profile records extracted from documents, one per line.",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "profile.jsonl/id",
+          "name": "id",
+          "description": "The record ID: the document's path, then the record key's values.",
+          "source": {
+            "fileObject": {
+              "@id": "file_0"
+            },
+            "extract": {
+              "column": "id"
+            }
+          },
+          "dataType": "sc:Text",
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "profile.jsonl/document",
+          "name": "document",
+          "description": "The document's path in the project.",
+          "source": {
+            "fileObject": {
+              "@id": "file_0"
+            },
+            "extract": {
+              "column": "document"
+            }
+          },
+          "dataType": "sc:Text",
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "profile.jsonl/supported",
+          "name": "supported",
+          "description": "False when more than half of the record's non-null values have no aligned quote or locator, or are quoted only from running heads: the extractor may have answered from memory or from page furniture, so the record needs review.",
+          "source": {
+            "fileObject": {
+              "@id": "file_0"
+            },
+            "extract": {
+              "column": "supported"
+            }
+          },
+          "dataType": "sc:Boolean",
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "profile.jsonl/values",
+          "name": "values",
+          "description": "Profile values. A researcher's profile page on an institute website.",
+          "source": {
+            "fileObject": {
+              "@id": "file_0"
+            },
+            "extract": {
+              "column": "values"
+            }
+          },
+          "biotope:nullable": false,
+          "subField": [
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/values/name",
+              "name": "name",
+              "description": "The researcher's full name, without academic titles. With its evidence.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "values/name"
+                }
+              },
+              "biotope:nullable": false,
+              "subField": [
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/values/name/value",
+                  "name": "value",
+                  "description": "The researcher's full name, without academic titles.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "values/name/value"
+                    }
+                  },
+                  "dataType": "sc:Text",
+                  "biotope:nullable": false
+                },
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/values/name/evidence",
+                  "name": "evidence",
+                  "description": "The value's evidence; null when the extractor gave neither a quote nor a locator.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "values/name/evidence"
+                    }
+                  },
+                  "subField": [
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/quote",
+                      "name": "quote",
+                      "description": "The text the extractor quoted for the value.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/quote"
+                        }
+                      },
+                      "dataType": "sc:Text"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/locator",
+                      "name": "locator",
+                      "description": "Where an extractor that does not quote found the value, in that extractor's notation.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/locator"
+                        }
+                      },
+                      "dataType": "sc:Text"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/aligned",
+                      "name": "aligned",
+                      "description": "Whether biotope found the quote in its text of the document; false needs review.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/aligned"
+                        }
+                      },
+                      "dataType": "sc:Boolean"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/start",
+                      "name": "start",
+                      "description": "Offset of the quote's first character in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/start"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/end",
+                      "name": "end",
+                      "description": "Offset just after the quote's last character in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/end"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/page",
+                      "name": "page",
+                      "description": "The PDF page the quote is on, counting from 1.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/page"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/occurrences",
+                      "name": "occurrences",
+                      "description": "How often the quote occurs in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/occurrences"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/name/evidence/weak",
+                      "name": "weak",
+                      "description": "Why an aligned quote may not prove its value: short, under 10 characters; repeated, under 30 characters and found more than once; running head, found only in lines that recur on most pages of a PDF. Empty for a quote without these reasons, null for an unaligned quote and a locator.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/name/evidence/weak"
+                        }
+                      },
+                      "dataType": "sc:Text",
+                      "cr:isArray": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/values/orcid",
+              "name": "orcid",
+              "description": "The researcher's ORCID iD, as 0000-0000-0000-0000. With its evidence.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "values/orcid"
+                }
+              },
+              "biotope:nullable": false,
+              "subField": [
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/values/orcid/value",
+                  "name": "value",
+                  "description": "The researcher's ORCID iD, as 0000-0000-0000-0000.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "values/orcid/value"
+                    }
+                  },
+                  "dataType": "sc:Text"
+                },
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/values/orcid/evidence",
+                  "name": "evidence",
+                  "description": "The value's evidence; null when the extractor gave neither a quote nor a locator.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "values/orcid/evidence"
+                    }
+                  },
+                  "subField": [
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/quote",
+                      "name": "quote",
+                      "description": "The text the extractor quoted for the value.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/quote"
+                        }
+                      },
+                      "dataType": "sc:Text"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/locator",
+                      "name": "locator",
+                      "description": "Where an extractor that does not quote found the value, in that extractor's notation.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/locator"
+                        }
+                      },
+                      "dataType": "sc:Text"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/aligned",
+                      "name": "aligned",
+                      "description": "Whether biotope found the quote in its text of the document; false needs review.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/aligned"
+                        }
+                      },
+                      "dataType": "sc:Boolean"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/start",
+                      "name": "start",
+                      "description": "Offset of the quote's first character in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/start"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/end",
+                      "name": "end",
+                      "description": "Offset just after the quote's last character in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/end"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/page",
+                      "name": "page",
+                      "description": "The PDF page the quote is on, counting from 1.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/page"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/occurrences",
+                      "name": "occurrences",
+                      "description": "How often the quote occurs in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/occurrences"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/orcid/evidence/weak",
+                      "name": "weak",
+                      "description": "Why an aligned quote may not prove its value: short, under 10 characters; repeated, under 30 characters and found more than once; running head, found only in lines that recur on most pages of a PDF. Empty for a quote without these reasons, null for an unaligned quote and a locator.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/orcid/evidence/weak"
+                        }
+                      },
+                      "dataType": "sc:Text",
+                      "cr:isArray": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/values/emails",
+              "name": "emails",
+              "description": "Every email address the page gives for the researcher. With its evidence.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "values/emails"
+                }
+              },
+              "cr:isArray": true,
+              "biotope:nullable": false,
+              "subField": [
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/values/emails/value",
+                  "name": "value",
+                  "description": "Every email address the page gives for the researcher.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "values/emails/value"
+                    }
+                  },
+                  "dataType": "sc:Text",
+                  "biotope:nullable": false
+                },
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/values/emails/evidence",
+                  "name": "evidence",
+                  "description": "The value's evidence; null when the extractor gave neither a quote nor a locator.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "values/emails/evidence"
+                    }
+                  },
+                  "subField": [
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/quote",
+                      "name": "quote",
+                      "description": "The text the extractor quoted for the value.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/quote"
+                        }
+                      },
+                      "dataType": "sc:Text"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/locator",
+                      "name": "locator",
+                      "description": "Where an extractor that does not quote found the value, in that extractor's notation.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/locator"
+                        }
+                      },
+                      "dataType": "sc:Text"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/aligned",
+                      "name": "aligned",
+                      "description": "Whether biotope found the quote in its text of the document; false needs review.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/aligned"
+                        }
+                      },
+                      "dataType": "sc:Boolean"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/start",
+                      "name": "start",
+                      "description": "Offset of the quote's first character in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/start"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/end",
+                      "name": "end",
+                      "description": "Offset just after the quote's last character in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/end"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/page",
+                      "name": "page",
+                      "description": "The PDF page the quote is on, counting from 1.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/page"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/occurrences",
+                      "name": "occurrences",
+                      "description": "How often the quote occurs in biotope's text of the document.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/occurrences"
+                        }
+                      },
+                      "dataType": "sc:Integer"
+                    },
+                    {
+                      "@type": "cr:Field",
+                      "@id": "profile.jsonl/values/emails/evidence/weak",
+                      "name": "weak",
+                      "description": "Why an aligned quote may not prove its value: short, under 10 characters; repeated, under 30 characters and found more than once; running head, found only in lines that recur on most pages of a PDF. Empty for a quote without these reasons, null for an unaligned quote and a locator.",
+                      "source": {
+                        "fileObject": {
+                          "@id": "file_0"
+                        },
+                        "extract": {
+                          "column": "values/emails/evidence/weak"
+                        }
+                      },
+                      "dataType": "sc:Text",
+                      "cr:isArray": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "profile.jsonl/provenance",
+          "name": "provenance",
+          "description": "How the record was extracted.",
+          "source": {
+            "fileObject": {
+              "@id": "file_0"
+            },
+            "extract": {
+              "column": "provenance"
+            }
+          },
+          "biotope:nullable": false,
+          "subField": [
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/document_sha256",
+              "name": "document_sha256",
+              "description": "SHA-256 digest of the document file.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/document_sha256"
+                }
+              },
+              "dataType": "sc:Text",
+              "biotope:nullable": false
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/media_type",
+              "name": "media_type",
+              "description": "The document's media type.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/media_type"
+                }
+              },
+              "dataType": "sc:Text",
+              "biotope:nullable": false
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/conversion",
+              "name": "conversion",
+              "description": "The version of biotope's conversion of the document to the text that evidence offsets refer to.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/conversion"
+                }
+              },
+              "dataType": "sc:Integer",
+              "biotope:nullable": false
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/schema",
+              "name": "schema",
+              "description": "The extraction schema's class name.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/schema"
+                }
+              },
+              "dataType": "sc:Text",
+              "biotope:nullable": false
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/schema_revision",
+              "name": "schema_revision",
+              "description": "Digest of the schema's derived JSON Schema.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/schema_revision"
+                }
+              },
+              "dataType": "sc:Text",
+              "biotope:nullable": false
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/extractor",
+              "name": "extractor",
+              "description": "The extractor that produced the record.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/extractor"
+                }
+              },
+              "biotope:nullable": false,
+              "subField": [
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/provenance/extractor/name",
+                  "name": "name",
+                  "description": "The extractor's name.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "provenance/extractor/name"
+                    }
+                  },
+                  "dataType": "sc:Text",
+                  "biotope:nullable": false
+                },
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/provenance/extractor/version",
+                  "name": "version",
+                  "description": "The extractor's version.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "provenance/extractor/version"
+                    }
+                  },
+                  "dataType": "sc:Text",
+                  "biotope:nullable": false
+                },
+                {
+                  "@type": "cr:Field",
+                  "@id": "profile.jsonl/provenance/extractor/settings",
+                  "name": "settings",
+                  "description": "The extractor's non-secret settings, such as the model and the endpoint.",
+                  "source": {
+                    "fileObject": {
+                      "@id": "file_0"
+                    },
+                    "extract": {
+                      "column": "provenance/extractor/settings"
+                    }
+                  },
+                  "biotope:nullable": false
+                }
+              ]
+            },
+            {
+              "@type": "cr:Field",
+              "@id": "profile.jsonl/provenance/redone",
+              "name": "redone",
+              "description": "True when the document was extracted again on request although its inputs were unchanged.",
+              "source": {
+                "fileObject": {
+                  "@id": "file_0"
+                },
+                "extract": {
+                  "column": "provenance/redone"
+                }
+              },
+              "dataType": "sc:Boolean"
+            }
+          ]
+        }
+      ],
+      "key": {
+        "@id": "profile.jsonl/id"
+      }
+    }
+  ],
+  "biotope:status": "processed",
+  "prov:wasDerivedFrom": [
+    {
+      "@id": "data/pages"
+    }
+  ]
+}
