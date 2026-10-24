@@ -246,6 +246,21 @@ def test_a_matchers_links_merge_automatically_and_a_bridging_link_stays_apart(ro
     }
 
 
+def test_a_bridging_record_and_a_bridging_link_in_one_group_leave_every_person_whole(root):
+    _, before = built(root, "before")
+    subprocess.run([sys.executable, "matchers/similar_names.py"], cwd=root, check=True)
+    with (root / "raw/roster.csv").open("a") as stream:
+        stream.write(f"recNew0005,Ilse Brandt,ilse.brandt@example.org,{JONAS}\n")
+    identity, entities = built(root, "after")
+    for record in ("roster:recIlse0001", "roster:recJonas0002", "roster:recJon0004"):
+        assert members(holding(entities, record)) == members(holding(before, record))
+    [contradiction] = identity["contradictions"]
+    assert [part.get("record") or part["link"]["subject_id"] for part in contradiction["apart"]] == [
+        "roster:recNew0005",
+        "roster:recJon0004",
+    ]
+
+
 def test_combined_lists_one_relation_from_two_sources_and_undeclared_disagreement(root):
     report, output = build(root)
     entities = json.loads((output / "entities.json").read_text())

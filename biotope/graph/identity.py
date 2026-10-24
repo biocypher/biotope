@@ -230,6 +230,24 @@ class Partition:
     def score(self, groups: list[set[str]]) -> int:
         return sum(len(values) - 1 for group in groups for values in self.contradicted(group).values())
 
+    def clash(self, first: str, second: str) -> bool:
+        own = {key: value for key, value in self.keys[first] if key in self.single}
+        return any(key in own and own[key] != value for key, value in self.keys[second] if key in self.single)
+
+    def ends(self, link: Link, records: set[str]) -> tuple[list[str], list[str]]:
+        return [r for r in link.subject if r in records], [r for r in link.object if r in records]
+
+    def clashes(self, choice: Link | str, records: set[str], links: list[Link]) -> int:
+        if isinstance(choice, Link):
+            subject, target = self.ends(choice, records)
+            return int(any(self.clash(first, second) for first in subject for second in target))
+        neighbours = {other for other in records if self.keys[other] & self.keys[choice]}
+        for link in links:
+            subject, target = self.ends(link, records)
+            if choice in subject or choice in target:
+                neighbours.update(subject[:1] + target[:1])
+        return sum(self.clash(choice, other) for other in neighbours - {choice})
+
     def split(self, group: set[str], links: list[Link]) -> tuple[list[set[str]], list[str], list[Link]]:
         records, kept = set(group), list(links)
         apart: list[str] = []
@@ -239,14 +257,16 @@ class Partition:
             total = self.score(current)
             if total == 0:
                 return current, sorted(apart), dropped
-            options: list[tuple[tuple[int, int, int, str], Link | str]] = []
+            options: list[tuple[tuple[int, int, int, int, str], Link | str]] = []
             for link in kept:
                 after = self.parts(records, [item for item in kept if item is not link])
                 name = f"{link.match.subject_id} {link.match.object_id}"
-                options.append(((self.score(after), 0, -pairs(after), name), link))
+                rank = (self.score(after), -self.clashes(link, records, kept), 0, -pairs(after), name)
+                options.append((rank, link))
             for record in sorted(records):
                 after = self.parts(records - {record}, kept)
-                options.append(((self.score(after), 1, -pairs(after), record), record))
+                rank = (self.score(after), -self.clashes(record, records, kept), 1, -pairs(after), record)
+                options.append((rank, record))
             best, choice = min(options, key=lambda option: option[0])
             if best[0] >= total:
                 for part in current:
