@@ -36,41 +36,27 @@ An **evolving project** meets two kinds of change. New rows in a known source ne
 ## Decisions
 
 1. **Biotope's scope.** Biotope owns the representation of the data and its mapping: extraction, sources, identity, precedence, topology, committed state and releases. It is never a fetcher or scraper, a scheduler, an application layer (search, user interfaces, writing back to tools such as Airtable), a general ETL tool, or a judge of equivalence. Downloading a source is a script the project adds.
+2. **Extraction is a stage before `add`.** A raw document goes through an extractor into a stored, derived dataset (`prov:wasDerivedFrom`, status `processed`). Croissant-baker then describes it like any other file. `graph build` stays deterministic and offline.
+3. **The extractor contract.** An extractor takes documents and a reviewed extraction schema, and returns records that match the schema. Each record points to its document and each field carries its evidence, the quoted span or a locator. An extractor declares its name and version. Whether it uses an agent or generated rules is hidden behind the contract.
+4. **Extraction is stored and reproducible.** Extracted records are versioned with their provenance: document hash, schema revision, extractor name and version, model and endpoint. A document is extracted again only when one of these changes.
+5. **The LLM extractor calls an OpenAI-compatible API.** OpenRouter and the HMGU endpoint both serve one. The endpoint URL is project configuration and may be written literally, since it is not a secret. The key always comes from an environment variable that the configuration names. The model is chosen after research, not by default.
+6. **Public inputs only in this version.** Only public documents go to an external model: public HTML pages, public ERC calls and InTRAC's published papers. Internal sources, such as presentations and contracts, come later and will need a per-source policy.
+7. **People review artefacts, not records.** An agent proposes the extraction schemas, the topology and the mapping priorities and conflict resolution from the project's purpose, and a person reviews them. The rest follows the `biotope-croissant` skill: the user owns scientific decisions, the agent engineering ones, and the agent stops and asks before merging identities without a shared accession.
+8. **Builds are pure.** A build is a function of its inputs and the project's committed files. The ID registry and the release history are committed files that biotope defines generically and every build reads and extends. Human decisions are an input dataset whose shape biotope defines, and each project chooses whether to commit it: REACH reads Anna's from Airtable at each build, so names and emails stay out of git (Vlad, 23 October 2026: "ok" to "decisions such as Anna's corrections are an input dataset"). Biotope keeps no hidden state.
+9. **Identity and precedence are explicit.** Today the build refuses conflicting values and leaves resolution to Python in the mappings, and `alignment/` is an empty template. The new version makes both explicit, reviewable artefacts. Matching rules stay project code.
+10. **Stable IDs where outside things point.** Entities with natural keys, such as genes, cell types and DOIs, keep them. Entities without one that something outside the build refers to get a registered ID that never changes and is never reused, with aliases and the date each was first seen. For kinds a project registers, natural keys are aliases of the persistent ID.
+11. **Human decisions survive change.** A decision is a record about a thing that keeps changing. Biotope applies these rules for every project:
+    - a rejected match stays rejected when the sources propose it again;
+    - a decision follows its target when that target's ID is merged into another;
+    - an override retires when the source starts to agree with it;
+    - a source change under an override is flagged for review, and the override stays;
+    - two conflicting decisions are flagged, never ranked;
+    - an invalid decision drops only itself and is reported with its reason.
 
-1. **Extraction is a stage before `add`.** A raw document goes through an extractor into a stored, derived dataset (`prov:wasDerivedFrom`, status `processed`). Croissant-baker then describes it like any other file. `graph build` stays deterministic and offline.
-
-1. **The extractor contract.** An extractor takes documents and a reviewed extraction schema, and returns records that match the schema. Each record points to its document and each field carries its evidence, the quoted span or a locator. An extractor declares its name and version. Whether it uses an agent or generated rules is hidden behind the contract.
-
-1. **Extraction is stored and reproducible.** Extracted records are versioned with their provenance: document hash, schema revision, extractor name and version, model and endpoint. A document is extracted again only when one of these changes.
-
-1. **The LLM extractor calls an OpenAI-compatible API.** OpenRouter and the HMGU endpoint both serve one. The endpoint URL is project configuration and may be written literally, since it is not a secret. The key always comes from an environment variable that the configuration names. The model is chosen after research, not by default.
-
-1. **Public inputs only in this version.** Only public documents go to an external model: public HTML pages, public ERC calls and InTRAC's published papers. Internal sources, such as presentations and contracts, come later and will need a per-source policy.
-
-1. **People review artefacts, not records.** An agent proposes the extraction schemas, the topology and the mapping priorities and conflict resolution from the project's purpose, and a person reviews them. The rest follows the `biotope-croissant` skill: the user owns scientific decisions, the agent engineering ones, and the agent stops and asks before merging identities without a shared accession.
-
-1. **Builds are pure.** A build is a function of its inputs and the project's committed files. The ID registry and the release history are committed files that biotope defines generically and every build reads and extends. Human decisions are an input dataset whose shape biotope defines, and each project chooses whether to commit it: REACH reads Anna's from Airtable at each build, so names and emails stay out of git (Vlad, 23 October 2026: "ok" to "decisions such as Anna's corrections are an input dataset"). Biotope keeps no hidden state.
-
-1. **Identity and precedence are explicit.** Today the build refuses conflicting values and leaves resolution to Python in the mappings, and `alignment/` is an empty template. The new version makes both explicit, reviewable artefacts. Matching rules stay project code.
-
-1. **Stable IDs where outside things point.** Entities with natural keys, such as genes, cell types and DOIs, keep them. Entities without one that something outside the build refers to get a registered ID that never changes and is never reused, with aliases and the date each was first seen. For kinds a project registers, natural keys are aliases of the persistent ID.
-
-1. **Human decisions survive change.** A decision is a record about a thing that keeps changing. Biotope applies these rules for every project:
-
-   - a rejected match stays rejected when the sources propose it again;
-   - a decision follows its target when that target's ID is merged into another;
-   - an override retires when the source starts to agree with it;
-   - a source change under an override is flagged for review, and the override stays;
-   - two conflicting decisions are flagged, never ranked;
-   - an invalid decision drops only itself and is reported with its reason.
-
-   Interfaces for making decisions, such as REACH's Airtable tables and field sync, stay in the project.
-
-1. **Releases have history.** Every build produces a release with a manifest and a diff against the previous one. A release records its exact inputs through what Croissant already holds, each file's sha256 and size, and the build refuses or flags an input file that no longer matches its manifest. A past release can be rebuilt from its inputs and the committed state at that point while the project keeps those input files; biotope stores no raw snapshots (Vlad, 23 October 2026: "wouldn't it be too much? And doesn't croissant already do that? Let's not overbuild this part, reuse existing tools if possible").
-
-1. **Breaking 0.10 is allowed.** Biotope is before 1.0. Each break gets a note in `migration.md`. biotope-bench is updated separately.
-
-1. **Public fixtures.** Tests and examples in this repo use only public material.
+    Interfaces for making decisions, such as REACH's Airtable tables and field sync, stay in the project.
+12. **Releases have history.** Every build produces a release with a manifest and a diff against the previous one. A release records its exact inputs through what Croissant already holds, each file's sha256 and size, and the build refuses or flags an input file that no longer matches its manifest. A past release can be rebuilt from its inputs and the committed state at that point while the project keeps those input files; biotope stores no raw snapshots (Vlad, 23 October 2026: "wouldn't it be too much? And doesn't croissant already do that? Let's not overbuild this part, reuse existing tools if possible").
+13. **Breaking 0.10 is allowed.** Biotope is before 1.0. Each break gets a note in `migration.md`. biotope-bench is updated separately.
+14. **Public fixtures.** Tests and examples in this repo use only public material.
 
 ## Milestones
 
