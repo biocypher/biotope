@@ -94,7 +94,8 @@ the previous graph and writes `build/last_failure.json`.
 | `biocypher_config.yaml` | Export settings                                                          |
 | `run.json`              | Inputs, code, settings, counts, exclusions, checks, conflicts and merges |
 | `provenance.json`       | Shared source and contributor evidence                                   |
-| `entities.json`         | Each entity and relation with its records, keys and chosen field values  |
+| `entities.jsonl`        | Each entity, one per line, with its records, keys and chosen values      |
+| `relations.jsonl`       | Each relation, one per line, with its endpoints and chosen values        |
 | `biocypher/`            | Import data, headers and script                                          |
 
 Every exported node and edge carries `biotope_provenance_id`, an index into

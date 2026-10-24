@@ -263,8 +263,9 @@ def test_an_empty_graph_builds_and_replaces_the_previous_build(tmp_path, file_fo
     assert sorted(path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()) == [
         "biocypher/neo4j-admin-import-call.sh",
         "biocypher_config.yaml",
-        "entities.json",
+        "entities.jsonl",
         "provenance.json",
+        "relations.jsonl",
         "run.json",
         "schema_config.yaml",
     ]

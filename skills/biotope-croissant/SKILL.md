@@ -11,7 +11,7 @@ description: Builds typed knowledge-graph projects with Biotope from local data 
 - **Source**: one input the graph may read — a RecordSet, or a file no RecordSet reads (a paper, notes, an image). Each source has a **package**, `graph/sources/<manifest>/<source>/`, holding its schema, `SOURCE` registration and loader.
 - **Revision**: a digest of one source's contract in the manifest. A schema's `__source_digest__` records the revision you reviewed.
 
-**What you deliver.** `graph/build/`: BioCypher import files, `schema_config.yaml` with every concept and property description, `provenance.json`, `entities.json` with every merged entity, and `run.json` with the scope, policies, bindings, counts, exclusions, contradictions and conflicts. The consumer gets the graph and `graph/build/`, never this repository or your reasoning, so everything needed to read a value correctly belongs in a description, a policy or the scope.
+**What you deliver.** `graph/build/`: BioCypher import files, `schema_config.yaml` with every concept and property description, `provenance.json`, `entities.jsonl` and `relations.jsonl` with every merged entity and relation, and `run.json` with the scope, policies, bindings, counts, exclusions, contradictions and conflicts. The consumer gets the graph and `graph/build/`, never this repository or your reasoning, so everything needed to read a value correctly belongs in a description, a policy or the scope.
 
 **Ownership.** The user owns scientific decisions; you own engineering ones. Reuse decisions already made. Ask about missing ones that change selection or identity; when no one can answer, apply the default this skill names and record the question in `graph/ASSUMPTIONS.md` and the hand-over. Never settle a scientific question silently.
 
@@ -79,7 +79,7 @@ Biotope graph project:
 
 **Step 7: Declare identity and precedence, then write mappings and the pipeline.**
 
-- In `graph/alignment/__init__.py`, propose an `Identity` for each node concept that several sources or records describe and a `Precedence` for each field several sources fill, from the purpose and sample records, and any matcher the purpose needs. Mappings emit one copy per source record with that record's ID, and biotope merges the copies after the run. Build, then show the user the declarations with the merges, contradictions, conflicts and automatic merges they produce, and adopt them only after the user approves. Ask whether each key is single-valued. Never merge without a shared key, by a key or a matcher, without the user's approval. Follow [identity.md](./references/identity.md).
+- In `graph/alignment/__init__.py`, propose an `Identity` for each node concept that several sources or records describe and a `Precedence` for each field several sources fill, from the purpose and sample records, and any matcher the purpose needs. Mappings emit one copy per source record with that record's ID, and biotope merges the copies after the run. Before the first build, list every proposed key that is not an accession, such as a gene symbol or a name, say what it would merge, and ask; ask also whether each key is single-valued. Build, then show the user the declarations with the merges per key, contradictions, conflicts and automatic merges they produce, and adopt them only after the user approves. Never merge without a shared key, by a key or a matcher, without the user's approval. Follow [identity.md](./references/identity.md).
 
 - Write `graph/mappings/<concept>/` and the stage sequence in `graph/pipelines/compose.py`. Mappings select, join and construct. Send every record you do not emit through `context.exclude(...)`, against a policy declared in `Pipeline.policies`. Put aggregate losses into `context.record_audit(...)` counts.
 
@@ -125,7 +125,7 @@ Checks establish structure, not scientific correctness: a dropped eligible recor
 Build: graph/build/   Sources: <n> selected / <n> excluded
 Excluded sources: <name> — <reason>; ...
 Excluded records: <policy> <count>; ...
-Identity: <concept> <entities> from <records> records, <merged> merged; contradictions <n>; conflicts <n>; automatic merges <n>; approved by the user on <date>
+Identity: <concept> <entities> from <records> records, <merged> merged (<key> <n>, ...); contradictions <n>; conflicts <n>; automatic merges <n>; approved by the user on <date>
 Deferred: <requirement key> — <reason>
 Independent reads: <claim> — <source of the expectation> — <agrees | differs: ...>
 Open questions: see graph/ASSUMPTIONS.md

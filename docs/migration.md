@@ -24,9 +24,12 @@ declarations, with these changes:
    source, unless the field has a precedence declaration. A field that one of
    them leaves `None`, `""` or `[]` now takes the other's value instead of
    stopping the build.
-1. **New outputs.** A build writes `entities.json`; `run.json` and the quality
-   report have an `identity` section; the check report lists `identity` and
-   `precedence` declarations.
+1. **New outputs.** A build writes `entities.jsonl` and `relations.jsonl`;
+   `run.json` and the quality report have an `identity` section; the check
+   report lists `identity` and `precedence` declarations.
+1. **Staging is cleaned.** A build removes the staging directories,
+   `.<output name>-<8 characters>` and `…-previous` beside its output, that a
+   killed build left. Do not run two builds into one output at once.
 1. **Declarations.** `Pipeline` takes `identities=` and `precedence=`, and a new
    scaffold defines `IDENTITIES` and `PRECEDENCE` in `graph/alignment/__init__.py`.
    Replace Python in `alignment/` or the mappings that maps aliases to one ID with

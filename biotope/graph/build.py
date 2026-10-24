@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import platform
+import re
 import shutil
 import tempfile
 from dataclasses import asdict
@@ -19,7 +20,7 @@ from biotope.graph.output import BioCypherWriter, GraphWriter
 from biotope.graph.quality import analyze_quality
 from biotope.graph.reports import REPORT_SCHEMA_VERSION, CheckFailed, Finding, FindingSink, Phase
 from biotope.graph.runtime import RunContext
-from biotope.graph.sources import digest, write_text_atomic
+from biotope.graph.sources import digest
 from biotope.graph.workspace import Workspace
 
 
@@ -44,6 +45,10 @@ def run_pipeline(
     output = output.absolute()
     check_build_destination(output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    left = re.compile(rf"\.{re.escape(output.name)}-[a-z0-9_]{{8}}(-previous)?")
+    for stale in output.parent.iterdir():
+        if left.fullmatch(stale.name) and stale.is_dir() and not stale.is_symlink():
+            shutil.rmtree(stale)
     staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
     backup = staging.with_name(staging.name + "-previous")
     try:
@@ -167,12 +172,7 @@ def _execute(
             if phase:
                 phase("Exporting BioCypher files")
             report["dependencies"]["biocypher"] = _software("biocypher")
-            entities = {"entities": context.entities, "relations": context.relations}
-            write_text_atomic(
-                output / "entities.json",
-                report_text({"schema_version": 1, "report_kind": "biotope.entities", **entities}),
-            )
-            report["outputs"] = sorted({"entities.json", *exporter.write(context, output)})
+            report["outputs"] = sorted({*write_entities(context, output), *exporter.write(context, output)})
             report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
     except Exception as exc:
@@ -189,6 +189,16 @@ def _execute(
         collect()
         save()
     return report
+
+
+def write_entities(context: RunContext, output: Path) -> list[str]:
+    files = {"entities.jsonl": context.entities, "relations.jsonl": context.relations}
+    for name, items in files.items():
+        with (output / name).open("w", encoding="utf-8", newline="\n") as stream:
+            for item in items:
+                line = json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+                stream.write(line + "\n")
+    return list(files)
 
 
 def _version(package: str) -> str:

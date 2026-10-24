@@ -28,6 +28,7 @@ MANIFESTS = {
 EGFR = "ensembl:ENSG00000146648"
 ILSE, JONAS = "0000-0004-1234-5671", "0000-0004-7890-1239"
 JON = "0000-0005-6789-0121"
+NEW = "0000-0006-1111-2221"
 PAPER = "doi:10.5555/reach.0001"
 
 
@@ -50,10 +51,17 @@ def build(root: Path, name: str = "first") -> tuple[dict, Path]:
     return json.loads(result.stdout), root / "graph/build" / name
 
 
+def written(output: Path) -> dict:
+    return {
+        name: [json.loads(line) for line in (output / f"{name}.jsonl").read_text().splitlines()]
+        for name in ("entities", "relations")
+    }
+
+
 def built(root: Path, name: str = "first") -> tuple[dict, dict]:
     report, output = build(root, name)
     assert report["state"] == "complete", report.get("error")
-    return report["identity"], json.loads((output / "entities.json").read_text())
+    return report["identity"], written(output)
 
 
 def holding(entities: dict, record: str) -> dict:
@@ -94,7 +102,11 @@ def test_genes_merge_on_ensembl_ids_and_take_the_symbol_of_the_first_study(root)
     assert members(egfr) == ["study_a:3", "study_b:1"]
     assert [member["sources"] for member in egfr["records"]] == [["genes/study_a"], ["genes/study_b"]]
     assert egfr["keys"] == {"ensembl": ["ENSG00000146648"]}
-    assert egfr["fields"]["symbol"] == {"value": "EGFR", "sources": ["genes/study_a"], "records": ["study_a:3"]}
+    assert egfr["fields"] == {"ensembl": "ENSG00000146648", "symbol": "EGFR"}
+    assert egfr["from"] == {"symbol": ["study_a:3"]}
+    assert genes["ensembl:ENSG00000141510"]["fields"]["symbol"] == "TP53"
+    assert "from" not in genes["ensembl:ENSG00000141510"]
+    assert identity["entities"]["fixture:gene"]["merged_by_key"] == {"ensembl": 2}
     [conflict] = [item for item in identity["conflicts"] if item.get("entity") == EGFR]
     assert conflict == {
         "concept": "fixture:gene",
@@ -114,7 +126,7 @@ def test_genes_merge_on_ensembl_ids_and_take_the_symbol_of_the_first_study(root)
     edit(root / "graph/alignment/__init__.py", "(STUDY_A, STUDY_B)", "(STUDY_B, STUDY_A)")
     reversed_identity, reversed_entities = built(root, "reversed")
     assert holding(reversed_entities, "study_a:4")["id"] == unmapped["id"]
-    egfr["fields"]["symbol"] = {"value": "ERBB1", "sources": ["genes/study_b"], "records": ["study_b:1"]}
+    egfr["fields"]["symbol"], egfr["from"] = "ERBB1", {"symbol": ["study_b:1"]}
     assert reversed_entities["entities"] == entities["entities"]
     conflict.update(chosen="ERBB1", chosen_source="genes/study_b")
     assert reversed_identity["conflicts"] == identity["conflicts"]
@@ -124,7 +136,7 @@ def test_genes_merge_on_ensembl_ids_and_take_the_symbol_of_the_first_study(root)
 def test_people_merge_transitively_and_every_build_gives_the_same_entities(root):
     report, output = build(root)
     identity = report["identity"]
-    entities = json.loads((output / "entities.json").read_text())
+    entities = written(output)
     ilse = holding(entities, "roster:recIlse0001")
     assert members(ilse) == ["directory:i.brandt@example.org", "profile:data/pages/ilse.html", "roster:recIlse0001"]
     assert ilse["keys"] == {
@@ -143,17 +155,20 @@ def test_people_merge_transitively_and_every_build_gives_the_same_entities(root)
         "profile:data/pages/jonas.html",
         "roster:recJonas0002",
     ]
-    assert jonas["fields"]["name"] == {
-        "value": "Jonas Keller",
-        "sources": ["people/roster", "profile/profile_jsonl"],
-        "records": ["profile:data/pages/jonas.html", "roster:recJonas0002"],
-    }
+    assert jonas["fields"]["name"] == "Jonas Keller"
+    assert jonas["from"]["name"] == ["profile:data/pages/jonas.html", "roster:recJonas0002"]
     assert {"concept": "fixture:person", "entity": jonas["id"], "field": "name"}.items() <= next(
         item for item in identity["conflicts"] if item.get("entity") == jonas["id"]
     ).items()
     assert members(holding(entities, "roster:recGrete0003")) == ["roster:recGrete0003"]
     assert members(holding(entities, "roster:recJon0004")) == ["roster:recJon0004"]
-    assert identity["entities"]["fixture:person"] == {"entities": 5, "records": 9, "merged": 2, "derived_ids": 5}
+    assert identity["entities"]["fixture:person"] == {
+        "entities": 5,
+        "records": 9,
+        "merged": 2,
+        "merged_by_key": {"emails": 2, "orcid": 2, "roster": 1},
+        "derived_ids": 5,
+    }
     relations = {(item["source"], item["target"]): item for item in entities["relations"]}
     assert set(relations) == {(ilse["id"], PAPER), (jonas["id"], PAPER)}
     edges = exported(output, "Authored")
@@ -185,13 +200,14 @@ def test_people_merge_transitively_and_every_build_gives_the_same_entities(root)
     profile.write_text("\n".join(reversed(profile.read_text().splitlines())) + "\n")
     shuffled, shuffled_output = build(root, "shuffled")
     assert shuffled["identity"] == identity
-    assert (shuffled_output / "entities.json").read_bytes() == (output / "entities.json").read_bytes()
+    files = ("entities.jsonl", "relations.jsonl")
+    assert [(shuffled_output / name).read_bytes() for name in files] == [(output / name).read_bytes() for name in files]
 
-    written = (output / "entities.json").read_bytes()
+    first = [(output / name).read_bytes() for name in files]
     shutil.rmtree(root / "graph/build")
     again, again_output = build(root, "first")
     assert again["identity"] == identity
-    assert (again_output / "entities.json").read_bytes() == written
+    assert [(again_output / name).read_bytes() for name in files] == first
 
 
 def test_a_record_that_bridges_two_people_stays_apart_and_both_stay_whole(root):
@@ -215,6 +231,63 @@ def test_a_record_that_bridges_two_people_stays_apart_and_both_stay_whole(root):
     assert relations == {(ilse["id"], PAPER), (jonas["id"], PAPER)}
 
 
+def test_a_key_value_that_only_records_kept_apart_hold_names_no_entity_and_its_relation_is_listed(root):
+    _, before = built(root, "before")
+    with (root / "raw/roster.csv").open("a") as stream:
+        stream.write(f"recNew0005,Ilse Brandt,ilse.brandt@example.org,{NEW}\n")
+        stream.write(f"recNew0006,Jonas Keller,jonas.keller@example.org,{NEW}\n")
+    with (root / "raw/push.csv").open("a") as stream:
+        stream.write(f"10.5555/reach.0001,Identity across sources,{NEW},3\n")
+    identity, entities = built(root, "after")
+    ilse, jonas = holding(entities, "roster:recIlse0001"), holding(entities, "roster:recJonas0002")
+    assert ilse == holding(before, "roster:recIlse0001") and jonas == holding(before, "roster:recJonas0002")
+    apart = [holding(entities, f"roster:recNew000{number}") for number in (5, 6)]
+    assert all(entity["kept_apart"] and entity["keys"]["orcid"] == [NEW] for entity in apart)
+    relations = {(item["source"], item["target"]) for item in entities["relations"]}
+    assert relations == {(ilse["id"], PAPER), (jonas["id"], PAPER)}
+    assert identity["ambiguous_endpoints"] == [
+        {
+            "concept": "fixture:authored",
+            "relation": {"source": f"orcid:{NEW}", "target": PAPER},
+            "endpoint": "source",
+            "entities": sorted(entity["id"] for entity in apart),
+            "sources": ["publications/push"],
+        }
+    ]
+
+
+def test_the_entity_output_is_one_compact_line_per_entity_or_relation(root):
+    _, output = build(root)
+    for name in ("entities.jsonl", "relations.jsonl"):
+        lines = (output / name).read_text(encoding="utf-8").splitlines()
+        compact = [
+            json.dumps(json.loads(line), sort_keys=True, separators=(",", ":"), ensure_ascii=False) for line in lines
+        ]
+        assert lines and lines == compact
+    [relation, *_] = written(output)["relations"]
+    assert "id" not in relation
+
+
+def test_a_build_removes_the_staging_directories_that_killed_builds_left(root):
+    build(root)
+    stale = [root / "graph/build/.first-k1ll3d_0", root / "graph/build/.first-k1ll3d_0-previous"]
+    kept = [root / "graph/build/.first-notes", root / "graph/build/.other-k1ll3d_0"]
+    for directory in (*stale, *kept):
+        directory.mkdir()
+        (directory / "entities.jsonl").write_text("{}\n")
+    report, _ = build(root)
+    assert report["state"] == "complete"
+    assert [directory.exists() for directory in (*stale, *kept)] == [False, False, True, True]
+
+
+def test_the_build_output_counts_merges_per_key(root):
+    result = CliRunner(mix_stderr=False).invoke(cli, ["graph", "build", "--out", "graph/build/first"])
+    assert result.exit_code == 0, result.stderr
+    shown = " ".join(result.stderr.split())
+    assert "2 merged: ensembl 2" in shown
+    assert "2 merged: emails 2, orcid 2, roster 1" in shown
+
+
 def test_a_matchers_links_merge_automatically_and_a_bridging_link_stays_apart(root):
     subprocess.run([sys.executable, "matchers/similar_names.py"], cwd=root, check=True)
     assert "semapv:LexicalMatching" in (root / "raw/matches.sssom.tsv").read_text()
@@ -229,8 +302,8 @@ def test_a_matchers_links_merge_automatically_and_a_bridging_link_stays_apart(ro
     assert grete["automatic"] == [link]
     assert identity["automatic_merges"] == [{"concept": "fixture:person", "entity": grete["id"], **link}]
     jonas, jon = holding(entities, "roster:recJonas0002"), holding(entities, "roster:recJon0004")
-    assert members(jon) == ["roster:recJon0004"] and not jon["kept_apart"]
-    assert len(members(jonas)) == 3 and jonas["automatic"] == []
+    assert members(jon) == ["roster:recJon0004"] and "kept_apart" not in jon
+    assert len(members(jonas)) == 3 and "automatic" not in jonas
     [contradiction] = identity["contradictions"]
     assert contradiction == {
         "concept": "fixture:person",
@@ -328,7 +401,7 @@ def test_a_records_source_is_the_loader_that_read_it_even_when_it_cites_another_
     )
     _, entities = built(root)
     jonas = holding(entities, "roster:recJonas0002")
-    assert jonas["fields"]["name"]["value"] == "Jonas Keller"
+    assert jonas["fields"]["name"] == "Jonas Keller"
     assert [member["sources"] for member in jonas["records"]] == [
         ["people/directory"],
         ["profile/profile_jsonl"],
@@ -338,17 +411,14 @@ def test_a_records_source_is_the_loader_that_read_it_even_when_it_cites_another_
 
 def test_combined_lists_one_relation_from_two_sources_and_undeclared_disagreement(root):
     report, output = build(root)
-    entities = json.loads((output / "entities.json").read_text())
+    entities = written(output)
     ilse = holding(entities, "roster:recIlse0001")
-    assert ilse["fields"]["emails"] == {
-        "value": ["ilse.brandt@example.org", "i.brandt@example.org", "ilse@lab.example.org"],
-        "sources": ["people/directory", "people/roster", "profile/profile_jsonl"],
-        "records": ["directory:i.brandt@example.org", "profile:data/pages/ilse.html", "roster:recIlse0001"],
-    }
+    assert ilse["fields"]["emails"] == ["ilse.brandt@example.org", "i.brandt@example.org", "ilse@lab.example.org"]
+    assert "emails" not in ilse["from"]
     assert not [item for item in report["identity"]["conflicts"] if item.get("field") == "emails"]
     [relation] = [item for item in entities["relations"] if item["source"] == ilse["id"]]
     assert relation["sources"] == ["publications/openalex", "publications/push"]
-    assert relation["fields"]["position"] == {"value": 1, "sources": ["publications/push"]}
+    assert relation["fields"] == {"position": 1} and relation["from"] == {"position": ["publications/push"]}
     [conflict] = [item for item in report["identity"]["conflicts"] if item.get("field") == "position"]
     assert conflict == {
         "concept": "fixture:authored",

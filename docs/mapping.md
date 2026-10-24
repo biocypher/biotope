@@ -243,6 +243,8 @@ types without invoking loaders. `graph metagraph` imports topology independently
 and writes `graph/metagraph.html`. `graph build` checks and executes the pipeline
 once, validates the graph and replaces `graph/build/` after success; a failed
 rebuild keeps the previous build and writes `graph/build/last_failure.json`.
+A build first removes the staging directories that a killed build left beside
+`graph/build/`, so do not run two builds into one output at once.
 
 Use `biotope graph quality` when you want to execute and assess without exporting;
 it prints the assessment. Running quality and build separately executes the

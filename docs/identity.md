@@ -190,8 +190,10 @@ Authored(source=PersonId(f"orcid:{row.orcid}"), target=PaperId(f"doi:{row.doi}")
 
 Biotope resolves each endpoint to the entity's ID. A reference that names no entity
 stops the build. A reference that names several entities resolves to the one that
-is not kept apart; when that still leaves several, the build stops. A record kept
-apart answers to its own key values only where no other entity holds them.
+is not kept apart. A record kept apart answers to its own key values only where no
+other entity holds them. When a reference still names several entities, because
+only records kept apart hold its value, it resolves to none: the build leaves that
+copy of the relation out, lists it under `ambiguous_endpoints` and goes on.
 
 The copies of a relation that several sources give, identified by its type and
 resolved endpoints, or by its `id` field when it has one, become one relation
@@ -204,7 +206,11 @@ entity's.
 `run.json`, and the JSON of `biotope graph quality`, hold an `identity` section:
 
 - `entities`: per concept, the number of `entities`, of `records`, of entities
-  `merged` from more than one record and of `derived_ids`.
+  `merged` from more than one record and of `derived_ids`; for a concept with an
+  identity declaration, `merged_by_key` counts per key the merged entities in which
+  that key's value joins two or more records. An entity joined by several keys
+  counts under each; an entity joined only by a match link counts under none and
+  is listed in `automatic_merges`.
 - `contradictions`: per group, the `concept`, the single-valued `keys` with their
   values, the `entities` that stay whole and what was kept `apart`: each record
   with the ID of the entity it became, and each link.
@@ -215,17 +221,29 @@ entity's.
 - `automatic_merges`: the `concept`, the `entity` and the link's `subject_id`,
   `object_id` and `mapping_justification`.
 - `unresolved_links`: links that named no record, with what was `missing`.
+- `ambiguous_endpoints`: relation copies left out because an endpoint names
+  several entities: the relation's `concept`, the `relation` as the mapping gave
+  it (`source` and `target`), which `endpoint`, the `entities` it names and the
+  `sources` of the copies left out.
 
-A build also writes `graph/build/entities.json`, the merged record of every entity
-and relation, sorted, with no timestamps, so two builds of the
-same inputs give the same file:
+A build also writes the merged record of every entity to
+`graph/build/entities.jsonl` and of every relation to `graph/build/relations.jsonl`:
+one compact JSON object per line, sorted, with no timestamps, so two builds of the
+same inputs give the same files.
 
-- each entity's `concept`, `id`, whether the ID is `derived`, whether it was
-  `kept_apart`, its `records` with their `sources` and `mappings`, its `keys` with
-  their values, its `automatic` links, and per field the chosen `value` with the
-  `sources` and `records` that give it;
-- each relation's `concept`, `id`, resolved `source` and `target`, the `sources`
-  of its copies and per field the chosen `value` with its `sources`.
+- An entity line holds its `concept`, `id`, `records` with their `sources` and
+  `mappings`, `keys` with their values and, in `fields`, the chosen value of each
+  field. `from` names, per field, the records that give the chosen value, for the
+  fields where not every record does; a field missing from `from` takes its value
+  from every record, and a field without a value has no source. `derived: true`,
+  `kept_apart: true` and the `automatic` links appear only when they apply.
+- A relation line holds its `concept`, its `id` when the relation type has an `id`
+  field, the resolved `source` and `target`, the `sources` of its copies and its
+  `fields`, with `from` naming per field the sources that give the chosen value
+  where not all do.
+
+A value's source is read through the records `from` names, which carry their
+sources, so no source is copied beside each value.
 
 Every exported node and edge keeps the evidence of all its copies, and of its
 automatic links, in `provenance.json`. The human output lists contradictions,

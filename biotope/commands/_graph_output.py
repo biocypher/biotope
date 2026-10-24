@@ -170,11 +170,13 @@ class GraphOutput:
     def identity(self, identity: dict[str, Any]) -> None:
         for concept, counts in identity.get("entities", {}).items():
             if counts["merged"] or counts["derived_ids"]:
+                by_key = ", ".join(f"{key} {count}" for key, count in sorted(counts.get("merged_by_key", {}).items()))
                 self.row(
                     "Entities",
                     concept,
-                    f"{counts['entities']} from {counts['records']} records · {counts['merged']} merged · "
-                    f"{counts['derived_ids']} derived IDs",
+                    f"{counts['entities']} from {counts['records']} records · {counts['merged']} merged"
+                    + (f": {by_key}" if by_key else "")
+                    + f" · {counts['derived_ids']} derived IDs",
                 )
         for item in identity.get("contradictions", []):
             values = "; ".join(f"{key}: {', '.join(values)}" for key, values in item["keys"].items())
@@ -193,6 +195,13 @@ class GraphOutput:
             )
         for item in identity.get("unresolved_links", []):
             self.row("WARN", f"Unresolved match link in {item['concept']}", ", ".join(item["missing"]))
+        for item in identity.get("ambiguous_endpoints", []):
+            self.row(
+                "WARN",
+                f"Relation left out in {item['concept']}",
+                f"{item['endpoint']} {item['relation'][item['endpoint']]!r} names several entities: "
+                + ", ".join(item["entities"]),
+            )
         conflicts = identity.get("conflicts", [])
         for item in conflicts[:10]:
             subject = item.get("entity") or f"{item['relation']['source']} -> {item['relation']['target']}"

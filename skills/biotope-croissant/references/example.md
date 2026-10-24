@@ -331,7 +331,7 @@ In `graph/pipelines/build_graph.py`, only these scaffolded fields change:
 ## What the check and build report
 
 - `biotope graph check --json`: state `checked`, no findings.
-- `biotope graph build`: 4 genes, 6 results and 6 edges, and `Excluded 1: untested_gene`. `NPPA` and `MYH6` are one gene each, because both studies supply their accessions; `run.json`'s `identity` counts them as merged, and `entities.json` lists each gene's records, accession and symbols.
+- `biotope graph build`: 4 genes, 6 results and 6 edges, and `Excluded 1: untested_gene`. `NPPA` and `MYH6` are one gene each, because both studies supply their accessions; `run.json`'s `identity` counts them as merged under `merged_by_key`, and `entities.jsonl` lists each gene's records, accession and symbols.
 - `run.json`, `definitions.standardization`: `adjusted_p_value` is bound to `study_a/padj` and `study_b/FDR`, and so on for each term. `cluster` is listed as a preserved field.
 
 ## Strict typing patterns

@@ -68,8 +68,8 @@ do not make the accumulated graph disk-backed.
 ## Output and review
 
 A build writes graph files, the export schema with every concept and property
-description, a shared provenance catalog, `entities.json` with every merged entity
-and relation, and `run.json`. The run record identifies
+description, a shared provenance catalog, `entities.jsonl` and `relations.jsonl`
+with every merged entity and relation, and `run.json`. The run record identifies
 source metadata, code, dependencies, scope, policies, settings, exclusions and
 audits. Every exported object carries `biotope_provenance_id`, an index into
 `provenance.json`.
