@@ -6,13 +6,17 @@ import random
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar, NewType
 
 import pytest
 from click.testing import CliRunner
 
 from biotope.cli import cli
+from biotope.graph import Evidence, Identity, Key, Mapping, Match, Pipeline, SourceRecord, Topology
 from biotope.graph.inventory import generate_source_packages
+from biotope.graph.runtime import RunContext
 from biotope.graph.sources import register_metadata
 
 
@@ -320,3 +324,50 @@ def test_check_names_declarations_that_do_not_fit_the_topology_or_sources(root):
     assert any("fixture:person" in message and "mail" in message for message in messages)
     assert any("fixture:paper" in message and "headline" in message for message in messages)
     assert any("emails" in message and "single" in message for message in messages)
+
+
+ThingId = NewType("ThingId", str)
+
+
+@dataclass(frozen=True)
+class Thing:
+    schema_id: ClassVar[str] = "test:thing"
+    id: ThingId
+    alias: str | None
+
+
+@dataclass(frozen=True)
+class LinkRow:
+    subject: str
+    target: str
+
+
+def link(row: SourceRecord[LinkRow]) -> list[Match]:
+    return [Match("test:thing", row.value.subject, row.value.target, "semapv:LexicalMatching")]
+
+
+def test_a_link_that_names_no_record_is_listed_and_changes_nothing():
+    links = Mapping(name="links", function=link)
+    pipeline = Pipeline(
+        "links",
+        Topology((Thing,), ()),
+        (),
+        (links,),
+        lambda context: None,
+        scope="one stale link",
+        code_paths=(__file__,),
+        identities=(Identity(Thing, keys=(Key("alias"),)),),
+    )
+    context = RunContext(pipeline)
+    context.map(links, SourceRecord(LinkRow("thing:gone", "alias:old"), (Evidence("links.tsv", "v1", "links", "2"),)))
+    context.resolve()
+    assert context.nodes == {}
+    assert context.identity["unresolved_links"] == [
+        {
+            "concept": "test:thing",
+            "subject_id": "thing:gone",
+            "object_id": "alias:old",
+            "mapping_justification": "semapv:LexicalMatching",
+            "missing": ["thing:gone", "alias:old"],
+        }
+    ]
