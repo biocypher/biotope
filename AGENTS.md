@@ -24,9 +24,9 @@ Read [`docs/roadmap.md`](docs/roadmap.md) before starting any task: the terms, t
 
 ### Layout
 
-- `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
+- `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `extraction/` the extraction stage (schemas, the extractor protocol, the LLM extractor, document text and stored records), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
 - `skills/`: the agent skills shipped in the Claude plugin (`.claude-plugin/`): `biotope-croissant` (project workflow and its ownership rules) and `biocypher`.
-- `tests/`: `unit/`, `commands/`, `croissant/`, `graph/` and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
+- `tests/`: `unit/`, `commands/`, `croissant/`, `graph/`, `extraction/` (against a fake OpenAI-compatible endpoint) and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
 - `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync), `roadmap.md`, `specs/` (one spec per milestone, format in `specs/README.md`) and `research/` (notes behind tool and model choices).
 
 ### Commands

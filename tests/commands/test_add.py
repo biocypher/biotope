@@ -13,7 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from biotope.commands._add_output import AddOutput
-from biotope.commands.add import _add_file, _bake_directory, add
+from biotope.commands.add import _bake_directory, add, add_file
 from biotope.graph.inventory import generate_source_packages
 from biotope.utils import (
     calculate_file_checksum,
@@ -73,7 +73,7 @@ def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
     target_file.write_text(sample_file.read_text())
 
     datasets_dir = git_repo / ".biotope" / "datasets"
-    result = _add_file(target_file, git_repo, datasets_dir, False)
+    result = add_file(target_file, git_repo, datasets_dir, False)
     assert result is True
 
     metadata_file = datasets_dir / target_file.relative_to(git_repo).with_suffix(".jsonld")
@@ -99,9 +99,9 @@ def test_add_file_relative_path_already_tracked(git_repo):
     try:
         os.chdir(git_repo)
         relative_path = Path("data/inputs/experiment.csv")
-        assert _add_file(relative_path, git_repo, datasets_dir, False) is True
-        assert _add_file(relative_path, git_repo, datasets_dir, False) is False
-        assert _add_file(relative_path, git_repo, datasets_dir, True) is True
+        assert add_file(relative_path, git_repo, datasets_dir, False) is True
+        assert add_file(relative_path, git_repo, datasets_dir, False) is False
+        assert add_file(relative_path, git_repo, datasets_dir, True) is True
     finally:
         os.chdir(original_cwd)
 
@@ -113,7 +113,7 @@ def test_add_file_stamps_status_raw_by_default(git_repo):
     target = git_repo / "doc.txt"
     target.write_text("a free-text doc")
     datasets_dir = git_repo / ".biotope" / "datasets"
-    assert _add_file(target, git_repo, datasets_dir, False) is True
+    assert add_file(target, git_repo, datasets_dir, False) is True
 
     manifest = datasets_dir / "doc.jsonld"
     with open(manifest) as f:
@@ -128,7 +128,7 @@ def test_add_file_status_override(git_repo):
     target = git_repo / "doc.txt"
     target.write_text("ignore me")
     datasets_dir = git_repo / ".biotope" / "datasets"
-    _add_file(
+    add_file(
         target,
         git_repo,
         datasets_dir,
@@ -144,7 +144,7 @@ def test_add_file_status_override(git_repo):
 
 def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
     """Canonical id, data-path, and manifest-path all resolve to the rel id."""
-    from biotope.commands.add import _resolve_dataset_ref
+    from biotope.commands.add import resolve_dataset_ref
 
     project = tmp_path / "proj"
     datasets_dir = project / ".biotope" / "datasets" / "data" / "inputs"
@@ -158,18 +158,18 @@ def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
     manifest.write_text("{}")
 
     canonical = "data/inputs/kidney"
-    assert _resolve_dataset_ref(canonical, project) == canonical
-    assert _resolve_dataset_ref(str(data_file), project) == canonical
-    assert _resolve_dataset_ref(str(manifest), project) == canonical
+    assert resolve_dataset_ref(canonical, project) == canonical
+    assert resolve_dataset_ref(str(data_file), project) == canonical
+    assert resolve_dataset_ref(str(manifest), project) == canonical
 
 
 def test_resolve_dataset_ref_rejects_missing(tmp_path):
-    from biotope.commands.add import _resolve_dataset_ref
+    from biotope.commands.add import resolve_dataset_ref
 
     project = tmp_path / "proj"
     (project / ".biotope" / "datasets").mkdir(parents=True)
     with pytest.raises(ValueError, match="no manifest found"):
-        _resolve_dataset_ref("missing/dataset", project)
+        resolve_dataset_ref("missing/dataset", project)
 
 
 def test_add_file_derived_from_writes_provenance(git_repo):
@@ -193,7 +193,7 @@ def test_add_file_derived_from_writes_provenance(git_repo):
     target = git_repo / "extracted.json"
     target.write_text("{}")
     datasets_dir = git_repo / ".biotope" / "datasets"
-    _add_file(
+    add_file(
         target,
         git_repo,
         datasets_dir,
@@ -207,9 +207,9 @@ def test_add_file_derived_from_writes_provenance(git_repo):
 
 
 def _default_overrides_for_test():
-    from biotope.commands.add import _default_overrides
+    from biotope.commands.add import default_overrides
 
-    return _default_overrides()
+    return default_overrides()
 
 
 def test_is_file_tracked_recognises_fileset_coverage(tmp_path):

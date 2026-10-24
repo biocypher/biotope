@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from string import Template
 from typing import Any, cast
 
+from biotope.extraction.text import MEDIA_TYPES, media_type
 from biotope.graph.sources import (
     KINDS,
     FieldNode,
@@ -48,9 +49,6 @@ TEMPLATE_NAMES = frozenset(
 
 # Biotope's own ruff line length, so that formatting generated code with it changes nothing.
 LINE_LENGTH = 120
-
-DOCUMENT_FORMATS = frozenset({"application/pdf", "text/plain", "text/markdown", "text/x-markdown"})
-DOCUMENT_SUFFIXES = frozenset({".pdf", ".txt", ".md", ".markdown"})
 
 
 def _template(name: str) -> Template:
@@ -131,12 +129,15 @@ def render_loader(kind: Kind, class_name: str) -> str:
 
 
 def _document_hint(resource: dict[str, Any]) -> str:
-    encoding: object = resource.get("encodingFormat")
-    values: list[object] = cast(list[object], encoding) if isinstance(encoding, list) else [encoding]
-    formats = {value for value in values if isinstance(value, str)}
     content = resource.get("contentUrl")
-    suffix = PurePosixPath(content).suffix.lower() if isinstance(content, str) else ""
-    if formats & DOCUMENT_FORMATS or suffix in DOCUMENT_SUFFIXES:
+    if isinstance(content, str) and media_type(content) is not None:
+        return (
+            "Extract this document's records with biotope extract run and map that dataset, or transcribe "
+            "reviewed facts as fields that loader.py returns with page or section locations."
+        )
+    encoding: object = resource.get("encodingFormat")
+    formats: list[object] = cast(list[object], encoding) if isinstance(encoding, list) else [encoding]
+    if set(MEDIA_TYPES.values()).intersection(formats):
         return "Author reviewed facts as fields; loader.py returns them with page or section locations."
     return (
         "Describe this file with a RecordSet in the manifest, author reviewed facts here, "

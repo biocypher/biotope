@@ -150,7 +150,7 @@ def init(
 
     gitignore = project_dir / ".gitignore"
     if not gitignore.exists():
-        gitignore.write_text("data/\n__pycache__/\n*.pyc\n.venv/\n")
+        gitignore.write_text("/data/\n__pycache__/\n*.pyc\n.venv/\n")
 
     if not no_git:
         try:

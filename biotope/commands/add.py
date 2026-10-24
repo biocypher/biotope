@@ -121,7 +121,7 @@ def add(
             raise click.BadParameter(str(exc)) from exc
 
         try:
-            resolved_provenance = [_resolve_dataset_ref(ref, biotope_root) for ref in derived_from]
+            resolved_provenance = [resolve_dataset_ref(ref, biotope_root) for ref in derived_from]
         except ValueError as exc:
             raise click.BadParameter(str(exc)) from exc
 
@@ -154,7 +154,7 @@ def add(
             if source.is_dir() and destination.is_relative_to(source):
                 raise click.BadParameter("--bake-to must be outside the input directory")
             if source.is_file():
-                success = _add_file(
+                success = add_file(
                     source, biotope_root, datasets_dir, False, overrides, output=destination, reporter=reporter
                 )
             else:
@@ -173,7 +173,7 @@ def add(
 
         for path in paths:
             if path.is_file():
-                result = _add_file(path, biotope_root, datasets_dir, force, overrides, reporter=reporter)
+                result = add_file(path, biotope_root, datasets_dir, force, overrides, reporter=reporter)
                 if result:
                     added_entries.append(path)
                 continue
@@ -218,7 +218,7 @@ def add(
             raise click.ClickException("One or more inputs could not be baked.")
 
 
-def _add_file(
+def add_file(
     file_path: Path,
     biotope_root: Path,
     datasets_dir: Path,
@@ -229,7 +229,7 @@ def _add_file(
     reporter: AddOutput | None = None,
 ) -> bool:
     """Add a single file to the biotope project."""
-    overrides = overrides or _default_overrides()
+    overrides = overrides or default_overrides()
     reporter = reporter or AddOutput()
     reporter.root = biotope_root
     abs_file = file_path.resolve()
@@ -437,7 +437,7 @@ def _bake_directory(
     reporter: AddOutput | None = None,
 ) -> tuple[dict[str, Any], int] | None:
     """Run croissant-baker over ``directory`` and write one directory-level JSON-LD."""
-    overrides = overrides or _default_overrides()
+    overrides = overrides or default_overrides()
     reporter = reporter or AddOutput()
     reporter.root = biotope_root
     abs_dir = directory.resolve()
@@ -602,7 +602,7 @@ def _iter_directory_files(abs_dir: Path):
         yield file_path
 
 
-def _default_overrides() -> dict[str, Any]:
+def default_overrides() -> dict[str, Any]:
     """Return the default add metadata overrides."""
     return {
         "name": None,
@@ -636,7 +636,7 @@ def _apply_pipeline_state(metadata: dict[str, Any], overrides: dict[str, Any]) -
         add_derived_from(metadata, source_id)
 
 
-def _resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
+def resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
     """Normalise a user-supplied dataset reference to its canonical id.
 
     A dataset's canonical id is its relative path under ``.biotope/datasets/``
