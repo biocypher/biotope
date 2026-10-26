@@ -1,5 +1,7 @@
 # Research: what B2 and B3 can reuse
 
+> **Withdrawn specs.** The B2 (identity and precedence) and B3 (committed state) specs this note served were withdrawn on 26 October 2026, and PR #58, which implemented B2, was closed unmerged. They rebuilt inside biotope what 0.10 provides by design: identity resolution, source priority and human decisions are project code in `graph/alignment/` and mappings ([roadmap](../roadmap.md), decisions 9 to 11). Sections 1 and 2, on input checks and release history, still inform the new B2 spec, [releases and input checks](../specs/b2-releases-input-checks.md). Sections 3 to 5 describe pieces that now belong in a project, such as REACH's registry and corrections.
+
 Researcher's note for the B2 (identity and precedence) and B3 (committed state) specs, 23 October 2026. Vlad asked to reuse existing tools and build only what is needed, and whether recording a hash of every input is too much. Checked against biotope `origin/main` (7d4f7d8), croissant-baker 0.6.0, mlcroissant 1.1.0 and REACH's `src/reach/ids.py`.
 
 ## 1. Input reproducibility: Croissant already hashes the files
