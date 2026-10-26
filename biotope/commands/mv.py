@@ -18,6 +18,7 @@ Three shapes of move land here:
    ``cr:FileObject`` per ``.jsonld``. Manifest follows the data file.
 """
 
+import copy
 import fnmatch
 import json
 import os
@@ -30,7 +31,9 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
+from biotope.croissant.ids import MOVED_FROM, moved_ids, rename
 from biotope.extraction.run import STATES
+from biotope.graph.moves import follow_ids, follow_manifest
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
@@ -293,7 +296,7 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
                 if new_metadata_path != metadata_file:
                     new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
                     try:
-                        shutil.move(str(metadata_file), str(new_metadata_path))
+                        _move_manifest(biotope_root, metadata_file, new_metadata_path)
                         moved_metadata_files.append((metadata_file, new_metadata_path))
                     except OSError as e:
                         console.print(f"[bold red]❌ Failed to move metadata file: {e}[/]")
@@ -493,6 +496,9 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
             except OSError as e:
                 console.print(f"[bold red]❌ Failed to move metadata directory: {e}[/]")
                 rollback_needed = True
+            for manifest in destination_metadata_dir.rglob("*.jsonld") if not rollback_needed else ():
+                old_manifest = source_metadata_dir / manifest.relative_to(destination_metadata_dir)
+                warn_ignored(biotope_root, follow_manifest(biotope_root / "graph/sources", old_manifest, manifest))
 
             if not rollback_needed:
                 # Update all metadata files in the renamed directory
@@ -571,7 +577,7 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
                         if new_metadata_path != metadata_file:
                             new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
                             try:
-                                shutil.move(str(metadata_file), str(new_metadata_path))
+                                _move_manifest(biotope_root, metadata_file, new_metadata_path)
                                 moved_metadata_files.append((metadata_file, new_metadata_path))
                             except OSError as e:
                                 console.print(f"[bold red]❌ Failed to move metadata file: {e}[/]")
@@ -716,7 +722,7 @@ def _whole_dataset_rename(source: Path, destination: Path, biotope_root: Path, c
     try:
         for old, new in manifests_to_move:
             new.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(old), str(new))
+            _move_manifest(biotope_root, old, new)
             _rewrite_manifest_paths(new, old_prefix, new_prefix)
             rewritten.append(new)
     except Exception as exc:
@@ -926,9 +932,12 @@ def _update_metadata_file_path(
     """Update file path in a metadata file."""
     try:
         metadata = _load_metadata_file(metadata_file)
+        before = copy.deepcopy(metadata)
 
-        dataset_dir = dataset_dir_for_manifest(metadata_file, biotope_root)
+        dataset_dir = dataset_dir_for_manifest(metadata_file, biotope_root).resolve()
         moved = (biotope_root / old_path).resolve()
+        destination = (biotope_root / new_path).resolve()
+        mapping: dict[str, str] = {}
         updated = False
         for distribution in metadata.get("distribution", []):
             url = distribution.get("contentUrl")
@@ -940,16 +949,32 @@ def _update_metadata_file_path(
                 distribution["contentUrl"] = Path(os.path.relpath(biotope_root / new_path, dataset_dir)).as_posix()
             else:
                 continue
+            if isinstance(distribution.get("@id"), str):
+                mapping |= moved_ids(
+                    metadata, distribution["@id"], _within(moved, dataset_dir), _within(destination, dataset_dir)
+                )
+            distribution.pop(MOVED_FROM, None)
             distribution["sha256"] = new_checksum
             distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
             distribution["contentSize"] = (biotope_root / new_path).stat().st_size
             updated = True
 
         if updated:
+            rename(metadata, mapping)
             with open(metadata_file, "w") as f:
-                json.dump(metadata, f, indent=2)
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            warn_ignored(biotope_root, follow_ids(biotope_root / "graph/sources", metadata_file, before, mapping))
 
         return updated
 
     except (json.JSONDecodeError, IOError, OSError):
         return False
+
+
+def _move_manifest(biotope_root: Path, old: Path, new: Path) -> None:
+    shutil.move(str(old), str(new))
+    warn_ignored(biotope_root, follow_manifest(biotope_root / "graph/sources", old, new))
+
+
+def _within(path: Path, dataset_dir: Path) -> str:
+    return (path.relative_to(dataset_dir) if path.is_relative_to(dataset_dir) else Path(path.name)).as_posix()

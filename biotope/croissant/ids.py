@@ -170,6 +170,20 @@ def _check(distribution: list[dict[str, Any]], records: list[dict[str, Any]]) ->
         raise ValueError("cannot give every file and table a stable ID: " + "; ".join(problems))
 
 
+def moved_ids(metadata: dict[str, Any], old_id: str, old_relative: str, new_relative: str) -> dict[str, str]:
+    new_id = file_id(new_relative)
+    tables = [record for record in metadata.get("recordSet") or [] if old_id in read_files(record)]
+    mapping = {old_id: new_id}
+    for record in tables:
+        identity = record.get("@id")
+        if isinstance(identity, str) and identity.startswith(old_id + "#"):
+            table = identity[len(old_id) + 1 :]
+            if len(tables) == 1 and table == encode(stem(old_relative), slash=False):
+                table = encode(stem(new_relative), slash=False)
+            mapping[identity] = f"{new_id}#{table}"
+    return mapping
+
+
 def note_moves(previous: dict[str, Any], current: dict[str, Any]) -> None:
     files = [entry for entry in current.get("distribution") or [] if is_kind(entry, "FileObject")]
     before = {entry.get("@id"): entry for entry in previous.get("distribution") or [] if is_kind(entry, "FileObject")}

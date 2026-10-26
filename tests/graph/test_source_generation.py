@@ -214,21 +214,6 @@ def test_a_renamed_package_directory_and_class_stay_owned_by_their_identity(proj
     assert not project.codes("error")
 
 
-def test_a_renamed_file_resource_leaves_an_orphan_with_a_rebind_hint(project):
-    manifest = project.manifest("study", [], [pdf("doc-1", "raw/paper.pdf")])
-    project.generate(manifest)
-    project.mark_implemented("study/paper_pdf")
-    project.edit(manifest, lambda data: data["distribution"][0].update({"@id": "doc-2"}))
-    plan = project.generate(manifest)
-    [orphan] = [status for status in plan.statuses if status.state == "orphaned"]
-    [created] = [status for status in plan.statuses if status.state == "created"]
-    assert orphan.package == "paper_pdf" and created.identity == "doc-2"
-    hint = "'doc-2' now describes the same file (raw/paper.pdf)"
-    assert hint in orphan.detail and f"delete {created.package}/" in orphan.detail
-    [message] = project.messages("inventory.orphan")
-    assert hint in message
-
-
 LEGACY_SCHEMA = """{header}# biotope:record-set {{"id":"rows"}}
 from __future__ import annotations
 

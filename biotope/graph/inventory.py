@@ -12,15 +12,15 @@ import shutil
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
+from biotope.croissant.ids import MOVED_FROM
 from biotope.graph.discovery import (
     Package,
     discover_packages,
     discover_roots,
     is_generated,
     is_package_name,
-    is_placeholder,
     read_declaration,
     root_manifest,
     unimportable_packages,
@@ -35,11 +35,11 @@ from biotope.graph.render import (
 )
 from biotope.graph.revisions import ContractStore, Drift, explain_drift
 from biotope.graph.sources import (
-    FILE_KINDS,
     KINDS,
     RESERVED_NAMES,
     Kind,
     digest,
+    objects,
     read_metadata,
     slug,
     write_text_atomic,
@@ -336,23 +336,14 @@ def _scaffold(plan: SourcePlan, target: Target, directory: Path) -> tuple[Packag
     return status, {path.name: text for path, text in missing.items()}
 
 
-def _orphans(plan: SourcePlan, owned: dict[str, Package], statuses: list[PackageStatus]) -> list[PackageStatus]:
+def _orphans(plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package]) -> list[PackageStatus]:
     live = {target.identity for target in plan.targets}
-    unauthored = {
-        status.identity: status.package
-        for status in statuses
-        if status.kind in FILE_KINDS
-        and (
-            status.state in ("created", "completed")
-            or (status.state == "current" and is_placeholder(status.path / "loader.py"))
-        )
-    }
     found: list[PackageStatus] = []
     for identity, package in sorted(owned.items(), key=lambda entry: entry[1].name):
         if identity in live:
             continue
-        detail = f"{identity!r} is no longer described by {plan.metadata.name}; delete the directory to remove it"
-        hint = _rebind_hint(plan, package, unauthored)
+        gone = f"{identity!r} is no longer described by {plan.metadata.name}"
+        detail = _moved(plan, data, identity, gone) or f"{gone}; delete the directory to remove it"
         declaration = package.declaration
         found.append(
             PackageStatus(
@@ -361,33 +352,29 @@ def _orphans(plan: SourcePlan, owned: dict[str, Package], statuses: list[Package
                 "orphaned",
                 identity,
                 declaration.kind,
-                detail + (f". {hint}" if hint else ""),
+                detail,
                 declaration.revision,
             )
         )
     return found
 
 
-def _rebind_hint(plan: SourcePlan, orphan: Package, unauthored: dict[str | None, str]) -> str:
-    """Name the new file resource that describes the same file as an orphaned document package.
-
-    ``unauthored`` maps new file resources to their packages that hold no authored work yet.
-    """
-    revision = orphan.declaration.revision
-    if orphan.declaration.kind not in FILE_KINDS or plan.store is None or not revision:
+def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str) -> str:
+    moves = {
+        entry[MOVED_FROM]: entry["@id"]
+        for entry in objects(data.get("distribution", []), "/distribution")
+        if isinstance(entry.get(MOVED_FROM), str) and isinstance(entry.get("@id"), str)
+    }
+    old = identity.split("#", 1)[0]
+    if old not in moves:
         return ""
-    recorded = plan.store.get(revision)
-    resource: object = recorded.get("distribution") if recorded is not None else None
-    content = cast(dict[str, object], resource).get("contentUrl") if isinstance(resource, dict) else None
-    if not isinstance(content, str):
-        return ""
-    for target in plan.targets:
-        if target.kind in FILE_KINDS and target.entry.get("contentUrl") == content and target.identity in unauthored:
-            return (
-                f"{target.identity!r} now describes the same file ({content}): to keep the authored work, "
-                f"set {orphan.name}/schema.py to declare {target.identity!r} and delete {unauthored[target.identity]}/"
-            )
-    return ""
+    new = moves[old]
+    now = [target.identity for target in plan.targets if target.identity.split("#", 1)[0] == new]
+    described = ", ".join(repr(item) for item in now) or repr(new)
+    return (
+        f"{gone}: its file {old!r} moved outside biotope to {new!r}, now described as {described}. Declare the new "
+        "ID in this package, or move the file back, rebake and use biotope mv"
+    )
 
 
 def plan_sources(metadata: Path, output: Path, package: str | None = None) -> SourcePlan:
@@ -422,7 +409,7 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
             else:
                 new_files.update({status.path / name: text for name, text in files.items()})
         statuses.append(status)
-    statuses += _orphans(plan, ownership.owned, statuses)
+    statuses += _orphans(plan, data, ownership.owned)
     return replace(
         plan,
         statuses=tuple(statuses),

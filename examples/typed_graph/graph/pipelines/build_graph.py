@@ -14,13 +14,13 @@ from ..topology import TOPOLOGY
 
 def build(context: RunContext) -> None:
     people: dict[str, SourceRecord[People]] = {}
-    for person in context.load(PEOPLE, load_people, PROJECT_ROOT / "raw/people.csv"):
+    for person in context.load(PEOPLE, load_people, PEOPLE.path()):
         if person.value.person_id in people:
             raise ValueError(f"people.person_id must be unique: {person.value.person_id}")
         people[person.value.person_id] = person
     matched: set[str] = set()
     read = kept = 0
-    for sample in context.load(SAMPLES, load_samples, PROJECT_ROOT / "raw/samples.csv"):
+    for sample in context.load(SAMPLES, load_samples, SAMPLES.path()):
         read += 1
         # Normalization first; the intermediate keeps its type through the join.
         for measurement in context.apply(NORMALISE, sample):
