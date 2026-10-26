@@ -902,7 +902,7 @@ def test_schemas_live_in_the_graph_and_records_in_data(study):
     built = study.run("graph", "build")
     assert built.exit_code == 0, built.output
     run = json.loads((study.root / "graph/build/run.json").read_text())
-    assert str(study.root / "graph/extraction/profile.py") in run["definitions"]["code_digests"]
+    assert str((study.root / "graph/extraction/profile.py").resolve()) in run["definitions"]["code_digests"]
     module = study.root / "graph/extraction/profile.py"
     module.write_text(module.read_text() + '\nWRONG: int = "text"\n')
     checked = study.run("graph", "check", "--json")
