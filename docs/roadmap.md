@@ -1,75 +1,47 @@
-# Roadmap: data products
+# Roadmap
 
-Biotope 0.10 builds a typed knowledge graph from local structured files in one pure pass. The next version makes biotope a reusable framework for building and maintaining a **data product**: a versioned representation of a domain, built from local sources of any kind, structured or not, and kept current as data and needs change.
+This roadmap is written from issue [#53](https://github.com/biocypher/biotope/issues/53), the source of truth for new work on biotope's next version. When this page, a spec, a PR or a comment disagrees with #53, #53 wins. #53 changes only on the decision of Vlad, the maintainer, and lists each change with its date. It replaces the plan of 22 October 2026 ([#52](https://github.com/biocypher/biotope/pull/52)). Live status is in #53.
 
-REACH, the Computational Health Center's register of who works on what ([slolab/reach](https://github.com/slolab/reach)), is the testing ground. It needs what 0.10 lacks: web pages as sources, IDs that people's edits point at, human corrections that survive every rebuild, and a topology that grows. InTRAC, with its published papers, is the second user, and the ELIXIR Atlas is expected to be the third. A feature belongs in biotope only if it makes sense beyond REACH.
+## Goal
 
-This roadmap records the premises and decisions from the alignment of 22 October 2026. Each milestone gets a spec in `docs/specs/` and one PR.
+- Biotope is a framework for data representation. It turns a project's local sources, structured files and documents alike, into a graph of typed records that answers the project's questions, and rebuilds the graph when the data changes.
+- It grows from real problems, not from a design made up front. The first is REACH, the register of who works on what at Helmholtz Munich's Computational Health Center. The ELIXIR Atlas follows later. Both run alongside biotope's benchmark work on graph representation and ephemeral graph building.
+- Biotope is developed in an agile way and specialized later by what sticks. It must work across projects like REACH and the ELIXIR Atlas, but for now it is built and tested with REACH only, plus the InTRAC build below.
+- Long-term goal: a project built on biotope can be maintained by AI, without an engineer. This is not tested now, but every architecture decision weighs it.
 
-## Terms
+## What biotope does and what stays in the project
 
-- **Data product:** the versioned output of a biotope project, a release of typed records with provenance. The BioCypher graph and SQLite are exports of a release.
-- **Unstructured source:** a local document whose content has no record structure, such as an HTML page, a PDF or a grant call. Croissant-baker describes it as a bare file.
-- **Extraction:** the stage that turns unstructured sources into structured records under a reviewed extraction schema. Its output is an ordinary structured source.
-- **Extraction schema:** the fields extraction fills for one kind of document. It is not the topology: the mapping from extracted records to topology objects is ordinary mapping.
-- **Extractor:** a swappable implementation of extraction. The first calls an LLM; a later one applies rules an agent writes.
-- **Release:** one immutable build of a project, with its manifest, provenance and the problems and conflicts it found.
-- **Committed state:** files a project commits and every build reads and extends: the ID registry and the release history. Human decisions are an input dataset, which a project may commit.
-- **Human decision:** a person's judgement on a record, such as accepting or rejecting a match, overriding a field or excluding a link. It is an input to the build.
-
-## Lifecycle
-
-```text
-local documents ── extraction ── extracted records ─┐
-                                                    ├─ croissant-baker ── reviewed sources
-local structured files ─────────────────────────────┘                          │
-                                                                               ▼
-IDs, release history, decisions ────────────► alignment, precedence, mappings ──► release
-                                                                               │
-                                                             graph, SQLite, project apps
-```
-
-A **new project** starts from raw data and its purpose. An agent proposes the extraction schemas, the topology and the mappings, and a person reviews them.
-
-An **evolving project** meets two kinds of change. New rows in a known source need only a mechanical rebuild. A new kind of source, or a new need, may change the topology; that change is reviewed, and the rebuild carries existing IDs and human decisions across it. Biotope tells the user or agent what changed and what must be reviewed.
+- Biotope is the framework for the representation and its mapping. It describes sources, extracts documents into records, and checks, runs and exports the project's topology, alignment and mappings, which the project writes as its own code.
+- Everything specific to a project stays in that project, such as downloading data or writing to tools like Airtable. Biotope is never a fetcher or scraper, a scheduler, an application layer or a general ETL tool, and it never decides on its own which records are the same thing.
+- 0.10's principle holds: "The project owns identities, units, null handling, join cardinality and exclusions. Biotope supplies contracts for recording and checking those decisions" ([architecture](architecture.md)).
+- Three parts of this already exist:
+  - harmonization, in the project's `graph/standardization.py`, which `biotope graph check` reports on;
+  - the alignment stage, in the project's own `graph/alignment/` folder. `biotope graph scaffold` creates it from the template `biotope/templates/graph/alignment/__init__.py`; it is project code, not a biotope module;
+  - the conflict guard: a build stops when two graph objects with one ID have different values, and the project resolves the conflict in its pipeline.
+- Biotope adds only what a real project shows is missing.
 
 ## Decisions
 
-1. **Biotope's scope.** Biotope owns the representation of the data and its mapping: extraction, sources, identity, precedence, topology, committed state and releases. It is never a fetcher or scraper, a scheduler, an application layer (search, user interfaces, writing back to tools such as Airtable), a general ETL tool, or a judge of equivalence. Downloading a source is a script the project adds.
-2. **Extraction is a stage before `add`.** A raw document goes through an extractor into a stored, derived dataset (`prov:wasDerivedFrom`, status `processed`). Croissant-baker then describes it like any other file. `graph build` stays deterministic and offline.
-3. **The extractor contract.** An extractor takes documents and a reviewed extraction schema, and returns records that match the schema. Each record points to its document and each field carries its evidence, the quoted span or a locator. An extractor declares its name and version. Whether it uses an agent or generated rules is hidden behind the contract.
-4. **Extraction is stored and reproducible.** Extracted records are versioned with their provenance: document hash, schema revision, extractor name and version, model and endpoint. A document is extracted again only when one of these changes.
-5. **The LLM extractor calls an OpenAI-compatible API.** OpenRouter and the HMGU endpoint both serve one. The endpoint URL is project configuration and may be written literally, since it is not a secret. The key always comes from an environment variable that the configuration names. The model is chosen after research, not by default.
-6. **Public inputs only in this version.** Only public documents go to an external model: public HTML pages, public ERC calls and InTRAC's published papers. Internal sources, such as presentations and contracts, come later and will need a per-source policy.
-7. **People review artefacts, not records.** An agent proposes the extraction schemas, the topology and the mapping priorities and conflict resolution from the project's purpose, and a person reviews them. The rest follows the `biotope-croissant` skill: the user owns scientific decisions, the agent engineering ones, and the agent stops and asks before merging identities without a shared accession.
-8. **Builds are pure.** A build is a function of its inputs and the project's committed files. The ID registry and the release history are committed files that biotope defines generically and every build reads and extends. Human decisions are an input dataset whose shape biotope defines, and each project chooses whether to commit it: REACH reads Anna's from Airtable at each build, so names and emails stay out of git (Vlad, 23 October 2026: "ok" to "decisions such as Anna's corrections are an input dataset"). Biotope keeps no hidden state.
-9. **Identity and precedence are explicit.** Today the build refuses conflicting values and leaves resolution to Python in the mappings, and `alignment/` is an empty template. The new version makes both explicit, reviewable artefacts. Matching rules stay project code.
-10. **Stable IDs where outside things point.** Entities with natural keys, such as genes, cell types and DOIs, keep them. Entities without one that something outside the build refers to get a registered ID that never changes and is never reused, with aliases and the date each was first seen. For kinds a project registers, natural keys are aliases of the persistent ID.
-11. **Human decisions survive change.** A decision is a record about a thing that keeps changing. Biotope applies these rules for every project:
-    - a rejected match stays rejected when the sources propose it again;
-    - a decision follows its target when that target's ID is merged into another;
-    - an override retires when the source starts to agree with it;
-    - a source change under an override is flagged for review, and the override stays;
-    - two conflicting decisions are flagged, never ranked;
-    - an invalid decision drops only itself and is reported with its reason.
+1. **Extraction** (done, [#55](https://github.com/biocypher/biotope/pull/55)). An unstructured document goes through a swappable extractor into stored, structured records with evidence, which are then an ordinary source. The LLM extractor is first; a rule-based one comes later behind the same contract. See [Extraction](extraction.md).
+1. **Stable IDs follow common industry practice.** Every build is a full rebuild. A project whose IDs nothing outside the build stores, such as InTRAC with its Ensembl gene IDs, needs nothing more. A project whose IDs are stored outside the build, as REACH's are in its Airtable rows, also keeps one committed key map: every alias (DOI, PMID, email, ORCID and so on) points to a permanent ID, an ID merged into another redirects to it, and no ID is ever reused. Human corrections are an input dataset that every build applies. The key map stays project code until a second project needs the same thing; then it moves into biotope.
+1. **Public documents only** go to external models in this version: public web pages, public ERC calls and InTRAC's published papers.
+1. **Testing and development** use only `deepseek/deepseek-v4.1-flash` through OpenRouter. The bar is reasonable results and an end-to-end run, not full accuracy.
 
-    Interfaces for making decisions, such as REACH's Airtable tables and field sync, stay in the project.
-12. **Releases have history.** Every build produces a release with a manifest and a diff against the previous one. A release records its exact inputs through what Croissant already holds, each file's sha256 and size, and the build refuses or flags an input file that no longer matches its manifest. A past release can be rebuilt from its inputs and the committed state at that point while the project keeps those input files; biotope stores no raw snapshots (Vlad, 23 October 2026: "wouldn't it be too much? And doesn't croissant already do that? Let's not overbuild this part, reuse existing tools if possible").
-13. **Breaking 0.10 is allowed.** Biotope is before 1.0. Each break gets a note in `migration.md`. biotope-bench is updated separately.
-14. **Public fixtures.** Tests and examples in this repo use only public material.
+## This sprint
 
-## Milestones
+Done by the end of the week of 26 October 2026. The ELIXIR Atlas hackathon follows soon after.
 
-Biotope:
+1. **REACH from scratch.** A new biotope project builds REACH's data from REACH's raw data and its existing ID registry. The CHC website pages go through extraction. For every output file, IDs and values match the current REACH pipeline's output from the same raw data, except for differences that are listed and approved by Vlad. REACH's own tools (Airtable push, search index, Claude plugin) work on it.
+1. **REACH iteration**, two cases:
+   - New data arrives: after a fresh download, the build runs again with no code or configuration change. Every existing ID names the same thing, every human correction still applies, and new things get new IDs.
+   - A new table: two or three public ERC calls are extracted into a new entity. Existing IDs and corrections carry over, and biotope shows what changed and what needs review.
+1. **InTRAC.** Its graph builds on biotope's main branch, including extraction from its published papers.
 
-- **B1 Extraction.** The extraction stage, the extractor contract and the LLM extractor. Schemas are proposed from the purpose and reviewed. Tested on InTRAC's six papers, REACH's CHC pages and two or three ERC calls.
-- **B2 Identity and precedence.** Explicit, reviewable identity (declared keys and aliases, merges on shared keys, contradictions flagged) and field precedence with listed conflicts. B2 stores nothing.
-- **B3 Committed state.** The ID registry, human decisions (match decisions, overrides and link edits) under decision 11, and release history with diffs and input checks under decision 12.
-- **B4 Evolving projects.** A topology change carries IDs and decisions across. Biotope reports what changed in sources, extraction and contracts, and what needs review.
+## Out of scope
 
-REACH, in its own repo:
+Testing AI maintenance, the ELIXIR Atlas, internal documents, and switching REACH's production data.
 
-- **Pass 1.** REACH built as a new biotope project from raw data, to test the new-project flow. It does not replace REACH's pipeline.
-- **Pass 2.** The pass-1 project evolves: ERC calls arrive as a new entity, and IDs and Anna's decisions carry across. Pass 2 is what lands, first on REACH's test base only. REACH's apps (Airtable, search, MCP) stay in REACH and read the release.
+## How the work runs
 
-Until pass 2 lands, fixes from Anna's feedback go into REACH's current pipeline, and each fix joins what pass 2 must reproduce.
+- REACH's biotope project is built first, in REACH's own repository on its test data. Whatever biotope cannot do becomes an issue and a small PR here; whatever is REACH-specific stays in REACH.
+- Each spec opens with a map of what biotope already does for its need, verified in code, and covers only the gap. The format is in [`specs/README.md`](specs/README.md).
