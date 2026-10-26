@@ -259,6 +259,7 @@ def check_pipeline(
         if workspace is not None:
             pyproject = Path(workspace.root.name) / "pyproject.toml"
             declared = declared_distributions(workspace.root / "pyproject.toml")
+            report.data["declared"] = sorted(declared)
             for module, providers in imported.items():
                 if not declared.intersection(providers):
                     warning(

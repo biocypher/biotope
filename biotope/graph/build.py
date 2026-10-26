@@ -110,9 +110,7 @@ def _execute(
         "findings": [],
         "audits": [],
         "quality": {"state": "not_run", "reason": "Pipeline execution and integrity checks have not completed"},
-        "dependencies": {
-            name: _software(name) for name in ("biotope", "croissant-baker", "pyright", *pipeline.dependencies)
-        },
+        "dependencies": {name: _software(name) for name in ("biotope", "croissant-baker", "pyright")},
     }
     context: RunContext | None = None
     exporter = (writer or BioCypherWriter()) if output is not None else None
@@ -136,10 +134,10 @@ def _execute(
     stage = "definitions"
     try:
         report["definitions"] = check_pipeline(pipeline, workspace=workspace, phase=phase, on_finding=on_finding)
-        for providers in report["definitions"].get("imports", {}).values():
-            for name in providers:
-                if name not in report["dependencies"]:
-                    report["dependencies"][name] = _software(name)
+        imported = report["definitions"].get("imports", {}).values()
+        for name in sorted({*report["definitions"].get("declared", []), *(n for names in imported for n in names)}):
+            if name not in report["dependencies"]:
+                report["dependencies"][name] = _software(name)
         if exporter is not None:
             stage = "environment"
             if phase:
