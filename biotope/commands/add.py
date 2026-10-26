@@ -14,7 +14,8 @@ import click
 import yaml
 
 from biotope.commands._add_output import AddOutput
-from biotope.graph.sources import protect_curated, write_text_atomic
+from biotope.croissant.ids import note_moves, stable_ids
+from biotope.graph.sources import protect_curated, read_metadata, write_text_atomic
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     SCAFFOLD_FILENAME,
@@ -256,12 +257,13 @@ def add_file(
             "description": (
                 overrides.get("description") or defaults.get("description") or f"Dataset for {abs_file.name}"
             ),
-            "distribution": [make_file_object(abs_file, biotope_root)],
+            "distribution": [make_file_object(abs_file, abs_file.parent)],
             "dateCreated": now,
         }
     )
 
     _enrich_with_baker(metadata, abs_file, reporter=reporter)
+    _give_stable_ids(metadata, relative_path)
     # Baker's single-file assembly is rooted at the file's parent. File tracking
     # in a single-file manifest uses project-relative paths.
     parent = abs_file.parent.relative_to(biotope_root)
@@ -307,12 +309,9 @@ def _enrich_with_baker(metadata: dict[str, Any], file_path: Path, *, reporter: A
                 if key not in {"name", "description", "dateCreated"}:
                     metadata[key] = value
         report.finish(generator.scan_report.to_dict(), {})
-    if bake_error is not None:
-        if str(bake_error) != "No supported files found in the dataset":
-            report.result.update(status="failed", error=str(bake_error))
-            raise bake_error
-        # Keep the original file-tracking pointer, without claiming structure.
-        metadata["distribution"][0]["contentUrl"] = file_path.name
+    if bake_error is not None and str(bake_error) != "No supported files found in the dataset":
+        report.result.update(status="failed", error=str(bake_error))
+        raise bake_error
 
 
 def _apply_dataset_metadata(metadata: dict[str, Any], defaults: dict[str, Any], overrides: dict[str, Any]) -> None:
@@ -471,9 +470,13 @@ def _bake_directory(
             return None
         metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
 
+    _give_stable_ids(metadata_dict, rel_dir)
     metadata_dict.setdefault("dateCreated", now)
     _apply_dataset_metadata(metadata_dict, defaults, overrides)
     _register_distinct_files(metadata_dict, abs_dir, biotope_root, files, copies)
+    _give_stable_ids(metadata_dict, rel_dir)
+    if output is None and target.metadata_path.is_file():
+        note_moves(read_metadata(target.metadata_path), metadata_dict)
     _apply_pipeline_state(metadata_dict, overrides)
 
     write_text_atomic(output or target.metadata_path, json.dumps(metadata_dict, indent=2, default=str) + "\n")
@@ -548,7 +551,14 @@ def _register_distinct_files(
                 item["excludes"] = [*_patterns(item.get("excludes")), *skipped]
     for file_path in files:
         if file_path not in copies and file_path.resolve() not in covered:
-            distributions.append(make_file_object(file_path, biotope_root))
+            distributions.append(make_file_object(file_path, abs_dir))
+
+
+def _give_stable_ids(metadata: dict[str, Any], source: Path) -> None:
+    try:
+        stable_ids(metadata)
+    except ValueError as exc:
+        raise click.ClickException(f"{source}: {exc}") from exc
 
 
 def _iter_directory_files(abs_dir: Path):

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from biotope.croissant.ids import file_id
 from biotope.utils import calculate_file_checksum
 
 
@@ -387,22 +388,16 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
     )
 
 
-def make_file_object(
-    file_path: Path,
-    biotope_root: Path,
-    *,
-    object_id: str | None = None,
-) -> dict[str, Any]:
-    """Build a normalized Croissant FileObject for one physical file."""
-    relative_path = file_path.relative_to(biotope_root)
+def make_file_object(file_path: Path, base: Path) -> dict[str, Any]:
+    relative_path = file_path.relative_to(base).as_posix()
     sha256_hash = calculate_file_checksum(file_path)
     encoding_format = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
 
     return {
         "@type": FILE_OBJECT_TYPE,
-        "@id": object_id or f"file_{sha256_hash[:8]}",
+        "@id": file_id(relative_path),
         "name": file_path.name,
-        "contentUrl": str(relative_path),
+        "contentUrl": relative_path,
         "encodingFormat": encoding_format,
         "sha256": sha256_hash,
         "contentSize": str(file_path.stat().st_size),

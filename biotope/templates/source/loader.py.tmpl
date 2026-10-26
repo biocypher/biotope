@@ -2,7 +2,7 @@
 """Decode this source into its schema, then delete the placeholder line above."""
 
 from collections.abc import Iterator
-
+${path_import}
 from biotope.graph import RunContext, SourceRecord
 
 from . import SOURCE
@@ -18,4 +18,4 @@ ${read_signature}
 
 
 ${load_signature}
-    yield from context.load(SOURCE, _read, None)
+    yield from context.load(SOURCE, _read, ${config})

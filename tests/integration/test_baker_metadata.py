@@ -136,10 +136,10 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     raw = json.loads(manifest.read_text())
     unnamed = raw["recordSet"][0]["field"][0]
     assert "name" not in unnamed
-    assert unnamed["@id"] == "indexed/"
+    assert unnamed["@id"] == "indexed.csv#indexed/"
     source.unlink()
     dataset = load_from_path(manifest)
     inspection = inspect_dataset(dataset)
-    assert {f.name for f in inspection.record_sets[0].fields} == {"indexed/", "gene_id", "score"}
+    assert {f.name for f in inspection.record_sets[0].fields} == {"indexed.csv#indexed/", "gene_id", "score"}
     generate_source_packages(manifest, tmp_path / "sources")
-    assert "indexed/" in (tmp_path / "sources/indexed/indexed/schema.py").read_text()
+    assert "indexed.csv#indexed/" in (tmp_path / "sources/indexed/indexed_csv_indexed/schema.py").read_text()

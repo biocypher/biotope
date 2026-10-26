@@ -286,7 +286,7 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     assert metadata_dict["recordSet"]
     distribution = metadata_dict["distribution"]
     assert any(item["@type"] == "cr:FileObject" for item in distribution)
-    assert any(item.get("contentUrl") == "data/mixed/README.md" for item in distribution)
+    assert any(item.get("contentUrl") == "README.md" for item in distribution)
 
     scaffold_path = data_dir / ".biotope.yaml"
     import yaml
@@ -328,7 +328,7 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
     urls = {item["@type"]: [] for item in metadata_dict["distribution"]}
     for item in metadata_dict["distribution"]:
         urls[item["@type"]].append(item.get("contentUrl") or item.get("excludes"))
-    assert sorted(urls["cr:FileObject"]) == ["a/pixel.png", "a/table.csv", "data/a/codes.txt", "data/x/b/table.csv"]
+    assert sorted(urls["cr:FileObject"]) == ["a/codes.txt", "a/pixel.png", "a/table.csv", "x/b/table.csv"]
     assert urls["cr:FileSet"] == [["b/pixel.png"]]
     generate_source_packages(project_root / ".biotope/datasets/data.jsonld", project_root / "graph/sources")
 

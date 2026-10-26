@@ -16,6 +16,7 @@ from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
 from biotope.commands.add import add_file, default_overrides, resolve_dataset_ref
+from biotope.croissant.ids import stem, table_id
 from biotope.extraction import ExtractionError, Extractor, Schema
 from biotope.extraction.describe import describe
 from biotope.extraction.run import (
@@ -343,7 +344,7 @@ def _register(
     file_object = _file_object(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")
-    describe(metadata, schema, file_object["@id"], target.name, records)
+    describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
     write_text_atomic(manifest, json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
 
 
@@ -357,7 +358,7 @@ def _registered(
     if file_object is None or file_object.get("sha256") != sha256(target) or get_derived_from(metadata) != dataset_ids:
         return False
     described = copy.deepcopy(metadata)
-    describe(described, schema, file_object["@id"], target.name, records)
+    describe(described, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
     return described == metadata
 
 

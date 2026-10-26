@@ -111,11 +111,14 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
             collect(item.get("subField", []))
 
     collect(manifest["recordSet"][0]["field"])
-    prefix = "profile.jsonl/values/name/evidence/"
+    prefix = "profile.jsonl#profile/values/name/evidence/"
     described = {key.removeprefix(prefix) for key in descriptions if key.startswith(prefix)}
     assert described == set(lind["values"]["name"]["evidence"])
-    assert descriptions["profile.jsonl/values/name/value"] == "The researcher's full name, without academic titles."
-    assert descriptions["profile.jsonl/values/methods/value"] == (
+    assert (
+        descriptions["profile.jsonl#profile/values/name/value"]
+        == "The researcher's full name, without academic titles."
+    )
+    assert descriptions["profile.jsonl#profile/values/methods/value"] == (
         "Each experimental or computational method the page lists."
     )
     generated = study.run(
@@ -123,7 +126,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     )
     assert generated.exit_code == 0, generated.output
     schema = next((study.root / "graph/sources").rglob("schema.py")).read_text()
-    assert "UnknownValue" not in schema and re.search(r"methods: list\[ProfileJsonlValuesMethods\b", schema)
+    assert "UnknownValue" not in schema and re.search(r"methods: list\[ProfileJsonlProfileValuesMethods\b", schema)
 
     texts = [str(path.relative_to(study.root)) for path in (study.root / ".biotope/texts").glob("*.txt")]
     assert len(texts) == 3
@@ -422,7 +425,10 @@ def test_generated_sources_load_extracted_records(study, monkeypatch, runs, desc
         source = importlib.import_module(".".join(package.parts)).SOURCE
         [record_class] = source.records
         rows = [
-            SourceRecord(decoded(record_class, line), (Evidence(line["document"], "v1", "profile.jsonl", line["id"]),))
+            SourceRecord(
+                decoded(record_class, line),
+                (Evidence(line["document"], "v1", record_class.__record_set__, line["id"]),),
+            )
             for line in study.records("profile")
         ]
         context = RunContext(Pipeline("extracted", Topology((), ()), (source,), (), lambda _: None, "test", ()))
@@ -941,7 +947,7 @@ def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
     assert (lind["supported"], okafor["supported"]) == (False, True)
     assert lind["values"]["group"]["value"] == "Cancer Imaging Group"
     manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
-    assert "profile.jsonl/supported" in {item["@id"] for item in manifest["recordSet"][0]["field"]}
+    assert "profile.jsonl#profile/supported" in {item["@id"] for item in manifest["recordSet"][0]["field"]}
 
     shown = " ".join(study.run("extract", "run", PROFILE, "data/pages").output.split())
     assert "Review data/pages/lind.html unsupported: 3 of 4 values have no aligned evidence" in shown
