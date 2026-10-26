@@ -18,7 +18,7 @@ These rules apply in every project. Projects inherit them from `~/Projects/fleet
 
 ## This project
 
-Biotope curates Croissant descriptions of local data and builds typed, provenance-tracked BioCypher graphs from them. The current iteration makes it a framework for data representation: it turns a project's local sources, structured files and documents alike, into a graph of typed records that answers the project's questions. REACH ([slolab/reach](https://github.com/slolab/reach)) is the testing ground and InTRAC the second user; a feature belongs in biotope only if it makes sense beyond REACH, and no spec here describes behaviour specific to one project.
+Biotope curates Croissant descriptions of local data and builds typed, provenance-tracked BioCypher graphs from them. The current iteration makes it a framework for data representation: it turns a project's local sources, structured files and documents alike, into a graph of typed records that answers the project's questions. REACH ([slolab/reach](https://github.com/slolab/reach)) is the first real problem it is built and tested on, the ELIXIR Atlas follows later, and InTRAC's graph must keep building; a feature belongs in biotope only if it makes sense beyond REACH, and no spec here describes behaviour specific to one project.
 
 Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of truth for new work: when a roadmap, spec, PR or comment disagrees with it, #53 wins. Read #53 and [`docs/roadmap.md`](docs/roadmap.md), which is written from it, before starting any task. Live status is in #53.
 
