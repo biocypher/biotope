@@ -18,7 +18,11 @@ graph/
         schema.py        typed records and field bindings; yours to edit
         loader.py        decoding into the schema; starts as a placeholder
   alignment/             cross-source identity resolution, before mappings
-  topology/<concept>/    node dataclasses and their outgoing relations
+  topology/
+    __init__.py          TOPOLOGY: the registered nodes and edges
+    <node>/              one folder per node, its class name in snake_case
+      node.py            the node dataclass
+      <edge>.py          one edge whose source is this node, named the same way
   mappings/<concept>/    selection, joins and graph-object construction
   pipelines/
     compose.py           the stage sequence
@@ -62,7 +66,11 @@ purpose file and the managed `.biotope/datasets/` live. `paths.py` supplies
    terms in `standardization.py`. Implement its loader and delete the loader's
    `# biotope:placeholder` first line. Loaders preserve rows; they do not filter.
 
-1. Declare concepts in `topology/<concept>/`. Describe every concept in its
+1. Declare each node in `topology/<node>/node.py` and each edge in its source
+   node's folder, one file per edge: `Sample` in `topology/sample/node.py`, and
+   `FromPerson`, from a sample to a person, in `topology/sample/from_person.py`.
+   `biotope graph check` enforces this layout; other modules there are free.
+   Register them in `topology/__init__.py`. Describe every concept in its
    docstring and every property with `field(metadata={"description": ...})`;
    the descriptions travel with the export.
 

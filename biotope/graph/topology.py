@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, fields, is_dataclass
 from functools import lru_cache
 from itertools import repeat
+from pathlib import PurePosixPath
 from typing import Any, Literal, TypedDict, cast, get_args, get_origin, get_type_hints
 
 from biotope.graph.annotations import label, nested_records, tuple_members, union_members, unwrap
@@ -29,6 +30,10 @@ def hints(cls: type) -> dict[str, Any]:
 def field_names(cls: type) -> tuple[str, ...]:
     """List a dataclass's fields once per declaration class."""
     return tuple(member.name for member in fields(cls))
+
+
+def snake_case(name: str) -> str:
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", name).lower()
 
 
 IDENTIFIER = re.compile(r"[^\s:]+:[^\s]+")
@@ -287,6 +292,15 @@ class Topology:
             item["nullable"] = sorted(name for name in item["properties"] if type(None) in get_args(annotations[name]))
             result[semantic] = item
         return dict(sorted(result.items()))
+
+    def layout(self) -> dict[type, PurePosixPath]:
+        folders = {hints(node).get("id"): snake_case(node.__name__) for node in self.nodes}
+        places = {node: PurePosixPath(snake_case(node.__name__), "node.py") for node in self.nodes}
+        for edge in self.edges:
+            folder = folders.get(hints(edge).get("source"))
+            if folder is not None:
+                places[edge] = PurePosixPath(folder, snake_case(edge.__name__) + ".py")
+        return places
 
     def descriptions(self) -> dict[str, ConceptDescription]:
         """Collect authored concept and property descriptions, separate from structure."""

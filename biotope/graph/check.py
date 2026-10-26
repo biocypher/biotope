@@ -225,6 +225,19 @@ def check_pipeline(
                 + ", ".join(missing[:20])
                 + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
             )
+        if workspace is not None:
+            for cls, place in pipeline.topology.layout().items():
+                found = Path(inspect.getfile(cls)).resolve()
+                if found != (workspace.root / "topology" / place).resolve():
+                    where = f"{workspace.root.name}/topology/{place}"
+                    error(
+                        "topology.layout",
+                        cls.__name__,
+                        f"{cls.__name__}: an edge class belongs in {where}, its source node's folder"
+                        if cls in pipeline.topology.edges
+                        else f"{cls.__name__}: a node class belongs in {where}",
+                        found,
+                    )
         return described
 
     schema = stage("topology", topology)
