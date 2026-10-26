@@ -23,6 +23,20 @@ description. Curated or annotated manifests are protected from overwrite. Use
 `add <path> --bake-to <new-review.jsonld>` to bake separately for reconciliation.
 Keep that output outside the input directory and `.biotope/datasets/`.
 
+## Extract records from documents
+
+| Command                                               | Purpose                                                                       |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `biotope extract try <module.py:Schema> <file>...`    | Show the records and evidence the configured extractor finds; change nothing. |
+| `biotope extract run <module.py:Schema> <dataset>...` | Extract registered documents, store the records and register them.            |
+| `biotope extract text <file>`                         | Print biotope's text of a document, which evidence offsets refer to.          |
+| `biotope extract schema <module.py:Schema>`           | Print the JSON Schema, key and revision biotope derives from a schema class.  |
+
+Extraction reads the extractor from `extraction` in `.biotope/config.yaml` and
+reuses stored records until a document, the schema or the extractor changes. See
+[Extraction](extraction.md) for the configuration, schemas, extractors and the
+stored records.
+
 ## Curate and generate
 
 ```bash

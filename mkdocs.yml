@@ -50,6 +50,7 @@ nav:
   - Commands:
       - Overview: commands.md
       - Report formats: commands_sidenotes.md
+  - Extraction: extraction.md
   - Typed graph projects:
       - Authoring: mapping.md
       - Technical notes: mapping_sidenotes.md
@@ -59,6 +60,7 @@ nav:
       - Administration examples: cluster-compliance_sidenotes.md
   - Migration to 0.10: migration.md
   - Development ideas: ideas.md
+  - Roadmap: roadmap.md
 
 validation:
   links:

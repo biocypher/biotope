@@ -46,7 +46,7 @@ A file Baker cannot parse can still answer a semantic question. Cohort descripti
 }
 ```
 
-Keep these entries. Generation gives each one a document package whose `Facts` schema holds what you transcribe, and whose loader cites the page or section of each statement. The `@id` follows the file's checksum, so the reviewed facts stay bound to the exact content they describe. A replaced document gets a new `@id`, leaving the old package orphaned; the orphan finding names the new resource so you can move the reviewed facts across.
+Keep these entries. Extract the records a document holds with `biotope extract`, as [extraction.md](./extraction.md) describes; the extracted records become a dataset of their own. Generation still gives each document a document package: exclude it with the reason `extracted into <records file>`, or, for a document kept out of extraction, use its `Facts` schema for what you transcribe, with a loader that cites the page or section of each statement. The `@id` follows the file's checksum, so the reviewed facts stay bound to the exact content they describe. A replaced document gets a new `@id`, leaving the old package orphaned; the orphan finding names the new resource so you can move the reviewed facts across.
 
 Add a FileObject by hand only for a file that no scan covered, in a draft registered as above. Give it a stable `@id`, its `contentUrl` relative to the project root (as in the entries `biotope add` appends; Baker's own entries are relative to the directory it scanned), `encodingFormat` and `sha256`.
 
