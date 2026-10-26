@@ -39,7 +39,7 @@ ARRAY_DELIMITER = ";"
 
 NEO4J_DEFAULT_READ_BUFFER = 4 * 2**20
 
-RESERVED_PROPERTIES = ("preferred_id", PROVENANCE_PROPERTY)
+RESERVED_PROPERTIES = frozenset({"preferred_id", PROVENANCE_PROPERTY})
 
 SQLITE_DATABASE = "graph.sqlite"
 SQLITE_TYPES = {"str": "TEXT", "int": "INTEGER", "float": "REAL", "bool": "INTEGER", "str[]": "TEXT"}

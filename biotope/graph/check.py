@@ -16,6 +16,7 @@ from typing import Any, get_type_hints
 from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
 from biotope.graph.dependencies import declared_distributions, imported_distributions
+from biotope.graph.output import RESERVED_PROPERTIES
 from biotope.graph.reports import (
     CheckFailed,
     CheckResult,
@@ -225,6 +226,13 @@ def check_pipeline(
                 + ", ".join(missing[:20])
                 + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
             )
+        for concept, item in described.items():
+            for name in sorted(RESERVED_PROPERTIES & item["properties"].keys()):
+                error(
+                    "topology.reserved",
+                    f"{concept}.{name}",
+                    f"{concept}.{name}: the export reserves {name}; rename the property",
+                )
         if workspace is not None:
             for cls, place in pipeline.topology.layout().items():
                 found = Path(inspect.getfile(cls)).resolve()

@@ -3,6 +3,9 @@
 import gzip
 import importlib.metadata
 import json
+import shutil
+import subprocess
+import sys
 from dataclasses import fields
 
 from croissant_baker.metadata_generator import MetadataGenerator
@@ -38,3 +41,20 @@ def test_run_json_records_every_declared_and_every_imported_distribution(tmp_pat
     recorded = json.loads((root / "graph/build/recorded/run.json").read_text())["dependencies"]
     for name in ("biotope", "pyyaml", "rich"):
         assert recorded[name]["version"] == importlib.metadata.version(name)
+
+
+def test_graph_check_reports_a_reserved_property_name_without_running_a_loader(tmp_path):
+    root = prepare(tmp_path)
+    shutil.rmtree(root / "raw")
+    node = root / "graph/topology/sample/node.py"
+    node.write_text(
+        node.read_text() + '    preferred_id: str = field(default="", metadata={"description": "An alias."})\n'
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "biotope.cli", "graph", "check", "--json"], cwd=root, text=True, capture_output=True
+    )
+    report = json.loads(result.stdout)
+    assert report["state"] == "failed"
+    [reserved] = [finding for finding in report["findings"] if finding["severity"] == "error"]
+    assert reserved["code"] == "topology.reserved"
+    assert reserved["message"] == "example:sample.preferred_id: the export reserves preferred_id; rename the property"
