@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import yaml
 
-from biotope.utils import find_biotope_root, is_git_repo, load_project_metadata
+from biotope.utils import find_biotope_root, load_project_metadata
 
 
 def test_find_biotope_root(tmp_path):
@@ -38,23 +38,6 @@ def test_find_biotope_root(tmp_path):
     with patch("biotope.utils.Path.cwd", return_value=outside_dir):
         result = find_biotope_root()
         assert result is None
-
-
-def test_is_git_repo(tmp_path):
-    """Test checking if directory is a git repository."""
-    # Test non-git directory
-    assert not is_git_repo(tmp_path)
-
-    # Test git directory
-    git_dir = tmp_path / "git_project"
-    git_dir.mkdir()
-
-    # Initialize a proper git repository
-    import subprocess
-
-    subprocess.run(["git", "init"], cwd=git_dir, check=True)
-
-    assert is_git_repo(git_dir)
 
 
 def test_load_project_metadata(tmp_path):

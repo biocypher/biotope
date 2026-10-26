@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -150,7 +151,7 @@ class Study:
         path.write_text(yaml.safe_dump(config, sort_keys=False))
 
     def records(self, name: str) -> list[dict]:
-        lines = (self.root / "extracted" / f"{name}.jsonl").read_text().splitlines()
+        lines = (self.root / "data/extracted" / f"{name}.jsonl").read_text().splitlines()
         return [json.loads(line) for line in lines]
 
     def text(self, document: str) -> str:
@@ -194,13 +195,14 @@ def study(tmp_path, monkeypatch, endpoint):
     created = project.run("init", "study", "--dir", str(tmp_path), "--no-prompt")
     assert created.exit_code == 0, created.output
     monkeypatch.chdir(root)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    assert project.run("graph", "scaffold").exit_code == 0
     (root / "data/pages").mkdir(parents=True)
     (root / "data/calls").mkdir(parents=True)
     for page in ("lind.html", "okafor.html"):
         shutil.copy(FIXTURES / page, root / "data/pages" / page)
     shutil.copy(FIXTURES / "call.pdf", root / "data/calls/call.pdf")
-    (root / "extraction").mkdir()
-    shutil.copy(FIXTURES / "schemas.py", root / "extraction/schemas.py")
+    shutil.copy(FIXTURES / "schemas.py", root / "graph/extraction/schemas.py")
     project.configure(extractor="llm", endpoint=endpoint.url, model="test/model", key_env="OPENROUTER_API_KEY")
     added = project.run("add", "data/pages", "data/calls")
     assert added.exit_code == 0, added.output

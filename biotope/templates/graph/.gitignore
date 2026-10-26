@@ -1,4 +1,5 @@
 /build/
+/metagraph.html
 .venv/
 __pycache__/
 *.py[cod]

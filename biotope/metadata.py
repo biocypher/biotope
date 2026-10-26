@@ -241,6 +241,12 @@ def resolve_content_url(content_url: str, dataset_dir: Path, biotope_root: Path)
     return None
 
 
+def names_file(distribution: dict[str, Any], dataset_dir: Path, file_path: Path, biotope_root: Path) -> bool:
+    url = distribution.get("contentUrl")
+    located = resolve_content_url(url, dataset_dir, biotope_root) if isinstance(url, str) else None
+    return located is not None and located.resolve() == file_path.resolve()
+
+
 def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
     """The data directory mirrored by a manifest under the project root.
 
@@ -271,16 +277,14 @@ def file_coverage_in_manifest(
     dataset directory, mirroring how ``biotope add`` resolves them at bake
     time.
     """
-    try:
-        file_rel = str(file_path.relative_to(biotope_root))
-    except ValueError:
+    if not file_path.resolve().is_relative_to(biotope_root.resolve()):
         return None
 
     fileset_hit = False
     for distribution in metadata.get("distribution", []) or []:
         entry_type = distribution.get("@type")
         if entry_type == FILE_OBJECT_TYPE:
-            if distribution.get("contentUrl") == file_rel:
+            if names_file(distribution, manifest_dataset_dir, file_path, biotope_root):
                 return "file_object"
             continue
         if entry_type == "cr:FileSet" and not fileset_hit:

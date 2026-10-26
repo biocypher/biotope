@@ -135,23 +135,12 @@ def test_mv_not_in_biotope_project(runner, tmp_path):
     assert result.exit_code != 0
 
 
-def test_mv_not_in_git_repo(runner, biotope_project):
-    source = biotope_project / "test.csv"
-    source.write_text("x")
-    with runner.isolated_filesystem(temp_dir=biotope_project):
-        with mock.patch("biotope.commands.mv.is_git_repo", return_value=False):
-            result = runner.invoke(mv, [str(source), "moved.csv"])
-    assert result.exit_code != 0
-    assert "git repository" in result.output.lower()
-
-
 def test_mv_file_not_tracked(runner, biotope_project):
     source = biotope_project / "test.csv"
     source.write_text("x")
     with runner.isolated_filesystem(temp_dir=biotope_project):
-        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
-            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=False):
-                result = runner.invoke(mv, [str(source), "moved.csv"])
+        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=False):
+            result = runner.invoke(mv, [str(source), "moved.csv"])
     assert result.exit_code != 0
     assert "is not tracked" in result.output
 
@@ -162,15 +151,12 @@ def test_mv_successful_move(runner, biotope_project_with_file):
     original_cwd = Path.cwd()
     try:
         os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
-            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv.stage_git_changes") as mock_stage:
-                    result = runner.invoke(mv, [str(source_file), str(destination)])
+        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+            result = runner.invoke(mv, [str(source_file), str(destination)])
         assert result.exit_code == 0
         assert "Move Complete" in result.output
         assert not source_file.exists()
         assert destination.exists()
-        mock_stage.assert_called_once()
         metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.jsonld"
         assert json.loads(metadata_file.read_text())["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
     finally:
@@ -185,10 +171,8 @@ def test_mv_force_overwrite(runner, biotope_project_with_file):
     original_cwd = Path.cwd()
     try:
         os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
-            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv.stage_git_changes"):
-                    result = runner.invoke(mv, [str(source_file), str(destination), "--force"])
+        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+            result = runner.invoke(mv, [str(source_file), str(destination), "--force"])
         assert result.exit_code == 0
         assert destination.read_text() == "gene,expression\nBRCA1,12.5"
     finally:
@@ -208,13 +192,50 @@ def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_
 
     try:
         os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_git_repo", return_value=True):
-            with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-                with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
-                    result = runner.invoke(mv, [str(source_file), str(destination)])
+        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
+            with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
+                result = runner.invoke(mv, [str(source_file), str(destination)])
         assert result.exit_code != 0
         assert "Failed to move metadata file" in result.output
         assert source_file.exists()
         assert not destination.exists()
     finally:
         os.chdir(original_cwd)
+
+
+def baked(tmp_path, monkeypatch):
+    from biotope.cli import cli
+
+    runner = CliRunner()
+    assert runner.invoke(cli, ["init", "baked", "--dir", str(tmp_path), "--no-prompt"]).exit_code == 0
+    root = tmp_path / "baked"
+    monkeypatch.chdir(root)
+    things = root / "data/things"
+    things.mkdir(parents=True)
+    (things / "first.csv").write_text("a,b\n1,2\n")
+    (things / "second.csv").write_text("x,y,z\n1,2,3\n")
+    (root / "data/solo").mkdir()
+    (root / "data/solo/only.csv").write_text("id\n1\n")
+    added = runner.invoke(cli, ["add", "data/things", "data/solo"])
+    assert added.exit_code == 0, added.output
+    return root, lambda *args: runner.invoke(cli, list(args))
+
+
+def described(root, dataset):
+    manifest = json.loads((root / f".biotope/datasets/{dataset}.jsonld").read_text())
+    return {entry["contentUrl"] for entry in manifest["distribution"]}, manifest
+
+
+def test_mv_accepts_files_baker_described_in_a_folder_manifest(tmp_path, monkeypatch):
+    from biotope.utils import is_file_tracked
+
+    root, run = baked(tmp_path, monkeypatch)
+    assert described(root, "data/things")[0] == {"first.csv", "second.csv"}
+    moved = run("mv", "data/things/first.csv", "data/things/renamed.csv")
+    assert moved.exit_code == 0, moved.output
+    assert described(root, "data/things")[0] == {"renamed.csv", "second.csv"}
+    assert is_file_tracked(root / "data/things/renamed.csv", root)
+    alone = run("mv", "data/solo/only.csv", "data/solo/single.csv")
+    assert alone.exit_code == 0, alone.output
+    assert described(root, "data/solo")[0] == {"single.csv"}
+    assert sorted(path.name for path in (root / ".biotope/datasets/data").iterdir()) == ["solo.jsonld", "things.jsonld"]

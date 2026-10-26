@@ -12,10 +12,9 @@ from biotope.commands.rm import rm
 
 
 def _project(runner: CliRunner, tmp_path: Path) -> Path:
-    r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-git", "--no-prompt"])
+    r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-prompt"])
     assert r.exit_code == 0, r.output
     project_dir = tmp_path / "proj"
-    (project_dir / ".git").mkdir(exist_ok=True)
     return project_dir
 
 
@@ -55,9 +54,7 @@ def test_rm_whole_dataset_deletes_data_and_manifest(tmp_path: Path, monkeypatch)
     (data_dir / "part-00.parquet").write_bytes(b"x")
     _write_manifest(project_dir, "data/ot/target")
 
-    with monkeypatch.context() as m:
-        m.setattr("biotope.commands.rm.stage_git_changes", lambda _: None)
-        r = runner.invoke(rm, [str(data_dir), "--force"])
+    r = runner.invoke(rm, [str(data_dir), "--force"])
     assert r.exit_code == 0, r.output
 
     assert not data_dir.exists()
@@ -74,9 +71,7 @@ def test_rm_whole_dataset_keep_data(tmp_path: Path, monkeypatch) -> None:
     (data_dir / "x.parquet").write_bytes(b"x")
     _write_manifest(project_dir, "data/ot/target")
 
-    with monkeypatch.context() as m:
-        m.setattr("biotope.commands.rm.stage_git_changes", lambda _: None)
-        r = runner.invoke(rm, [str(data_dir), "--force", "--keep-data"])
+    r = runner.invoke(rm, [str(data_dir), "--force", "--keep-data"])
     assert r.exit_code == 0, r.output
     assert data_dir.exists()
     assert not (project_dir / ".biotope" / "datasets" / "data" / "ot" / "target.jsonld").exists()
@@ -90,9 +85,7 @@ def test_rm_canonical_id_accepted_when_data_already_gone(tmp_path: Path, monkeyp
     monkeypatch.chdir(project_dir)
     _write_manifest(project_dir, "data/ot/orphan")
 
-    with monkeypatch.context() as m:
-        m.setattr("biotope.commands.rm.stage_git_changes", lambda _: None)
-        r = runner.invoke(rm, ["data/ot/orphan", "--force"])
+    r = runner.invoke(rm, ["data/ot/orphan", "--force"])
     assert r.exit_code == 0, r.output
     assert not (project_dir / ".biotope" / "datasets" / "data" / "ot" / "orphan.jsonld").exists()
 
@@ -137,9 +130,7 @@ def test_rm_single_file_object_keeps_other_distribution_entries(tmp_path: Path, 
         ],
     )
 
-    with monkeypatch.context() as m:
-        m.setattr("biotope.commands.rm.stage_git_changes", lambda _: None)
-        r = runner.invoke(rm, [str(target), "--force"])
+    r = runner.invoke(rm, [str(target), "--force"])
     assert r.exit_code == 0, r.output
 
     assert not target.exists()
@@ -169,9 +160,7 @@ def test_rm_last_file_in_manifest_deletes_manifest(tmp_path: Path, monkeypatch) 
         ],
     )
 
-    with monkeypatch.context() as m:
-        m.setattr("biotope.commands.rm.stage_git_changes", lambda _: None)
-        r = runner.invoke(rm, [str(target), "--force"])
+    r = runner.invoke(rm, [str(target), "--force"])
     assert r.exit_code == 0, r.output
 
     manifest = project_dir / ".biotope" / "datasets" / "data" / "lone.jsonld"
@@ -221,10 +210,29 @@ def test_rm_keep_data_for_file(tmp_path: Path, monkeypatch) -> None:
         ],
     )
 
-    with monkeypatch.context() as m:
-        m.setattr("biotope.commands.rm.stage_git_changes", lambda _: None)
-        r = runner.invoke(rm, [str(target), "--force", "--keep-data"])
+    r = runner.invoke(rm, [str(target), "--force", "--keep-data"])
     assert r.exit_code == 0, r.output
     assert target.exists()  # disk untouched
     metadata = json.loads((project_dir / ".biotope" / "datasets" / "data" / "ot.jsonld").read_text())
     assert all(d["contentUrl"] != "data/ot/README.md" for d in metadata["distribution"])
+
+
+def test_rm_accepts_a_file_baker_described_in_a_folder_manifest(tmp_path: Path, monkeypatch) -> None:
+    from biotope.cli import cli
+
+    runner = CliRunner()
+    assert runner.invoke(cli, ["init", "baked", "--dir", str(tmp_path), "--no-prompt"]).exit_code == 0
+    root = tmp_path / "baked"
+    monkeypatch.chdir(root)
+    things = root / "data/things"
+    things.mkdir(parents=True)
+    (things / "first.csv").write_text("a,b\n1,2\n")
+    (things / "second.csv").write_text("x,y,z\n1,2,3\n")
+    assert runner.invoke(cli, ["add", "data/things"]).exit_code == 0
+    removed = runner.invoke(cli, ["rm", "-f", "data/things/second.csv"])
+    assert removed.exit_code == 0, removed.output
+    assert not (things / "second.csv").exists()
+    manifest = json.loads((root / ".biotope/datasets/data/things.jsonld").read_text())
+    assert [entry["contentUrl"] for entry in manifest["distribution"]] == ["first.csv"]
+    [kept] = manifest["recordSet"]
+    assert {field["name"] for field in kept["field"]} == {"a", "b"}

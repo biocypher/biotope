@@ -4,7 +4,6 @@ import copy
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -44,7 +43,7 @@ from biotope.metadata import (
     get_derived_from,
     resolve_content_url,
 )
-from biotope.utils import find_biotope_root, is_git_repo, stage_git_changes
+from biotope.utils import find_biotope_root, ignored_by_git
 
 
 class Output:
@@ -144,7 +143,9 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
 )
 @click.argument("schema_ref", metavar="SCHEMA")
 @click.argument("datasets", nargs=-1, required=True)
-@click.option("--out", type=click.Path(dir_okay=False, path_type=Path), help="Records file [extracted/<schema>.jsonl]")
+@click.option(
+    "--out", type=click.Path(dir_okay=False, path_type=Path), help="Records file [data/extracted/<schema>.jsonl]"
+)
 @click.option(
     "--redo",
     multiple=True,
@@ -166,7 +167,7 @@ def run_command(
     strangers = sorted(chosen - {source.path for source in sources})
     if strangers:
         output.fail(f"{', '.join(strangers)} is not a document of {', '.join(datasets)}")
-    target = out.resolve() if out is not None else root / "extracted" / f"{_snake(schema.name)}.jsonl"
+    target = out.resolve() if out is not None else root / "data/extracted" / f"{_snake(schema.name)}.jsonl"
     try:
         relative = target.relative_to(root)
     except ValueError:
@@ -189,7 +190,7 @@ def run_command(
     manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
     if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
-    ignored = _ignored(root, [target, manifest, state])
+    ignored = ignored_by_git(root, [target, manifest, state])
     output.report.update(
         manifest=manifest.relative_to(root).as_posix(),
         documents=[_document_report(outcome) for outcome in result.documents],
@@ -286,14 +287,6 @@ def _tried(schema: Schema) -> Path:
     return cache / "biotope/tried" / schema.revision
 
 
-def _ignored(root: Path, paths: list[Path]) -> list[str]:
-    if not is_git_repo(root):
-        return []
-    relative = [path.relative_to(root).as_posix() for path in paths]
-    checked = subprocess.run(["git", "check-ignore", "--", *relative], cwd=root, capture_output=True, text=True)
-    return sorted(checked.stdout.split())
-
-
 def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor, int]:
     root = find_biotope_root()
     if root is None:
@@ -347,14 +340,11 @@ def _register(
     if not add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
     metadata = json.loads(manifest.read_text(encoding="utf-8"))
-    for unknown in ("creator", "license"):
-        metadata.pop(unknown, None)
     file_object = _file_object(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")
     describe(metadata, schema, file_object["@id"], target.name, records)
     write_text_atomic(manifest, json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
-    stage_git_changes(root)
 
 
 def _registered(

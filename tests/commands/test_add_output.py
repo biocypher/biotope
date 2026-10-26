@@ -17,7 +17,7 @@ def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypa
 
     monkeypatch.chdir(tmp_path)
     runner = CliRunner(mix_stderr=False)
-    assert runner.invoke(cli, ["init", ".", "--no-git", "--no-prompt"]).exit_code == 0
+    assert runner.invoke(cli, ["init", ".", "--no-prompt"]).exit_code == 0
     raw = tmp_path / "raw"
     raw.mkdir()
     (raw / "genes.csv").write_text("id,name\n1,A\n")

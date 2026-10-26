@@ -16,7 +16,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures" / "croissant"
 
 def test_map_intent_flags_update_project(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
-    r = runner.invoke(init, ["bcc-e2e", "--dir", str(tmp_path), "--no-git", "--no-prompt"])
+    r = runner.invoke(init, ["bcc-e2e", "--dir", str(tmp_path), "--no-prompt"])
     assert r.exit_code == 0, r.output
     project_dir = tmp_path / "bcc-e2e"
     monkeypatch.chdir(project_dir)

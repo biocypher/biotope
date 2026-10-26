@@ -25,6 +25,7 @@ PIPELINE = Pipeline(
             "paths.py",
             "standardization.py",
             "alignment",
+            "extraction",
             "sources",
             "topology",
             "mappings",

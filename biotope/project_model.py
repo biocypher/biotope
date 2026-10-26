@@ -63,14 +63,9 @@ class Project(BaseModel):
         Path(path).write_text(yaml.safe_dump(payload, sort_keys=False))
 
 
-def resolve_project_path(start: Path | None = None, *, visible: bool = False) -> Path:
-    """Return the path where ``project.yaml`` lives for the project at ``start``.
-
-    If ``visible``, the file lives at the project root (``project.yaml``);
-    otherwise under ``.biotope/project.yaml``.
-    """
-    base = start if start is not None else Path.cwd()
-    return (base / "project.yaml") if visible else (base / ".biotope" / "project.yaml")
+def resolve_project_path(start: Path | None = None) -> Path:
+    """Return the path where ``project.yaml`` lives for the project at ``start``."""
+    return (start if start is not None else Path.cwd()) / ".biotope" / "project.yaml"
 
 
 def find_project(start: Path | None = None) -> Path | None:

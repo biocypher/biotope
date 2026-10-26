@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import getpass
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -33,7 +32,7 @@ from biotope.metadata import (
 from biotope.metadata import (
     merge_metadata as shared_merge_metadata,
 )
-from biotope.utils import find_biotope_root, stage_git_changes
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 def get_standard_context() -> dict:
@@ -109,9 +108,8 @@ def apply(path: Path, set_pairs: tuple[str, ...]) -> None:
         click.echo(f"❌ Target metadata file not found: {target.metadata_path}")
         raise click.Abort
 
-    updated = _apply_scaffold(console, scaffold_path, target, overrides, biotope_root)
-    if updated:
-        stage_git_changes(biotope_root)
+    if _apply_scaffold(console, scaffold_path, target, overrides, biotope_root):
+        warn_ignored(biotope_root, [target.metadata_path])
 
 
 @annotate.command()
@@ -440,7 +438,7 @@ def edit(
 
     contact = click.prompt(
         "Contact person (email preferred)",
-        default=metadata.get("creator", {}).get("name", getpass.getuser()),
+        default=metadata.get("creator", {}).get("name", ""),
     )
 
     date = click.prompt(
@@ -519,7 +517,7 @@ def edit(
 
     license_url = click.prompt(
         "License URL",
-        default=metadata.get("license", "https://creativecommons.org/licenses/by/4.0/"),
+        default=metadata.get("license", ""),
     )
 
     citation = click.prompt(
@@ -534,17 +532,16 @@ def edit(
         "name": dataset_name,
         "description": description,
         "url": data_source,
-        "creator": {
-            "@type": "Person",
-            "name": contact,
-        },
         "dateCreated": date,
         "cr:projectName": project_name,
         "datePublished": publication_date,
         "version": version,
-        "license": license_url,
         "citation": citation,
     }
+    if contact:
+        new_metadata["creator"] = {"@type": "Person", "name": contact}
+    if license_url:
+        new_metadata["license"] = license_url
 
     # Only add access restrictions if they exist
     if access_restrictions:
@@ -821,10 +818,9 @@ def edit(
     metadata = normalize_metadata_shape(metadata)
     _save_annotations(Path(output_path), metadata)
 
-    # Stage the changes in Git if we're in a biotope project
     biotope_root = find_biotope_root()
     if biotope_root:
-        stage_git_changes(biotope_root)
+        warn_ignored(biotope_root, [Path(output_path).resolve()])
 
     # Final success message with rich formatting
     console.print()
@@ -937,7 +933,7 @@ def _run_interactive_annotation(
 
     contact = click.prompt(
         "Contact person (email preferred)",
-        default=metadata.get("creator", {}).get("name", getpass.getuser()),
+        default=metadata.get("creator", {}).get("name", ""),
     )
 
     date = click.prompt(
@@ -1016,7 +1012,7 @@ def _run_interactive_annotation(
 
     license_url = click.prompt(
         "License URL",
-        default=metadata.get("license", "https://creativecommons.org/licenses/by/4.0/"),
+        default=metadata.get("license", ""),
     )
 
     citation = click.prompt(
@@ -1031,17 +1027,16 @@ def _run_interactive_annotation(
         "name": dataset_name,
         "description": description,
         "url": data_source,
-        "creator": {
-            "@type": "Person",
-            "name": contact,
-        },
         "dateCreated": date,
         "cr:projectName": project_name,
         "datePublished": publication_date,
         "version": version,
-        "license": license_url,
         "citation": citation,
     }
+    if contact:
+        new_metadata["creator"] = {"@type": "Person", "name": contact}
+    if license_url:
+        new_metadata["license"] = license_url
 
     # Only add access restrictions if they exist
     if access_restrictions:
@@ -1085,8 +1080,7 @@ def _run_interactive_annotation(
     metadata = normalize_metadata_shape(metadata)
     _save_annotations(Path(output_path), metadata)
 
-    # Stage the changes in Git
-    stage_git_changes(biotope_root)
+    warn_ignored(biotope_root, [Path(output_path)])
     console.print(f"✅ Created metadata: {output_path}")
 
 

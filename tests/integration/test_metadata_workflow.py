@@ -51,8 +51,6 @@ assert result.exit_code == 0, result.output
 
 
 def test_no_git_project_can_describe_and_track_metadata(tmp_path, monkeypatch):
-    from biotope.validation import get_staged_metadata_files
-
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     parent_manifest = tmp_path / ".biotope/datasets/parent.jsonld"
     parent_manifest.parent.mkdir(parents=True)
@@ -62,7 +60,7 @@ def test_no_git_project_can_describe_and_track_metadata(tmp_path, monkeypatch):
     root.mkdir()
     monkeypatch.chdir(root)
     runner = CliRunner()
-    r = runner.invoke(cli, ["init", ".", "--no-git", "--no-prompt"])
+    r = runner.invoke(cli, ["init", ".", "--no-prompt"])
     assert r.exit_code == 0, r.output
     for args in (["status"], ["queue", "--json"], ["check-data"]):
         r = runner.invoke(cli, args)
@@ -83,7 +81,6 @@ def test_no_git_project_can_describe_and_track_metadata(tmp_path, monkeypatch):
     for directory in ("data", "mappings", ".biotope/workflows"):
         assert not (root / directory).exists()
     assert not (root / ".git").exists()
-    assert get_staged_metadata_files(root) == []
     r = runner.invoke(cli, ["rm", "raw", "--keep-data", "--force"])
     assert r.exit_code == 0, r.output
     assert (root / "raw/genes.csv").is_file()

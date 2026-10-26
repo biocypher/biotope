@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -15,11 +14,7 @@ from click.testing import CliRunner
 from biotope.commands._add_output import AddOutput
 from biotope.commands.add import _bake_directory, add, add_file
 from biotope.graph.inventory import generate_source_packages
-from biotope.utils import (
-    calculate_file_checksum,
-    is_file_tracked,
-    stage_git_changes,
-)
+from biotope.utils import calculate_file_checksum, is_file_tracked
 
 
 EXAMPLE_CSV = Path(__file__).resolve().parents[1] / "fixtures/example_gene_expression.csv"
@@ -56,16 +51,6 @@ def test_calculate_file_checksum(sample_file):
 
     expected_hash = hashlib.sha256(sample_file.read_bytes()).hexdigest()
     assert calculate_file_checksum(sample_file) == expected_hash
-
-
-def test_stage_git_changes(tmp_path):
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    manifest = tmp_path / ".biotope/datasets/items.jsonld"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text("{}")
-    stage_git_changes(tmp_path)
-    staged = subprocess.check_output(["git", "diff", "--cached", "--name-only"], cwd=tmp_path, text=True)
-    assert ".biotope/datasets/items.jsonld" in staged.splitlines()
 
 
 def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
@@ -357,9 +342,7 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
-@mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_directory_recurses_by_default(
-    mock_stage,
     mock_csv,
     mock_bake,
     mock_find_root,
@@ -379,16 +362,13 @@ def test_add_command_directory_recurses_by_default(
 
     assert result.exit_code == 0
     mock_bake.assert_called_once()
-    mock_stage.assert_called_once_with(git_repo)
     mock_csv.assert_called_once()
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
-@mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_directory_already_tracked_skips_without_rebake(
-    mock_stage,
     mock_csv,
     mock_bake,
     mock_find_root,
@@ -424,9 +404,7 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add._bake_directory")
 @mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
-@mock.patch("biotope.commands.add.stage_git_changes")
 def test_add_command_resolves_relative_directory(
-    mock_stage,
     mock_csv,
     mock_bake,
     mock_find_root,

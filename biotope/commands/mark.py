@@ -13,7 +13,7 @@ from biotope.metadata import (
     get_derived_from,
     set_status,
 )
-from biotope.utils import find_biotope_root
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 @click.command()
@@ -65,6 +65,7 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
         add_derived_from(metadata, source)
     with open(manifest_path, "w") as handle:
         json.dump(metadata, handle, indent=2)
+    warn_ignored(biotope_root, [manifest_path])
 
     summary = f"✓ {target_id} → {status}"
     new_provenance = [s for s in resolved_sources if s in get_derived_from(metadata)]

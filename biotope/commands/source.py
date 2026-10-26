@@ -8,7 +8,7 @@ import click
 from biotope.graph.inventory import PackageStatus, SourcePlan, apply_plan, plan_sources, record_revisions, unrecorded
 from biotope.graph.revisions import DRIFT_LINE_LIMIT, STORE, short_revision
 from biotope.graph.sources import KINDS, register_metadata
-from biotope.utils import find_biotope_root, stage_git_changes
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 @click.group(name="source")
@@ -37,7 +37,7 @@ def register(metadata: Path, name: str, reason: str, replace: bool) -> None:
         )
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
-    stage_git_changes(root)
+    warn_ignored(root, [target])
     click.echo(f"Registered curated metadata: {target}\nReview source contracts and regenerate before building.")
 
 
@@ -129,15 +129,14 @@ def generate(metadata: Path, out: Path, package: str | None, check: bool) -> Non
         _row("Done", "current")
         return
     try:
-        apply_plan(plan)
+        written = apply_plan(plan)
         recorded = record_revisions(plan)
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     _report(plan, written=True)
     if plan.store is not None:
         _row("Recorded", f"{len(recorded)} new of {len(plan.targets)} revisions in {_shown(plan.store.directory)}")
-        if recorded:
-            stage_git_changes(plan.store.project)
+        warn_ignored(plan.store.project, [*written, *recorded])
     if any(status.state in ("created", "completed") for status in plan.statuses):
         click.echo(
             "Next: implement each placeholder loader, then select sources from INVENTORY or exclude them "

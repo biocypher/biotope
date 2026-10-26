@@ -318,27 +318,3 @@ def get_all_tracked_files(biotope_root: Path) -> List[str]:
         tracked_files.append(str(relative_path))
 
     return tracked_files
-
-
-def get_staged_metadata_files(biotope_root: Path) -> List[str]:
-    """Get all staged metadata files using Git."""
-    import subprocess
-
-    from biotope.utils import is_git_repo
-
-    if not is_git_repo(biotope_root):
-        return []
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"], cwd=biotope_root, capture_output=True, text=True, check=True
-        )
-
-        staged_files = []
-        for file_path in result.stdout.splitlines():
-            if file_path.startswith(".biotope/datasets/") and file_path.endswith(".jsonld"):
-                staged_files.append(file_path)
-
-        return staged_files
-
-    except subprocess.CalledProcessError:
-        return []

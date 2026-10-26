@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -20,7 +17,7 @@ def _invoke(runner: CliRunner, *args: str) -> object:
 
 def test_init_default_layout(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = _invoke(runner, "myproj", "--dir", str(tmp_path), "--no-git")
+    result = _invoke(runner, "myproj", "--dir", str(tmp_path))
     assert result.exit_code == 0, result.output
 
     assert "biotope get" not in result.output
@@ -46,7 +43,7 @@ def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
     (target / "pyproject.toml").write_text(user_pyproject)
 
     runner = CliRunner()
-    result = _invoke(runner, ".", "--dir", str(target), "--no-git", "--no-prompt")
+    result = _invoke(runner, ".", "--dir", str(target), "--no-prompt")
     assert result.exit_code == 0, result.output
 
     assert (target / "pyproject.toml").read_text() == user_pyproject
@@ -59,7 +56,6 @@ def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:
         "p",
         "--dir",
         str(tmp_path),
-        "--no-git",
         "--purpose",
         "Map drug-target-disease links for type-2 diabetes",
     )
@@ -69,44 +65,10 @@ def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:
     assert "type-2 diabetes" in project.purpose
 
 
-def test_init_visible_promotes_project_yaml(tmp_path: Path) -> None:
-    runner = CliRunner()
-    result = _invoke(runner, "v", "--dir", str(tmp_path), "--no-git", "--visible")
-    assert result.exit_code == 0, result.output
-
-    root = tmp_path / "v"
-    assert (root / "project.yaml").is_file()
-    assert not (root / ".biotope" / "project.yaml").exists()
-
-
 def test_init_refuses_existing_biotope(tmp_path: Path) -> None:
     runner = CliRunner()
-    first = _invoke(runner, "twice", "--dir", str(tmp_path), "--no-git")
+    first = _invoke(runner, "twice", "--dir", str(tmp_path))
     assert first.exit_code == 0
-    second = _invoke(runner, "twice", "--dir", str(tmp_path), "--no-git")
+    second = _invoke(runner, "twice", "--dir", str(tmp_path))
     assert second.exit_code != 0
     assert "already contains" in second.output
-
-
-@pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
-def test_init_creates_initial_commit_and_leaves_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """After init, the scaffold should be committed so `git status` is clean —
-    otherwise init artefacts (config.yaml, .gitignore, ...) leak into the user's
-    first `biotope status` and look like changes they made."""
-    for var, val in (
-        ("GIT_AUTHOR_NAME", "t"),
-        ("GIT_AUTHOR_EMAIL", "t@t"),
-        ("GIT_COMMITTER_NAME", "t"),
-        ("GIT_COMMITTER_EMAIL", "t@t"),
-    ):
-        monkeypatch.setenv(var, val)
-    runner = CliRunner()
-    result = _invoke(runner, "g", "--dir", str(tmp_path), "--no-prompt")
-    assert result.exit_code == 0, result.output
-
-    root = tmp_path / "g"
-    porcelain = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True)
-    assert porcelain.stdout.strip() == "", f"expected clean tree, got:\n{porcelain.stdout}"
-
-    log = subprocess.run(["git", "log", "--oneline"], cwd=root, capture_output=True, text=True, check=True)
-    assert "initialize biotope project" in log.stdout

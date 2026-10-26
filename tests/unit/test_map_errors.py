@@ -19,7 +19,7 @@ def minimal_croissant_jsonld() -> Path:
 
 def _init_project(tmp_path: Path) -> Path:
     runner = CliRunner()
-    r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-git", "--no-prompt"])
+    r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-prompt"])
     assert r.exit_code == 0, r.output
     return tmp_path / "proj"
 

@@ -20,6 +20,7 @@ Three shapes of move land here:
 
 import fnmatch
 import json
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,18 +30,19 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
+from biotope.extraction.run import STATES
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
     ensure_no_legacy_file_objects,
     file_coverage_in_manifest,
+    resolve_target,
 )
 from biotope.utils import (
     calculate_file_checksum,
     find_biotope_root,
     is_file_tracked,
-    is_git_repo,
-    stage_git_changes,
+    warn_ignored,
 )
 
 
@@ -75,10 +77,6 @@ def mv(
         click.echo("❌ Not in a biotope project. Run 'biotope init' first.")
         raise click.Abort
 
-    if not is_git_repo(biotope_root):
-        click.echo("❌ Not in a Git repository. Initialize Git first with 'git init .'")
-        raise click.Abort
-
     # Resolve file paths to absolute paths if they're relative
     if not source.is_absolute():
         source = source.resolve()
@@ -110,6 +108,17 @@ def mv(
         _execute_directory_move(source, actual_destination, biotope_root, console)
     else:
         _execute_move(source, actual_destination, biotope_root, console)
+        _move_extraction_state(source, actual_destination, biotope_root)
+
+
+def _move_extraction_state(source: Path, destination: Path, biotope_root: Path) -> None:
+    old, new = (
+        biotope_root / STATES / path.relative_to(biotope_root).with_suffix(".json") for path in (source, destination)
+    )
+    if old.is_file() and destination.is_file() and not source.exists():
+        new.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(old), str(new))
+        warn_ignored(biotope_root, [new])
 
 
 def _resolve_destination_path(source: Path, destination: Path) -> Path:
@@ -183,7 +192,7 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
     # The legacy "move manifest alongside" logic only fires when every owning
     # manifest is single-file (one FileObject, no FileSet) — i.e. the
     # historical 1-manifest-per-file shape.
-    if any(_is_multi_file_manifest_at(m) for m in metadata_files):
+    if any(m != resolve_target(source, biotope_root).metadata_path for m in metadata_files):
         _execute_move_for_multifile(source, destination, biotope_root, metadata_files, console)
         return
 
@@ -278,9 +287,7 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
             ):
                 updated_files.append(metadata_file)
 
-                # Calculate new metadata file path based on the data file's new location
-                # Keep the original metadata file name to avoid conflicts
-                new_metadata_path = biotope_root / ".biotope" / "datasets" / destination_rel.parent / metadata_file.name
+                new_metadata_path = resolve_target(destination, biotope_root).metadata_path
 
                 # Move the metadata file to mirror the new data file structure
                 if new_metadata_path != metadata_file:
@@ -317,8 +324,8 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
 
         raise click.Abort
 
-    if updated_files or moved_metadata_files:
-        stage_git_changes(biotope_root)
+    written = [*updated_files, *(new for _, new in moved_metadata_files)]
+    warn_ignored(biotope_root, [path for path in written if path.exists()])
 
     console.print(
         Panel(
@@ -335,7 +342,6 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
     console.print("\n💡 Next steps:")
     console.print("  1. Run 'biotope status' to see the changes")
     console.print("  2. Run 'biotope check-data' to verify file integrity")
-    console.print("  3. Run 'biotope commit -m \"message\"' to save changes")
 
 
 def _find_tracked_files_in_directory(directory: Path, biotope_root: Path) -> List[Path]:
@@ -595,8 +601,7 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
 
         raise click.Abort
 
-    if updated_files:
-        stage_git_changes(biotope_root)
+    warn_ignored(biotope_root, [path for path in updated_files if path.exists()])
 
     console.print(
         Panel(
@@ -611,7 +616,6 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
     console.print("\n💡 Next steps:")
     console.print("  1. Run 'biotope status' to see the changes")
     console.print("  2. Run 'biotope check-data' to verify file integrity")
-    console.print("  3. Run 'biotope commit -m \"message\"' to save changes")
 
 
 def _cleanup_empty_metadata_directories(metadata_dir: Path, biotope_root: Path) -> None:
@@ -730,7 +734,7 @@ def _whole_dataset_rename(source: Path, destination: Path, biotope_root: Path, c
         _prune_datasets_subtree(nested_root, datasets_dir)
     _prune_datasets_subtree(top_manifest.parent, datasets_dir)
 
-    stage_git_changes(biotope_root)
+    warn_ignored(biotope_root, rewritten)
     console.print(
         Panel(
             f"[bold green]✅ Renamed dataset[/]\n"
@@ -781,21 +785,6 @@ def _prune_datasets_subtree(start: Path, datasets_root: Path) -> None:
         except OSError:
             return
         current = current.parent
-
-
-def _is_multi_file_manifest_at(manifest_path: Path) -> bool:
-    """A manifest is multi-file iff it covers more than one logical thing —
-    multiple FileObjects, or any FileSet. The legacy `biotope add <file>`
-    shape (one FileObject per `.jsonld`) returns False here."""
-    try:
-        with open(manifest_path) as handle:
-            metadata = json.load(handle)
-    except (OSError, ValueError):
-        return False
-    distribution = metadata.get("distribution", []) or []
-    n_file_objects = sum(1 for d in distribution if d.get("@type") == FILE_OBJECT_TYPE)
-    has_fileset = any(d.get("@type") == "cr:FileSet" for d in distribution)
-    return n_file_objects > 1 or has_fileset
 
 
 def _fileset_patterns(metadata: dict) -> list[str]:
@@ -911,8 +900,7 @@ def _execute_move_for_multifile(
         elif mode == "fileset_no_op":
             fileset_passthroughs.append(metadata_file)
 
-    if updated or fileset_passthroughs:
-        stage_git_changes(biotope_root)
+    warn_ignored(biotope_root, updated)
 
     summary_lines = [
         f"[bold green]✅ Moved:[/] {source}",
@@ -926,7 +914,6 @@ def _execute_move_for_multifile(
     console.print(Panel("\n".join(summary_lines), title="Move Complete"))
     console.print("\n💡 Next steps:")
     console.print("  1. Run 'biotope status' to see the changes")
-    console.print("  2. Run 'biotope commit -m \"message\"' to save changes")
 
 
 def _update_metadata_file_path(
@@ -940,16 +927,23 @@ def _update_metadata_file_path(
     try:
         metadata = _load_metadata_file(metadata_file)
 
+        dataset_dir = dataset_dir_for_manifest(metadata_file, biotope_root)
+        moved = (biotope_root / old_path).resolve()
         updated = False
         for distribution in metadata.get("distribution", []):
-            if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == old_path:
+            url = distribution.get("contentUrl")
+            if distribution.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
+                continue
+            if url == old_path:
                 distribution["contentUrl"] = new_path
-                distribution["sha256"] = new_checksum
-                distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
-                # Update file size
-                new_file_path = biotope_root / new_path
-                distribution["contentSize"] = new_file_path.stat().st_size
-                updated = True
+            elif (dataset_dir / url).resolve() == moved:
+                distribution["contentUrl"] = Path(os.path.relpath(biotope_root / new_path, dataset_dir)).as_posix()
+            else:
+                continue
+            distribution["sha256"] = new_checksum
+            distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
+            distribution["contentSize"] = (biotope_root / new_path).stat().st_size
+            updated = True
 
         if updated:
             with open(metadata_file, "w") as f:

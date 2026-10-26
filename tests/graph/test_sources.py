@@ -11,7 +11,7 @@ from biotope.graph.sources import register_metadata, write_text_atomic
 def test_rebake_stops_before_overwriting_curated_metadata(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
-    assert runner.invoke(cli, ["init", ".", "--no-git", "--no-prompt"]).exit_code == 0
+    assert runner.invoke(cli, ["init", ".", "--no-prompt"]).exit_code == 0
     raw = tmp_path / "raw"
     raw.mkdir()
     (raw / "a.csv").write_text("id\n1\n")

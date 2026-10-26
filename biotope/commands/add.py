@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shlex
-import subprocess
 from collections import defaultdict
 from datetime import datetime, timezone
 from glob import escape as escape_glob
@@ -34,7 +33,7 @@ from biotope.utils import (
     find_biotope_root,
     is_file_tracked,
     load_project_metadata,
-    stage_git_changes,
+    warn_ignored,
 )
 
 
@@ -194,11 +193,11 @@ def add(
             added_entries.append(path)
             baked_dirs.append((path.resolve(), metadata_dict))
 
-        if added_entries:
-            stage_git_changes(biotope_root)
-
         for source_dir, metadata_dict in baked_dirs:
             _generate_biotope_scaffold_from_baked(source_dir, metadata_dict, biotope_root, reporter=reporter)
+
+        written = [resolve_target(entry.resolve(), biotope_root).metadata_path for entry in added_entries]
+        warn_ignored(biotope_root, [*written, *(source_dir / SCAFFOLD_FILENAME for source_dir, _ in baked_dirs)])
 
         if added_entries:
             if baked_dirs:
@@ -274,7 +273,7 @@ def add_file(
             distribution["includes"] = (
                 str(parent / includes) if isinstance(includes, str) else [str(parent / pattern) for pattern in includes]
             )
-    _apply_dataset_metadata(metadata, defaults, overrides, biotope_root)
+    _apply_dataset_metadata(metadata, defaults, overrides)
     _apply_pipeline_state(metadata, overrides)
 
     target = resolve_target(abs_file, biotope_root)
@@ -316,44 +315,15 @@ def _enrich_with_baker(metadata: dict[str, Any], file_path: Path, *, reporter: A
         metadata["distribution"][0]["contentUrl"] = file_path.name
 
 
-def _git_user_identity(cwd: Path) -> tuple[str | None, str | None]:
-    """Return (name, email) from git config, preferring repo-local config."""
-    try:
-        name = subprocess.run(
-            ["git", "config", "--get", "user.name"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout.strip()
-        email = subprocess.run(
-            ["git", "config", "--get", "user.email"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout.strip()
-    except FileNotFoundError:
-        return None, None
-
-    if not isinstance(name, str):
-        name = None
-    if not isinstance(email, str):
-        email = None
-
-    return (name or None), (email or None)
-
-
-def _apply_dataset_metadata(
-    metadata: dict[str, Any],
-    defaults: dict[str, Any],
-    overrides: dict[str, Any],
-    biotope_root: Path,
-) -> None:
+def _apply_dataset_metadata(metadata: dict[str, Any], defaults: dict[str, Any], overrides: dict[str, Any]) -> None:
     """Apply top-level dataset metadata from project defaults and CLI overrides."""
-    creator_node = _resolve_creator(defaults, overrides, biotope_root)
+    creator_node = _resolve_creator(defaults, overrides)
     if creator_node:
         metadata["creator"] = creator_node
+    else:
+        metadata.pop("creator", None)
+    if not (overrides.get("license") or defaults.get("license")):
+        metadata.pop("license", None)
 
     field_mapping = {
         "name": "name",
@@ -393,19 +363,13 @@ def _apply_dataset_metadata(
         metadata[key] = value
 
 
-def _resolve_creator(
-    defaults: dict[str, Any],
-    overrides: dict[str, Any],
-    biotope_root: Path,
-) -> dict[str, str] | None:
-    """Resolve creator info from CLI, git, or project defaults."""
+def _resolve_creator(defaults: dict[str, Any], overrides: dict[str, Any]) -> dict[str, str] | None:
+    """Resolve creator info from CLI or project defaults."""
     default_creator = defaults.get("creator")
     default_name = default_creator.get("name") if isinstance(default_creator, dict) else None
 
-    git_name, git_email = _git_user_identity(biotope_root)
-
-    creator_name = overrides.get("creator") or default_name or git_name or overrides.get("creator_email")
-    creator_email = overrides.get("creator_email") or git_email
+    creator_name = overrides.get("creator") or default_name or overrides.get("creator_email")
+    creator_email = overrides.get("creator_email")
 
     if not creator_name:
         return None
@@ -416,13 +380,9 @@ def _resolve_creator(
     return creator_node
 
 
-def _creator_for_baker(
-    defaults: dict[str, Any],
-    overrides: dict[str, Any],
-    biotope_root: Path,
-) -> list[dict[str, str]] | None:
+def _creator_for_baker(defaults: dict[str, Any], overrides: dict[str, Any]) -> list[dict[str, str]] | None:
     """Resolve creator info in croissant-baker's expected shape."""
-    creator_node = _resolve_creator(defaults, overrides, biotope_root)
+    creator_node = _resolve_creator(defaults, overrides)
     if creator_node is None:
         return None
     return [{key: value for key, value in creator_node.items() if key in {"name", "email", "url"}}]
@@ -483,7 +443,7 @@ def _bake_directory(
             citation=overrides.get("citation") or defaults.get("citation"),
             version=overrides.get("version"),
             date_created=now,
-            creators=_creator_for_baker(defaults, overrides, biotope_root),
+            creators=_creator_for_baker(defaults, overrides),
             keywords=list(overrides.get("keywords") or []) or None,
             excludes=[
                 SCAFFOLD_FILENAME,
@@ -512,7 +472,7 @@ def _bake_directory(
         metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
 
     metadata_dict.setdefault("dateCreated", now)
-    _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
+    _apply_dataset_metadata(metadata_dict, defaults, overrides)
     _register_distinct_files(metadata_dict, abs_dir, biotope_root, files, copies)
     _apply_pipeline_state(metadata_dict, overrides)
 

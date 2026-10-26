@@ -13,7 +13,7 @@ from biotope.commands.queue import queue
 
 
 def _project(runner: CliRunner, tmp_path: Path) -> Path:
-    r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-git", "--no-prompt"])
+    r = runner.invoke(init, ["proj", "--dir", str(tmp_path), "--no-prompt"])
     assert r.exit_code == 0, r.output
     project_dir = tmp_path / "proj"
     return project_dir
