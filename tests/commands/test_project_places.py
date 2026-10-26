@@ -20,6 +20,12 @@ PROFILE = "graph/extraction/profile.py:Profile"
 NOT_GIVEN = (USER, EMAIL, "Dataset Creator", "creator@example.com", "creativecommons.org/licenses/by")
 
 
+@pytest.fixture(autouse=True)
+def _no_global_git_config(monkeypatch):
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+
 def git(root, *args):
     return subprocess.run([GIT, *args], cwd=root, capture_output=True, text=True, check=True).stdout
 
@@ -263,9 +269,3 @@ def test_writers_warn_when_git_ignores_what_they_write(tmp_path, monkeypatch):
             assert (
                 subprocess.run([GIT, "check-ignore", ".biotope/datasets/data/things.jsonld"], cwd=root).returncode == 0
             )
-
-
-@pytest.fixture(autouse=True)
-def _no_global_git_config(tmp_path, monkeypatch):
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
