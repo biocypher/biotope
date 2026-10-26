@@ -31,7 +31,7 @@ The milestone respects these roadmap decisions:
 - The rule-based extractor; B1 has only a test extractor standing in for it.
 - Layout-aware table recovery, such as row and column locators. It comes later behind the same contract. InTRAC's competence questions need no value that exists only in a table inside a paper (checked on 23 October 2026: all 30 cite only InTRAC's CSV and spreadsheet files).
 - OCR and scanned PDFs; evaluation (gold sets, precision and recall, model comparisons); fetching or scraping; internal or confidential documents (decision 6).
-- Identity and precedence across records and documents (B2); the ID registry, human decisions and release history (B3).
+- Identity and precedence across records and documents, the ID registry and human decisions, which are project code in alignment and mappings (roadmap decisions 9 to 11), and release history (B2).
 - Editing an extracted dataset's description by hand. Biotope writes it from the schema.
 
 ## Interfaces
@@ -43,7 +43,7 @@ The milestone respects these roadmap decisions:
 **Stored output,** what later stages may rely on:
 
 - One record per line, each with its ID, its document, its values with their evidence, and its provenance. The records are committed with the project. The document texts biotope makes are never committed, since they can hold copyrighted full text, and can be made again from the documents.
-- **Record IDs** come from the document's path and the record key's values, never from a record's position, so re-extraction keeps an ID while its key values stay the same. Without a key, the path alone gives the ID. Two records of one document with equal key values, both null included, fail that document. B2 uses these IDs to decide which records are one entity, and B3's registry keeps them as aliases of entity IDs; B1 mints no entity IDs.
+- **Record IDs** come from the document's path and the record key's values, never from a record's position, so re-extraction keeps an ID while its key values stay the same. Without a key, the path alone gives the ID. Two records of one document with equal key values, both null included, fail that document. A project's alignment code uses these IDs to decide which records are one entity, and a project's registry may keep them as aliases of its entity IDs (roadmap decisions 9 to 11); B1 mints no entity IDs.
 - **Evidence.** A quote is aligned by biotope to the document's text and says where it is, at least the page for a PDF. A value read from a table quotes the table's whole row, with its page. A value whose quote cannot be aligned is kept, marked unaligned and reported. A value from a locator-based extractor carries its locator.
 - **Provenance** per record: the document's path and digest, the schema name and revision, and the extractor's name, version and settings.
 - **Reuse.** A document is extracted again only when its digest, the schema revision, or the extractor's name, version or settings change. Otherwise its stored records are reused without a model call, also after the document moved; its record IDs then follow the new path. A registered document whose file is missing keeps its stored records, so a clone without the documents still builds. A document removed from its dataset loses its records.
