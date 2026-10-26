@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap is written from issue [#53](https://github.com/biocypher/biotope/issues/53), the source of truth for new work on biotope's next version. When this page, a spec, a PR or a comment disagrees with #53, #53 wins. #53 changes only on the decision of Vlad, the maintainer, and lists each change with its date. It replaces the plan of 22 October 2026 ([#52](https://github.com/biocypher/biotope/pull/52)). Live status is in #53.
+This roadmap holds the goal and the decisions for biotope's next version and is the source of truth for new work. When a spec, a PR or a comment disagrees with it, this page wins. It changes only on the decision of Vlad, the maintainer, through a PR. It replaces the plan of 22 October 2026 ([#52](https://github.com/biocypher/biotope/pull/52)). Issue [#53](https://github.com/biocypher/biotope/issues/53) tracks the work step by step and holds the live status.
 
 ## Goal
 
@@ -43,5 +43,6 @@ Testing AI maintenance, the ELIXIR Atlas, internal documents, and switching REAC
 
 ## How the work runs
 
-- REACH's biotope project is built first, in REACH's own repository on its test data. Whatever biotope cannot do becomes an issue and a small PR here; whatever is REACH-specific stays in REACH.
+- Before REACH's biotope project is built, a readiness check walks REACH's needs through biotope's main branch, verified in code. The gaps that block REACH are fixed in biotope first.
+- Then REACH's biotope project is built, in REACH's own repository on its test data. Whatever biotope cannot do becomes an issue and a small PR here; whatever is REACH-specific stays in REACH.
 - Each spec opens with a map of what biotope already does for its need, verified in code, and covers only the gap. The format is in [`specs/README.md`](specs/README.md).
