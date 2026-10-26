@@ -79,8 +79,7 @@ def manifest_targets(data: dict[str, Any]) -> tuple[Target, ...]:
     and that is not the ``sameAs`` copy of another described resource."""
     records = record_set_targets(data)
     targets = [
-        Target(item.identity, "recordSet", item.package, item.record, record_set_definition(data, item))
-        for item in records
+        Target(item.identity, "recordSet", item.package, item.record, record_set_definition(item)) for item in records
     ]
     distribution = objects(data.get("distribution", []), "/distribution")
     described = _identities(distribution)
@@ -94,7 +93,7 @@ def manifest_targets(data: dict[str, Any]) -> tuple[Target, ...]:
         if _identities(resource.get("sameAs")) & described:
             continue
         name = slug(_preferred_name(resource, identity))
-        targets.append(Target(identity, kind, name, resource, file_definition(data, resource)))
+        targets.append(Target(identity, kind, name, resource, file_definition(resource)))
     return tuple(targets)
 
 
