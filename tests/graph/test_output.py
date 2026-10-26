@@ -21,6 +21,9 @@ from biotope.graph.runtime import RunContext
 ItemId = NewType("ItemId", str)
 OtherId = NewType("OtherId", str)
 ClaimId = NewType("ClaimId", str)
+CasedId = NewType("CasedId", str)
+TwinsId = NewType("TwinsId", str)
+SourcedId = NewType("SourcedId", str)
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,29 @@ class Claim:
     biotope_provenance_id: int
 
 
+@dataclass(frozen=True)
+class Cased:
+    schema_id: ClassVar[str] = "study:cased"
+    id: CasedId
+    ID: str
+
+
+@dataclass(frozen=True)
+class Twins:
+    schema_id: ClassVar[str] = "study:twins"
+    id: TwinsId
+    name: str
+    Name: str
+
+
+@dataclass(frozen=True)
+class Sourced:
+    schema_id: ClassVar[str] = "study:sourced"
+    id: SourcedId
+    source: str
+    target: str | None
+
+
 def make_item(row: SourceRecord[ItemRow]) -> Iterator[Item]:
     yield Item(ItemId(row.value.identity), row.value.label, row.value.aliases)
 
@@ -64,14 +90,29 @@ def make_claim(row: SourceRecord[ItemRow]) -> Iterator[Claim]:
     yield Claim(ClaimId(row.value.identity), 0)
 
 
+def make_cased(row: SourceRecord[ItemRow]) -> Iterator[Cased]:
+    yield Cased(CasedId(row.value.identity), row.value.label)
+
+
+def make_twins(row: SourceRecord[ItemRow]) -> Iterator[Twins]:
+    yield Twins(TwinsId(row.value.identity), "a", "b")
+
+
+def make_sourced(row: SourceRecord[ItemRow]) -> Iterator[Sourced]:
+    yield Sourced(SourcedId(row.value.identity), row.value.label, None)
+
+
 ITEMS = Mapping(name="items", function=make_item)
 OTHERS = Mapping(name="others", function=make_other)
 CLAIMS = Mapping(name="claims", function=make_claim)
+CASED = Mapping(name="cased", function=make_cased)
+TWINS = Mapping(name="twins", function=make_twins)
+SOURCED = Mapping(name="sourced", function=make_sourced)
 EXPORT = Pipeline(
     "export",
     Topology((Item,), ()),
     (),
-    (ITEMS, OTHERS, CLAIMS),
+    (ITEMS, OTHERS, CLAIMS, CASED, TWINS, SOURCED),
     lambda context: None,
     scope="CSV representation",
     code_paths=(__file__,),
@@ -165,6 +206,8 @@ def test_export_labels_drop_the_namespace_and_widen_only_under_collision():
     assert set(residual) == {"study:item", "study:ITEM"}
     assert all(label.startswith("StudyItemH") for label in residual.values())
     assert len(set(residual.values())) == 2
+    cased = export_labels(["study:gene-set", "study:geneset"])
+    assert len({label.casefold() for label in cased.values()}) == 2
 
 
 def test_exporter_version_is_enforced_before_any_payload_is_read(tmp_path, monkeypatch, unchecked_definitions):
@@ -287,7 +330,7 @@ def test_sqlite_keeps_values_neo4j_files_cannot_hold(tmp_path):
 
 def test_a_sqlite_build_types_columns_and_references_edge_endpoints(tmp_path, unchecked_definitions):
     report = build.run_pipeline(RESULTS_PIPELINE, tmp_path / "run", writer=SQLiteWriter())
-    assert report["exporter"]["format"] == "sqlite"
+    assert report["exporter"]["format"] == "sqlite" and "biocypher" not in report["dependencies"]
     assert sorted(p.name for p in (tmp_path / "run").iterdir()) == [
         "graph.sqlite",
         "provenance.json",
@@ -303,8 +346,25 @@ def test_a_sqlite_build_types_columns_and_references_edge_endpoints(tmp_path, un
     assert counts == [1, 1]
 
 
-def test_sqlite_refuses_a_property_named_like_a_column_it_writes(tmp_path):
-    context = RunContext(replace(EXPORT, topology=Topology((Item, Claim), ())))
-    context.map(CLAIMS, SourceRecord(ItemRow("claim:1", "label", []), EVIDENCE))
-    with pytest.raises(ValueError, match=r"study:claim\.biotope_provenance_id: the exporter reserves"):
+@pytest.mark.parametrize(
+    ("concept", "mapping", "message"),
+    [
+        (Claim, CLAIMS, r"study:claim\.biotope_provenance_id: the exporter reserves"),
+        (Cased, CASED, r"study:cased: SQLite ignores case, so ID collides with id; rename"),
+        (Twins, TWINS, r"study:twins: SQLite ignores case, so Name collides with name; rename"),
+    ],
+)
+def test_sqlite_refuses_a_property_named_like_another_column(tmp_path, concept, mapping, message):
+    context = RunContext(replace(EXPORT, topology=Topology((Item, concept), ())))
+    context.map(mapping, SourceRecord(ItemRow("row:1", "label", []), EVIDENCE))
+    with pytest.raises(ValueError, match=message):
         SQLiteWriter().write(context, tmp_path / "db")
+
+
+def test_sqlite_exports_node_properties_named_source_and_target(tmp_path):
+    context = RunContext(replace(EXPORT, topology=Topology((Item, Sourced), ())))
+    context.map(SOURCED, SourceRecord(ItemRow("sourced:1", "label", []), EVIDENCE))
+    SQLiteWriter().write(context, tmp_path / "db")
+    with sqlite3.connect(tmp_path / "db/graph.sqlite") as connection:
+        row = connection.execute('SELECT id, source, target FROM "Sourced"').fetchone()
+    assert row == ("sourced:1", "label", None)

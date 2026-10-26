@@ -86,7 +86,8 @@ def _pascal(text: str) -> str:
 
 
 def _taken(candidates: dict[str, str]) -> frozenset[str]:
-    return frozenset(label for label, count in Counter(candidates.values()).items() if count > 1)
+    counts = Counter(label.casefold() for label in candidates.values())
+    return frozenset(label for label in candidates.values() if counts[label.casefold()] > 1)
 
 
 def export_labels(concepts: Iterable[str]) -> dict[str, str]:
@@ -99,7 +100,7 @@ def export_labels(concepts: Iterable[str]) -> dict[str, str]:
         semantic: label + "H" + digest(semantic)[:10] if label in ambiguous else label
         for semantic, label in full.items()
     }
-    if len(set(labels.values())) != len(labels):
+    if len({label.casefold() for label in labels.values()}) != len(labels):
         raise ValueError("Graph concept IDs collide after export label normalization; use distinct semantic IDs")
     return labels
 
@@ -328,11 +329,18 @@ class SQLiteWriter:
         return {"exporter": "sqlite3", "version": sqlite3.sqlite_version, "format": "sqlite"}
 
     def check_object(self, identity: str, value: object, schema: ConceptSchema) -> None:
-        """Refuse a property whose name collides with a column the exporter writes."""
+        """Refuse a property whose name collides, ignoring case, with another column of its table."""
         concept = concept_id(type(value))
+        reserved = (
+            ("id", "source", "target", PROVENANCE_PROPERTY) if schema["kind"] == "edge" else ("id", PROVENANCE_PROPERTY)
+        )
+        columns = {column.casefold(): column for column in reserved}
         for name in schema["properties"]:
-            if name in ("id", "source", "target", PROVENANCE_PROPERTY):
+            if name in reserved:
                 raise ValueError(f"{concept}.{name}: the exporter reserves {name}; rename the property")
+            other = columns.setdefault(name.casefold(), name)
+            if other != name:
+                raise ValueError(f"{concept}: SQLite ignores case, so {name} collides with {other}; rename one of them")
 
     def write(self, context: RunContext, directory: Path) -> list[str]:
         """Write the database, the export schema and the provenance catalog its rows reference."""

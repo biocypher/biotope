@@ -164,7 +164,8 @@ def _execute(
             stage = "export"
             if phase:
                 phase("Exporting the graph")
-            report["dependencies"]["biocypher"] = _software("biocypher")
+            if isinstance(exporter, BioCypherWriter):
+                report["dependencies"]["biocypher"] = _software("biocypher")
             report["outputs"] = exporter.write(context, output)
             report["graph_digest"] = context.content_digest()
         report["state"] = "complete"
