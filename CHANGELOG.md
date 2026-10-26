@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.11.0](https://github.com/biocypher/biotope/compare/biotope-v0.10.0...biotope-v0.11.0) (2026-10-26)
+
+
+### Features
+
+* extract records from local documents under a reviewed schema ([2c0cd49](https://github.com/biocypher/biotope/commit/2c0cd49e3be71cbe0aaa13cc74a4c059d6cf0265))
+* **graph:** export the graph as one SQLite database ([e828f79](https://github.com/biocypher/biotope/commit/e828f793005f2fe04241a726cd51c02eb7ead0a5))
+* **graph:** export the graph as one SQLite database ([b5947bb](https://github.com/biocypher/biotope/commit/b5947bb5bb8af3066eed80dd4190ee79b88b1b5d))
+* make extraction reviewable and recoverable after the AC-12 trial ([be70e89](https://github.com/biocypher/biotope/commit/be70e891f6a8004a0fd6120daaf1f0cfc00c816d))
+
+
+### Bug Fixes
+
+* answer the architect and Codex reviews of extraction ([709872c](https://github.com/biocypher/biotope/commit/709872ca3df2d536f21f9e5773e6b379bfd30dcb))
+* close the second AC-12 run's extraction faults and extract in parallel ([8748423](https://github.com/biocypher/biotope/commit/8748423734315fb00cc36900d305413c86eaa3b7))
+* commit extraction output only when a run completes, and realign evidence after a conversion change ([4e55b76](https://github.com/biocypher/biotope/commit/4e55b76e0ea2508fad64a0a8ffefcaf9ccca95ef))
+* describe an extractor setting only when all stored records agree on its type ([0bf1b32](https://github.com/biocypher/biotope/commit/0bf1b32f570cf94d03029c923bda5ac603eeeda3))
+* flag records answered from memory and runs on an untried schema ([8ee4f3e](https://github.com/biocypher/biotope/commit/8ee4f3ef7c30db16265d917dc21d2a93200f13e3))
+* flag running-head evidence and store each document as it finishes ([942ce76](https://github.com/biocypher/biotope/commit/942ce7675a860f49d148f8aa92e9e5c4a4fc9618))
+* **graph:** fit SQLite export to node columns and case-insensitive names ([6e9956a](https://github.com/biocypher/biotope/commit/6e9956ada4f0048e254e18bfd18aa72b4f9852fd))
+* load extracted records through generated sources ([bc4a62a](https://github.com/biocypher/biotope/commit/bc4a62af21bcb68c1209e6b26d928250e3f75019))
+* load extracted records through generated sources ([382670c](https://github.com/biocypher/biotope/commit/382670cfce0804c3a7f8a14233aeebaa0d4a85f8)), closes [#59](https://github.com/biocypher/biotope/issues/59)
+
+
+### Documentation
+
+* add the agent guide, the spec format and the B1 extraction spec ([aa4e3ef](https://github.com/biocypher/biotope/commit/aa4e3efc6f5291403b9722ed7236fb8d7eaab63f))
+* add the B2 and B3 specs ([26a798d](https://github.com/biocypher/biotope/commit/26a798d7affb7b53caae186e2ec47bbf98eedce6))
+* add the roadmap for data products ([05c5c0f](https://github.com/biocypher/biotope/commit/05c5c0fee72ee2c5978e7f6cf92d6b7b26d23f60))
+* answer the first review of the B2 and B3 specs ([4c5f9a4](https://github.com/biocypher/biotope/commit/4c5f9a409cd7b06ae968afc4825984277038e6f6))
+* answer the second review of the B2 and B3 specs ([a68c75a](https://github.com/biocypher/biotope/commit/a68c75a9d3d61e4389469be41b9d03762d43969b))
+* document extraction and route documents through it in the skill ([6455f37](https://github.com/biocypher/biotope/commit/6455f375c17230d6d2740e2c1095843d9f4dac0b))
+* have the agent ground schemas in questions and check try output ([2764489](https://github.com/biocypher/biotope/commit/2764489384780f9103e75b1e0853af82a543e9dc))
+* limit B1's interfaces to its seams and answer the second review ([6cf4461](https://github.com/biocypher/biotope/commit/6cf4461f5c1d1f0f52a9323983da2b1410894367))
+* make decisions an input dataset and reuse Croissant hashes for releases ([57e2f62](https://github.com/biocypher/biotope/commit/57e2f6296b32d1f7a7006715819d10d7ab9b324a))
+* make natural keys aliases in registered kinds in roadmap decision 10 ([ca1279b](https://github.com/biocypher/biotope/commit/ca1279ba561785ab6a507c5afb626e3e80cd2dc1))
+* make the B1 spec buildable after the first review ([4881f39](https://github.com/biocypher/biotope/commit/4881f3960eb793c082003d25c26457ad78f7c4d2))
+* make the extraction skill re-check schema changes and redo wrong documents ([46d318e](https://github.com/biocypher/biotope/commit/46d318e9f9429ec31465c2c41f1e94c0fecca784))
+* record B1 research on extraction tools and models ([a321239](https://github.com/biocypher/biotope/commit/a321239103bbbf03b5ede51f4ef53995b56c1956))
+* research what B2 and B3 can reuse ([6aa976c](https://github.com/biocypher/biotope/commit/6aa976c8b5a3112ab9418fa485732be5b4f82f57))
+* rewrite the B1 spec around goals, scope and interfaces ([ff193e6](https://github.com/biocypher/biotope/commit/ff193e63a666c279ce3a25ade32d631b8e0ed22d))
+* say a build writes CSV, Parquet or SQLite ([fd2ef9c](https://github.com/biocypher/biotope/commit/fd2ef9cd2e5c6afac20912d60f63987033a8af2b))
+* settle leaves, record IDs and curated manifests in the B1 spec ([cf3f0e3](https://github.com/biocypher/biotope/commit/cf3f0e33caeb490355cbda9a0d84bb44bccf10d4))
+
+
+### Build System
+
+* type-check the extraction package strictly ([9cf6c5f](https://github.com/biocypher/biotope/commit/9cf6c5fe010edc8412f44a4c5667e756079f5906))
+
+
+### Refactoring
+
+* type the extract command's helpers ([35aabf6](https://github.com/biocypher/biotope/commit/35aabf69674eb0efcc63b5f730914c71a06a5701))
+
 ## [0.10.0](https://github.com/biocypher/biotope/compare/biotope-v0.9.1...biotope-v0.10.0) (2026-09-28)
 
 
