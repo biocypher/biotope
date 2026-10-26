@@ -165,7 +165,7 @@ def _check(distribution: list[dict[str, Any]], records: list[dict[str, Any]]) ->
         if len(found) > 1
     ]
     if not problems:
-        counts = Counter(str(item.get("@id")) for item in [*distribution, *records])
+        counts = Counter(item["@id"] for item in [*distribution, *records] if isinstance(item.get("@id"), str))
         problems += [f"{count} entries share the ID {identity!r}" for identity, count in counts.items() if count > 1]
     if problems:
         raise ValueError("cannot give every file and table a stable ID: " + "; ".join(problems))

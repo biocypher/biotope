@@ -961,7 +961,7 @@ def _update_metadata_file_path(
 
         if updated:
             rename(metadata, mapping)
-            with open(metadata_file, "w") as f:
+            with open(metadata_file, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
             warn_ignored(biotope_root, follow_ids(biotope_root / "graph/sources", metadata_file, before, mapping))
 
