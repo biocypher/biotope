@@ -2,7 +2,8 @@
 
 Biotope turns reviewed descriptions of local data into typed Python graph projects.
 You define the research purpose, source readers, identities and transformations;
-Biotope checks the definitions and exports BioCypher files with provenance.
+Biotope checks the definitions and exports the graph with provenance, as CSV or
+Parquet files for Neo4j import or as one SQLite database.
 
 ## Start here
 

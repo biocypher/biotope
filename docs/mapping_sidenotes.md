@@ -169,7 +169,8 @@ BioCypher or an import step: one table per export label with `id`, an edge's
 `source` and `target` referencing its endpoint tables, one typed column per
 property and `biotope_provenance_id`. Booleans are 0 or 1, string lists are JSON
 arrays and nulls stay NULL, so strings may hold quotes, delimiters and line
-breaks.
+breaks. SQLite ignores case in names, so the build refuses a property that differs
+from another column of its table only in case.
 
 `run.json` (`schema_version` 2) records scope, policies, source metadata and
 available versions, code/topology revisions, settings, bindings, dependencies, the
