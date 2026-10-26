@@ -226,7 +226,7 @@ def check_pipeline(
                 + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
             )
         for concept, item in described.items():
-            for name in sorted(RESERVED_PROPERTIES & item["properties"].keys()):
+            for name in sorted(RESERVED_PROPERTIES.intersection(item["properties"])):
                 error(
                     "topology.reserved",
                     f"{concept}.{name}",
