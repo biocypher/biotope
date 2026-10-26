@@ -16,7 +16,6 @@ from typing import Any, get_type_hints
 from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
 from biotope.graph.dependencies import declared_distributions, imported_distributions
-from biotope.graph.output import RESERVED_PROPERTIES
 from biotope.graph.reports import (
     CheckFailed,
     CheckResult,
@@ -31,7 +30,7 @@ from biotope.graph.signatures import MappingContract, SignatureError, contract
 from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, read_metadata
 from biotope.graph.standardization import describe_standardization
 from biotope.graph.survey import inventory_findings, sources_of, survey_sources
-from biotope.graph.topology import CHECKABLE_TYPES, unchecked_fields
+from biotope.graph.topology import CHECKABLE_TYPES, RESERVED_PROPERTIES, unchecked_fields
 from biotope.graph.workspace import Workspace, WorkspaceLoadFailed
 from biotope.project_model import Project, find_project
 

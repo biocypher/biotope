@@ -18,6 +18,8 @@ from biotope.graph.sources import UnknownValue
 
 # Concept IDs in this namespace are reserved for Biotope's own metadata.
 RESERVED_NAMESPACE = "biotope"
+PROVENANCE_PROPERTY = "biotope_provenance_id"
+RESERVED_PROPERTIES = frozenset({"preferred_id", PROVENANCE_PROPERTY})
 
 
 @lru_cache(maxsize=None)
