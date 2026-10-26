@@ -159,7 +159,6 @@ class Pipeline:
     deferrals: dict[str, str] = field(default_factory=dict[str, str])
     policies: dict[str, str] = field(default_factory=dict[str, str])
     intent: Path | None = None
-    dependencies: tuple[str, ...] = ()
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."
     terms: tuple[Term, ...] = ()
     source_inventory: tuple[SourceContract, ...] = ()

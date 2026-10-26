@@ -38,32 +38,53 @@ def test_drift_without_recorded_history_shows_the_current_contract(project):
     assert "x/g: sc:Float" in message
 
 
-def test_checksum_context_and_order_changes_are_explained(project):
+def test_descriptions_equivalent_properties_checksums_and_context_change_no_revision(project):
     paper = file_object("paper", "p.pdf", fmt="application/pdf")
     manifest = project.implemented_study(record_set("rows", "a", "b"), files=[paper])
+    reviewed, recorded = project.snapshot(), set(project.store)
+
+    def describe(data):
+        data["description"] = "A synthetic study."
+        data["@context"].update(biotope="https://biocypher.org/biotope/", dct="http://purl.org/dc/terms/")
+        rows = data["recordSet"][0]
+        rows.update(name="Rows", description="One row per sample.")
+        rows["field"][0].update(
+            name="Sample", description="The sample.", equivalentProperty="https://schema.org/identifier"
+        )
+        for resource in data["distribution"]:
+            resource.update(sha256="1" * 64, md5="2" * 32, contentSize="3 MB", description="Downloaded again.")
+
+    project.edit(manifest, describe)
+    assert project.codes("error") == {}
+    assert states(project.generate(manifest)) == {"rows": "current", "p_pdf": "current"}
+    assert project.snapshot() == reviewed and project.store == recorded
+
+
+def test_a_new_column_a_changed_type_and_a_changed_file_reference_drift(project):
+    paper = file_object("paper", "p.pdf", fmt="application/pdf")
+    other = file_object("other", "other.csv")
+    manifest = project.implemented_study(record_set("rows", "a", "b"), files=[paper, other])
 
     def drift():
-        return {
-            finding["subject"]: finding["message"]
-            for finding in project.findings()
-            if finding["code"] == "source.drift"
-        }
+        return {finding["subject"] for finding in project.findings() if finding["code"] == "source.drift"}
 
-    project.edit(manifest, lambda data: data["distribution"][1].update(sha256="1" * 64))
-    found = drift()
-    assert list(found) == ["study/p_pdf"] and "changed /distribution/sha256" in found["study/p_pdf"]
-    project.generate(manifest)
-    project.acknowledge_drift(manifest)
-    project.edit(manifest, lambda data: data["@context"].update(dct="http://purl.org/dc/terms/"))
-    found = drift()
-    assert sorted(found) == ["study/p_pdf", "study/rows"]
-    assert all("only @context changed" in message and "added /@context/dct" in message for message in found.values())
-    project.generate(manifest)
-    project.acknowledge_drift(manifest)
-    assert not drift()
+    def fields(data):
+        return data["recordSet"][0]["field"]
+
+    for change, drifted in (
+        (lambda data: fields(data).append(record_set("rows", "c")["field"][0]), "study/rows"),
+        (lambda data: fields(data)[0].update(dataType="sc:Integer"), "study/rows"),
+        (lambda data: fields(data)[1]["source"]["fileObject"].update({"@id": "other"}), "study/rows"),
+        (lambda data: data["distribution"][1].update(contentUrl="papers/p.pdf"), "study/p_pdf"),
+    ):
+        project.edit(manifest, change)
+        assert drift() == {drifted}
+        project.generate(manifest)
+        project.acknowledge_drift(manifest)
+        assert not drift()
     project.edit(manifest, lambda data: data["recordSet"][0]["field"].reverse())
-    found = drift()
-    assert list(found) == ["study/rows"] and "field order changed" in found["study/rows"]
+    [message] = project.messages("source.drift")
+    assert "field order changed" in message
 
 
 def test_the_drift_summary_names_every_kind_of_field_change_and_the_diff_is_cut_at_its_limit(project):
@@ -141,7 +162,10 @@ def test_a_revision_ignores_key_order_curation_notes_payloads_and_other_record_s
 
 
 def test_reordering_record_sets_without_an_id_is_drift_never_a_conflict(project):
-    positional = [{"name": "alpha", "field": []}, {"name": "beta", "field": []}]
+    positional = [
+        {"name": "alpha", "field": [{"name": "a", "dataType": "sc:Text"}]},
+        {"name": "beta", "field": [{"name": "b", "dataType": "sc:Integer"}]},
+    ]
     manifest = project.manifest("study", positional)
     project.generate(manifest)
     project.edit(manifest, lambda data: data["recordSet"].reverse())

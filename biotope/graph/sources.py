@@ -426,14 +426,53 @@ def scalar_type(value: object) -> str:
     return "UnknownValue"
 
 
-def record_set_definition(data: dict[str, Any], target: RecordSetTarget) -> dict[str, Any]:
-    """Narrow the declarations to one record set, so unrelated edits leave it unchanged."""
-    return {"@context": data.get("@context"), "recordSet": [target.record]}
+STRUCTURE = frozenset(
+    {
+        "@id",
+        "@type",
+        "key",
+        "field",
+        "subField",
+        "parentField",
+        "dataType",
+        "source",
+        "references",
+        "repeated",
+        "isArray",
+        "cr:isArray",
+        "arrayShape",
+        "cr:arrayShape",
+        "biotope:nullable",
+        "biotope:columnIndex",
+        "contentUrl",
+        "encodingFormat",
+        "includes",
+        "excludes",
+        "containedIn",
+    }
+)
 
 
-def file_definition(data: dict[str, Any], resource: dict[str, Any]) -> dict[str, Any]:
-    """Narrow the declarations to one FileObject or FileSet, including its checksum."""
-    return {"@context": data.get("@context"), "distribution": resource}
+def structure(item: dict[str, Any]) -> dict[str, Any]:
+    kept = {key: value for key, value in item.items() if key in STRUCTURE}
+    for key in ("field", "subField"):
+        value: object = kept.get(key)
+        if isinstance(value, dict):
+            kept[key] = structure(cast(dict[str, Any], value))
+        elif isinstance(value, list):
+            kept[key] = [
+                structure(cast(dict[str, Any], child)) if isinstance(child, dict) else child
+                for child in cast(list[object], value)
+            ]
+    return kept
+
+
+def record_set_definition(target: RecordSetTarget) -> dict[str, Any]:
+    return {"recordSet": [structure(target.record)]}
+
+
+def file_definition(resource: dict[str, Any]) -> dict[str, Any]:
+    return {"distribution": structure(resource)}
 
 
 def resource_kinds(resource: dict[str, Any]) -> set[str]:
@@ -520,12 +559,12 @@ def check_source_record(data: dict[str, Any], record: object) -> str:
             raise ValueError(f"{record.__name__}: {file_identity!r} is not a {spec.label}")
         if not identity.startswith(file_identity + "/") or identity == file_identity + "/":
             raise ValueError(f"{record.__name__}: document record identity must be scoped under {file_identity!r}")
-        expected = digest(file_definition(data, file))
+        expected = digest(file_definition(file))
     else:
         target = next((target for target in record_set_targets(data) if target.identity == identity), None)
         if target is None:
             raise ValueError(f"{record.__name__}: RecordSet {identity!r} is missing from metadata")
-        expected = digest(record_set_definition(data, target))
+        expected = digest(record_set_definition(target))
         _check_fields(record, child_fields(target.record, target.identity, target.identity))
     if getattr(record, "__source_digest__", None) != expected:
         raise StaleBinding(

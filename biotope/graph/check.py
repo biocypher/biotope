@@ -30,7 +30,7 @@ from biotope.graph.signatures import MappingContract, SignatureError, contract
 from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, read_metadata
 from biotope.graph.standardization import describe_standardization
 from biotope.graph.survey import inventory_findings, sources_of, survey_sources
-from biotope.graph.topology import CHECKABLE_TYPES, unchecked_fields
+from biotope.graph.topology import CHECKABLE_TYPES, RESERVED_PROPERTIES, unchecked_fields
 from biotope.graph.workspace import Workspace, WorkspaceLoadFailed
 from biotope.project_model import Project, find_project
 
@@ -225,6 +225,26 @@ def check_pipeline(
                 + ", ".join(missing[:20])
                 + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
             )
+        for concept, item in described.items():
+            for name in sorted(RESERVED_PROPERTIES.intersection(item["properties"])):
+                error(
+                    "topology.reserved",
+                    f"{concept}.{name}",
+                    f"{concept}.{name}: the export reserves {name}; rename the property",
+                )
+        if workspace is not None:
+            for cls, place in pipeline.topology.layout().items():
+                found = Path(inspect.getfile(cls)).resolve()
+                if found != (workspace.root / "topology" / place).resolve():
+                    where = f"{workspace.root.name}/topology/{place}"
+                    error(
+                        "topology.layout",
+                        cls.__name__,
+                        f"{cls.__name__}: an edge class belongs in {where}, its source node's folder"
+                        if cls in pipeline.topology.edges
+                        else f"{cls.__name__}: a node class belongs in {where}",
+                        found,
+                    )
         return described
 
     schema = stage("topology", topology)
@@ -246,6 +266,7 @@ def check_pipeline(
         if workspace is not None:
             pyproject = Path(workspace.root.name) / "pyproject.toml"
             declared = declared_distributions(workspace.root / "pyproject.toml")
+            report.data["declared"] = sorted(declared)
             for module, providers in imported.items():
                 if not declared.intersection(providers):
                     warning(
