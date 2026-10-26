@@ -9,7 +9,7 @@ Local data ── croissant-baker ── reviewed Croissant ── source invent
     │                                                          │
     └── project loaders ── typed records ── alignment, mappings ─┤
                                                                ↓
-                                          validated graph → BioCypher files
+                                validated graph → CSV, Parquet or SQLite
 ```
 
 ## Responsibilities
@@ -21,7 +21,7 @@ Local data ── croissant-baker ── reviewed Croissant ── source invent
 | croissant-baker     | Format-aware local source description and scan diagnostics                  |
 | `biotope.graph`     | Source generation, typed contracts, checks, execution and export            |
 | Project `graph/`    | Source schemas and readers, topology, alignment, transformations, selection |
-| BioCypher           | Writing the graph files used for database import                            |
+| BioCypher           | Writing the CSV or Parquet files used for Neo4j import                      |
 
 The project owns identities, units, null handling, join cardinality and exclusions.
 Biotope supplies contracts for recording and checking those decisions. It does not
@@ -55,8 +55,9 @@ modules must therefore avoid reading data or executing work during import.
 `biotope graph quality` and `biotope graph build` each check and execute the
 selected pipeline once. They validate source values, emitted objects, identity
 conflicts and endpoint references. Quality prints an assessment without exporting;
-build also writes BioCypher files into `graph/build/`, replacing the previous build
-only after success.
+build also writes the graph into `graph/build/`, replacing the previous build only
+after success: CSV or Parquet files for Neo4j import through BioCypher, or with
+`--format sqlite` one SQLite database, `graph.sqlite`.
 
 Biotope retains graph objects and contributor references in memory. Projects
 should select a scope that fits the available resources. Streaming source readers

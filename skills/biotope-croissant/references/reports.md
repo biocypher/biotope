@@ -65,6 +65,12 @@ two concepts collide. When a CSV line reaches 4 MiB, the default read buffer of
 `neo4j-admin database import`, the import script passes `--read-buffer-size` set
 to the next power of two above the longest line.
 
+`biotope graph build --format csv|parquet|sqlite` picks the writer. `sqlite`
+(`SQLiteWriter()`) needs no BioCypher and writes `graph.sqlite`: one table per
+export label, typed columns, edge endpoints as foreign keys, string lists as JSON
+arrays and NULLs kept. SQLite ignores case in names, so the build refuses a
+property that differs from another column of its table only in case.
+
 Every exported node and edge carries `biotope_provenance_id`, a zero-based index
 into `provenance.json["records"]`. Each record lists its mapping names and indexes
 into `evidence`; each evidence entry names a location and a `sources` entry with

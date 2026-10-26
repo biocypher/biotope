@@ -1,6 +1,8 @@
-"""BioCypher export: actual Neo4j values, readable labels, the declared format and what the exporter refuses."""
+"""Graph export: actual Neo4j and SQLite values, readable labels, the declared format and what exporters refuse."""
 
 import csv
+import json
+import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -12,13 +14,16 @@ import yaml
 from synthetic_pipelines import RESULTS_PIPELINE
 
 from biotope.graph import Evidence, Mapping, Pipeline, SourceRecord, Topology, build, output
-from biotope.graph.output import ARRAY_DELIMITER, BioCypherWriter, export_labels
+from biotope.graph.output import ARRAY_DELIMITER, BioCypherWriter, SQLiteWriter, export_labels
 from biotope.graph.runtime import RunContext
 
 
 ItemId = NewType("ItemId", str)
 OtherId = NewType("OtherId", str)
 ClaimId = NewType("ClaimId", str)
+CasedId = NewType("CasedId", str)
+TwinsId = NewType("TwinsId", str)
+SourcedId = NewType("SourcedId", str)
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,29 @@ class Claim:
     biotope_provenance_id: int
 
 
+@dataclass(frozen=True)
+class Cased:
+    schema_id: ClassVar[str] = "study:cased"
+    id: CasedId
+    ID: str
+
+
+@dataclass(frozen=True)
+class Twins:
+    schema_id: ClassVar[str] = "study:twins"
+    id: TwinsId
+    name: str
+    Name: str
+
+
+@dataclass(frozen=True)
+class Sourced:
+    schema_id: ClassVar[str] = "study:sourced"
+    id: SourcedId
+    source: str
+    target: str | None
+
+
 def make_item(row: SourceRecord[ItemRow]) -> Iterator[Item]:
     yield Item(ItemId(row.value.identity), row.value.label, row.value.aliases)
 
@@ -62,14 +90,29 @@ def make_claim(row: SourceRecord[ItemRow]) -> Iterator[Claim]:
     yield Claim(ClaimId(row.value.identity), 0)
 
 
+def make_cased(row: SourceRecord[ItemRow]) -> Iterator[Cased]:
+    yield Cased(CasedId(row.value.identity), row.value.label)
+
+
+def make_twins(row: SourceRecord[ItemRow]) -> Iterator[Twins]:
+    yield Twins(TwinsId(row.value.identity), "a", "b")
+
+
+def make_sourced(row: SourceRecord[ItemRow]) -> Iterator[Sourced]:
+    yield Sourced(SourcedId(row.value.identity), row.value.label, None)
+
+
 ITEMS = Mapping(name="items", function=make_item)
 OTHERS = Mapping(name="others", function=make_other)
 CLAIMS = Mapping(name="claims", function=make_claim)
+CASED = Mapping(name="cased", function=make_cased)
+TWINS = Mapping(name="twins", function=make_twins)
+SOURCED = Mapping(name="sourced", function=make_sourced)
 EXPORT = Pipeline(
     "export",
     Topology((Item,), ()),
     (),
-    (ITEMS, OTHERS, CLAIMS),
+    (ITEMS, OTHERS, CLAIMS, CASED, TWINS, SOURCED),
     lambda context: None,
     scope="CSV representation",
     code_paths=(__file__,),
@@ -163,6 +206,8 @@ def test_export_labels_drop_the_namespace_and_widen_only_under_collision():
     assert set(residual) == {"study:item", "study:ITEM"}
     assert all(label.startswith("StudyItemH") for label in residual.values())
     assert len(set(residual.values())) == 2
+    cased = export_labels(["study:gene-set", "study:geneset"])
+    assert len({label.casefold() for label in cased.values()}) == 2
 
 
 def test_exporter_version_is_enforced_before_any_payload_is_read(tmp_path, monkeypatch, unchecked_definitions):
@@ -262,3 +307,64 @@ def test_an_empty_graph_builds_and_replaces_the_previous_build(tmp_path, file_fo
         "run.json",
         "schema_config.yaml",
     ]
+
+
+def test_sqlite_keeps_values_neo4j_files_cannot_hold(tmp_path):
+    context = RunContext(replace(EXPORT, topology=Topology((Item, Other), ())))
+    value = ItemRow("item:1", 'Text "quoted",\tand | delimited\non two lines', ['alias "quoted"', "with, comma; and |"])
+    context.map(ITEMS, SourceRecord(value, EVIDENCE))
+    context.map(OTHERS, SourceRecord(replace(value, identity="other:1"), EVIDENCE))
+    files = SQLiteWriter().write(context, tmp_path / "db")
+    assert files == ["graph.sqlite", "provenance.json", "schema_config.yaml"]
+    schema = yaml.safe_load((tmp_path / "db/schema_config.yaml").read_text())
+    labels = {item["input_label"]: label for label, item in schema.items()}
+    with sqlite3.connect(tmp_path / "db/graph.sqlite") as connection:
+        item = connection.execute(f'SELECT id, label, aliases, biotope_provenance_id FROM "{labels["study:item"]}"')
+        identity, label, aliases, provenance = item.fetchone()
+        note = connection.execute(f'SELECT note FROM "{labels["study:ITEM"]}"').fetchone()
+    assert (identity, label, json.loads(aliases)) == ("item:1", value.label, value.aliases)
+    assert note == (None,)
+    catalog = json.loads((tmp_path / "db/provenance.json").read_text())
+    assert catalog["records"][provenance]["mappings"] == ["items"]
+
+
+def test_a_sqlite_build_types_columns_and_references_edge_endpoints(tmp_path, unchecked_definitions):
+    report = build.run_pipeline(RESULTS_PIPELINE, tmp_path / "run", writer=SQLiteWriter())
+    assert report["exporter"]["format"] == "sqlite" and "biocypher" not in report["dependencies"]
+    assert sorted(p.name for p in (tmp_path / "run").iterdir()) == [
+        "graph.sqlite",
+        "provenance.json",
+        "run.json",
+        "schema_config.yaml",
+    ]
+    with sqlite3.connect(tmp_path / "run/graph.sqlite") as connection:
+        columns = {row[1]: row[2] for row in connection.execute('PRAGMA table_info("ResultV1")')}
+        references = {row[3]: row[2] for row in connection.execute('PRAGMA foreign_key_list("ReportedBy")')}
+        counts = [connection.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] for t in ("ResultV1", "ReportedBy")]
+    assert columns["id"] == "TEXT" and columns["effect"] == "REAL" and columns["biotope_provenance_id"] == "INTEGER"
+    assert references == {"source": "ResultV1", "target": "Source"}
+    assert counts == [1, 1]
+
+
+@pytest.mark.parametrize(
+    ("concept", "mapping", "message"),
+    [
+        (Claim, CLAIMS, r"study:claim\.biotope_provenance_id: the exporter reserves"),
+        (Cased, CASED, r"study:cased: SQLite ignores case, so ID collides with id; rename"),
+        (Twins, TWINS, r"study:twins: SQLite ignores case, so Name collides with name; rename"),
+    ],
+)
+def test_sqlite_refuses_a_property_named_like_another_column(tmp_path, concept, mapping, message):
+    context = RunContext(replace(EXPORT, topology=Topology((Item, concept), ())))
+    context.map(mapping, SourceRecord(ItemRow("row:1", "label", []), EVIDENCE))
+    with pytest.raises(ValueError, match=message):
+        SQLiteWriter().write(context, tmp_path / "db")
+
+
+def test_sqlite_exports_node_properties_named_source_and_target(tmp_path):
+    context = RunContext(replace(EXPORT, topology=Topology((Item, Sourced), ())))
+    context.map(SOURCED, SourceRecord(ItemRow("sourced:1", "label", []), EVIDENCE))
+    SQLiteWriter().write(context, tmp_path / "db")
+    with sqlite3.connect(tmp_path / "db/graph.sqlite") as connection:
+        row = connection.execute('SELECT id, source, target FROM "Sourced"').fetchone()
+    assert row == ("sourced:1", "label", None)

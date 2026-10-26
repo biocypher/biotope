@@ -159,3 +159,17 @@ def test_a_failure_ends_with_its_error_and_phases_are_logged_without_a_terminal(
     lines, text = render("check", failed_check, (mistyped,))
     assert lines[-2:] == ["FAIL      mapping", "          python.argument: Expected StudyId."]
     assert "Phase" not in text and text.count("Expected StudyId.") == 1
+
+
+def test_build_format_sqlite_writes_one_database(tmp_path):
+    root = prepare(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-m", "biotope.cli", "graph", "build", "--format", "sqlite", "--json"],
+        cwd=root,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report["exporter"]["format"] == "sqlite"
+    assert "graph.sqlite" in report["outputs"] and not (root / "graph/build/biocypher").exists()

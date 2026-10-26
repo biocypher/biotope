@@ -159,11 +159,18 @@ Only recognized generated reports may be replaced; authored files are preserved.
 ## Export and provenance
 
 Before a build reads payloads, the writer checks that the installed BioCypher
-version is supported. Biotope 0.10 uses BioCypher 0.17.x. The pipeline selects its
-export format: `BioCypherWriter("csv")` is the default and
-`BioCypherWriter("parquet")` is also supported, the latter needing a Neo4j release
-whose import accepts it. After writing, the export directory is checked against
-the declared format.
+version is supported. Biotope 0.10 uses BioCypher 0.17.x. `biotope graph build --format` selects the export format: `csv` (`BioCypherWriter("csv")`) is the default
+and `parquet` (`BioCypherWriter("parquet")`) is also supported, the latter needing a
+Neo4j release whose import accepts it. After writing, the export directory is
+checked against the declared format.
+
+`--format sqlite` (`SQLiteWriter()`) writes `graph.sqlite` instead, without
+BioCypher or an import step: one table per export label with `id`, an edge's
+`source` and `target` referencing its endpoint tables, one typed column per
+property and `biotope_provenance_id`. Booleans are 0 or 1, string lists are JSON
+arrays and nulls stay NULL, so strings may hold quotes, delimiters and line
+breaks. SQLite ignores case in names, so the build refuses a property that differs
+from another column of its table only in case.
 
 `run.json` (`schema_version` 2) records scope, policies, source metadata and
 available versions, code/topology revisions, settings, bindings, dependencies, the
