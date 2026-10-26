@@ -43,7 +43,7 @@ project registry and decisions ─────────► project alignment 
 
 A **new project** starts from raw data and its purpose. An agent proposes the extraction schemas, the topology, the alignment and the mappings, and a person reviews them.
 
-An **evolving project** meets two kinds of change. New rows in a known source need the file described again and a rebuild. A new kind of source, or a new need, may change the topology; that change is reviewed, and the project's alignment carries existing IDs and human decisions across it. Biotope tells the user or agent what changed and what must be reviewed.
+An **evolving project** meets two kinds of change. New rows in a known source need a rebuild, which warns until the file is described again. A new kind of source, or a new need, may change the topology; that change is reviewed, and the project's alignment carries existing IDs and human decisions across it. Biotope tells the user or agent what changed and what must be reviewed.
 
 ## Decisions
 
@@ -58,7 +58,7 @@ An **evolving project** meets two kinds of change. New rows in a known source ne
 9. **Identity and source priority are project code.** As 0.10 designs it, the project resolves cross-source identity in `graph/alignment/` before mappings run, and decides which source wins for a field in alignment or mappings. Biotope records and checks those decisions through evidence, provenance, contract revisions and the run record. It adds no declaration language for keys or precedence and no merging of its own.
 10. **Stable IDs and human decisions live in the project.** Entities with natural keys, such as genes and DOIs, keep them. A project whose IDs are pointed at from outside, as REACH's are from Airtable rows and search, keeps its own registry of IDs and applies its human decisions (match decisions, overrides, link edits) in its alignment and mappings. For REACH, the registry and Anna's corrections, with the rules REACH already applies to them, live in REACH's biotope project.
 11. **Generic pieces only on evidence.** Biotope adds a generic piece for identity, decisions or state only when a second project needs the same piece, or when REACH pass 1 shows a gap that project code cannot fill. Each such piece follows the rule for new milestones.
-12. **Releases: checked inputs, history in git.** A release records its exact inputs through what Croissant already holds, each file's sha256, and the build refuses an input file that no longer matches its description. The run record holds no record values, so a project can commit it, and git over the run records is the release history. Biotope diffs two builds by object ID. A past release can be rebuilt from its inputs and committed files while the project keeps those input files; biotope stores no raw snapshots (Vlad, 23 October 2026: "wouldn't it be too much? And doesn't croissant already do that? Let's not overbuild this part, reuse existing tools if possible").
+12. **Releases: recorded inputs, history in git.** A release records its exact inputs by sha256: the run record holds the hash of each file as the build read it, and a file that no longer matches its description is a warning, not a stop. Sources such as REACH's are fetched again on every refresh, so a stop would make every refresh a manual re-description. The run record holds no record values, so a project can commit it, and git over the run records is the release history; a diff by object ID waits until REACH pass 1 or InTRAC shows a need. A past release can be rebuilt from its inputs and committed files while the project keeps those input files; biotope stores no raw snapshots (Vlad, 23 October 2026: "wouldn't it be too much? And doesn't croissant already do that? Let's not overbuild this part, reuse existing tools if possible").
 13. **Breaking 0.10 is allowed.** Biotope is before 1.0. Each break gets a note in `migration.md`. biotope-bench is updated separately.
 14. **Public fixtures.** Tests and examples in this repo use only public material.
 
@@ -67,9 +67,9 @@ An **evolving project** meets two kinds of change. New rows in a known source ne
 Biotope:
 
 - **B1 Extraction** (done, PR #55). The extraction stage, the extractor contract and the LLM extractor, tested on InTRAC's six papers, REACH's CHC pages and ERC calls.
-- **B2 Releases and input checks.** The build checks its input files against their descriptions' sha256 and refuses a mismatch, the run record holds no record values so a project can commit it, and biotope diffs two builds by object ID. Nothing else.
-- **B3 What REACH pass 1 shows biotope lacks.** Unspecified until pass 1 reports its gaps; each gap is mapped against what exists before its spec.
-- **B4 Evolving projects.** A topology change carries IDs and decisions across, and biotope reports what changed in sources, extraction and contracts, and what needs review. Its spec follows the rule for new milestones: contract drift, B1's run report and B2's diff already cover part of this.
+- **B2 Releases and input checks.** The run record holds the sha256 of each input file the build read and warns when it differs from the description, and it holds no record values, so a project can commit it and git is the release history. Nothing else.
+- **B3 What REACH pass 1 shows biotope lacks.** Unspecified until pass 1 reports its gaps; each gap is mapped against what exists before its spec. A diff between builds by object ID is a candidate if pass 1 or InTRAC needs one.
+- **B4 Evolving projects.** A topology change carries IDs and decisions across, and biotope reports what changed in sources, extraction and contracts, and what needs review. Its spec follows the rule for new milestones: contract drift, B1's run report and the committed run records already cover part of this.
 
 REACH, in its own repo:
 
