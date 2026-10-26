@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -6,6 +7,9 @@ import shutil
 import subprocess
 import sys
 import time
+import types
+from dataclasses import fields, is_dataclass
+from typing import Union, get_args, get_origin, get_type_hints
 
 import pytest
 from conftest import FIXTURES, KEY, LIVE_KEY, ROUNDS, ROWS, funding_round, quoted
@@ -14,6 +18,7 @@ from conftest import OKAFOR as OKAFOR_ANSWER
 
 from biotope.extraction import Schema, llm
 from biotope.extraction import text as converter
+from biotope.graph import Evidence, Pipeline, RunContext, SourceRecord, Topology
 
 
 PROFILE = "extraction/schemas.py:Profile"
@@ -346,6 +351,79 @@ def test_a_project_extractor_runs_by_configuration(study):
     ran = study.extract("run", PROFILE, "data/pages")[1]["documents"][0]
     assert tried["status"] == ran["status"] == "failed"
     assert tried["reason"] == ran["reason"] == "ValueError: line numbers start at 1"
+
+
+def decoded(annotation, value):
+    if value is None:
+        return None
+    if get_origin(annotation) in (Union, types.UnionType):
+        [annotation] = [member for member in get_args(annotation) if member is not type(None)]
+    if get_origin(annotation) is list:
+        return [decoded(get_args(annotation)[0], item) for item in value]
+    if is_dataclass(annotation):
+        hints = get_type_hints(annotation)
+        return annotation(**{item.name: decoded(hints[item.name], value.get(item.name)) for item in fields(annotation)})
+    return float(value) if annotation is float else value
+
+
+FIRST_LINE = "extraction/rules.py:FirstLineExtractor"
+
+
+@pytest.mark.parametrize(
+    "runs,described",
+    [
+        ([{}], {"endpoint": "sc:Text", "model": "sc:Text"}),
+        ([{"extractor": FIRST_LINE, "recorded": {}}], None),
+        (
+            [{"extractor": FIRST_LINE, "recorded": {"line": 1, "pages": [1, 2], "options": {"strict": True}}}],
+            {"line": "sc:Integer"},
+        ),
+        (
+            [
+                {
+                    "extractor": FIRST_LINE,
+                    "recorded": {"line": 1, "pages": 1, "threshold": 0, "mode": None, "unit": "mm"},
+                },
+                {
+                    "extractor": FIRST_LINE,
+                    "recorded": {"line": 1, "pages": [1, 2], "threshold": 0.5, "mode": 3, "unit": 2},
+                    "fail": "lind",
+                },
+            ],
+            {"line": "sc:Integer", "threshold": "sc:Float", "mode": "sc:Integer"},
+        ),
+    ],
+    ids=["llm", "no settings", "structured settings", "settings changed shape"],
+)
+def test_generated_sources_load_extracted_records(study, monkeypatch, runs, described):
+    for extractor in runs:
+        if extractor:
+            shutil.copy(FIXTURES / "rules.py", study.root / "extraction/rules.py")
+            study.configure(**extractor)
+        result, _ = study.extract("run", PROFILE, "data/pages")
+        assert (result.exit_code == 0) != ("fail" in extractor), result.output
+    manifest = json.loads((study.root / ".biotope/datasets/extracted/profile.jsonld").read_text())
+    [provenance] = [item for item in manifest["recordSet"][0]["field"] if item["name"] == "provenance"]
+    [extractor_field] = [item for item in provenance["subField"] if item["name"] == "extractor"]
+    settings = [item for item in extractor_field["subField"] if item["name"] == "settings"]
+    assert ({item["name"]: item["dataType"] for item in settings[0]["subField"]} if settings else None) == described
+    generated = study.run("source", "generate", ".biotope/datasets/extracted/profile.jsonld", "--out", "graph/sources")
+    assert generated.exit_code == 0, generated.output
+
+    monkeypatch.syspath_prepend(str(study.root))
+    package = next((study.root / "graph/sources").rglob("schema.py")).parent.relative_to(study.root)
+    try:
+        source = importlib.import_module(".".join(package.parts)).SOURCE
+        [record_class] = source.records
+        rows = [
+            SourceRecord(decoded(record_class, line), (Evidence(line["document"], "v1", "profile.jsonl", line["id"]),))
+            for line in study.records("profile")
+        ]
+        context = RunContext(Pipeline("extracted", Topology((), ()), (source,), (), lambda _: None, "test", ()))
+        assert list(context.load(source, lambda _: iter(rows), None)) == rows
+    finally:
+        for name in [name for name in sys.modules if name == "graph" or name.startswith("graph.")]:
+            del sys.modules[name]
 
 
 def test_missing_configuration_stops_before_any_request_and_the_key_stays_secret(study, monkeypatch):
