@@ -63,13 +63,14 @@ def _named(value: object) -> list[str]:
     return [item["@id"] if isinstance(item, dict) else item for item in items if isinstance(item, dict | str)]
 
 
-def read_files(record: dict[str, Any]) -> set[str]:
+def read_files(record: dict[str, Any], key: str = "field") -> set[str]:
     found: set[str] = set()
-    for field in record.get("field") or []:
+    fields = record.get(key)
+    for field in [fields] if isinstance(fields, dict) else fields or []:
         source = field.get("source")
         if isinstance(source, dict):
-            found.update(name for key in ("fileObject", "fileSet") for name in _named(source.get(key)))
-        found |= read_files({"field": field.get("subField") or []})
+            found.update(name for kind in ("fileObject", "fileSet") for name in _named(source.get(kind)))
+        found |= read_files(field, "subField")
     return found
 
 

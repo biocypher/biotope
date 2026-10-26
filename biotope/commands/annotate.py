@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from biotope.croissant import ids
 from biotope.graph.sources import CURATION, write_text_atomic
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
@@ -282,7 +283,7 @@ def edit(
                     "distribution": [
                         {
                             "@type": FILE_OBJECT_TYPE,
-                            "@id": f"file_{file_info['sha256'][:8]}",
+                            "@id": ids.file_id(file_path.name),
                             "name": file_path.name,
                             "contentUrl": str(file_path.relative_to(biotope_root)),
                             "sha256": file_info["sha256"],
