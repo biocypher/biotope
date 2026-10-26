@@ -1,6 +1,6 @@
 # Milestone specs
 
-Each milestone in [`docs/roadmap.md`](../roadmap.md) has one spec here, named `<id>-<slug>.md`, such as `b1-extraction.md`.
+Each milestone has one spec here, named `<id>-<slug>.md`, such as `b1-extraction.md`.
 
 ## Lifecycle
 
@@ -12,6 +12,7 @@ Specs have no status line: merged means approved. Implementation status is track
 
 ## Rules for writing a spec
 
+- A spec **opens with its gap**: one sentence on what its need lacks today, then a map of what biotope already does for that need and why, verified in code. The spec covers only the gap ([#53](https://github.com/biocypher/biotope/issues/53)).
 - A spec says **what and why**, not how. Most of it covers the goal and its reasons, scope, non-goals, interfaces and acceptance criteria. The design is a short sketch.
 - **Binding:** the goal, scope, non-goals, interfaces and acceptance criteria. **Guidance:** the design sketch and the risks. The implementer may depart from the sketch and explains why in the PR; that needs no spec change.
 - A spec aligns on goals, scope and interfaces; the implementer works out the details during development. **Interfaces** name only the surface others depend on, at the level of concepts and contracts, such as a Python protocol described in words or what a stored output promises later stages. Command options, configuration key names, file layouts and formats are decided by the implementer and documented in `docs/` by the implementation PR.
@@ -29,6 +30,9 @@ Specs have no status line: merged means approved. Implementation status is track
 # <ID>: <title>
 
 Needs: <milestones> · Roadmap decisions: <numbers>
+
+## Gap and what biotope already does
+One sentence on what the need lacks today. Then what biotope already does for it and why, verified in code.
 
 ## Goal and why
 What exists afterwards that did not exist before, who needs it, and why. Quote the roadmap decisions this milestone must respect.
