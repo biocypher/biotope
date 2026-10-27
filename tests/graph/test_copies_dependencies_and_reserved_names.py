@@ -1,5 +1,3 @@
-"""AC-17, the decisions of #50: sameAs copies, one dependency declaration, reserved property names."""
-
 import gzip
 import importlib.metadata
 import json

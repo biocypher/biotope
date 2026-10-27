@@ -1,5 +1,3 @@
-"""Atomic writes of generated artifacts."""
-
 from biotope.graph.sources import write_text_atomic
 
 

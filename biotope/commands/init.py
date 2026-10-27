@@ -1,17 +1,3 @@
-"""``biotope init`` — scaffold a new biotope project.
-
-Default behavior is **pure scaffold**: write the project configuration and an
-empty ``project.yaml``. No content questions. The agent (or
-the user via ``biotope map``) fills in the competence questions afterwards.
-
-The agent-facing contract is the **biotope** plugin skills (``skills/biotope-croissant``
-and ``skills/biocypher``), installed via the virtual-human marketplace. Load only
-the skill that matches the current pipeline stage.
-
-Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
-``project.yaml`` so the user can fill ``purpose:`` before exiting init.
-"""
-
 from __future__ import annotations
 
 import os

@@ -64,7 +64,6 @@ class Project(BaseModel):
 
 
 def resolve_project_path(start: Path | None = None) -> Path:
-    """Return the path where ``project.yaml`` lives for the project at ``start``."""
     return (start if start is not None else Path.cwd()) / ".biotope" / "project.yaml"
 
 

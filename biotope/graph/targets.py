@@ -69,8 +69,6 @@ def _preferred_name(resource: dict[str, Any], identity: str) -> str:
 
 
 def manifest_targets(data: dict[str, Any]) -> tuple[Target, ...]:
-    """Every top-level RecordSet, then every file resource no RecordSet field reads, nothing is ``containedIn``
-    and that is not the ``sameAs`` copy of another described resource."""
     records = record_set_targets(data)
     targets = [
         Target(item.identity, "recordSet", item.package, item.record, record_set_definition(item)) for item in records

@@ -44,7 +44,6 @@ cli.add_command(mark_cmd, "mark")
 # Metadata annotations
 cli.add_command(annotate_cmd, "annotate")
 
-# Dataset tracking
 cli.add_command(add_cmd, "add")
 cli.add_command(mv_cmd, "mv")
 cli.add_command(rm_cmd, "rm")

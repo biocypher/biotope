@@ -1,5 +1,3 @@
-"""AC-8: graph/topology/<node>/node.py holds each node, and its folder one file per edge from that node."""
-
 import json
 import shutil
 import subprocess

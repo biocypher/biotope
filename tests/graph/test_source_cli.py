@@ -1,5 +1,3 @@
-"""The `biotope source generate` command: what it reports, warns about and refuses."""
-
 import json
 import re
 import shutil
