@@ -196,7 +196,8 @@ biotope annotate set data/study --table 'push/people.csv#people' --column person
   adds to `prov:wasDerivedFrom`.
 - `biotope annotate set DATA KEY=VALUE...` writes into the annotation file of
   `DATA`, the path you added. Without `--table` the values describe the dataset,
-  with `--table <ID>` that table, and with `--column <name>` that column. A
+  with `--table <ID>` that table, and with `--column <name>` that column. The ID
+  may be written without its percent-encoding, such as `'x - y.csv#x - y'`. A
   repeated key makes a list, and an empty value clears. It refuses a table or
   column the description does not have.
 

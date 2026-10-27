@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import click
 
@@ -24,7 +26,7 @@ def annotate(ctx: click.Context) -> None:
 @annotate.command(name="set")
 @click.argument("data", type=click.Path(exists=True, path_type=Path))
 @click.argument("values", nargs=-1, required=True)
-@click.option("--table", help="A table's ID, such as push/people.csv#people.")
+@click.option("--table", help="A table's ID, such as push/people.csv#people, percent-encoded or not.")
 @click.option("--column", help="A column of --table, by its name in the data.")
 def set_values(data: Path, values: tuple[str, ...], table: str | None, column: str | None) -> None:
     """Write KEY=VALUE pairs into the annotation file of DATA, a dataset biotope add described.
@@ -49,7 +51,7 @@ def set_values(data: Path, values: tuple[str, ...], table: str | None, column: s
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     if table is not None:
-        _check_names(description, table, [column] if column is not None else annotation.names(given.get("key")))
+        table = _table_id(description, table, [column] if column is not None else annotation.names(given.get("key")))
     scope = () if table is None else (annotation.TABLES, table)
     scope += () if column is None else (annotation.COLUMNS, column)
     path = annotation.annotation_path(data.resolve())
@@ -79,13 +81,18 @@ def _pairs(values: tuple[str, ...], *, reserved: set[str]) -> dict[str, Any]:
     return given
 
 
-def _check_names(description: dict[str, Any], table: str, columns: list[str]) -> None:
-    record = next((item for item in description.get("recordSet") or [] if item.get("@id") == table), None)
+def _table_id(description: dict[str, Any], table: str, columns: list[str]) -> str:
+    records = [item for item in description.get("recordSet") or [] if isinstance(item.get("@id"), str)]
+    readable = unicodedata.normalize("NFC", table)
+    record = next((item for item in records if item["@id"] == table), None) or next(
+        (item for item in records if unquote(item["@id"]) == readable), None
+    )
     if record is None:
         raise click.ClickException(f"The description has no table {table!r}")
     missing = [name for name in columns if name not in annotation.columns(record)]
     if missing:
         raise click.ClickException(f"The table {table!r} has no column {', '.join(map(repr, missing))}")
+    return record["@id"]
 
 
 @annotate.command()

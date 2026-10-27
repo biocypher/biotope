@@ -34,8 +34,10 @@ biotope annotate set data/study --table 'push/people.csv#people' --column name d
 
 `annotate set` writes the values given into the dataset's
 [annotation file](project.md#the-annotation-file): the dataset's without
-`--table`, a table's with `--table <ID>`, and a column's with `--column <name>`. A
-repeated key makes a list and an empty value clears. The `add` flags such as
+`--table`, a table's with `--table <ID>`, and a column's with `--column <name>`.
+`--table` takes the ID as `map inspect` prints it or without its percent-encoding,
+such as `'x - y.csv#x - y'` for `x%20-%20y.csv#x%20-%20y`. A repeated key makes a
+list and an empty value clears. The `add` flags such as
 `--description`, `--license` and `--creator` write dataset fields into the same
 file. `annotate validate --jsonld <file>` runs the external `mlcroissant`
 validator on a description.

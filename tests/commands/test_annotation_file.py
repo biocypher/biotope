@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+import unicodedata
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -100,6 +101,20 @@ def test_add_and_annotate_write_only_the_values_given_and_keep_comments(fresh):
     }
     for annotation in (folder, single):
         assert annotation.read_text().startswith(written[annotation])
+
+
+def test_annotate_set_takes_a_table_by_its_readable_id(fresh):
+    (fresh / "data/study/Café - SupTable5.csv").write_text("gene,padj\nA,0.1\n")
+    ok("add", "data/study")
+    identity = "Café%20-%20SupTable5.csv#Café%20-%20SupTable5"
+    readable = unicodedata.normalize("NFD", "Café - SupTable5.csv#Café - SupTable5")
+
+    ok("annotate", "set", "data/study", "--table", readable, "--column", "padj", "description=Adjusted p-value.")
+
+    assert yaml.safe_load((fresh / "data/study/.biotope.yaml").read_text()) == {
+        "tables": {identity: {"columns": {"padj": {"description": "Adjusted p-value."}}}}
+    }
+    assert column(table(described(fresh), identity), "padj")["description"] == "Adjusted p-value."
 
 
 def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):

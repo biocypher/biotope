@@ -34,7 +34,7 @@ biotope annotate set data description="Differential expression in atrial fibrill
 biotope annotate set data --table 'study_a.csv#study_a' --column padj description="Adjusted p-value; empty when untested."
 ```
 
-Without `--table`, `annotate set` writes dataset fields; with `--table` a table's; with `--column` a column's. A repeated key makes a list, and an empty value clears. It refuses a table or column the manifest does not have. On the first `biotope add`, or with `--rebake`, flags such as `--description`, `--license`, `--creator` and `--citation` write dataset fields into the same file.
+Without `--table`, `annotate set` writes dataset fields; with `--table` a table's, named by its ID with or without percent-encoding, such as `'x - y.csv#x - y'`; with `--column` a column's. A repeated key makes a list, and an empty value clears. It refuses a table or column the manifest does not have. On the first `biotope add`, or with `--rebake`, flags such as `--description`, `--license`, `--creator` and `--citation` write dataset fields into the same file.
 
 Name the evidence for each value, and any unresolved gap, in a YAML comment beside it, so a later reviewer can assess it. Comments survive every command.
 
