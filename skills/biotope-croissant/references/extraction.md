@@ -33,4 +33,4 @@ Documents, such as papers, saved web pages and calls, go through extraction: an 
 
 Never edit the extracted records or their manifest by hand: a later run rewrites them. Correct a wrong value through the schema and a new run, or exclude the record in a mapping against a declared policy. Field descriptions come from the schema; dataset fields, such as a description or a URL, go into the records file's annotation file, for example `biotope annotate set data/extracted/<kind>.jsonl description="..."`. Move a records file only with `biotope mv`, which moves its extraction state, then pass the new path to `--out`.
 
-Run `biotope extract run` again after documents change; unchanged documents are reused without a model call, and the report says what changed.
+Run `biotope extract run` again after documents change, with every dataset the schema reads, as in its first run: a run drops the records of documents in datasets it is not given. Unchanged documents are reused without a model call, and the report says what changed.

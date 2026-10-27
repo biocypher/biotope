@@ -307,18 +307,21 @@ re-downloaded document or a same-named file in another folder, run:
 
 ```bash
 biotope add --rebake data/study
-biotope extract run graph/extraction/<kind>.py:<Class> data/study
+biotope extract run graph/extraction/<kind>.py:<Class> <every dataset the schema reads>
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build
 ```
 
 Run `add --rebake` once per changed dataset, `extract run` once per extraction
-schema that reads documents of a changed dataset, with the `--out` the project
-uses, and `source generate` once per description. Skip `extract run` when no
-schema reads the dataset. Without it, every check and the build pass on the records
-extracted from the previous documents, and the rebake records each document's new
-checksum, so `check-data` no longer reports the change. No file needs a hand edit:
+schema that reads documents of a changed dataset, and `source generate` once per
+description. Give `extract run` every dataset the schema reads, as in its first
+run, and the `--out` the project uses: a run keeps only the records of the
+datasets it is given and drops those of documents in any other dataset, and every
+check still passes. Skip `extract run` when no schema reads the dataset. Without
+it, every check and the build pass on the records extracted from the previous
+documents, and the rebake records each document's new checksum, so `check-data`
+no longer reports the change. No file needs a hand edit:
 every existing file and table keeps its ID, so every source reads the same file as
 before, and the annotation file applies again.
 
@@ -362,9 +365,9 @@ never copies it, so it cannot move data to another filesystem or a folder onto a
 folder that holds files; there it also changes nothing.
 
 After `mv` of a document that an extraction schema reads, run `biotope extract run`
-on its dataset again, with the `--out` the project uses. The records name each
-document by its path, and the run reuses the moved document's records without a
-request.
+again with every dataset the schema reads and the `--out` the project uses, as in
+the refresh. The records name each document by its path, and the run reuses the
+moved document's records without a request.
 
 A move made outside biotope, by a file manager, `git mv` or a download script,
 gives the file a new ID at the next refresh. `source generate` creates a package
