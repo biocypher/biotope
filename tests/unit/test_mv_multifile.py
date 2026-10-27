@@ -1,94 +1,30 @@
-"""Tests for `biotope mv` against multi-file manifests and whole-dataset renames."""
-
-from __future__ import annotations
-
 import json
-from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
-from biotope.commands.mv import mv
+from biotope.cli import cli
 
 
-@pytest.fixture
-def runner() -> CliRunner:
-    return CliRunner()
+def invoke(*args):
+    return CliRunner().invoke(cli, list(args))
 
 
-@pytest.fixture
-def project(tmp_path: Path) -> Path:
-    (tmp_path / ".biotope" / "datasets").mkdir(parents=True)
-    return tmp_path
+def test_a_file_a_file_set_covers_is_renamed_only_within_its_pattern_and_never_removed_alone(tmp_path, monkeypatch):
+    data = tmp_path / "data/ot"
+    data.mkdir(parents=True)
+    (data / "part-00.parquet").write_bytes(b"x")
+    manifest = tmp_path / ".biotope/datasets/data/ot.jsonld"
+    manifest.parent.mkdir(parents=True)
+    fileset = {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"}
+    manifest.write_text(json.dumps({"@type": "sc:Dataset", "name": "data/ot", "distribution": [fileset]}))
+    monkeypatch.chdir(tmp_path)
 
+    moved = invoke("mv", "data/ot/part-00.parquet", "data/ot/part-renamed.parquet")
+    assert moved.exit_code == 0, moved.output
+    assert json.loads(manifest.read_text())["distribution"] == [fileset]
 
-def _write_manifest(project_dir: Path, rel_id: str, distribution: list[dict]) -> Path:
-    manifest_path = project_dir / ".biotope" / "datasets" / f"{rel_id}.jsonld"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "@type": "sc:Dataset",
-                "name": rel_id,
-                "distribution": distribution,
-            }
-        )
-    )
-    return manifest_path
-
-
-def test_fileset_rename_pattern_still_matches(runner: CliRunner, project: Path) -> None:
-    """Renaming a FileSet-covered file to a name that still matches the
-    glob succeeds with no manifest update."""
-    data_dir = project / "data" / "ot"
-    data_dir.mkdir(parents=True)
-    src = data_dir / "part-00.parquet"
-    src.write_bytes(b"x")
-
-    _write_manifest(
-        project,
-        "data/ot",
-        distribution=[
-            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-        ],
-    )
-
-    dst = data_dir / "part-renamed.parquet"
-    import os
-
-    os.chdir(project)
-    r = runner.invoke(mv, [str(src), str(dst)])
-    assert r.exit_code == 0, r.output
-    assert dst.exists()
-    assert not src.exists()
-    # Manifest unchanged — FileSet still covers via pattern.
-    manifest = project / ".biotope" / "datasets" / "data" / "ot.jsonld"
-    metadata = json.loads(manifest.read_text())
-    assert metadata["distribution"][0]["includes"] == "*.parquet"
-
-
-def test_fileset_rename_pattern_no_longer_matches_refused(runner: CliRunner, project: Path) -> None:
-    """Renaming a FileSet-covered file to a name that DOESN'T match the
-    glob is refused — would leave the manifest stale."""
-    data_dir = project / "data" / "ot"
-    data_dir.mkdir(parents=True)
-    src = data_dir / "part-00.parquet"
-    src.write_bytes(b"x")
-
-    _write_manifest(
-        project,
-        "data/ot",
-        distribution=[
-            {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-        ],
-    )
-
-    dst = data_dir / "renamed.txt"
-    import os
-
-    os.chdir(project)
-    r = runner.invoke(mv, [str(src), str(dst)])
-    assert r.exit_code != 0
-    assert "FileSet" in r.output
-    assert src.exists()
-    assert not dst.exists()
+    renamed = invoke("mv", "data/ot/part-renamed.parquet", "data/ot/renamed.txt")
+    assert renamed.exit_code != 0 and "FileSet" in renamed.output
+    removed = invoke("rm", "-f", "data/ot/part-renamed.parquet")
+    assert removed.exit_code != 0 and "FileSet" in removed.output
+    assert [path.name for path in data.iterdir()] == ["part-renamed.parquet"]

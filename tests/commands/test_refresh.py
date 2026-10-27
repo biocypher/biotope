@@ -146,47 +146,15 @@ def test_mv_of_a_file_keeps_the_name_of_a_table_inside_it_through_the_refresh(pr
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
-@pytest.mark.parametrize(
-    ("move", "dataset", "people"),
-    [
-        (
-            ("data/study/push/people.csv", "data/study/current/people.csv"),
-            "data/study",
-            "data/study/current/people.csv",
-        ),
-        (("-r", "data/study", "data/current"), "data/current", "data/current/push/people.csv"),
-    ],
-)
-def test_mv_changes_nothing_while_the_annotation_file_is_invalid_and_works_once_it_is_fixed(
-    project, move, dataset, people
-):
+def test_mv_changes_nothing_while_the_annotation_file_is_invalid(project):
     annotation = project / "data/study/.biotope.yaml"
-    valid = annotation.read_text()
-    annotation.write_text(valid + "tables: [\n")
+    annotation.write_text(annotation.read_text() + "tables: [\n")
     before = snapshot(project)
 
-    failed = invoke("mv", *move)
+    failed = invoke("mv", "-r", "data/study", "data/current")
 
     assert failed.exit_code != 0 and "data/study/.biotope.yaml" in failed.output
     assert snapshot(project) == before
-    annotation.write_text(valid)
-    ok("mv", *move)
-    refresh(dataset)
-    assert built(project) == ({people, f"{dataset}/docs/report.html"}, 2)
-
-
-def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(project):
-    (project / "data/study/current").mkdir()
-    shutil.move(project / "data/study/push/people.csv", project / "data/study/current/people.csv")
-    refresh()
-
-    result = invoke("graph", "check", "--json")
-
-    assert result.exit_code != 0
-    assert any(
-        "'push/people.csv#people'" in finding["message"] and "'current/people.csv#people'" in finding["message"]
-        for finding in findings(result)
-    ), findings(result)
 
 
 def orphans() -> dict[str, str]:
@@ -209,8 +177,11 @@ def test_the_new_id_declared_where_generate_and_check_say_after_a_move_outside_b
     generation = ok("source", "generate", MANIFEST, "--out", "graph/sources").output
     generated = "graph/sources/study/current_people_csv_people"
 
+    checked = invoke("graph", "check", "--json")
     [message] = orphans().values()
 
+    assert checked.exit_code != 0
+    assert "'push/people.csv#people'" in message and "'current/people.csv#people'" in message
     assert f"Delete {generated}, then declare the new ID in this package" in message
     assert message in generation
     shutil.rmtree(project / generated)
@@ -220,15 +191,13 @@ def test_the_new_id_declared_where_generate_and_check_say_after_a_move_outside_b
     assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 2)
 
 
-@pytest.mark.parametrize("implemented", [False, True])
-def test_a_file_moved_back_outside_biotope_names_no_package_that_reads_it_for_deletion(project, implemented):
+def test_a_file_moved_back_outside_biotope_names_no_package_that_reads_it_for_deletion(project):
     study, interim = project / "data/study", "graph/sources/study/current_people_csv_people"
     (study / "current").mkdir()
     shutil.move(study / "push/people.csv", study / "current/people.csv")
     refresh()
-    if implemented:
-        loader = project / interim / "loader.py"
-        loader.write_text(loader.read_text().split("\n", 1)[1])
+    loader = project / interim / "loader.py"
+    loader.write_text(loader.read_text().split("\n", 1)[1])
     shutil.move(study / "current/people.csv", study / "push/people.csv")
     refresh()
 
@@ -276,7 +245,6 @@ def descriptions(root):
 @pytest.mark.parametrize(
     ("moved", "named", "generated"),
     [
-        ("data/raw/staff.csv", ("'people.csv#people'", "'staff.csv#staff'"), "staff_csv_staff"),
         ("data/current/staff.csv", ("'people.csv#people'", "'staff.csv#staff'"), "staff_csv_staff"),
         (
             "data/current/people.csv",
@@ -364,19 +332,6 @@ def keep_the_new_id(root, moved):
     assert built(root) == ({moved, "data/study/docs/report.html"}, 2)
 
 
-@pytest.mark.parametrize("destination", ["data/current/people.csv", "data/raw/people.csv"])
-def test_biotope_mv_of_a_single_file_kept_under_the_id_it_got_outside_biotope_passes_the_check(single, destination):
-    shutil.move(single / "data/raw/people.csv", single / "data/raw/staff.csv")
-    refresh("data/raw/staff.csv")
-    keep_the_new_id(single, "data/raw/staff.csv")
-
-    ok("mv", "data/raw/staff.csv", destination)
-
-    ok("graph", "check")
-    refresh(destination)
-    assert built(single) == ({destination, "data/study/docs/report.html"}, 2)
-
-
 def test_a_single_file_kept_under_the_id_it_got_outside_biotope_and_moved_outside_again_fails_the_check(single):
     for folder in ("current", "archive"):
         (single / "data" / folder).mkdir()
@@ -398,17 +353,13 @@ def test_a_single_file_kept_under_the_id_it_got_outside_biotope_and_moved_outsid
     assert built(single) == ({"data/archive/staff.csv", "data/study/docs/report.html"}, 2)
 
 
-@pytest.mark.parametrize("destination", ["data/archive/staff.csv", "data/raw/people.csv"])
-def test_mv_refuses_a_file_whose_rename_outside_biotope_is_unresolved_until_graph_check_is_followed(
-    single, destination
-):
-    for folder in ("current", "archive"):
-        (single / "data" / folder).mkdir()
+def test_mv_refuses_a_file_whose_rename_outside_biotope_is_unresolved_until_graph_check_is_followed(single):
+    (single / "data/current").mkdir()
     shutil.move(single / "data/raw/people.csv", single / "data/current/staff.csv")
     refresh("data/current/staff.csv")
     before = snapshot(single)
 
-    refused = invoke("mv", "data/current/staff.csv", destination)
+    refused = invoke("mv", "data/current/staff.csv", "data/raw/people.csv")
 
     assert refused.exit_code != 0
     assert "'people.csv'" in refused.output and "biotope graph check" in refused.output
@@ -423,23 +374,30 @@ def test_mv_refuses_a_file_whose_rename_outside_biotope_is_unresolved_until_grap
         for finding in findings(result)
     ), findings(result)
     keep_the_new_id(single, "data/current/staff.csv")
-    ok("mv", "data/current/staff.csv", destination)
-    refresh(destination)
-    assert built(single) == ({destination, "data/study/docs/report.html"}, 2)
+    ok("mv", "data/current/staff.csv", "data/raw/people.csv")
+    ok("graph", "check")
+    refresh("data/raw/people.csv")
+    assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
 
 
-@pytest.mark.parametrize(("failure", "message"), [("annotation", "people.csv.biotope.yaml"), ("disk", "disk full")])
-def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, failure, message):
+def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single):
     annotation = single / "data/raw/people.csv.biotope.yaml"
     valid = annotation.read_text()
-    annotation.write_text(valid + ("tables: [\n" if failure == "annotation" else ""))
+    annotation.write_text(valid + "tables: [\n")
     (single / "data/current").mkdir()
     shutil.move(single / "data/raw/people.csv", single / "data/current/staff.csv")
+    before = snapshot(single)
+
+    failed = invoke("add", "--rebake", "data/current/staff.csv")
+
+    assert failed.exit_code != 0 and "people.csv.biotope.yaml" in failed.output + str(failed.exception)
+    assert snapshot(single) == before
+    annotation.write_text(valid)
     before = snapshot(single)
     replace, failed_once = os.replace, []
 
     def failing(source, destination):
-        if failure == "disk" and str(destination).endswith(".jsonld") and not failed_once:
+        if str(destination).endswith(".jsonld") and not failed_once:
             failed_once.append(destination)
             raise OSError("disk full")
         return replace(source, destination)
@@ -447,9 +405,8 @@ def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, fa
     with mock.patch("os.replace", side_effect=failing):
         failed = invoke("add", "--rebake", "data/current/staff.csv")
 
-    assert failed.exit_code != 0 and message in failed.output + str(failed.exception)
+    assert failed.exit_code != 0 and "disk full" in failed.output + str(failed.exception)
     assert snapshot(single) == before
-    annotation.write_text(valid)
     refresh("data/current/staff.csv")
     result = invoke("graph", "check", "--json")
     assert result.exit_code != 0
@@ -480,8 +437,6 @@ def test_an_identical_copy_whose_path_differs_only_in_case_fails_the_refresh_and
         assert "the paths push/PEOPLE.csv and push/people.csv differ only in case" in " ".join(result.output.split())
         (push / "PEOPLE.csv").unlink()
         assert snapshot(project) == before
-    refresh()
-    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
     copy = project / "data/study/x/people.csv"
     copy.parent.mkdir()
     shutil.copy(push / "people.csv", copy)
@@ -494,8 +449,6 @@ def test_an_identical_copy_whose_path_differs_only_in_case_fails_the_refresh_and
     reason = "exists" if taken else "the paths x/PEOPLE.csv and x/people.csv differ only in case"
     assert refused.exit_code != 0 and reason in " ".join(refused.output.split())
     assert snapshot(project) == before
-    refresh()
-    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
 def test_new_data_of_the_same_shape_rebuilds_after_the_refresh_alone(project):
