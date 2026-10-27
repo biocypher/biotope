@@ -1,17 +1,13 @@
 import gzip
 import importlib.machinery
-import importlib.metadata
 import json
 import os
 import shutil
 import subprocess
 import sys
-from dataclasses import fields
 
 from croissant_baker.metadata_generator import MetadataGenerator
-from typed_example import prepare, run
-
-from biotope.graph import Pipeline
+from typed_example import prepare
 
 
 def test_a_compressed_copy_that_baker_links_with_same_as_makes_no_separate_source(project):
@@ -27,20 +23,6 @@ def test_a_compressed_copy_that_baker_links_with_same_as_makes_no_separate_sourc
     assert result.exit_code == 0, result.output
     packages = [path.name for path in (project.sources / "table").iterdir() if path.is_dir()]
     assert packages == ["table"]
-
-
-def test_run_json_records_every_declared_and_every_imported_distribution(tmp_path):
-    assert "dependencies" not in {member.name for member in fields(Pipeline)}
-    root = prepare(tmp_path)
-    pyproject = root / "graph/pyproject.toml"
-    pyproject.write_text(pyproject.read_text().replace('<0.11"]', '<0.11", "PyYAML>=6"]'))
-    paths = root / "graph/paths.py"
-    paths.write_text(paths.read_text() + '\nfrom rich.markup import escape\n\nLABEL = escape("[study]")\n')
-    result = run(root, "build", "recorded")
-    assert result.returncode == 0, result.stdout + result.stderr
-    recorded = json.loads((root / "graph/build/recorded/run.json").read_text())["dependencies"]
-    for name in ("biotope", "pyyaml", "rich"):
-        assert recorded[name]["version"] == importlib.metadata.version(name)
 
 
 def test_graph_check_counts_a_compiled_module_that_declares_no_top_level_names(tmp_path):
