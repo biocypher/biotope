@@ -8,6 +8,7 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.util import load_yaml_guess_indent
 
 from biotope.croissant.ids import is_kind, stable_ids
 
@@ -153,10 +154,13 @@ def renamed(path: Path, rename: Callable[[str], str]) -> str | None:
 
 def _rewritten(path: Path, text: str, change: Callable[[CommentedMap], None]) -> str:
     yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.width = 4096
     try:
-        document = yaml.load(text)
+        document, indent, offset = load_yaml_guess_indent(text, yaml=yaml)
     except YAMLError as exc:
         raise ValueError(f"{path}: invalid YAML: {exc}") from exc
+    yaml.indent(mapping=indent or 2, sequence=(indent or 2) + (offset or 0), offset=offset or 0)
     if document is not None and not isinstance(document, CommentedMap):
         raise ValueError(f"{path}: an annotation file holds a mapping")
     preamble = text if document is None else ""

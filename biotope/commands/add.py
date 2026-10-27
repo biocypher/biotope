@@ -231,15 +231,15 @@ def add_file(
 def _describe(
     data: Path, manifest: Path, baked: dict[str, Any], given: dict[str, Any] | None, reporter: AddOutput
 ) -> None:
-    if given is not None:
-        path = annotation.annotation_path(data)
-        if given or not path.exists():
-            write_text_atomic(path, annotation.edited(path, (), given))
-        reporter.annotation(data, path)
     try:
+        if given is not None:
+            path = annotation.annotation_path(data)
+            if given or not path.exists():
+                write_text_atomic(path, annotation.edited(path, (), given))
+            reporter.annotation(data, path)
         described = write_description(manifest, baked)
     except ValueError as exc:
-        raise click.ClickException(f"{data}: {exc}") from exc
+        raise click.ClickException(str(exc)) from exc
     reporter.saved(manifest, described)
     found = annotation.located(manifest, baked)
     unknown = annotation.unknown(baked, annotation.read(found)) if found is not None else []
@@ -277,7 +277,6 @@ def _enrich_with_baker(metadata: dict[str, Any], file_path: Path, *, reporter: A
 
 
 def _apply_dataset_metadata(metadata: dict[str, Any], defaults: dict[str, Any], overrides: dict[str, Any]) -> None:
-    """Apply top-level dataset metadata from project defaults and a caller's overrides."""
     for key in ("creator", "license"):
         if defaults.get(key):
             metadata[key] = defaults[key]
@@ -470,7 +469,6 @@ def _iter_directory_files(abs_dir: Path):
 
 
 def default_overrides() -> dict[str, Any]:
-    """Return the values a caller can set on a bake: name, description, status and provenance."""
     return {"name": None, "description": None, "status_override": None, "derived_from": []}
 
 

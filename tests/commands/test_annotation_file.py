@@ -41,9 +41,11 @@ def test_add_and_annotate_write_only_the_values_given_and_keep_comments(fresh):
     ok("add", "data/study", "data/raw/samples.csv")
     folder, single = fresh / "data/study/.biotope.yaml", fresh / "data/raw/samples.csv.biotope.yaml"
     assert not (fresh / "graph").exists()
+    written = {}
     for annotation in (folder, single):
         assert not yaml.safe_load(annotation.read_text())
-        annotation.write_text(annotation.read_text() + COMMENT)
+        written[annotation] = annotation.read_text() + COMMENT
+        annotation.write_text(written[annotation])
 
     ok("add", "--rebake", "data/study", "--description", "People of one study.", "--license", "")
     ok("add", "--rebake", "data/raw/samples.csv", "--creator", "Ada Lovelace", "--keyword", "samples")
@@ -97,7 +99,7 @@ def test_add_and_annotate_write_only_the_values_given_and_keep_comments(fresh):
         "tables": {"samples.csv#samples": {"columns": {"sample_id": {"description": None}}}},
     }
     for annotation in (folder, single):
-        assert COMMENT in annotation.read_text()
+        assert annotation.read_text().startswith(written[annotation])
 
 
 def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
