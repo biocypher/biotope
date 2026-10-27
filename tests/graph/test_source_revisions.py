@@ -38,13 +38,15 @@ def test_drift_without_recorded_history_shows_the_current_contract(project):
     assert "x/g: sc:Float" in message
 
 
-def test_descriptions_equivalent_properties_checksums_and_context_change_no_revision(project):
+def test_edits_outside_the_contract_change_no_revision(project):
     paper = file_object("paper", "p.pdf", fmt="application/pdf")
     manifest = project.implemented_study(record_set("rows", "a", "b"), files=[paper])
     reviewed, recorded = project.snapshot(), set(project.store)
+    before = project.report()["sources"]["study/rows"]
 
     def describe(data):
         data["description"] = "A synthetic study."
+        data["biotope:curation"] = {"reason": "Reviewed again"}
         data["@context"].update(biotope="https://biocypher.org/biotope/", dct="http://purl.org/dc/terms/")
         rows = data["recordSet"][0]
         rows.update(name="Rows", description="One row per sample.")
@@ -52,12 +54,24 @@ def test_descriptions_equivalent_properties_checksums_and_context_change_no_revi
             name="Sample", description="The sample.", equivalentProperty="https://schema.org/identifier"
         )
         for resource in data["distribution"]:
-            resource.update(sha256="1" * 64, md5="2" * 32, contentSize="3 MB", description="Downloaded again.")
+            resource.update(
+                sha256="1" * 64,
+                md5="2" * 32,
+                contentSize="3 MB",
+                dateModified="2026-09-09",
+                description="Downloaded again.",
+            )
 
     project.edit(manifest, describe)
+    manifest.write_text(json.dumps(json.loads(manifest.read_text()), sort_keys=True))
     assert project.codes("error") == {}
+    after = project.report()["sources"]["study/rows"]
+    assert after["digest"] != before["digest"] and after["contract_digest"] == before["contract_digest"]
     assert states(project.generate(manifest)) == {"rows": "current", "p_pdf": "current"}
     assert project.snapshot() == reviewed and project.store == recorded
+    project.edit(manifest, lambda data: data["recordSet"].insert(0, record_set("inserted", "y")))
+    assert states(project.generate(manifest)) == {"inserted": "created", "rows": "current", "p_pdf": "current"}
+    assert {path: text for path, text in project.snapshot().items() if path in reviewed} == reviewed
 
 
 def test_descriptions_and_equivalent_properties_in_an_annotation_file_change_no_revision(project):
@@ -168,24 +182,6 @@ def test_a_build_never_writes_history_and_generation_never_rewrites_a_drifted_sc
     assert project.store == recorded
     assert states(project.generate(manifest)) == {"rows": "drift"}
     assert schema.read_bytes() == reviewed and len(project.store) == len(recorded) + 1
-
-
-def test_a_revision_ignores_key_order_curation_notes_payloads_and_other_record_sets(project):
-    manifest = project.implemented_study(record_set("kept", "x"))
-    schema = project.sources / "study/kept/schema.py"
-    reviewed, before = schema.read_bytes(), project.report()["sources"]["study/kept"]
-
-    def unrelated(data):
-        data["biotope:curation"] = {"reason": "Reviewed again"}
-        data["distribution"][0].update(sha256="1" * 64, dateModified="2026-09-09")
-
-    project.edit(manifest, unrelated)
-    manifest.write_text(json.dumps(json.loads(manifest.read_text()), sort_keys=True))
-    after = project.report()["sources"]["study/kept"]
-    assert after["digest"] != before["digest"] and after["contract_digest"] == before["contract_digest"]
-    project.edit(manifest, lambda data: data["recordSet"].insert(0, record_set("inserted", "y")))
-    assert states(project.generate(manifest)) == {"inserted": "created", "kept": "current"}
-    assert schema.read_bytes() == reviewed
 
 
 def test_reordering_record_sets_without_an_id_is_drift_never_a_conflict(project):

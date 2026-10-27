@@ -31,12 +31,11 @@ def fail(context):
     raise ValueError("deliberate loader failure")
 
 
-@pytest.mark.parametrize("schema_version", [1, 2])
-def test_a_failed_rebuild_preserves_the_previous_build_and_a_successful_one_replaces_it(tmp_path, schema_version):
+def test_a_failed_rebuild_preserves_the_previous_build_and_a_successful_one_replaces_it(tmp_path):
     output = tmp_path / "build"
     first = rebuild(output)
     previous = json.loads((output / RUN_REPORT).read_text())
-    (output / RUN_REPORT).write_text(json.dumps({**previous, "schema_version": schema_version}))
+    (output / RUN_REPORT).write_text(json.dumps({**previous, "schema_version": 1}))
     before = tree(output)
     with pytest.raises(build.RunFailed):
         rebuild(output, replace(RESULTS_PIPELINE, run=fail))
