@@ -18,6 +18,7 @@ graph/
         schema.py        typed records and field bindings; yours to edit
         loader.py        decoding into the schema; starts as a placeholder
   alignment/             cross-source identity resolution, before mappings
+  extraction/            extraction schemas, one <kind>.py per kind of document
   topology/
     __init__.py          TOPOLOGY: the registered nodes and edges
     <node>/              one folder per node, its class name in snake_case
@@ -40,31 +41,43 @@ libraries that loaders import, such as pandas, in `graph/pyproject.toml`;
 installed version of each. See
 [installation](https://biocypher.github.io/biotope/installation/).
 
-Run Biotope commands from the parent project directory, where raw data, the
-purpose file and the managed `.biotope/datasets/` live. `paths.py` supplies
-`PROJECT_ROOT` and `GRAPH_ROOT`; use package-relative imports.
+Run Biotope commands from the parent project directory, where the data, its
+annotation files and `.biotope/` live. `paths.py` supplies `PROJECT_ROOT` and
+`GRAPH_ROOT`; use package-relative imports. Biotope never writes to git: commit
+this workspace with the project. `.gitignore` here keeps `build/` and
+`metagraph.html` out.
 
 ## Workflow
 
-1. Register each reviewed Croissant description with `biotope source register`.
-   Every input the graph might use must be described, documents included.
+1. Describe each dataset with `biotope add data/study`, and write what you know
+   about it, such as descriptions, keys and a licence, into its annotation file,
+   `data/study/.biotope.yaml`. Every input the graph might use must be described,
+   documents included. Extract a document's records with `biotope extract run`
+   and a schema in `extraction/<kind>.py`.
 
 1. Scaffold its sources:
 
    ```bash
-   biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+   biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
    ```
 
-   Each RecordSet, and each file no RecordSet reads, gets a package. Generation
-   creates missing files only; it never rewrites a schema, registration or
-   loader. It records every contract revision in `.biotope/contracts/`.
+   Each RecordSet, and each file no RecordSet reads, gets a package named after
+   its ID, such as `push_people_csv_people` for `push/people.csv#people`.
+   Generation creates missing files only; it never rewrites a schema,
+   registration or loader, and only `biotope mv` updates the IDs in them. It
+   records every contract revision in `.biotope/contracts/`.
 
 1. Select sources in `sources/__init__.py`. A source that is not used goes into
    `EXCLUDED_SOURCES` with a reason; every inventoried source is one or the other.
+   As scaffolded, it selects every source, so a new table in later data fails the
+   check until its loader is written. To rebuild after new data without a hand
+   edit, select sources by name and exclude the rest with one rule; see
+   [project layout](https://biocypher.github.io/biotope/project/).
 
 1. Edit each selected schema: names, types, missing-value tokens and bindings to
-   terms in `standardization.py`. Implement its loader and delete the loader's
-   `# biotope:placeholder` first line. Loaders preserve rows; they do not filter.
+   terms in `standardization.py`. Implement its loader, which reads the file at
+   `SOURCE.path()`, and delete the loader's `# biotope:placeholder` first line.
+   Loaders preserve rows; they do not filter.
 
 1. Declare each node in `topology/<node>/node.py` and each edge in its source
    node's folder, one file per edge: `Sample` in `topology/sample/node.py`, and
@@ -86,9 +99,22 @@ purpose file and the managed `.biotope/datasets/` live. `paths.py` supplies
    biotope graph metagraph --report graph/build/run.json
    ```
 
-When a manifest changes, `biotope graph check` reports `source.drift` for each
-affected schema and explains the change. Review it, update the schema, then set
-its `__source_digest__` to the revision the finding names.
+After new data of the same shape, refresh with commands only; files and tables
+keep IDs from their paths, so no schema, loader or annotation changes:
+
+```bash
+biotope add --rebake data/study
+biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
+biotope graph check
+biotope graph build
+```
+
+Move data files with `biotope mv`, which updates every ID that names them. When
+the structure changes, such as a new column, a changed type or a key in the
+annotation file, `biotope graph check` reports `source.drift` for each affected
+schema and explains the change. Review it, update the schema, then set its
+`__source_digest__` to the revision the finding names. Descriptions and a file's
+changed content never cause drift.
 
 ## Artifacts
 

@@ -1,15 +1,17 @@
 ---
 name: biotope-croissant
-description: Builds typed knowledge-graph projects with Biotope from local data described in Croissant. Covers registering and curating manifests for tables and documents, extracting records from papers, web pages and other documents under a reviewed extraction schema, generating the complete source inventory, authoring source schemas, loaders, shared terms, identity alignment, topology with descriptions, mappings and the pipeline, then checking and exporting through BioCypher. Use whenever the user works in a project with a `.biotope/` directory or a `graph/` workspace, runs or asks about `biotope add`, `biotope extract`, `biotope source generate`, `biotope graph check` or `biotope graph build`, wants to turn CSV, Excel, Parquet or other data files and papers into a knowledge graph, needs to resolve inventory or `source.drift` findings after a metadata change, or migrates a Biotope 0.9 project, even if they do not name Biotope or Croissant.
+description: Builds typed knowledge-graph projects with Biotope from local data described in Croissant. Covers describing and annotating datasets of tables and documents, extracting records from papers, web pages and other documents under a reviewed extraction schema, generating the complete source inventory, authoring source schemas, loaders, shared terms, identity alignment, topology with descriptions, mappings and the pipeline, then checking and exporting through BioCypher. Use whenever the user works in a project with a `.biotope/` directory or a `graph/` workspace, runs or asks about `biotope add`, `biotope extract`, `biotope source generate`, `biotope graph check` or `biotope graph build`, wants to turn CSV, Excel, Parquet or other data files and papers into a knowledge graph, needs to rebuild after new data or resolve inventory or `source.drift` findings, or migrates a Biotope 0.9 project, even if they do not name Biotope or Croissant.
 ---
 
 # Biotope graph projects
 
 **Terms used throughout.**
 
-- **Manifest**: a registered Croissant description, `.biotope/datasets/<name>.jsonld`. Drafts live in `.biotope/reviews/`.
+- **Manifest**: a dataset's Croissant description, `.biotope/datasets/<path>.jsonld`. Biotope makes it from the data and the dataset's annotation file; never edit it.
+- **Annotation file**: `<folder>/.biotope.yaml` for a dataset added as a folder, `<file>.biotope.yaml` for a single file. The one place for everything people and agents write about the dataset.
+- **ID**: files and tables are named by their paths in the dataset, such as `push/people.csv` and its table `push/people.csv#people`, so new data keeps every ID.
 - **Source**: one input the graph may read — a RecordSet, or a file no RecordSet reads (a paper, notes, an image). Each source has a **package**, `graph/sources/<manifest>/<source>/`, holding its schema, `SOURCE` registration and loader.
-- **Revision**: a digest of one source's contract in the manifest. A schema's `__source_digest__` records the revision you reviewed.
+- **Revision**: a digest of one source's structure: fields, types, nullability, keys and file references, not descriptions. A schema's `__source_digest__` records the revision you reviewed.
 
 **What you deliver.** `graph/build/`: BioCypher import files, `schema_config.yaml` with every concept and property description, `provenance.json`, and `run.json` with the scope, policies, bindings, counts and exclusions. The consumer gets the graph and `graph/build/`, never this repository or your reasoning, so everything needed to read a value correctly belongs in a description, a policy or the scope.
 
@@ -25,7 +27,7 @@ Copy this checklist and track progress.
 Biotope graph project:
 - [ ] Step 1: Read the inputs and the existing project
 - [ ] Step 2: Agree the purpose and requirements
-- [ ] Step 3: Describe and register every source
+- [ ] Step 3: Describe and annotate every source
 - [ ] Step 4: Generate the inventory and decide exclusions
 - [ ] Step 5: Author schemas and terms, then loaders
 - [ ] Step 6: Declare the topology by concept
@@ -38,7 +40,8 @@ Biotope graph project:
 
 - Run every command from the project root. Read purpose files, `biotope map --show`, and `graph/README.md` if a workspace exists; it documents the layout you will edit.
 - Graph checks and builds need `biotope[graph]`; Pyright needs Node.js on `PATH` or `pyright[nodejs]`.
-- Create only what is missing: `biotope init . --no-prompt` for metadata tracking, `biotope graph scaffold` for the workspace.
+- Create only what is missing: `biotope init . --no-prompt` at the root of the host repository for metadata tracking, `biotope graph scaffold` for the workspace.
+- Biotope writes only in `.biotope/`, `graph/`, `data/extracted/`, annotation files and a root `.gitignore` the project lacks, and never to git. Leave committing to the user. When a command warns that git ignores a file, tell the user: it must be committed, so `.gitignore` needs an exception.
 - Write no project code yet.
 
 **Step 2: Agree the purpose and requirements.**
@@ -46,20 +49,23 @@ Biotope graph project:
 - A purpose and its example questions are evidence of intent, not a specification. Derive the adjacent questions: the neighbouring comparison, evidence that would contradict the expected answer, a second defensible reading of the same statistic, the context needed to interpret a result, and the case where a well-founded "no such record" is the answer. For each, name the evidence and distinctions it needs: that list decides what the sources must supply and what the mappings must admit.
 - Record the agreed purpose with `biotope map --purpose "..." --entity "..." --relation "..."`. Propose adjacent requirements once, with their cost; record declined ones as out of scope.
 
-**Step 3: Describe and register every source.**
+**Step 3: Describe and annotate every source.**
 
 - Describe new inputs with `biotope add <data-path> --json` and review each file's outcome. Do not scan environments or previous outputs. Keep the requested scope, including whole directories; never split a Croissant file to shape the packages, and never invent structure to make a mapping work.
-- `biotope add` also writes an annotation template, `<data-path>/.biotope.yaml`, and pre-fills the manifest's `creator` from the local git identity and its `license` with Baker's default, CC BY 4.0. Neither describes the data. The creator is whoever produced the data, which the person running the tools usually is not. In your first correction, keep a creator or licence only where the data's documentation or the user explicitly states it for this data; otherwise remove it and record the question. Do not fill it with any identity from the environment, such as the git user or the account you work for.
-- Files Baker cannot parse are reported `unclaimed`, and `biotope add` still gives each a FileObject whose `@id` follows its checksum. Keep these. A document, such as a paper, a web page or notes, goes through extraction (next bullet). A structured file the graph reads records from, such as tab-separated `.txt`, RDF or a shapefile, needs a RecordSet over that FileObject instead. Add a FileObject by hand only for a file outside the scanned paths. Both are in [curation.md](./references/curation.md).
+- A file's path within the folder you add is its ID. Keep each dataset at a fixed path: a folder per download, such as a run ID inside the dataset, changes every ID on the next download.
+- `biotope add` also creates the dataset's annotation file, empty. Everything you or the user know about the dataset goes there, never into `.biotope/datasets/`: descriptions, keys, equivalent properties, a licence, a creator. Follow [curation.md](./references/curation.md).
+- Biotope adds no creator or licence that nobody gave. The creator is whoever produced the data, which the person running the tools usually is not. Write a creator or licence only where the data's documentation or the user explicitly states it for this data; otherwise leave it out and record the question. Never fill it with an identity from the environment, such as the git user or the account you work for.
+- Files Baker cannot parse are reported `unclaimed`, and `biotope add` still gives each a file entry whose ID is its path. Keep these. A document, such as a paper, a web page or notes, goes through extraction (next bullet). Any other file the graph reads records from, such as tab-separated `.txt`, RDF or a shapefile, is read by its own package's loader, as [curation.md](./references/curation.md) describes. Describe every input with `biotope add`; never add a FileObject or RecordSet by hand, since the next rebake drops it.
 - **Documents go through extraction.** Propose an extraction schema for each kind of document from the agreed purpose's competence questions or user stories and sample documents: write each as a query, propose the fields users would search or filter on without being asked, and name the query each field serves. Ask only for records the purpose needs and the document reports. Check the `biotope extract try` output on those samples against the quotes and the document text, weak evidence and wrong or missing records included, and sharpen the descriptions; then show the user the schema with that output, and run `biotope extract run` only after the user approves the schema. Every later change to the schema needs a new `try` and a new approval before `run`. Re-extract every document whose records you judge wrong with `--redo`, and check it again. The schema's fields and descriptions are scientific decisions: you propose, the user decides. Only public documents go to an external model; ask before extracting any other document, and transcribe its facts by hand if the user agrees. Follow [extraction.md](./references/extraction.md).
 - Inspect fields and exact IDs with `biotope map inspect <manifest> --json`, which reads metadata only.
-- To correct a manifest, copy it into `.biotope/reviews/`, edit the copy, and register it: `biotope source register <draft> --name <name> --reason "<evidence and gaps>" --replace`. Never edit `.biotope/datasets/` directly.
+- To correct or complete a description, write into the dataset's annotation file, by hand or with `biotope annotate set`, and put the evidence in a comment beside the value. The next command that reads the description applies it; `biotope add --rebake` keeps it. A key is structure: declaring one changes the source's revision once, as "When the data changes" describes.
 - A metadata-only request ends here.
 
 **Step 4: Generate the inventory and decide exclusions.**
 
-- Run `biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources` once per manifest. Every source gets a package with a schema, a `SOURCE` registration and a placeholder loader. Existing files are never rewritten, and every revision is recorded in `.biotope/contracts/`.
+- Run `biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources` once per manifest. Every source gets a package with a schema, a `SOURCE` registration and a placeholder loader. Existing files are never rewritten, apart from the IDs `biotope mv` updates, and every revision is recorded in `.biotope/contracts/`.
 - In `graph/sources/__init__.py`, each source is either selected or listed in `EXCLUDED_SOURCES` with a reason a reviewer can check. To leave a source out, exclude it. Deleting its package does not remove it: the next generation recreates the package and the check reports it as stale.
+- The scaffold selects every inventoried source, so a new table or file in later data fails the check until its loader is written. When the project must rebuild after new data without you, select sources by name and exclude the rest with one rule, as in "When the data changes" below.
 
 **Step 5: Author schemas and terms, then loaders.** Before writing the first schema, loader or mapping, read [example.md](./references/example.md): a complete small project that passes the check, file by file. The references document the contracts you build against; the installed package's source is internal and changes between releases.
 
@@ -67,13 +73,14 @@ Biotope graph project:
 - Encodings are local to their source: missing-value tokens, value aliases and species context go in that schema. They are declarations only; the loader applies them.
 - Whenever the graph will read fields of several sources as one meaning, such as a fold change or an adjusted p-value that one property collects from several tables, declare that meaning once as a `Term` in `standardization.py`, and bind each of those fields to it with `source_field(..., term=...)` on an attribute named after the term. The check validates the bindings, and `run.json` shows reviewers which source fields were treated as equivalent. An equivalence written only into mapping code is invisible to them. Bind a field only after reading what each source means by it, since matching names establish no equivalence. A field kept as its source reported it needs no term.
 - Generated directory and class names follow the manifest's ids and can be long. Both are yours: a package belongs to the source its schema declares, whatever its directory is called, so rename a directory or class (and the imports in its `__init__.py` and `loader.py`) rather than adding a module of aliases.
-- Implement each selected loader, then delete its first line, `# biotope:placeholder`. A loader decodes every described field of every row and attaches `Evidence` with the file, a pinned version (such as `sha256:` plus the manifest's checksum) and a row or page location. It does not filter, impute, join or deduplicate: those are selection decisions, and only mappings report them.
+- Implement each selected loader, then delete its first line, `# biotope:placeholder`. The generated `load` passes `SOURCE.path()`, the file's path from the manifest, to `_read(path)`; read that path, never one written into code, so `biotope mv` keeps the loader working. A loader decodes every described field of every row and attaches `Evidence` with the file, a pinned version (such as `sha256:` plus the digest of the bytes read) and a row or page location. It does not filter, impute, join or deduplicate: those are selection decisions, and only mappings report them.
 - Read files with an established library. Declare it in `graph/pyproject.toml`, then install every declared library where Biotope runs, for example `uv tool install 'biotope[graph]' --with-requirements graph/pyproject.toml`; each `uv tool install` replaces the libraries the previous one added. `graph check` warns about an undeclared import, and the build records the installed version of every imported library in `run.json`.
 - Map extracted records through the package of their registered dataset, like a table. Exclude each extracted document's own document source with the reason `extracted into <records file>`. Only for a document the user kept out of extraction, transcribe the reviewed facts into its `Facts` schema; its loader cites each page or section read.
 
 **Step 6: Declare the topology by concept.**
 
-- Write `graph/topology/<concept>/`: one node dataclass and its outgoing relations. Describe every concept in its docstring and every property with `field(metadata={"description": ...})`: what it measures, against which reference, and what it does not establish. Descriptions are the only interpretation that travels with the export; see [interpretation.md](./references/interpretation.md) and [modeling.md](./references/modeling.md).
+- Put each node class in `graph/topology/<node>/node.py`, the folder named after the class in snake_case, and each edge class in its own file in its source node's folder, named the same way: `Sample` in `topology/sample/node.py`, and `FromPerson`, from a sample to a person, in `topology/sample/from_person.py`. Helper modules and shared types there are free. Register the classes in `topology/__init__.py`. Never name a property `preferred_id` or `biotope_provenance_id`: the export reserves them.
+- Describe every concept in its docstring and every property with `field(metadata={"description": ...})`: what it measures, against which reference, and what it does not establish. Descriptions are the only interpretation that travels with the export; see [interpretation.md](./references/interpretation.md) and [modeling.md](./references/modeling.md).
 - **Stop and ask** when two readings of a statistic are both defensible and change which records exist. Present both and the record cost of admitting their union. The default is to admit the union.
 - **Stop and ask** before merging identities across sources that do not jointly establish the match. A shared accession establishes it; a matching name, symbol or label does not. The default is separate nodes in source-specific namespaces, such as `symbol:<source>/<symbol>`, so that counting sources never counts one name twice. The rule covers every way records come to compare as one thing: a shared node, or a normalised value such as one common analyte or cell-type label. A match that looks obvious, such as a spelling variant, is still the user's decision. Keep each source's own label, and record the candidate match as an explicit, described link or property, not as the join itself.
 
@@ -98,23 +105,25 @@ Biotope graph project:
 
 Biotope derives the export schema from the topology: write no project adapter or hand-written export schema. If the agreed scope will not execute, agree a new one rather than sampling silently.
 
-| Finding                                                                      | Meaning                                                                                                                                                                                  | Fix in                    |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `inventory.absent`, `inventory.mismatch`                                     | The pipeline is not wired to `INVENTORY`, or a selected source differs from it                                                                                                           | Step 4                    |
-| `inventory.stale`, `inventory.manifest_not_generated`                        | A source has no package, or a manifest was never generated                                                                                                                               | Step 4                    |
-| `inventory.unselected`, `inventory.conflicting_selection`                    | A source is neither selected nor excluded, or both                                                                                                                                       | Step 4                    |
-| `inventory.unknown_exclusion`, `inventory.exclusion_reason`                  | An exclusion names no source, or gives no reason                                                                                                                                         | Step 4                    |
-| `inventory.placeholder`                                                      | A selected loader is still the placeholder                                                                                                                                               | Step 5                    |
-| `inventory.orphan`, `inventory.manifest_missing`                             | A package's source is no longer described: exclude it, then delete the directory                                                                                                         | Step 4                    |
-| `inventory.conflict`, `inventory.manifest_invalid`                           | Two packages claim one source, a source has no or a shared `@id`, a package directory is not a Python identifier, a root is contested, or a manifest cannot be read; nothing was written | Step 3                    |
-| `source.drift`                                                               | The manifest changed since the schema's revision was reviewed                                                                                                                            | "When a manifest changes" |
-| `source.revision_unavailable`, `source.revision_unrecorded`                  | Contract history is missing; run `biotope source generate`                                                                                                                               | Step 4                    |
-| `source.unscoped_field`                                                      | A field `@id` is not under its RecordSet; rescope it in the manifest                                                                                                                     | Step 3                    |
-| `source.contract`, `source.opaque`, `standardization.*`                      | A schema does not cover its fields, a value type is unknown, or a term binding is invalid                                                                                                | Step 5                    |
-| `topology.undescribed`, `topology.undescribed_property`, `topology.examples` | A consumer would see only a label, or a placeholder concept is registered                                                                                                                | Step 6                    |
-| `requirements.*`, `intent.*`                                                 | A purpose requirement is neither bound nor deferred, or the intent is missing                                                                                                            | Step 2                    |
-| `python.*`, `mapping.contract`                                               | Authored code is wrong                                                                                                                                                                   | Step 7                    |
-| `dependencies.undeclared`                                                    | Graph code imports a library that `graph/pyproject.toml` does not declare                                                                                                                | Step 5                    |
+| Finding                                                                      | Meaning                                                                                                                                                                                  | Fix in                  |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `inventory.absent`, `inventory.mismatch`                                     | The pipeline is not wired to `INVENTORY`, or a selected source differs from it                                                                                                           | Step 4                  |
+| `inventory.stale`, `inventory.manifest_not_generated`                        | A source has no package, or a manifest was never generated                                                                                                                               | Step 4                  |
+| `inventory.unselected`, `inventory.conflicting_selection`                    | A source is neither selected nor excluded, or both                                                                                                                                       | Step 4                  |
+| `inventory.unknown_exclusion`, `inventory.exclusion_reason`                  | An exclusion names no source, or gives no reason                                                                                                                                         | Step 4                  |
+| `inventory.placeholder`                                                      | A selected loader is still the placeholder                                                                                                                                               | Step 5                  |
+| `inventory.orphan`, `inventory.manifest_missing`                             | A package's source is no longer described. After a move outside biotope, the finding names the old and the new ID; otherwise exclude it, then delete the directory                       | "When the data changes" |
+| `inventory.conflict`, `inventory.manifest_invalid`                           | Two packages claim one source, a source has no or a shared `@id`, a package directory is not a Python identifier, a root is contested, or a manifest cannot be read; nothing was written | Step 3                  |
+| `source.drift`                                                               | The structure changed since the schema's revision was reviewed                                                                                                                           | "When the data changes" |
+| `source.revision_unavailable`, `source.revision_unrecorded`                  | Contract history is missing; run `biotope source generate`                                                                                                                               | Step 4                  |
+| `source.unscoped_field`                                                      | A field `@id` is not under its RecordSet; only a description written by hand has one                                                                                                     | Step 3                  |
+| `source.contract`, `source.opaque`, `standardization.*`                      | A schema does not cover its fields, a value type is unknown, or a term binding is invalid                                                                                                | Step 5                  |
+| `topology.undescribed`, `topology.undescribed_property`, `topology.examples` | A consumer would see only a label, or a placeholder concept is registered                                                                                                                | Step 6                  |
+| `topology.layout`                                                            | A node or edge class sits outside its file; the finding names the file it belongs in                                                                                                     | Step 6                  |
+| `topology.reserved`                                                          | A property uses a name the export reserves, such as `preferred_id`                                                                                                                       | Step 6                  |
+| `requirements.*`, `intent.*`                                                 | A purpose requirement is neither bound nor deferred, or the intent is missing                                                                                                            | Step 2                  |
+| `python.*`, `mapping.contract`                                               | Authored code is wrong                                                                                                                                                                   | Step 7                  |
+| `dependencies.undeclared`                                                    | Graph code imports a library that `graph/pyproject.toml` does not declare                                                                                                                | Step 5                  |
 
 **Step 9: Review and hand over.**
 
@@ -140,11 +149,31 @@ Then read `graph/build/schema_config.yaml` as the consumer will, with only the g
 
 Anything unticked returns to Step 6 or Step 7. Human scientific review stays manual.
 
-## When a manifest changes
+## When the data changes
 
-Follow these steps exactly; each schema holds reviewed work.
+**New data of the same shape** (new rows, a new file, a re-downloaded document, a same-named file in another folder) needs commands only:
 
-1. Register the corrected manifest (Step 3), then run `biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources`. It reports each drifted source, records the new revision and rewrites nothing.
+```bash
+biotope add --rebake <data-path>
+biotope source generate .biotope/datasets/<data-path>.jsonld --out graph/sources
+biotope graph check --json
+biotope graph build
+```
+
+Every existing file and table keeps its ID and the annotation file applies again, so no schema, loader or annotation needs an edit. A new table or file gets a package with a placeholder loader: implement it (Step 5) or exclude it (Step 4). To keep later data from breaking the build, select sources by name and exclude the rest with one rule in `graph/sources/__init__.py`:
+
+```python
+SOURCES: tuple[SourceContract, ...] = (PEOPLE, REPORT)
+EXCLUDED_SOURCES: dict[str, str] = {
+    source.name: "New data; select it once its loader is written" for source in INVENTORY if source not in SOURCES
+}
+```
+
+**Moves.** Move a described file with `biotope mv <old> <new>`, never with `mv` or `git mv`: it updates the manifest, the annotation file and the source package's IDs in one step, and the check passes. After a move made outside biotope, `graph check` reports `inventory.orphan` naming the old and the new ID. Move the file back, run `biotope add --rebake`, move it with `biotope mv`, then delete the package that generation created for the new path.
+
+**`source.drift`** means the structure changed: a new column or a changed type in the data, a key in the annotation file, or a changed file reference. Descriptions and a file's changed content never cause it. Follow these steps exactly; each schema holds reviewed work.
+
+1. Run `biotope source generate .biotope/datasets/<data-path>.jsonld --out graph/sources`. It reports each drifted source, records the new revision and rewrites nothing.
 1. Run `biotope graph check --json`. Each `source.drift` finding names the source, lists the field changes (`field <id>: dataType "sc:Float" -> "sc:Integer"`), and carries every JSON-pointer difference in its `examples`.
 1. For each change, update that source's schema (types, nullability, bindings) and its loader, and any mapping that reads the field.
 1. In that schema, set `__source_digest__` to the full revision the finding names.
@@ -152,13 +181,13 @@ Follow these steps exactly; each schema holds reviewed work.
 
 Never delete a schema to regenerate it: that discards the reviewed bindings, and the new schema would still need the same review.
 
-After code changes, rerun Step 8. During requested cleanup, remove generated outputs such as `graph/build/`, and preserve raw data, manifests, `.biotope/contracts/` and authored code. Do not use `biotope rm raw` for test cleanup.
+After code changes, rerun Step 8. During requested cleanup, remove generated outputs such as `graph/build/`, and preserve raw data, annotation files, `.biotope/` and authored code. Do not use `biotope rm raw` for test cleanup.
 
 ## References
 
 - [example.md](./references/example.md): read before Step 5, for a complete checked project: terms, schemas, loaders for a table and a document, topology, alignment, mappings and the pipeline.
 - [extraction.md](./references/extraction.md): read in Step 3, before extracting records from documents: who decides what, the schema review with `biotope extract try`, and the run.
-- [curation.md](./references/curation.md): read in Step 3, when correcting, re-baking or registering a manifest, adding a document by hand, or describing a structured file Baker cannot parse.
+- [curation.md](./references/curation.md): read in Step 3, when writing an annotation file, rebaking a dataset, or reading a file Baker cannot parse.
 - [authoring.md](./references/authoring.md): read in Steps 4, 5 and 7, for the file layout, schema bindings, loader and mapping contracts and `RunContext`.
 - [interpretation.md](./references/interpretation.md): read in Steps 2, 6 and 9, for selection versus query filter and what each description must state.
 - [modeling.md](./references/modeling.md): read in Steps 6 and 7, before a modeling choice that could erase a distinction (qualifiers, absence states, identity).

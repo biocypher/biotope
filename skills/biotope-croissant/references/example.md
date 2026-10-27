@@ -5,9 +5,9 @@ A complete small project, file by file. It passes `biotope graph check` with str
 ## Contents
 
 - The inputs and the commands
+- The annotation file
 - Shared terms
 - Schemas
-- Locating a described file
 - Loaders, tables and documents
 - Topology
 - Alignment
@@ -19,9 +19,20 @@ A complete small project, file by file. It passes `biotope graph check` with str
 ## The inputs and the commands
 
 ```text
-data/study_a.csv   gene,ensembl_id,log2fc,padj              (padj is empty for untested genes)
-data/study_b.csv   Gene,gene_id,logFC,FDR,cluster           (gene_id is empty for one symbol)
-data/methods.txt   who was compared with whom, per study
+data/study_a.csv
+gene,ensembl_id,log2fc,padj
+NPPA,ENSG00000175206,1.8,0.001
+MYH6,ENSG00000197616,-0.9,0.02
+TTN,ENSG00000155657,0.1,                       (padj is empty: TTN was not tested)
+
+data/study_b.csv
+Gene,gene_id,logFC,FDR,cluster
+NPPA,ENSG00000175206,2.1,0.0005,atrial
+MYH6,ENSG00000197616,-1.1,0.01,atrial
+PLN,,0.7,0.03,atrial                           (gene_id is empty for PLN)
+KCNJ3,ENSG00000162989,-0.6,0.04,ventricular
+
+data/methods.txt   four paragraphs: a heading, the comparison, study A's methods, study B's methods
 ```
 
 ```bash
@@ -33,7 +44,26 @@ biotope add data --json
 biotope source generate .biotope/datasets/data.jsonld --out graph/sources
 ```
 
-Baker describes both tables, as RecordSets `study_a` and `study_b` over FileObjects `file_0` and `file_1`. It cannot parse `methods.txt`, so `biotope add` appends FileObject `file_9608b3c3` for it. Generation creates `graph/sources/data/{study_a,study_b,methods_txt}/`, each holding `schema.py`, `__init__.py` (the `SOURCE` registration, kept as generated) and a placeholder `loader.py`. All three are selected: `graph/sources/__init__.py` stays as scaffolded, with `EXCLUDED_SOURCES = {}`.
+`biotope add data` describes the folder `data/` as one dataset, `.biotope/datasets/data.jsonld`, and creates its empty annotation file, `data/.biotope.yaml`. Files and tables take IDs from their paths in `data/`: Baker describes both tables, `study_a.csv#study_a` and `study_b.csv#study_b`, over the files `study_a.csv` and `study_b.csv`. It cannot parse `methods.txt`, which still gets the file entry `methods.txt`. The user kept the methods note out of extraction, so its facts are transcribed by hand below.
+
+Generation creates `graph/sources/data/{study_a_csv_study_a,study_b_csv_study_b,methods_txt}/`, each holding `schema.py`, `__init__.py` (the `SOURCE` registration, kept as generated) and a placeholder `loader.py`. All three are selected: `graph/sources/__init__.py` stays as scaffolded, with `EXCLUDED_SOURCES = {}`.
+
+## The annotation file
+
+What the user and the methods note say about the data goes into `data/.biotope.yaml`, never into `.biotope/datasets/data.jsonld`:
+
+```yaml
+# What people write about this dataset. A value here wins over the data's; an empty value clears it.
+description: Differential expression in atrial fibrillation from two studies, with their methods note.
+tables:
+  study_a.csv#study_a:
+    description: One row per gene in study A.
+    columns:
+      padj:
+        description: Benjamini-Hochberg adjusted p-value; empty when the gene was filtered before testing.
+```
+
+The next command that reads the manifest applies it. Descriptions change no revision, so no schema needs a new `__source_digest__`. The data names no creator or licence, so the file sets none.
 
 ## Shared terms
 
@@ -58,7 +88,7 @@ TERMS: tuple[Term, ...] = (GENE_SYMBOL, GENE_ACCESSION, LOG2_FOLD_CHANGE, ADJUST
 The generated schemas start with every field nullable and named as in the file. Tightened and bound, with the attribute named after its term:
 
 ```python
-# graph/sources/data/study_a/schema.py (header comment omitted)
+# graph/sources/data/study_a_csv_study_a/schema.py (header comments omitted)
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -70,111 +100,113 @@ from ....standardization import ADJUSTED_P_VALUE, GENE_ACCESSION, GENE_SYMBOL, L
 
 
 @dataclass(frozen=True, kw_only=True)
-class StudyA:
-    __record_set__: ClassVar[str] = "study_a"
-    __source_digest__: ClassVar[str] = "d88f42eff4d1…"  # the full revision, as generated
+class StudyACsvStudyA:
+    __record_set__: ClassVar[str] = "study_a.csv#study_a"
+    __source_digest__: ClassVar[str] = "4d3ee624b8ae…"  # the full revision, as generated
     __missing_values__: ClassVar[frozenset[str]] = frozenset({""})
 
     gene_symbol: str = source_field("gene", term=GENE_SYMBOL)
     gene_accession: str | None = source_field("ensembl_id", term=GENE_ACCESSION)
     log2_fold_change: float = source_field("log2fc", term=LOG2_FOLD_CHANGE)
-    # Empty when the gene was filtered before testing (methods.txt, paragraph 2).
+    # Empty when the gene was filtered before testing (methods.txt, paragraph 3).
     adjusted_p_value: float | None = source_field("padj", term=ADJUSTED_P_VALUE)
 ```
 
 ```python
-# graph/sources/data/study_b/schema.py: the fields only
+# graph/sources/data/study_b_csv_study_b/schema.py: the fields only
     gene_symbol: str = source_field("Gene", term=GENE_SYMBOL)
     gene_accession: str | None = source_field("gene_id", term=GENE_ACCESSION)
     log2_fold_change: float = source_field("logFC", term=LOG2_FOLD_CHANGE)
     adjusted_p_value: float = source_field("FDR", term=ADJUSTED_P_VALUE)
-    cluster: str  # binds study_b/cluster by its own name
+    cluster: str  # binds study_b.csv#study_b/cluster by its own name
 ```
+
+The package and class names follow the table IDs. Both are yours: rename a directory or class, and the imports in its `__init__.py` and `loader.py`, when a shorter name reads better. This example keeps them as generated.
 
 A document's `Facts` schema gets the fields you transcribe:
 
 ```python
 # graph/sources/data/methods_txt/schema.py: the fields added under the generated ClassVars
-    study: str  # the record set the statement is about
+    study: str  # the study the statement is about: study_a or study_b
     case_group: str
     reference_group: str
 ```
 
-## Locating a described file
+## Loaders, tables and documents
 
-Evidence cites a file and a pinned version. Both come from the manifest's FileObject, so one helper beside the loaders serves every source of the manifest:
+The generated `load` passes `SOURCE.path()`, the file's path as the manifest names it, to `_read`. Only `_read` is written, and the placeholder line is deleted. Evidence cites the file and the digest of the bytes read; one helper beside the loaders serves every source of the manifest:
 
 ```python
 # graph/sources/data/_files.py
-def described_file(source: SourceContract, file_id: str) -> tuple[Path, str, str]:
-    """Return the path, "sha256:<digest>" and project-relative name of one FileObject.
+import hashlib
+from pathlib import Path
 
-    Baker writes contentUrl relative to the directory it scanned (data/ for
-    .biotope/datasets/data.jsonld); FileObjects that `biotope add` appends for files
-    Baker cannot parse are relative to the project root. Changed content is refused.
-    """
-    manifest = cast(dict[str, Any], json.loads(source.metadata.read_text(encoding="utf-8")))
-    entry = next(item for item in cast(list[dict[str, Any]], manifest["distribution"]) if item["@id"] == file_id)
-    scanned = PROJECT_ROOT / source.metadata.resolve().relative_to(PROJECT_ROOT / ".biotope/datasets").with_suffix("")
-    url = str(entry["contentUrl"])
-    path = next((base / url for base in (scanned, PROJECT_ROOT) if (base / url).is_file()), scanned / url)
-    actual = hashlib.sha256(path.read_bytes()).hexdigest()
-    if actual != entry["sha256"]:
-        raise ValueError(f"{path}: content differs from the described sha256; review the manifest first")
-    return path, "sha256:" + actual, path.relative_to(PROJECT_ROOT).as_posix()
+from ...paths import PROJECT_ROOT
+
+
+def cited(path: Path) -> tuple[str, str]:
+    """Return the project-relative name and "sha256:<digest>" of the bytes a loader reads."""
+    return path.relative_to(PROJECT_ROOT).as_posix(), "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 ```
 
 Modules in a root, and directories without a `schema.py`, are helpers: inventory collection ignores them.
 
-## Loaders, tables and documents
-
-The generated loader keeps its two functions; only `_read` is written, and the placeholder line is deleted:
-
 ```python
-# graph/sources/data/study_a/loader.py
+# graph/sources/data/study_a_csv_study_a/loader.py (imports omitted)
 def _optional(raw: str) -> str | None:
-    return None if raw.strip().lower() in StudyA.__missing_values__ else raw
+    return None if raw.strip().lower() in StudyACsvStudyA.__missing_values__ else raw
 
 
-def _read(config: None) -> Iterator[SourceRecord[StudyA]]:
+def _read(path: Path) -> Iterator[SourceRecord[StudyACsvStudyA]]:
     """Yield one record per row; missing tokens become None, nothing is filtered."""
-    path, version, artifact = described_file(SOURCE, "file_0")
+    artifact, version = cited(path)
     with path.open(newline="", encoding="utf-8") as stream:
         for line, row in enumerate(csv.DictReader(stream), start=2):
             padj = _optional(row["padj"])
-            record = StudyA(
+            record = StudyACsvStudyA(
                 gene_symbol=row["gene"],
                 gene_accession=_optional(row["ensembl_id"]),
                 log2_fold_change=float(row["log2fc"]),
                 adjusted_p_value=None if padj is None else float(padj),
             )
-            yield SourceRecord(record, (Evidence(artifact, version, StudyA.__record_set__, f"line {line}"),))
+            yield SourceRecord(record, (Evidence(artifact, version, StudyACsvStudyA.__record_set__, f"line {line}"),))
 
 
-def load(context: RunContext) -> Iterator[SourceRecord[StudyA]]:
-    yield from context.load(SOURCE, _read, None)
+def load(context: RunContext) -> Iterator[SourceRecord[StudyACsvStudyA]]:
+    yield from context.load(SOURCE, _read, SOURCE.path())
 ```
 
-A document's loader returns the facts you transcribed after reading the file, each with the location it came from:
+`study_b`'s loader has the same shape. A document's loader returns the facts you transcribed after reading the file, each with the location it came from:
 
 ```python
 # graph/sources/data/methods_txt/loader.py: _read; load() is as generated
 TRANSCRIBED = (
-    (Facts(study="study_a", case_group="atrial fibrillation (AF)", reference_group="sinus rhythm (SR)"), "paragraph 2"),
-    (Facts(study="study_b", case_group="atrial fibrillation (AF)", reference_group="sinus rhythm (SR)"), "paragraph 3"),
+    (Facts(study="study_a", case_group="atrial fibrillation (AF)", reference_group="sinus rhythm (SR)"), "paragraph 3"),
+    (Facts(study="study_b", case_group="atrial fibrillation (AF)", reference_group="sinus rhythm (SR)"), "paragraph 4"),
 )
 
 
-def _read(config: None) -> Iterator[SourceRecord[Facts]]:
-    _, version, artifact = described_file(SOURCE, Facts.__file_object__)
+def _read(path: Path) -> Iterator[SourceRecord[Facts]]:
+    """Yield the reviewed facts transcribed from this file."""
+    artifact, version = cited(path)
     for facts, location in TRANSCRIBED:
         yield SourceRecord(facts, (Evidence(artifact, version, Facts.__record_set__, location),))
 ```
 
 ## Topology
 
+Each node has a folder named after its class in snake_case, with the node in `node.py`; each edge has its own file in its source node's folder, named after its class. `graph check` enforces this layout.
+
+```text
+graph/topology/
+  __init__.py                   TOPOLOGY
+  gene/node.py                  Gene
+  result/node.py                Result
+  result/result_reports_gene.py ResultReportsGene, from a result to a gene
+```
+
 ```python
-# graph/topology/gene/__init__.py
+# graph/topology/gene/node.py
 GeneId = NewType("GeneId", str)
 
 
@@ -183,8 +215,8 @@ class Gene:
     """A gene as the sources identify it; no identity is inferred from a matching symbol.
 
     `ensembl:<accession>` when a source supplied the accession, shared by every source
-    that did. `symbol:<source>/<symbol>` when a source gave only a symbol: it stays
-    local to that source, so one gene can appear under several ids.
+    that did. `symbol:<study>/<symbol>` when a source gave only a symbol: it stays
+    local to that study, so one gene can appear under several ids.
     """
 
     schema_id: ClassVar[str] = "af:gene"
@@ -196,7 +228,7 @@ class Gene:
 ```
 
 ```python
-# graph/topology/result/__init__.py
+# graph/topology/result/node.py
 ResultId = NewType("ResultId", str)
 
 
@@ -209,7 +241,7 @@ class Result:
 
     schema_id: ClassVar[str] = "af:result"
     id: ResultId
-    study: str = field(metadata={"description": "The record set that reported the result: study_a or study_b."})
+    study: str = field(metadata={"description": "The study that reported the result: study_a or study_b."})
     log2_fold_change: float = field(
         metadata={"description": "Log2 fold change, case group over reference group, as the study reports it."}
     )
@@ -218,6 +250,12 @@ class Result:
     )
     case_group: str = field(metadata={"description": "The group the fold change is for, from methods.txt."})
     reference_group: str = field(metadata={"description": "The group the fold change is against, from methods.txt."})
+```
+
+```python
+# graph/topology/result/result_reports_gene.py
+from ..gene.node import GeneId
+from .node import ResultId
 
 
 @dataclass(frozen=True)
@@ -229,7 +267,7 @@ class ResultReportsGene:
     target: GeneId
 ```
 
-`graph/topology/__init__.py` registers them: `TOPOLOGY = Topology(nodes=(Gene, Result), edges=(ResultReportsGene,))`.
+`graph/topology/__init__.py` imports the three classes from their files and registers them: `TOPOLOGY = Topology(nodes=(Gene, Result), edges=(ResultReportsGene,))`.
 
 ## Alignment
 
@@ -246,13 +284,19 @@ class GeneIdentity:
     symbols: tuple[str, ...]
 
 
-def gene_key(row: StudyA | StudyB) -> str:
+def study(row: StudyACsvStudyA | StudyBCsvStudyB) -> str:
+    return "study_a" if isinstance(row, StudyACsvStudyA) else "study_b"
+
+
+def gene_key(row: StudyACsvStudyA | StudyBCsvStudyB) -> str:
     if row.gene_accession:
         return f"ensembl:{row.gene_accession}"
-    return f"symbol:{type(row).__record_set__}/{row.gene_symbol}"
+    return f"symbol:{study(row)}/{row.gene_symbol}"
 
 
-def resolve_genes(rows: list[SourceRecord[StudyA] | SourceRecord[StudyB]]) -> dict[str, SourceRecord[GeneIdentity]]:
+def resolve_genes(
+    rows: list[SourceRecord[StudyACsvStudyA] | SourceRecord[StudyBCsvStudyB]],
+) -> dict[str, SourceRecord[GeneIdentity]]:
     symbols: dict[str, set[str]] = {}
     evidence: dict[str, set[Evidence]] = {}
     for row in rows:
@@ -267,7 +311,7 @@ def resolve_genes(rows: list[SourceRecord[StudyA] | SourceRecord[StudyB]]) -> di
     return identities
 ```
 
-Because both schemas name their fields after the shared terms, `row.gene_accession` reads either study without a branch.
+Because both schemas name their fields after the shared terms, `row.gene_accession` reads either study without a branch. Graph IDs name the study, not the table ID, so they stay short and readable.
 
 ## Mappings
 
@@ -279,19 +323,21 @@ def make_gene(identity: SourceRecord[GeneIdentity]) -> Iterator[Gene]:
 
 
 def make_result(
-    row: SourceRecord[StudyA | StudyB], gene: SourceRecord[GeneIdentity], facts: SourceRecord[Facts]
+    row: SourceRecord[StudyACsvStudyA | StudyBCsvStudyB],
+    gene: SourceRecord[GeneIdentity],
+    facts: SourceRecord[Facts],
 ) -> Iterator[Result | ResultReportsGene]:
     """Both schemas bind the same terms, so one mapping reads either study's rows."""
     value = row.value
     if value.adjusted_p_value is None:
         raise ValueError(f"{row.evidence[0]}: compose excludes untested rows before this mapping")
-    study = type(value).__record_set__
+    name = study(value)
     # A natural key: a second row with the same key and other values fails the build.
-    group = f"{value.cluster}/" if isinstance(value, StudyB) else ""
-    result_id = ResultId(f"result:{study}/{group}{gene.value.gene_id}")
+    group = f"{value.cluster}/" if isinstance(value, StudyBCsvStudyB) else ""
+    result_id = ResultId(f"result:{name}/{group}{gene.value.gene_id}")
     yield Result(
         id=result_id,
-        study=study,
+        study=name,
         log2_fold_change=value.log2_fold_change,
         adjusted_p_value=value.adjusted_p_value,
         case_group=facts.value.case_group,
@@ -317,7 +363,10 @@ RESULTS = Mapping(
 # graph/pipelines/compose.py
 def run(context: RunContext) -> None:
     facts = {record.value.study: record for record in load_methods(context)}
-    rows: list[SourceRecord[StudyA] | SourceRecord[StudyB]] = [*load_study_a(context), *load_study_b(context)]
+    rows: list[SourceRecord[StudyACsvStudyA] | SourceRecord[StudyBCsvStudyB]] = [
+        *load_study_a(context),
+        *load_study_b(context),
+    ]
     # Identity comes before admission: every row contributes evidence, admitted or not.
     genes = resolve_genes(rows)
     reported: set[str] = set()
@@ -329,12 +378,12 @@ def run(context: RunContext) -> None:
         admitted += 1
         key = gene_key(row.value)
         reported.add(key)
-        context.map(RESULTS, row, genes[key], facts[type(row.value).__record_set__])
+        context.map(RESULTS, row, genes[key], facts[study(row.value)])
     for key in sorted(reported):
         context.map(GENES, genes[key])
     context.record_audit(
         "results",
-        inputs="every row of study_a and study_b",
+        inputs="every row of study_a.csv and study_b.csv",
         outputs="one Result and one ResultReportsGene per tested row; one Gene per identity they report",
         selection="Admit every row with an adjusted p-value; significance is a query filter.",
         counts={"rows": len(rows), "admitted": admitted, "genes": len(reported)},
@@ -361,14 +410,17 @@ In `graph/pipelines/build_graph.py`, only these scaffolded fields change:
 
 - `biotope graph check --json`: state `checked`, no findings.
 - `biotope graph build`: 4 genes, 6 results and 6 edges, and `Excluded 1: untested_gene`. `NPPA` and `MYH6` are one gene each, because both studies supply their accessions.
-- `run.json`, `definitions.standardization`: `adjusted_p_value` is bound to `study_a/padj` and `study_b/FDR`, and so on for each term. `cluster` is listed as a preserved field.
+- `run.json`, `definitions.standardization`: `adjusted_p_value` is bound to `study_a.csv#study_a/padj` and `study_b.csv#study_b/FDR`, and so on for each term. `cluster` and the three transcribed facts are listed as preserved fields.
+- `biotope status`: `Current   data`.
+
+When new rows arrive in `study_a.csv`, `biotope add --rebake data` and `biotope source generate .biotope/datasets/data.jsonld --out graph/sources` are the whole refresh: every ID, schema, loader and annotation stays.
 
 ## Strict typing patterns
 
 The check runs Pyright in strict mode over the whole workspace. These patterns pass it:
 
 - Annotate empty containers: `symbols: dict[str, set[str]] = {}`, and `field(default_factory=dict[str, set[str]])` in a dataclass.
-- `json.loads` returns `Any`: `cast` it once, where the manifest is read.
-- `SourceRecord` is covariant: a `list[SourceRecord[StudyA] | SourceRecord[StudyB]]` element passes to a parameter annotated `SourceRecord[StudyA | StudyB]`.
+- `json.loads` returns `Any`: `cast` it once, where a file is read.
+- `SourceRecord` is covariant: a `list[SourceRecord[StudyACsvStudyA] | SourceRecord[StudyBCsvStudyB]]` element passes to a parameter annotated `SourceRecord[StudyACsvStudyA | StudyBCsvStudyB]`.
 - Intermediate and source records may hold `str`, `int`, `float`, `bool`, `None`, a `NewType`, `list[...]`, `tuple[...]` or a dataclass; `graph check` rejects anything else. Graph properties are narrower: nullable scalars and lists of strings.
 - A loader built on pandas meets untyped APIs. Keep them inside one typed function, rather than spreading casts through the loaders.
