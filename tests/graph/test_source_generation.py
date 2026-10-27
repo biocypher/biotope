@@ -582,3 +582,16 @@ def test_a_package_that_cannot_serve_its_target_is_a_conflict(project, change, d
     change(project, manifest)
     conflicts = plan_sources(manifest, project.sources).conflicts
     assert [(status.package, status.detail) for status in conflicts] == [("rows", detail)]
+
+
+def test_a_table_read_from_a_file_set_gets_a_loader_that_reads_no_single_path(project):
+    table = record_set("parts#events", "a", file="parts")
+    for field in table["field"]:
+        field["source"]["fileSet"] = field["source"].pop("fileObject")
+    parts = {"@id": "parts", "@type": "cr:FileSet", "encodingFormat": "text/csv", "includes": "parts/*.csv"}
+    single = record_set("one.csv#one", "a", file="one.csv")
+    manifest = project.manifest("study", [table, single], [parts, file_object("one.csv", "one.csv")])
+    project.generate(manifest)
+    loaders = {path.parent.name: path.read_text() for path in project.sources.glob("study/*/loader.py")}
+    assert "SOURCE.path()" not in loaders["parts_events"]
+    assert "SOURCE.path()" in loaders["one_csv_one"]

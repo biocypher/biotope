@@ -43,7 +43,7 @@ Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and m
 
 ## Import the contracts from `biotope.graph`
 
-- `SourceContract(name, metadata, schema, records)` links a manifest, the source's schema module and its record classes. Generation writes it; keep the registration as generated, apart from its import when you rename the record class. `SOURCE.path()` returns the one file the source reads, as the manifest names it now, so a loader keeps working after `biotope mv`. A table read from a file set has no single file: there `SOURCE.path()` raises, and the loader finds the set's files itself.
+- `SourceContract(name, metadata, schema, records)` links a manifest, the source's schema module and its record classes. Generation writes it; keep the registration as generated, apart from its import when you rename the record class. `SOURCE.path()` returns the one file the source reads, as the manifest names it now, so a loader keeps working after `biotope mv`. A table read from a file set has no single file: there `SOURCE.path()` raises, so the generated loader passes no path and finds the set's files itself.
 - `Evidence(artifact, version, record_set, location)` identifies a contributor. `SourceRecord(value, evidence)` carries a typed value and its references.
 - `Loader[Config, Row]` takes one argument and yields source records; the generated loader's `_read(path)` takes the file path that `load` passes from `SOURCE.path()`. Implement it beside the schema with an established parsing library; Biotope ships no source-format readers.
 - `Term(standard_name, description, values=None)` and `source_field(...)` bind source fields to shared meanings.

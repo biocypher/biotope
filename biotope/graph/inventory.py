@@ -42,6 +42,7 @@ from biotope.graph.sources import (
     objects,
     read_metadata,
     slug,
+    walk_fields,
     write_text_atomic,
 )
 from biotope.graph.targets import Target, declared_identities, manifest_targets, unidentified_files
@@ -273,10 +274,17 @@ def _occupied(root: Path) -> tuple[set[str], set[str]]:
     return occupied | ROOT_MODULE_NAMES, reusable
 
 
-def _package_files(metadata: Path, root: Path, directory: Path, kind: Kind, class_name: str) -> dict[str, str]:
+def _package_files(metadata: Path, root: Path, directory: Path, target: Target, class_name: str) -> dict[str, str]:
+    one_file = target.kind == "fileObject" or (
+        target.kind == "recordSet"
+        and not any(
+            isinstance(source := node.item.get("source"), dict) and "fileSet" in source
+            for node in walk_fields(target.entry, target.identity)
+        )
+    )
     return {
         "__init__.py": render_package(metadata, directory, f"{root.name}/{directory.name}", class_name),
-        "loader.py": render_loader(kind, class_name),
+        "loader.py": render_loader(target.kind, class_name, one_file=one_file),
     }
 
 
@@ -300,7 +308,7 @@ def _reconcile_existing(plan: SourcePlan, target: Target, package: Package) -> t
             detail = "cannot complete the package: no class declares its identity"
             return _conflict(package.schema, detail, package.name, target.identity), {}
         missing = _missing(
-            package.path, _package_files(plan.metadata, plan.root, package.path, target.kind, declaration.class_name)
+            package.path, _package_files(plan.metadata, plan.root, package.path, target, declaration.class_name)
         )
     drifted = declaration.revision != target.revision
     status = PackageStatus(
@@ -322,7 +330,7 @@ def _scaffold(plan: SourcePlan, target: Target, directory: Path) -> tuple[Packag
     class_name = new_class_name(target, directory.name)
     files = {
         "schema.py": render_schema(target, class_name),
-        **_package_files(plan.metadata, plan.root, directory, target.kind, class_name),
+        **_package_files(plan.metadata, plan.root, directory, target, class_name),
     }
     if not directory.is_dir():
         return PackageStatus(
