@@ -31,8 +31,8 @@ infer biological equivalence or decide which records answer a research question.
 
 `biotope add` reads local files and stores Croissant descriptions under
 `.biotope/datasets/`. What people know about a dataset lives in its annotation
-file next to the data, which commands write only when asked and never overwrite. A
-description is the data, as croissant-baker describes it, with the annotation file
+file next to the data, which biotope never regenerates: commands write into it only
+the values you give. A description is the data, as croissant-baker describes it, with the annotation file
 over it, so a rebake always succeeds and keeps every annotation. Files and tables
 take their IDs from their paths in the dataset, so new data of the same shape keeps
 every ID. See [project layout](project.md).

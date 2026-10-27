@@ -76,8 +76,9 @@ existing schema, registration or loader; only `biotope mv` changes them. The
 generated inventory collects every package; in `graph/sources/__init__.py`, select
 each source or list it in `EXCLUDED_SOURCES` with a reason. `biotope graph check`
 reports a source that is neither, a selected placeholder loader and a described
-input without a package. See [generation details](mapping_sidenotes.md#source-generation)
-for naming, ownership, conflicts and removed sources.
+input without a package. See
+[generation details](mapping_sidenotes.md#source-generation) for naming,
+ownership, conflicts and removed sources.
 
 Each schema starts from the description: known scalar, nested and repeated types
 become Python declarations, fields are nullable unless curated metadata asserts

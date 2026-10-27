@@ -192,10 +192,10 @@ source inventory and exclusions, audits, completion and output locations.
 `dependencies` holds the installed version of biotope, croissant-baker and pyright,
 of every distribution `graph/pyproject.toml` declares, of every distribution the
 graph code imports, and of BioCypher when it writes the export, with editable/VCS
-details when available.
-`graph/pyproject.toml` is the one place to declare them; `Pipeline` has no
-`dependencies` field. Biotope's Python source digest identifies local edits that a package
-version cannot. Unspecified variability is reported as unreviewed. `graph_digest`
+details when available. `graph/pyproject.toml` is the one place to declare them;
+`Pipeline` has no `dependencies` field. Biotope's Python source digest identifies
+local edits that a package version cannot. Unspecified variability is reported as
+unreviewed. `graph_digest`
 compares graph content across runs without timestamps or paths. Reproducibility
 still depends on the project's external state and code policies.
 

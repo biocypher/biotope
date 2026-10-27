@@ -61,11 +61,12 @@ this workspace with the project. `.gitignore` here keeps `build/` and
    biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
    ```
 
-   Each RecordSet, and each file no RecordSet reads, gets a package named after
-   its ID, such as `push_people_csv_people` for `push/people.csv#people`.
-   Generation creates missing files only; it never rewrites a schema,
-   registration or loader, and only `biotope mv` updates the IDs in them. It
-   records every contract revision in `.biotope/contracts/`.
+   Each RecordSet, and each file no RecordSet reads, gets a package, such as
+   `push_people_csv_people` for the table `push/people.csv#people` and
+   `report_html` for the document `docs/report.html`. Generation creates missing
+   files only; it never rewrites a schema, registration or loader, and only
+   `biotope mv` updates the IDs in them. It records every contract revision in
+   `.biotope/contracts/`.
 
 1. Select sources in `sources/__init__.py`. A source that is not used goes into
    `EXCLUDED_SOURCES` with a reason; every inventoried source is one or the other.

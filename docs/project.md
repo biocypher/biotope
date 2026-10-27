@@ -46,6 +46,41 @@ __pycache__/
 a `/data/` rule with `/data/**` and add the three exceptions: git cannot re-include
 a file inside an ignored folder, so the exceptions do not work under `/data/`.
 
+## The graph workspace
+
+`biotope graph scaffold` creates `graph/`; its `README.md` describes the layout.
+Three parts of it follow fixed rules:
+
+- **Topology.** Each node has a folder under `graph/topology/`, named after its
+  class in snake_case, with the class in `node.py`. Each edge has its own file in
+  the folder of its source node, the node whose ID type its `source` field uses,
+  named after the edge class in snake_case:
+
+  ```text
+  graph/topology/
+    __init__.py            TOPOLOGY registers every node and edge
+    person/node.py         Person
+    sample/node.py         Sample
+    sample/from_person.py  FromPerson, from a sample to a person
+  ```
+
+  `biotope graph check` fails with `topology.layout`, naming the class and the file
+  it belongs in, when a node or edge sits elsewhere. Other modules there, such as
+  helpers and shared types, are free. The export reserves the property names
+  `preferred_id` and `biotope_provenance_id`, and `graph check` reports either as
+  `topology.reserved` before any build.
+
+- **Extraction schemas** live in `graph/extraction/<kind>.py`. The scaffold lists
+  `extraction` in the pipeline's `code_paths`, so `graph check` type-checks them
+  and `run.json` records them with the rest of the graph code. Write them after
+  `graph scaffold`, which refuses an existing `graph/`.
+
+- **Dependencies.** `graph/pyproject.toml` declares the libraries the graph code
+  uses. `graph check` warns about an undeclared import, and a build's `run.json`
+  records the installed version of every declared distribution, every distribution
+  the graph code imports, biotope, croissant-baker and pyright, and BioCypher when
+  it writes the export.
+
 ## Git belongs to the project
 
 Biotope does not presume or require git, and it never writes to git: no command
