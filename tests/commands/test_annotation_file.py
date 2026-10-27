@@ -302,3 +302,24 @@ def test_every_command_writes_the_description_in_utf_8(fresh):
     ok("rm", "-f", "data/study/push/other.csv")
     ok("mv", "-r", "data/study", "data/sets/study")
     assert "Données" in (fresh / ".biotope/datasets/data/sets/study.jsonld").read_text(encoding="utf-8")
+
+
+def test_files_whose_names_differ_only_in_extension_and_a_folder_of_their_stem_keep_their_own_descriptions(fresh):
+    (fresh / "data/results.csv").write_text("id,score\n1,0.5\n")
+    (fresh / "data/results.tsv").write_text("id\tlabel\n1\tgood\n")
+    (fresh / "data/results").mkdir()
+    (fresh / "data/results/notes.csv").write_text("id,note\n1,ok\n")
+
+    ok("add", "data/results.csv", "--description", "Scores.")
+    ok("add", "data/results.tsv", "--description", "Labels.")
+    ok("add", "data/results", "--description", "Notes.")
+
+    descriptions = {
+        name: described(fresh, f".biotope/datasets/data/{name}")["description"]
+        for name in ("results.csv.jsonld", "results.tsv.jsonld", "results.jsonld")
+    }
+    assert descriptions == {
+        "results.csv.jsonld": "Scores.",
+        "results.tsv.jsonld": "Labels.",
+        "results.jsonld": "Notes.",
+    }
