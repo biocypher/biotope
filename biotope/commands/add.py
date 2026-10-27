@@ -8,15 +8,16 @@ import shutil
 from collections import defaultdict
 from datetime import datetime, timezone
 from glob import escape as escape_glob
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import click
 
 from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
-from biotope.croissant.ids import MOVED_FROM, case_clashes, note_moves, stable_ids
+from biotope.croissant.ids import MOVED_FROM, case_clashes, file_id, note_moves, stable_ids
 from biotope.extraction.run import state_path
+from biotope.graph.inventory import declared_files
 from biotope.graph.moves import carry_description, kept, package_files
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import (
@@ -235,7 +236,8 @@ def add_file(
     if previous is not None:
         described = _read_description(previous)
         note_moves(described, metadata)
-        _note_relocation(described, metadata, dataset_id(previous, biotope_root), relative_path.as_posix())
+        declared = declared_files(biotope_root / "graph/sources", previous)
+        _note_relocation(described, metadata, dataset_id(previous, biotope_root), relative_path.as_posix(), declared)
     if previous in (None, manifest):
         _describe(abs_file, manifest, metadata, given, reporter)
     else:
@@ -243,11 +245,16 @@ def add_file(
     return True
 
 
-def _note_relocation(previous: dict[str, Any], baked: dict[str, Any], old: str, new: str) -> None:
+def _note_relocation(previous: dict[str, Any], baked: dict[str, Any], old: str, new: str, declared: set[str]) -> None:
     origin = previous.get(MOVED_FROM)
-    origin = origin if isinstance(origin, str) else old
+    if not isinstance(origin, str) or (_file(old) in declared and _file(origin) != _file(old)):
+        origin = old
     if origin != new:
         baked[MOVED_FROM] = origin
+
+
+def _file(path: str) -> str:
+    return file_id(PurePosixPath(path).name)
 
 
 def _gone_copy(data: Path, biotope_root: Path) -> Path | None:

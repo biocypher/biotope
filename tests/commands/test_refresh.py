@@ -355,6 +355,49 @@ def test_a_file_moved_outside_biotope_twice_is_named_at_its_last_path_to_every_p
     assert built(single) == ({"data/raw/members.csv", "data/study/docs/report.html"}, 2)
 
 
+def keep_the_new_id(root, moved):
+    shutil.rmtree(root / "graph/sources/people_csv/staff_csv_staff")
+    schema = root / "graph/sources/people_csv/people_csv_people/schema.py"
+    schema.write_text(schema.read_text().replace('"people.csv#people', '"staff.csv#staff'))
+    ok("source", "generate", f".biotope/datasets/{moved}.jsonld", "--out", "graph/sources")
+    acknowledge(root, f".biotope/datasets/{moved}.jsonld")
+    assert built(root) == ({moved, "data/study/docs/report.html"}, 2)
+
+
+@pytest.mark.parametrize("destination", ["data/current/people.csv", "data/raw/people.csv"])
+def test_biotope_mv_of_a_single_file_kept_under_the_id_it_got_outside_biotope_passes_the_check(single, destination):
+    shutil.move(single / "data/raw/people.csv", single / "data/raw/staff.csv")
+    refresh("data/raw/staff.csv")
+    keep_the_new_id(single, "data/raw/staff.csv")
+
+    ok("mv", "data/raw/staff.csv", destination)
+
+    ok("graph", "check")
+    refresh(destination)
+    assert built(single) == ({destination, "data/study/docs/report.html"}, 2)
+
+
+def test_a_single_file_kept_under_the_id_it_got_outside_biotope_and_moved_outside_again_fails_the_check(single):
+    for folder in ("current", "archive"):
+        (single / "data" / folder).mkdir()
+    shutil.move(single / "data/raw/people.csv", single / "data/current/staff.csv")
+    refresh("data/current/staff.csv")
+    keep_the_new_id(single, "data/current/staff.csv")
+    shutil.move(single / "data/current/staff.csv", single / "data/archive/staff.csv")
+
+    refresh("data/archive/staff.csv")
+
+    result = invoke("graph", "check", "--json")
+    assert result.exit_code != 0
+    named = ("'staff.csv#staff'", "'data/current/staff.csv'", "'data/archive/staff.csv'")
+    assert any(all(name in finding["message"] for name in named) for finding in findings(result)), findings(result)
+    shutil.move(single / "data/archive/staff.csv", single / "data/current/staff.csv")
+    ok("add", "--rebake", "data/current/staff.csv")
+    ok("mv", "data/current/staff.csv", "data/archive/staff.csv")
+    refresh("data/archive/staff.csv")
+    assert built(single) == ({"data/archive/staff.csv", "data/study/docs/report.html"}, 2)
+
+
 @pytest.mark.parametrize(("failure", "message"), [("annotation", "people.csv.biotope.yaml"), ("disk", "disk full")])
 def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, failure, message):
     annotation = single / "data/raw/people.csv.biotope.yaml"
@@ -387,8 +430,8 @@ def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, fa
     assert (single / "data/current/staff.csv.biotope.yaml").read_text() == valid
 
 
-def acknowledge(root):
-    for status in plan_sources(root / MANIFEST, root / "graph/sources").statuses:
+def acknowledge(root, manifest=MANIFEST):
+    for status in plan_sources(root / manifest, root / "graph/sources").statuses:
         if status.state == "drift":
             schema = status.path / "schema.py"
             schema.write_text(schema.read_text().replace(status.acknowledged, status.revision))

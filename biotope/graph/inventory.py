@@ -436,6 +436,16 @@ def _placeholder(package: Path) -> bool:
     return not loader.exists() or is_placeholder(loader)
 
 
+def declared_files(sources: Path, metadata: Path) -> set[str]:
+    return {
+        package.declaration.identity.split("#", 1)[0]
+        for root in discover_roots(sources)
+        if root.metadata == metadata.resolve()
+        for package in discover_packages(root.path)
+        if package.declaration.identity is not None and not _placeholder(package.path)
+    }
+
+
 def plan_sources(metadata: Path, output: Path, package: str | None = None) -> SourcePlan:
     """Reconcile one manifest with its root without writing anything."""
     root = root_directory(metadata, output, package)

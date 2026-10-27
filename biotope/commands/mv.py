@@ -206,6 +206,7 @@ def _plan(
         mapping |= ids
         distribution["contentUrl"] = moved_url
         distribution.pop(MOVED_FROM, None)
+        metadata.pop(MOVED_FROM, None)
     if staying:
         _check_file_sets(manifest, metadata, base, moves, biotope_root)
         if not mapping:
