@@ -212,6 +212,10 @@ def moved_ids(metadata: dict[str, Any], old_id: str, new_relative: str) -> dict[
     return mapping
 
 
+def moved_from(entry: dict[str, Any]) -> list[str]:
+    return _named(entry.get(MOVED_FROM))
+
+
 def note_moves(previous: dict[str, Any], current: dict[str, Any]) -> None:
     files = [entry for entry in current.get("distribution") or [] if is_kind(entry, "FileObject")]
     before = {entry.get("@id"): entry for entry in previous.get("distribution") or [] if is_kind(entry, "FileObject")}
@@ -225,4 +229,6 @@ def note_moves(previous: dict[str, Any], current: dict[str, Any]) -> None:
         if old is not None and MOVED_FROM in old:
             entry[MOVED_FROM] = old[MOVED_FROM]
         elif old is None and len(gone.get(entry.get("sha256"), [])) == 1:
-            entry[MOVED_FROM] = gone[entry["sha256"]][0]
+            [identity] = gone[entry["sha256"]]
+            origins = dict.fromkeys([*moved_from(before[identity]), identity])
+            entry[MOVED_FROM] = [origin for origin in origins if origin != entry.get("@id")]

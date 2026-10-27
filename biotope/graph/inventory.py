@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from biotope.croissant.ids import MOVED_FROM
+from biotope.croissant.ids import moved_from
 from biotope.graph.discovery import (
     Package,
     discover_packages,
@@ -371,9 +371,10 @@ def _orphans(plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package]) 
 
 def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str, owned: dict[str, Package]) -> str:
     moves = {
-        entry[MOVED_FROM]: entry["@id"]
+        old: entry["@id"]
         for entry in objects(data.get("distribution", []), "/distribution")
-        if isinstance(entry.get(MOVED_FROM), str) and isinstance(entry.get("@id"), str)
+        if isinstance(entry.get("@id"), str)
+        for old in moved_from(entry)
     }
     old = identity.split("#", 1)[0]
     if old not in moves:

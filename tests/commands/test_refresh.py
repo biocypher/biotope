@@ -239,6 +239,31 @@ def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_
     assert built(single) == ({moved, "data/study/docs/report.html"}, 2)
 
 
+def test_a_file_moved_outside_biotope_twice_is_named_at_its_last_path_to_every_package_it_left(single):
+    raw = single / "data/raw"
+    shutil.move(raw / "people.csv", raw / "staff.csv")
+    refresh("data/raw/staff.csv")
+    shutil.move(raw / "staff.csv", raw / "members.csv")
+    refresh("data/raw/members.csv")
+
+    result = invoke("graph", "check", "--json")
+
+    assert result.exit_code != 0
+    for old in ("'people.csv#people'", "'staff.csv#staff'"):
+        assert any(
+            old in finding["message"] and "'members.csv#members'" in finding["message"]
+            for finding in findings(result)
+            if finding["code"] == "inventory.orphan"
+        ), findings(result)
+    shutil.move(raw / "members.csv", raw / "people.csv")
+    ok("add", "--rebake", "data/raw/people.csv")
+    ok("mv", "data/raw/people.csv", "data/raw/members.csv")
+    for package in ("staff_csv_staff", "members_csv_members"):
+        shutil.rmtree(single / "graph/sources/people_csv" / package)
+    refresh("data/raw/members.csv")
+    assert built(single) == ({"data/raw/members.csv", "data/study/docs/report.html"}, 2)
+
+
 @pytest.mark.parametrize(("failure", "message"), [("annotation", "people.csv.biotope.yaml"), ("disk", "disk full")])
 def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, failure, message):
     annotation = single / "data/raw/people.csv.biotope.yaml"
