@@ -393,6 +393,23 @@ def acknowledge(root):
             schema.write_text(schema.read_text().replace(status.acknowledged, status.revision))
 
 
+def test_an_identical_copy_whose_path_differs_only_in_case_fails_the_refresh_naming_both(project):
+    push = project / "data/study/push"
+    before = snapshot(project)
+    both = not (push / "PEOPLE.csv").exists()
+    (push / "PEOPLE.csv").write_bytes((push / "people.csv").read_bytes())
+
+    result = invoke("add", "--rebake", "data/study")
+
+    if both:
+        assert result.exit_code != 0
+        assert "the paths push/PEOPLE.csv and push/people.csv differ only in case" in " ".join(result.output.split())
+        (push / "PEOPLE.csv").unlink()
+        assert snapshot(project) == before
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def test_new_data_of_the_same_shape_rebuilds_after_the_refresh_alone(project):
     study = project / "data/study"
     (study / "docs/about.html").write_text("<html><body>About the study</body></html>")

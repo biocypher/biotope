@@ -15,7 +15,7 @@ import click
 
 from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
-from biotope.croissant.ids import MOVED_FROM, note_moves, stable_ids
+from biotope.croissant.ids import MOVED_FROM, case_clashes, note_moves, stable_ids
 from biotope.extraction.run import state_path
 from biotope.graph.moves import carry_description, kept, package_files
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
@@ -396,6 +396,9 @@ def _bake_directory(
         for entry in _read_description(target.metadata_path).get("distribution") or []
         if entry.get("@type") == FILE_OBJECT_TYPE and isinstance(entry.get("contentUrl"), str)
     }
+    clashes = case_clashes(path.relative_to(abs_dir).as_posix() for path in files)
+    if clashes:
+        raise click.ClickException(f"{rel_dir}: cannot give every file and table a stable ID: {'; '.join(clashes)}")
     copies = _identical_copies(files, described)
     skipped = {path.relative_to(abs_dir) for path in [*copies, *records]}
     bake_error = None

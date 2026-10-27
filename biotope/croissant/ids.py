@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import quote
@@ -172,17 +172,23 @@ def stable_ids(metadata: dict[str, Any]) -> None:
     records.sort(key=lambda record: str(record.get("@id")))
 
 
+def case_clashes(paths: Iterable[str]) -> list[str]:
+    cases: defaultdict[str, set[str]] = defaultdict(set)
+    for path in paths:
+        cases[unicodedata.normalize("NFC", path).casefold()].add(path)
+    return [
+        f"the paths {' and '.join(sorted(found))} differ only in case" for found in cases.values() if len(found) > 1
+    ]
+
+
 def check_ids(metadata: dict[str, Any]) -> None:
     distribution: list[dict[str, Any]] = metadata.get("distribution") or []
     records: list[dict[str, Any]] = metadata.get("recordSet") or []
-    problems: list[str] = []
-    cases: defaultdict[str, set[str]] = defaultdict(set)
-    for entry in distribution:
-        if is_kind(entry, "FileObject") and isinstance(entry.get("contentUrl"), str):
-            cases[unicodedata.normalize("NFC", entry["contentUrl"]).casefold()].add(entry["contentUrl"])
-    problems += [
-        f"the paths {' and '.join(sorted(paths))} differ only in case" for paths in cases.values() if len(paths) > 1
-    ]
+    problems = case_clashes(
+        entry["contentUrl"]
+        for entry in distribution
+        if is_kind(entry, "FileObject") and isinstance(entry.get("contentUrl"), str)
+    )
     sets: defaultdict[str, list[str]] = defaultdict(list)
     for entry in distribution:
         if is_kind(entry, "FileSet"):

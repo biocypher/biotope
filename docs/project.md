@@ -256,9 +256,10 @@ cannot give every file and table a stable ID: the paths push/People.csv and push
 cannot give every file and table a stable ID: the file set name 'parts' is used 2 times, by the file sets of a/*.parquet and b/*.parquet; rename one
 ```
 
-Rename one of the files, or rename one file set in the annotation file by its
-include pattern, as in `file_sets: {a/*.parquet: a parts}`. No ID gets a suffix
-that depends on order or on other files.
+Rename or remove one of the files, even when the two hold the same bytes, or rename
+one file set in the annotation file by its include pattern, as in `file_sets:
+{a/*.parquet: a parts}`. No ID gets a suffix that depends on order or on other
+files.
 
 `biotope source generate` names packages and record classes after the IDs, with
 the percent-encoding undone: the table `push/people.csv#people` gets the package
