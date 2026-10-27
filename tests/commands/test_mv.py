@@ -11,8 +11,9 @@ from unittest import mock
 
 import click
 import pytest
+import yaml
 from click.testing import CliRunner
-from graph_project import built, invoke, refresh, snapshot
+from graph_project import MANIFEST, built, invoke, ok, refresh, snapshot
 
 from biotope.commands.mv import _resolve_destination_path, _validate_move_operation, mv
 
@@ -358,3 +359,33 @@ def test_mv_refuses_to_move_a_single_file_dataset_into_a_folder_dataset(single, 
     assert snapshot(single) == before
     refresh("data/study", "data/raw/people.csv")
     assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        ("data/extracted/profile.jsonl", "data/study/records/profile.jsonl"),
+        ("-r", "data/extracted", "data/study/records"),
+    ],
+)
+def test_mv_moves_records_into_a_folder_dataset_whose_bake_leaves_them_out(project, move):
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures/extraction"
+    shutil.copy(fixtures / "schemas.py", project / "graph/extraction/schemas.py")
+    (project / "src").mkdir()
+    shutil.copy(fixtures / "rules.py", project / "src/rules.py")
+    config = project / ".biotope/config.yaml"
+    settings = yaml.safe_load(config.read_text())
+    settings["extraction"] = {"extractor": "src/rules.py:LineExtractor", "version": "1", "line": 1}
+    config.write_text(yaml.safe_dump(settings, sort_keys=False))
+    schema = "graph/extraction/schemas.py:Profile"
+    ok("extract", "run", schema, "data/study")
+
+    ok("mv", *move)
+
+    refresh()
+    extracted = ok("extract", "run", schema, "data/study", "--out", "data/study/records/profile.jsonl", "--json")
+    assert {document["status"] for document in json.loads(extracted.stdout)["documents"]} == {"reused"}
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+    manifest = json.loads((project / MANIFEST).read_text())
+    identities = [entry["@id"] for entry in [*manifest["distribution"], *manifest["recordSet"]]]
+    assert [identity for identity in identities if "profile" in identity] == []

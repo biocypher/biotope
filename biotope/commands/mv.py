@@ -167,6 +167,8 @@ def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_r
 def _check_into(manifests: list[Path], source: Path, destination: Path, biotope_root: Path) -> None:
     data = {manifest: biotope_root / dataset_id(manifest, biotope_root) for manifest in manifests}
     for manifest, path in data.items():
+        if state_path(biotope_root, path).is_file():
+            continue
         carried = _follows(path, source, destination)
         for other, base in data.items():
             if other == manifest or not base.is_dir() or path.is_relative_to(base):
