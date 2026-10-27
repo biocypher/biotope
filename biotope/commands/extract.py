@@ -14,7 +14,7 @@ from rich.table import Table
 from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
-from biotope.commands.add import add_file, default_overrides, resolve_dataset_ref
+from biotope.commands.add import add_file, resolve_dataset_ref
 from biotope.croissant import annotation
 from biotope.croissant.ids import stem, table_id
 from biotope.extraction import ExtractionError, Extractor, Schema
@@ -333,7 +333,6 @@ def _register(
     root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
 ) -> None:
     overrides = {
-        **default_overrides(),
         "name": target.relative_to(root).as_posix(),
         "description": f"{schema.name} records extracted from {', '.join(dataset_ids)}. {schema.description}".strip(),
         "status_override": STATUS_PROCESSED,

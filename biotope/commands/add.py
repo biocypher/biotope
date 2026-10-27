@@ -146,7 +146,6 @@ def add(
             given[STATUS] = status_override
         if resolved_provenance:
             given[DERIVED_FROM] = resolved_provenance
-        overrides = default_overrides()
 
         datasets_dir = biotope_root / ".biotope" / "datasets"
         datasets_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +153,7 @@ def add(
         added_entries: list[Path] = []
         for path in paths:
             if path.is_file():
-                if add_file(path, biotope_root, datasets_dir, rebake, overrides, given=given, reporter=reporter):
+                if add_file(path, biotope_root, datasets_dir, rebake, given=given, reporter=reporter):
                     added_entries.append(path)
                 continue
 
@@ -164,7 +163,7 @@ def add(
                     path, f"{target.metadata_path.relative_to(biotope_root)} already exists; use --rebake to refresh."
                 )
                 continue
-            if _bake_directory(path, biotope_root, overrides, given=given, reporter=reporter) is not None:
+            if _bake_directory(path, biotope_root, given=given, reporter=reporter) is not None:
                 added_entries.append(path)
 
         for entry in added_entries:
@@ -186,7 +185,7 @@ def add_file(
     reporter: AddOutput | None = None,
 ) -> bool:
     """Add a single file to the biotope project."""
-    overrides = overrides or default_overrides()
+    overrides = overrides or {}
     reporter = reporter or AddOutput()
     reporter.root = biotope_root
     abs_file = file_path.resolve()
@@ -301,13 +300,11 @@ def _apply_dataset_metadata(metadata: dict[str, Any], defaults: dict[str, Any], 
 def _bake_directory(
     directory: Path,
     biotope_root: Path,
-    overrides: dict[str, Any] | None = None,
     *,
     given: dict[str, Any] | None = None,
     reporter: AddOutput | None = None,
 ) -> tuple[dict[str, Any], int] | None:
     """Run croissant-baker over ``directory`` and write one directory-level JSON-LD."""
-    overrides = overrides or default_overrides()
     reporter = reporter or AddOutput()
     reporter.root = biotope_root
     abs_dir = directory.resolve()
@@ -344,8 +341,8 @@ def _bake_directory(
 
         generator = MetadataGenerator(
             dataset_path=str(abs_dir),
-            name=overrides.get("name") or str(rel_dir),
-            description=overrides.get("description") or defaults.get("description"),
+            name=str(rel_dir),
+            description=defaults.get("description"),
             url=defaults.get("url"),
             citation=defaults.get("citation"),
             date_created=now,
@@ -374,37 +371,29 @@ def _bake_directory(
             report.result.update(status="failed", error=str(bake_error))
             reporter.row("FAIL", str(rel_dir), str(bake_error))
             return None
-        metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
+        metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, defaults)
 
     metadata_dict.setdefault("dateCreated", now)
-    _apply_dataset_metadata(metadata_dict, defaults, overrides)
+    _apply_dataset_metadata(metadata_dict, defaults, {})
     _register_distinct_files(metadata_dict, abs_dir, biotope_root, files, copies)
     _give_stable_ids(metadata_dict, rel_dir, abs_dir)
     if target.metadata_path.is_file():
         note_moves(refresh_description(target.metadata_path), metadata_dict)
-    _apply_pipeline_state(metadata_dict, overrides)
+    _apply_pipeline_state(metadata_dict, {})
     _describe(abs_dir, target.metadata_path, metadata_dict, given, reporter)
     return metadata_dict, len(files)
 
 
-def _build_minimal_directory_metadata(
-    abs_dir: Path,
-    biotope_root: Path,
-    overrides: dict[str, Any],
-    defaults: dict[str, Any],
-) -> dict[str, Any]:
+def _build_minimal_directory_metadata(abs_dir: Path, biotope_root: Path, defaults: dict[str, Any]) -> dict[str, Any]:
     """Build a minimal dataset for directories without baker-supported files."""
     relative_dir = abs_dir.relative_to(biotope_root)
-    metadata = merge_metadata(
+    return merge_metadata(
         {
-            "name": overrides.get("name") or str(relative_dir),
-            "description": (
-                overrides.get("description") or defaults.get("description") or f"Dataset for {relative_dir}"
-            ),
+            "name": str(relative_dir),
+            "description": defaults.get("description") or f"Dataset for {relative_dir}",
             "distribution": [],
         }
     )
-    return metadata
 
 
 def _identical_copies(files: list[Path]) -> dict[Path, Path]:
@@ -474,10 +463,6 @@ def _iter_directory_files(abs_dir: Path):
         if any(part.startswith(".") for part in relative.parts) or file_path.name.endswith(annotation.SUFFIX):
             continue
         yield file_path
-
-
-def default_overrides() -> dict[str, Any]:
-    return {"name": None, "description": None, "status_override": None, "derived_from": []}
 
 
 def _apply_pipeline_state(metadata: dict[str, Any], overrides: dict[str, Any]) -> None:

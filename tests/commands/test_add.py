@@ -110,7 +110,7 @@ def test_add_file_status_override(biotope_project):
         biotope_project,
         datasets_dir,
         False,
-        overrides={**_default_overrides_for_test(), "status_override": "processed"},
+        overrides={"status_override": "processed"},
     )
 
     manifest = datasets_dir / "doc.txt.jsonld"
@@ -175,18 +175,12 @@ def test_add_file_derived_from_writes_provenance(biotope_project):
         biotope_project,
         datasets_dir,
         False,
-        overrides={**_default_overrides_for_test(), "derived_from": ["raw_pdf"]},
+        overrides={"derived_from": ["raw_pdf"]},
     )
 
     with open(datasets_dir / "extracted.json.jsonld") as f:
         metadata = json.load(f)
     assert get_derived_from(metadata) == ["raw_pdf"]
-
-
-def _default_overrides_for_test():
-    from biotope.commands.add import default_overrides
-
-    return default_overrides()
 
 
 def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
@@ -255,7 +249,7 @@ def test_glob_covered_files_keep_their_checksum(tmp_path):
     for name, colour in (("a.png", "black"), ("b.png", "white")):
         _write_png(data_dir / name, colour)
 
-    metadata_dict, _ = _bake_directory(data_dir, project_root, {})
+    metadata_dict, _ = _bake_directory(data_dir, project_root)
 
     file_objects = [d for d in metadata_dict["distribution"] if d.get("@type") == "cr:FileObject"]
     assert any(d.get("@type") == "cr:FileSet" for d in metadata_dict["distribution"])
@@ -272,7 +266,7 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     (data_dir / "example_gene_expression.csv").write_text(EXAMPLE_CSV.read_text())
     (data_dir / "README.md").write_text("notes")
 
-    metadata_dict, n_source_files = _bake_directory(data_dir, project_root, {})
+    metadata_dict, n_source_files = _bake_directory(data_dir, project_root)
 
     assert n_source_files == 2
     assert metadata_dict["recordSet"]
@@ -294,7 +288,7 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
     (data_dir / "x/b/table.csv").write_text("id,value\n3,z\n")
 
     reporter = AddOutput()
-    metadata_dict, _ = _bake_directory(data_dir, project_root, {}, reporter=reporter)
+    metadata_dict, _ = _bake_directory(data_dir, project_root, reporter=reporter)
 
     [source] = reporter.sources
     assert source["duplicates"] == [
@@ -411,7 +405,7 @@ def test_bake_directory_reports_coverage(mixed_dataset, capsys):
     """Undescribed files are otherwise invisible: biotope backfills them like any other."""
     project_root, data_dir = mixed_dataset
 
-    _bake_directory(data_dir, project_root, {})
+    _bake_directory(data_dir, project_root)
 
     captured = capsys.readouterr()
     assert captured.out == ""
