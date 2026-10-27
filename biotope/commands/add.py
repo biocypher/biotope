@@ -246,12 +246,8 @@ def add_file(
 def _note_relocation(previous: dict[str, Any], baked: dict[str, Any], old: str, new: str) -> None:
     origin = previous.get(MOVED_FROM)
     origin = origin if isinstance(origin, str) else old
-    if origin != new and _file_ids(previous) == _file_ids(baked):
+    if origin != new:
         baked[MOVED_FROM] = origin
-
-
-def _file_ids(described: dict[str, Any]) -> set[str]:
-    return {entry.get("@id") for entry in described.get("distribution") or [] if entry.get("@type") == FILE_OBJECT_TYPE}
 
 
 def _gone_copy(data: Path, biotope_root: Path) -> Path | None:

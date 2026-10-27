@@ -307,6 +307,28 @@ def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_
     assert built(single) == ({moved, "data/study/docs/report.html"}, 2)
 
 
+def test_a_single_file_renamed_and_then_given_its_name_back_in_another_folder_fails_the_check(single):
+    for old, new in (
+        ("data/raw/people.csv", "data/current/staff.csv"),
+        ("data/current/staff.csv", "data/archive/people.csv"),
+    ):
+        (single / new).parent.mkdir(exist_ok=True)
+        shutil.move(single / old, single / new)
+        refresh(new)
+
+    result = invoke("graph", "check", "--json")
+
+    assert result.exit_code != 0
+    named = ("'people.csv#people'", "'data/raw/people.csv'", "'data/archive/people.csv'")
+    assert any(all(name in finding["message"] for name in named) for finding in findings(result)), findings(result)
+    shutil.move(single / "data/archive/people.csv", single / "data/raw/people.csv")
+    ok("add", "--rebake", "data/raw/people.csv")
+    ok("mv", "data/raw/people.csv", "data/archive/people.csv")
+    shutil.rmtree(single / "graph/sources/people_csv/staff_csv_staff")
+    refresh("data/archive/people.csv")
+    assert built(single) == ({"data/archive/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def test_a_file_moved_outside_biotope_twice_is_named_at_its_last_path_to_every_package_it_left(single):
     raw = single / "data/raw"
     shutil.move(raw / "people.csv", raw / "staff.csv")

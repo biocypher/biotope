@@ -373,8 +373,9 @@ A dataset that is a single file has no folder to rebake, so its refresh runs
 `biotope add` on the file at its new path and `source generate` on the description
 that names it. When exactly one description names a file that is gone and has the
 same content, `add` moves that description and its annotation file to the new path,
-and `graph check` fails in the same way. A file moved to another folder under its own
-name keeps its ID, so the finding names its old and its new path instead.
+and `graph check` fails in the same way. A file that ends up in another folder under
+its original name keeps its ID, even after a rename in between, so the finding names
+its original and its new path instead.
 
 To recover, move the file back, run `biotope add --rebake` on its dataset, or on
 the file for a single-file dataset, move it with `biotope mv`, and delete the package

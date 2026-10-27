@@ -10,10 +10,10 @@ import secrets
 import shutil
 from collections import Counter
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from biotope.croissant.ids import MOVED_FROM, moved_from
+from biotope.croissant.ids import MOVED_FROM, file_id, moved_from
 from biotope.graph.discovery import (
     Package,
     discover_packages,
@@ -379,6 +379,8 @@ def _relocated(plan: SourcePlan, data: dict[str, Any], status: PackageStatus) ->
     origin = data.get(MOVED_FROM)
     project = project_root(plan.metadata)
     if not isinstance(origin, str) or project is None or status.state not in ("current", "drift"):
+        return status
+    if str(status.identity).split("#", 1)[0] != file_id(PurePosixPath(origin).name):
         return status
     now = dataset_id(plan.metadata.resolve(), project)
     detail = (
