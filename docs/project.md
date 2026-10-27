@@ -257,9 +257,9 @@ cannot give every file and table a stable ID: the file set name 'parts' is used 
 ```
 
 Rename or remove one of the files, even when the two hold the same bytes, or rename
-one file set in the annotation file by its include pattern, as in `file_sets:
-{a/*.parquet: a parts}`. No ID gets a suffix that depends on order or on other
-files.
+one file set in the annotation file by its include pattern, as in
+`file_sets: {a/*.parquet: a parts}`. No ID gets a suffix that depends on order or
+on other files.
 
 `biotope source generate` names packages and record classes after the IDs, with
 the percent-encoding undone: the table `push/people.csv#people` gets the package
@@ -307,15 +307,20 @@ re-downloaded document or a same-named file in another folder, run:
 
 ```bash
 biotope add --rebake data/study
+biotope extract run graph/extraction/<kind>.py:<Class> data/study
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build
 ```
 
-Run `add --rebake` once per changed dataset and `source generate` once per
-description. No file needs a hand edit: every existing file and table keeps its ID,
-so every source reads the same file as before, and the annotation file applies
-again.
+Run `add --rebake` once per changed dataset, `extract run` once per extraction
+schema that reads documents of a changed dataset, with the `--out` the project
+uses, and `source generate` once per description. Skip `extract run` when no
+schema reads the dataset. Without it, every check and the build pass on the records
+extracted from the previous documents, and the rebake records each document's new
+checksum, so `check-data` no longer reports the change. No file needs a hand edit:
+every existing file and table keeps its ID, so every source reads the same file as
+before, and the annotation file applies again.
 
 A new table or file gets a new package with a placeholder loader. The scaffold's
 `graph/sources/__init__.py` selects every inventoried source, so `graph check`
@@ -354,6 +359,11 @@ description holds or an existing annotation file, even with `--force`, and to gi
 a file a path that differs from another's only in case. It renames the data and
 never copies it, so it cannot move data to another filesystem or a folder onto a
 folder that holds files; there it also changes nothing.
+
+After `mv` of a document that an extraction schema reads, run `biotope extract run`
+on its dataset again, with the `--out` the project uses. The records name each
+document by its path, and the run reuses the moved document's records without a
+request.
 
 A move made outside biotope, by a file manager, `git mv` or a download script,
 gives the file a new ID at the next refresh. `source generate` creates a package

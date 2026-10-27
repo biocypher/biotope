@@ -64,7 +64,7 @@ A file Baker cannot parse can still answer a semantic question. Cohort descripti
 
 Keep these entries. Extract the records a document holds with `biotope extract`, as [extraction.md](./extraction.md) describes; the extracted records become a dataset of their own. Generation still gives each document a document package: exclude it with the reason `extracted into <records file>`, or, for a document the user kept out of extraction, use its `Facts` schema for what you transcribe, with a loader that cites the page or section of each statement.
 
-The ID follows the path, never the content, so a re-downloaded document keeps its ID and its package. A changed document is extracted again on the next `extract run`. Transcribed facts are not re-read automatically: `biotope check-data` reports the changed file, and you check the facts against it.
+The ID follows the path, never the content, so a re-downloaded document keeps its ID and its package. A changed document is extracted again on the next `extract run`. Transcribed facts are not re-read automatically: `biotope check-data` reports a changed file only until `biotope add --rebake` records its new checksum, so run it before the rebake and check the facts against each document it reports.
 
 A file outside every added folder is described by adding it, `biotope add <file>`, never by a FileObject written by hand.
 

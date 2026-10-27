@@ -85,11 +85,13 @@ After new data arrives, refresh with commands only:
 
 ```bash
 biotope add --rebake data/study
+biotope extract run graph/extraction/<kind>.py:<Class> data/study
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build
 ```
 
+Run `extract run` only when an extraction schema reads documents of the dataset.
 See [refresh after new data](project.md#refresh-after-new-data) for what changes and
 how a project keeps new inputs from breaking its build.
 

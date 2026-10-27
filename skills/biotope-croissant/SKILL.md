@@ -156,12 +156,13 @@ Anything unticked returns to Step 6 or Step 7. Human scientific review stays man
 
 ```bash
 biotope add --rebake <data-path>
+biotope extract run graph/extraction/<kind>.py:<Class> <data-path>
 biotope source generate .biotope/datasets/<data-path>.jsonld --out graph/sources
 biotope graph check --json
 biotope graph build
 ```
 
-Every existing file and table keeps its ID and the annotation file applies again, so no schema, loader or annotation needs an edit. A new table or file gets a package with a placeholder loader: implement it (Step 5) or exclude it (Step 4). To keep later data from breaking the build, select sources by name and exclude the rest with one rule in `graph/sources/__init__.py`:
+Run `extract run` once per extraction schema that reads documents of the changed dataset, with the `--out` the project uses, and skip it when none does. Without it, every check and the build pass on records extracted from the previous documents, and the rebake records each document's new checksum, so `check-data` no longer reports the change. Run `source generate` once per description, the records file's included. Every existing file and table keeps its ID and the annotation file applies again, so no schema, loader or annotation needs an edit. A new table or file gets a package with a placeholder loader: implement it (Step 5) or exclude it (Step 4). To keep later data from breaking the build, select sources by name and exclude the rest with one rule in `graph/sources/__init__.py`:
 
 ```python
 SOURCES: tuple[SourceContract, ...] = (PEOPLE, REPORT)
@@ -170,7 +171,7 @@ EXCLUDED_SOURCES: dict[str, str] = {
 }
 ```
 
-**Moves.** Move a described file with `biotope mv <old> <new>`, never with `mv` or `git mv`: it updates the manifest, the annotation file and the source package's IDs in one step, and the check passes. After a move made outside biotope, `graph check` reports `inventory.orphan` naming the old and the new ID and the package generation created for the new path: an error when the pipeline selects the old package's source, a warning when it excludes it. Move the file back, run `biotope add --rebake`, move it with `biotope mv`, then delete that package. When the file must stay at its new path, as when a download script puts it there, delete that package first, replace the old ID with the new one in the old package's `schema.py`, run `biotope source generate` again and set `__source_digest__` to the revision `graph check` names. The finding names another package for deletion only while its loader is still a placeholder, and tells a package generated for a path the file has since left to delete itself.
+**Moves.** Move a described file with `biotope mv <old> <new>`, never with `mv` or `git mv`: it updates the manifest, the annotation file and the source package's IDs in one step, and the check passes. After moving a document that an extraction schema reads, run `biotope extract run` on its dataset again, with the `--out` the project uses: the records name each document by its path, and the run reuses the moved document's records without a model call. After a move made outside biotope, `graph check` reports `inventory.orphan` naming the old and the new ID and the package generation created for the new path: an error when the pipeline selects the old package's source, a warning when it excludes it. Move the file back, run `biotope add --rebake`, move it with `biotope mv`, then delete that package. When the file must stay at its new path, as when a download script puts it there, delete that package first, replace the old ID with the new one in the old package's `schema.py`, run `biotope source generate` again and set `__source_digest__` to the revision `graph check` names. The finding names another package for deletion only while its loader is still a placeholder, and tells a package generated for a path the file has since left to delete itself.
 
 **`source.drift`** means the structure changed: a new column or a changed type in the data, a key in the annotation file, or a changed file reference. Descriptions and a file's changed content never cause it. Follow these steps exactly; each schema holds reviewed work.
 
