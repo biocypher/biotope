@@ -151,8 +151,7 @@ def test_mv_successful_move(runner, biotope_project_with_file):
     original_cwd = Path.cwd()
     try:
         os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-            result = runner.invoke(mv, [str(source_file), str(destination)])
+        result = runner.invoke(mv, [str(source_file), str(destination)])
         assert result.exit_code == 0
         assert "Move Complete" in result.output
         assert not source_file.exists()
@@ -171,8 +170,7 @@ def test_mv_force_overwrite(runner, biotope_project_with_file):
     original_cwd = Path.cwd()
     try:
         os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-            result = runner.invoke(mv, [str(source_file), str(destination), "--force"])
+        result = runner.invoke(mv, [str(source_file), str(destination), "--force"])
         assert result.exit_code == 0
         assert destination.read_text() == "gene,expression\nBRCA1,12.5"
     finally:
@@ -192,9 +190,8 @@ def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_
 
     try:
         os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-            with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
-                result = runner.invoke(mv, [str(source_file), str(destination)])
+        with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
+            result = runner.invoke(mv, [str(source_file), str(destination)])
         assert result.exit_code != 0
         assert "Failed to move metadata file" in result.output
         assert source_file.exists()

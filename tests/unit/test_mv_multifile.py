@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from click.testing import CliRunner
@@ -204,11 +203,10 @@ def test_file_object_rename_within_dataset_updates_contentUrl_in_place(runner: C
     )
 
     dst = data_dir / "README_v2.md"
-    with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-        import os
+    import os
 
-        os.chdir(project)
-        r = runner.invoke(mv, [str(src), str(dst)])
+    os.chdir(project)
+    r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code == 0, r.output
 
     # File moved.
@@ -256,11 +254,10 @@ def test_file_object_cross_dataset_move_refused(runner: CliRunner, project: Path
     other_dir.mkdir(parents=True)
     dst = other_dir / "README.md"
 
-    with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-        import os
+    import os
 
-        os.chdir(project)
-        r = runner.invoke(mv, [str(src), str(dst)])
+    os.chdir(project)
+    r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code != 0
     assert "Cross-dataset" in r.output
     # Nothing moved.
@@ -285,11 +282,10 @@ def test_fileset_rename_pattern_still_matches(runner: CliRunner, project: Path) 
     )
 
     dst = data_dir / "part-renamed.parquet"
-    with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-        import os
+    import os
 
-        os.chdir(project)
-        r = runner.invoke(mv, [str(src), str(dst)])
+    os.chdir(project)
+    r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code == 0, r.output
     assert dst.exists()
     assert not src.exists()
@@ -316,11 +312,10 @@ def test_fileset_rename_pattern_no_longer_matches_refused(runner: CliRunner, pro
     )
 
     dst = data_dir / "renamed.txt"
-    with mock.patch("biotope.commands.mv.is_file_tracked", return_value=True):
-        import os
+    import os
 
-        os.chdir(project)
-        r = runner.invoke(mv, [str(src), str(dst)])
+    os.chdir(project)
+    r = runner.invoke(mv, [str(src), str(dst)])
     assert r.exit_code != 0
     assert "FileSet" in r.output
     assert src.exists()

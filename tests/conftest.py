@@ -22,20 +22,8 @@ ANNOTATION_VALIDATION_CONFIG = {
 
 @pytest.fixture
 def biotope_project(tmp_path):
-    """Minimal biotope project root with git and datasets dir."""
-    (tmp_path / ".git").mkdir()
     biotope_dir = tmp_path / ".biotope"
     biotope_dir.mkdir()
     (biotope_dir / "datasets").mkdir()
     (biotope_dir / "cache").mkdir(parents=True, exist_ok=True)
     return tmp_path
-
-
-@pytest.fixture
-def git_repo(biotope_project):
-    """Project inside a mocked git repo."""
-    from unittest import mock
-
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        yield biotope_project

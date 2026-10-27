@@ -35,15 +35,7 @@ def sample_file(tmp_path):
 @pytest.fixture
 def biotope_project(tmp_path):
     (tmp_path / ".biotope" / "datasets").mkdir(parents=True)
-    (tmp_path / ".git").mkdir()
     return tmp_path
-
-
-@pytest.fixture
-def git_repo(biotope_project):
-    with mock.patch("subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
-        yield biotope_project
 
 
 def test_calculate_file_checksum(sample_file):
@@ -53,52 +45,52 @@ def test_calculate_file_checksum(sample_file):
     assert calculate_file_checksum(sample_file) == expected_hash
 
 
-def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
-    target_file = git_repo / sample_file.name
+def test_add_file_absolute_path_writes_cr_file_object(biotope_project, sample_file):
+    target_file = biotope_project / sample_file.name
     target_file.write_text(sample_file.read_text())
 
-    datasets_dir = git_repo / ".biotope" / "datasets"
-    result = add_file(target_file, git_repo, datasets_dir, False)
+    datasets_dir = biotope_project / ".biotope" / "datasets"
+    result = add_file(target_file, biotope_project, datasets_dir, False)
     assert result is True
 
-    metadata_file = datasets_dir / f"{target_file.relative_to(git_repo)}.jsonld"
+    metadata_file = datasets_dir / f"{target_file.relative_to(biotope_project)}.jsonld"
     assert metadata_file.exists()
 
     with open(metadata_file) as handle:
         metadata = json.load(handle)
 
     assert metadata["distribution"][0]["@type"] == "cr:FileObject"
-    assert metadata["distribution"][0]["contentUrl"] == str(target_file.relative_to(git_repo))
-    assert is_file_tracked(target_file, git_repo)
+    assert metadata["distribution"][0]["contentUrl"] == str(target_file.relative_to(biotope_project))
+    assert is_file_tracked(target_file, biotope_project)
 
 
-def test_add_file_relative_path_already_tracked(git_repo):
-    data_dir = git_repo / "data" / "inputs"
+def test_add_file_relative_path_already_tracked(biotope_project):
+    data_dir = biotope_project / "data" / "inputs"
     data_dir.mkdir(parents=True)
     target_file = data_dir / "experiment.csv"
     target_file.write_text("gene,expression\nBRCA1,12.5")
 
-    datasets_dir = git_repo / ".biotope" / "datasets"
+    datasets_dir = biotope_project / ".biotope" / "datasets"
 
     original_cwd = Path.cwd()
     try:
-        os.chdir(git_repo)
+        os.chdir(biotope_project)
         relative_path = Path("data/inputs/experiment.csv")
-        assert add_file(relative_path, git_repo, datasets_dir, False) is True
-        assert add_file(relative_path, git_repo, datasets_dir, False) is False
-        assert add_file(relative_path, git_repo, datasets_dir, True) is True
+        assert add_file(relative_path, biotope_project, datasets_dir, False) is True
+        assert add_file(relative_path, biotope_project, datasets_dir, False) is False
+        assert add_file(relative_path, biotope_project, datasets_dir, True) is True
     finally:
         os.chdir(original_cwd)
 
 
-def test_add_file_stamps_status_raw_by_default(git_repo):
+def test_add_file_stamps_status_raw_by_default(biotope_project):
     """A plain file `biotope add` without a baked record set lands as raw."""
     from biotope.metadata import STATUS_RAW, get_status
 
-    target = git_repo / "doc.txt"
+    target = biotope_project / "doc.txt"
     target.write_text("a free-text doc")
-    datasets_dir = git_repo / ".biotope" / "datasets"
-    assert add_file(target, git_repo, datasets_dir, False) is True
+    datasets_dir = biotope_project / ".biotope" / "datasets"
+    assert add_file(target, biotope_project, datasets_dir, False) is True
 
     manifest = datasets_dir / "doc.txt.jsonld"
     with open(manifest) as f:
@@ -106,16 +98,16 @@ def test_add_file_stamps_status_raw_by_default(git_repo):
     assert get_status(metadata) == STATUS_RAW
 
 
-def test_add_file_status_override(git_repo):
+def test_add_file_status_override(biotope_project):
     """`--status processed` overrides the heuristic."""
     from biotope.metadata import STATUS_PROCESSED, get_status
 
-    target = git_repo / "doc.txt"
+    target = biotope_project / "doc.txt"
     target.write_text("ignore me")
-    datasets_dir = git_repo / ".biotope" / "datasets"
+    datasets_dir = biotope_project / ".biotope" / "datasets"
     add_file(
         target,
-        git_repo,
+        biotope_project,
         datasets_dir,
         False,
         overrides={**_default_overrides_for_test(), "status_override": "processed"},
@@ -157,12 +149,12 @@ def test_resolve_dataset_ref_rejects_missing(tmp_path):
         resolve_dataset_ref("missing/dataset", project)
 
 
-def test_add_file_derived_from_writes_provenance(git_repo):
+def test_add_file_derived_from_writes_provenance(biotope_project):
     """`--derived-from <ref>` records `prov:wasDerivedFrom` on the new dataset."""
     from biotope.metadata import get_derived_from
 
     # Seed an existing manifest to derive from.
-    src_manifest = git_repo / ".biotope" / "datasets" / "raw_pdf.jsonld"
+    src_manifest = biotope_project / ".biotope" / "datasets" / "raw_pdf.jsonld"
     src_manifest.parent.mkdir(parents=True, exist_ok=True)
     src_manifest.write_text(
         json.dumps(
@@ -175,12 +167,12 @@ def test_add_file_derived_from_writes_provenance(git_repo):
         )
     )
 
-    target = git_repo / "extracted.json"
+    target = biotope_project / "extracted.json"
     target.write_text("{}")
-    datasets_dir = git_repo / ".biotope" / "datasets"
+    datasets_dir = biotope_project / ".biotope" / "datasets"
     add_file(
         target,
-        git_repo,
+        biotope_project,
         datasets_dir,
         False,
         overrides={**_default_overrides_for_test(), "derived_from": ["raw_pdf"]},
@@ -327,50 +319,27 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
 
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add._bake_directory")
-def test_add_command_directory_recurses_by_default(
-    mock_bake,
-    mock_find_root,
-    runner,
-    git_repo,
-):
-    mock_find_root.return_value = git_repo
-
-    data_dir = git_repo / "data"
-    data_dir.mkdir()
-    fake_metadata = {"recordSet": [{"@id": "#rs", "field": []}], "distribution": []}
-    mock_bake.return_value = (fake_metadata, 2)
-
-    with runner.isolated_filesystem():
-        os.chdir(git_repo)
-        result = runner.invoke(add, [str(data_dir)])
-
-    assert result.exit_code == 0
-    mock_bake.assert_called_once()
-
-
-@mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add._bake_directory")
 def test_add_command_directory_already_tracked_skips_without_rebake(
     mock_bake,
     mock_find_root,
     runner,
-    git_repo,
+    biotope_project,
 ):
-    mock_find_root.return_value = git_repo
+    mock_find_root.return_value = biotope_project
 
-    data_dir = git_repo / "data"
+    data_dir = biotope_project / "data"
     data_dir.mkdir()
     fake_metadata = {"recordSet": [{"@id": "#rs", "field": []}], "distribution": []}
     mock_bake.return_value = (fake_metadata, 2)
 
     with runner.isolated_filesystem():
-        os.chdir(git_repo)
+        os.chdir(biotope_project)
         first = runner.invoke(add, [str(data_dir)])
         assert first.exit_code == 0
         mock_bake.assert_called_once()
         # The real `_bake_directory` writes metadata_path; the mock doesn't,
         # so simulate that side effect for the "already tracked" check.
-        (git_repo / ".biotope" / "datasets" / "data.jsonld").write_text("{}")
+        (biotope_project / ".biotope" / "datasets" / "data.jsonld").write_text("{}")
 
         second = runner.invoke(add, [str(data_dir)])
         assert second.exit_code == 0
@@ -383,16 +352,16 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
-def test_add_command_rejects_name_for_multiple_paths(mock_find_root, runner, git_repo):
-    mock_find_root.return_value = git_repo
+def test_add_command_rejects_name_for_multiple_paths(mock_find_root, runner, biotope_project):
+    mock_find_root.return_value = biotope_project
 
-    file_one = git_repo / "one.txt"
-    file_two = git_repo / "two.txt"
+    file_one = biotope_project / "one.txt"
+    file_two = biotope_project / "two.txt"
     file_one.write_text("one")
     file_two.write_text("two")
 
     with runner.isolated_filesystem():
-        os.chdir(git_repo)
+        os.chdir(biotope_project)
         result = runner.invoke(add, ["--name", "dataset", str(file_one), str(file_two)])
 
     assert result.exit_code != 0
