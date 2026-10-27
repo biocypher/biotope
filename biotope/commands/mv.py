@@ -1,4 +1,3 @@
-import copy
 import fnmatch
 import json
 import os
@@ -177,7 +176,8 @@ def _plan(
     staying = carried == data
     if staying and not source.is_relative_to(base):
         return None
-    before = copy.deepcopy(metadata)
+    found = annotation.located(manifest)
+    before = annotation.current(metadata, annotation.read(found))
     mapping: dict[str, str] = {}
     for distribution in metadata.get("distribution") or []:
         url = distribution.get("contentUrl")
@@ -208,7 +208,6 @@ def _plan(
     for item in (metadata, metadata.get(annotation.FROM_DATA) or {}):
         if item.get("name") == old_name:
             item["name"] = new_name
-    found = annotation.located(manifest)
     text = annotation.renamed(found, renamer(mapping)) if found is not None else None
     after = annotation.current(metadata, annotation.parsed(found, text) if found and text else annotation.read(found))
     schemas, revised = planned_ids(biotope_root / "graph/sources", manifest, before, after, mapping)

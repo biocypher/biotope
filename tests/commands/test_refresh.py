@@ -90,6 +90,21 @@ def test_a_dataset_file_whose_path_also_names_a_file_at_the_project_root_moves_w
     assert "data/people.csv#people" in tables
 
 
+def test_mv_after_a_new_key_in_the_annotation_file_leaves_the_key_for_graph_check_to_report(project):
+    annotation = project / "data/study/.biotope.yaml"
+    annotation.write_text(annotation.read_text() + "tables:\n  push/people.csv#people:\n    key: person_id\n")
+
+    ok("mv", "data/study/push/people.csv", "data/study/push/staff.csv")
+
+    refresh()
+    result = invoke("graph", "check", "--json")
+    assert result.exit_code != 0
+    assert any(
+        finding["code"] == "source.drift" and "push/staff.csv#staff" in finding["message"]
+        for finding in findings(result)
+    ), findings(result)
+
+
 def test_mv_of_a_workbook_keeps_its_sheet_name_through_the_refresh(project):
     book = openpyxl.Workbook()
     sheet = book.active
