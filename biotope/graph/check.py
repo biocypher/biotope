@@ -66,8 +66,8 @@ def check_types(pipeline: Pipeline, *, on_finding: FindingSink | None = None) ->
         "reportMissingTypeStubs": "none",
     }
     files = code_files(pipeline)
-    with tempfile.TemporaryDirectory(prefix="biotope-pyright-", dir=Path.cwd()) as temporary:
-        path = Path(temporary) / "pyrightconfig.json"
+    with tempfile.TemporaryDirectory(prefix="biotope-pyright-") as temporary:
+        path = Path(temporary).resolve() / "pyrightconfig.json"
         config["include"] = [os.path.relpath(item, path.parent) for item in files]
         path.write_text(json.dumps(config), encoding="utf-8")
         result = subprocess.run(

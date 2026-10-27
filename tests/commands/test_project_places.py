@@ -139,6 +139,23 @@ def test_commands_write_only_in_their_places_and_never_to_git(tmp_path, monkeypa
     assert not any({"creator", "license"} & set(manifest) for manifest in manifests)
 
 
+def test_graph_check_writes_nothing_outside_its_places_while_pyright_runs(project, monkeypatch):
+    def outside() -> set[str]:
+        return {path for path in snapshot(project) if not in_places(path)}
+
+    before, seen, run = outside(), [], subprocess.run
+
+    def spy(command, *args, **kwargs):
+        if "pyright" in command:
+            seen.append(outside())
+        return run(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    result = invoke("graph", "check")
+    assert result.exit_code == 0, result.output
+    assert seen == [before]
+
+
 def test_init_creates_no_repository_and_keeps_project_yaml_in_biotope(tmp_path):
     result = invoke("init", "plain", "--dir", str(tmp_path), "--no-prompt")
     assert result.exit_code == 0, result.output
