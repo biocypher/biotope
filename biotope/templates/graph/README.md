@@ -105,6 +105,7 @@ keep IDs from their paths, so no schema, loader or annotation changes:
 
 ```bash
 biotope add --rebake data/study
+biotope extract run graph/extraction/<kind>.py:<Class> <every dataset the schema reads>
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build
