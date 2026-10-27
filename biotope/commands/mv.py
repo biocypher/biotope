@@ -297,7 +297,7 @@ def _apply(
                     shutil.move(str(old), str(new))
                     written.append(new)
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(source), str(destination))
+            (os.rename if source.is_dir() else os.replace)(source, destination)
     except Exception as exc:
         prune(destination.parent, folder)
         console.print(f"[bold red]❌ {exc}; nothing was moved.[/]")

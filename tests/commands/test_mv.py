@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -202,6 +203,29 @@ def test_a_mv_that_fails_on_a_path_under_a_file_puts_every_file_and_folder_back(
 
     assert failed.exit_code != 0 and "nothing was moved" in failed.output
     assert snapshot(root) == before
+
+
+def test_a_mv_that_cannot_rename_the_data_keeps_the_file_it_would_replace(single):
+    (single / "data/raw/staff.csv").write_text("person_id,name\ns1,Lin\n")
+    before = snapshot(single)
+    rename, replace = os.rename, os.replace
+
+    def across_devices(real):
+        def moving(source, destination):
+            if str(source).endswith("people.csv"):
+                raise OSError(errno.EXDEV, "Invalid cross-device link", str(source), None, str(destination))
+            return real(source, destination)
+
+        return moving
+
+    with (
+        mock.patch("os.rename", side_effect=across_devices(rename)),
+        mock.patch("os.replace", side_effect=across_devices(replace)),
+    ):
+        failed = invoke("mv", "-f", "data/raw/people.csv", "data/raw/staff.csv")
+
+    assert failed.exit_code != 0 and "nothing was moved" in failed.output
+    assert snapshot(single) == before
 
 
 @pytest.mark.parametrize("force", [(), ("-f",)])
