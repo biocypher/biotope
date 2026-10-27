@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
-
 import click
 
 from biotope.commands.add import resolve_dataset_ref
-from biotope.graph.sources import read_metadata
+from biotope.graph.sources import read_metadata, write_description
 from biotope.metadata import (
     STATUS_VALUES,
     add_derived_from,
@@ -63,8 +61,10 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
     set_status(metadata, status)
     for source in resolved_sources:
         add_derived_from(metadata, source)
-    with open(manifest_path, "w") as handle:
-        json.dump(metadata, handle, indent=2)
+    try:
+        write_description(manifest_path, metadata)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     warn_ignored(biotope_root, [manifest_path])
 
     summary = f"✓ {target_id} → {status}"

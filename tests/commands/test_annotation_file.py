@@ -248,3 +248,13 @@ def test_annotations_reach_a_dotted_folder_and_a_file_beside_a_folder_of_its_ste
         table(described(fresh, ".biotope/datasets/data/study.v2.jsonld"), "push/staff.csv#staff")["description"]
         == "One row per person."
     )
+
+
+def test_a_date_in_the_annotation_file_reaches_the_description_as_written(fresh):
+    ok("add", "data/study")
+    annotation = fresh / "data/study/.biotope.yaml"
+    annotation.write_text(annotation.read_text() + "datePublished: 2024-05-01\n")
+    ok("mark", "data/study", "mapped")
+    assert (described(fresh)["datePublished"], described(fresh)["biotope:status"]) == ("2024-05-01", "mapped")
+    ok("add", "--rebake", "data/study")
+    assert described(fresh)["datePublished"] == "2024-05-01"

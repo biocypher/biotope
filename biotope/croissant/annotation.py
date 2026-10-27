@@ -8,6 +8,7 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.constructor import SafeConstructor
 from ruamel.yaml.util import load_yaml_guess_indent
 
 from biotope.croissant.ids import is_kind, stable_ids
@@ -20,6 +21,13 @@ TABLES = "tables"
 COLUMNS = "columns"
 FILE_SETS = "file_sets"
 KEY = "key"
+
+
+class _Constructor(SafeConstructor):
+    pass
+
+
+_Constructor.add_constructor("tag:yaml.org,2002:timestamp", SafeConstructor.construct_yaml_str)
 HEADER = "# What people write about this dataset. A value here wins over the data's; an empty value clears it.\n"
 
 
@@ -40,8 +48,14 @@ def located(manifest: Path) -> Path | None:
 def read(path: Path | None) -> dict[str, Any]:
     if path is None or not path.is_file():
         return {}
+    return _loaded(path, path.read_text(encoding="utf-8"))
+
+
+def _loaded(path: Path, text: str) -> dict[str, Any]:
+    yaml = YAML(typ="safe", pure=True)
+    yaml.Constructor = _Constructor
     try:
-        loaded = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
+        loaded = yaml.load(text)
     except YAMLError as exc:
         raise ValueError(f"{path}: invalid YAML: {exc}") from exc
     if loaded is not None and not isinstance(loaded, dict):
@@ -130,7 +144,7 @@ def renamed(path: Path, rename: Callable[[str], str]) -> str | None:
     if not path.is_file():
         return None
     text = path.read_text(encoding="utf-8")
-    tables = _mapping(_mapping(YAML(typ="safe").load(text)).get(TABLES))
+    tables = _mapping(_loaded(path, text).get(TABLES))
     if all(rename(identity) == identity for identity in tables):
         return None
 
