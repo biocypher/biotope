@@ -3,7 +3,8 @@ from __future__ import annotations
 import ast
 import json
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Iterable
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ from biotope.croissant.ids import renamer
 from biotope.graph.discovery import discover_packages, discover_roots
 from biotope.graph.render import relative_path, render_root
 from biotope.graph.revisions import ContractStore
-from biotope.graph.sources import write_module
+from biotope.graph.sources import write_module, write_text_atomic
 from biotope.graph.targets import Target, manifest_targets
 
 
@@ -101,3 +102,17 @@ def prune(directory: Path, stop: Path) -> None:
     while directory != stop and directory.is_relative_to(stop) and directory.is_dir() and not any(directory.iterdir()):
         directory.rmdir()
         directory = directory.parent
+
+
+@contextmanager
+def kept(paths: Iterable[Path]) -> Generator[None, None, None]:
+    saved = {path: path.read_bytes() if path.is_file() else None for path in paths}
+    try:
+        yield
+    except BaseException:
+        for path, data in saved.items():
+            if data is None:
+                path.unlink(missing_ok=True)
+            else:
+                (write_module if path.suffix == ".py" else write_text_atomic)(path, data.decode("utf-8"))
+        raise

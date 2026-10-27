@@ -1,6 +1,8 @@
 import json
+import os
 import shutil
 from pathlib import Path
+from unittest import mock
 
 import openpyxl
 import pytest
@@ -158,6 +160,38 @@ def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_
     shutil.rmtree(single / "graph/sources/people_csv/staff_csv_staff")
     refresh(moved)
     assert built(single) == ({moved, "data/study/docs/report.html"}, 2)
+
+
+@pytest.mark.parametrize(("failure", "message"), [("annotation", "people.csv.biotope.yaml"), ("disk", "disk full")])
+def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, failure, message):
+    annotation = single / "data/raw/people.csv.biotope.yaml"
+    valid = annotation.read_text()
+    annotation.write_text(valid + ("tables: [\n" if failure == "annotation" else ""))
+    (single / "data/current").mkdir()
+    shutil.move(single / "data/raw/people.csv", single / "data/current/staff.csv")
+    before = snapshot(single)
+    replace, failed_once = os.replace, []
+
+    def failing(source, destination):
+        if failure == "disk" and str(destination).endswith(".jsonld") and not failed_once:
+            failed_once.append(destination)
+            raise OSError("disk full")
+        return replace(source, destination)
+
+    with mock.patch("os.replace", side_effect=failing):
+        failed = invoke("add", "--rebake", "data/current/staff.csv")
+
+    assert failed.exit_code != 0 and message in failed.output + str(failed.exception)
+    assert snapshot(single) == before
+    annotation.write_text(valid)
+    refresh("data/current/staff.csv")
+    result = invoke("graph", "check", "--json")
+    assert result.exit_code != 0
+    assert any(
+        "'people.csv#people'" in finding["message"] and "'staff.csv#staff'" in finding["message"]
+        for finding in findings(result)
+    ), findings(result)
+    assert (single / "data/current/staff.csv.biotope.yaml").read_text() == valid
 
 
 def acknowledge(root):

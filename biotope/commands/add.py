@@ -17,7 +17,7 @@ from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
 from biotope.croissant.ids import note_moves, stable_ids
 from biotope.extraction.run import state_path
-from biotope.graph.moves import carry_description
+from biotope.graph.moves import carry_description, kept, package_files
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import (
     DERIVED_FROM,
@@ -231,33 +231,48 @@ def add_file(
     _apply_dataset_metadata(metadata, defaults, overrides)
     _apply_pipeline_state(metadata, overrides)
     manifest = resolve_target(abs_file, biotope_root).metadata_path
-    previous = _take_over(abs_file, manifest, biotope_root, reporter)
-    if previous is not None:
-        note_moves(previous, metadata)
-    _describe(abs_file, manifest, metadata, given, reporter)
+    previous = None if manifest.exists() else _gone_copy(abs_file, biotope_root)
+    if previous is None:
+        _describe(abs_file, manifest, metadata, given, reporter)
+    else:
+        _take_over(previous, abs_file, manifest, metadata, given, biotope_root, reporter)
     return True
 
 
-def _take_over(data: Path, manifest: Path, biotope_root: Path, reporter: AddOutput) -> dict[str, Any] | None:
-    if manifest.exists():
-        return None
+def _gone_copy(data: Path, biotope_root: Path) -> Path | None:
     checksum = calculate_file_checksum(data)
     descriptions = sorted((biotope_root / ".biotope" / "datasets").rglob("*.jsonld"))
     found = [path for path in descriptions if _describes_gone_copy(path, checksum, biotope_root)]
-    if len(found) != 1:
-        return None
-    [previous] = found
-    described = json.loads(previous.read_text(encoding="utf-8"))
+    return found[0] if len(found) == 1 else None
+
+
+def _take_over(
+    previous: Path,
+    data: Path,
+    manifest: Path,
+    baked: dict[str, Any],
+    given: dict[str, Any] | None,
+    biotope_root: Path,
+    reporter: AddOutput,
+) -> None:
     gone = biotope_root / dataset_id(previous, biotope_root)
-    warn_ignored(biotope_root, carry_description(biotope_root, previous, manifest))
-    if annotation.annotation_path(gone).is_file() and not annotation.annotation_path(data).exists():
-        shutil.move(annotation.annotation_path(gone), annotation.annotation_path(data))
+    left, notes = annotation.annotation_path(gone), annotation.annotation_path(data)
+    carried = {left: notes} if left.is_file() and not notes.exists() else {}
+    try:
+        annotation.current(baked, annotation.read(next(iter(carried), notes)))
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    note_moves(json.loads(previous.read_text(encoding="utf-8")), baked)
+    with kept([previous, manifest, notes, *carried, *package_files(biotope_root / "graph/sources", previous)]):
+        warn_ignored(biotope_root, carry_description(biotope_root, previous, manifest))
+        for old, new in carried.items():
+            shutil.move(old, new)
+        _describe(data, manifest, baked, given, reporter)
     reporter.warning(
         data,
         f"{gone.relative_to(biotope_root)} is gone and this file has its content, so its description now "
         "describes this file and source generate reports each ID that changed. Move described files with biotope mv",
     )
-    return described
 
 
 def _describes_gone_copy(description: Path, checksum: str, biotope_root: Path) -> bool:
