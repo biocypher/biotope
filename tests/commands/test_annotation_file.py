@@ -203,6 +203,7 @@ def test_mv_carries_the_annotations_of_the_moved_file(fresh):
     ok("add", "data/study", "data/raw/samples.csv")
     ok("annotate", "set", "data/study", "--table", PEOPLE, "--column", "name", "description=Full name.")
     ok("annotate", "set", "data/raw/samples.csv", "description=One row per sample.")
+    ok("annotate", "set", "data/raw/samples.csv", "--table", "samples.csv#samples", "description=Samples.")
     folder = fresh / "data/study/.biotope.yaml"
     folder.write_text(folder.read_text().replace(f"  {PEOPLE}:\n", f"  {PEOPLE}:  # the PuSH export\n"))
 
@@ -214,9 +215,14 @@ def test_mv_carries_the_annotations_of_the_moved_file(fresh):
     assert column(table(described(fresh), moved), "name")["description"] == "Full name."
     assert not (fresh / "data/raw/samples.csv.biotope.yaml").exists()
     assert yaml.safe_load((fresh / "data/raw/sheets.csv.biotope.yaml").read_text()) == {
-        "description": "One row per sample."
+        "description": "One row per sample.",
+        "tables": {"sheets.csv#sheets": {"description": "Samples."}},
     }
-    assert described(fresh, ".biotope/datasets/data/raw/sheets.csv.jsonld")["description"] == "One row per sample."
+    sheets = described(fresh, ".biotope/datasets/data/raw/sheets.csv.jsonld")
+    assert (sheets["description"], table(sheets, "sheets.csv#sheets")["description"]) == (
+        "One row per sample.",
+        "Samples.",
+    )
 
     shutil.move(fresh / "data/study/current/people.csv", fresh / "data/study/push/people.csv")
     rebaked = ok("add", "--rebake", "data/study")

@@ -21,6 +21,30 @@ def test_mv_keeps_the_graph_building_and_a_content_change_alone_is_reported_by_c
     assert "current/people.csv#people" in {record["@id"] for record in manifest["recordSet"]}
 
 
+def test_mv_of_a_folder_inside_a_dataset_keeps_the_graph_building(project):
+    ok("mv", "-r", "data/study/push", "data/study/current")
+
+    assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 2)
+    manifest = json.loads((project / MANIFEST).read_text())
+    assert "current/people.csv#people" in {record["@id"] for record in manifest["recordSet"]}
+
+
+def test_mv_changes_nothing_while_the_annotation_file_is_invalid_and_works_once_it_is_fixed(project):
+    annotation = project / "data/study/.biotope.yaml"
+    valid = annotation.read_text()
+    annotation.write_text(valid + "tables: [\n")
+    before = (project / MANIFEST).read_bytes()
+
+    failed = invoke("mv", "data/study/push/people.csv", "data/study/current/people.csv")
+
+    assert failed.exit_code != 0 and "data/study/.biotope.yaml" in failed.output
+    assert (project / "data/study/push/people.csv").is_file()
+    assert (project / MANIFEST).read_bytes() == before
+    annotation.write_text(valid)
+    ok("mv", "data/study/push/people.csv", "data/study/current/people.csv")
+    assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(project):
     (project / "data/study/current").mkdir()
     shutil.move(project / "data/study/push/people.csv", project / "data/study/current/people.csv")

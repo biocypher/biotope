@@ -6,6 +6,7 @@ This module reads metadata, never the resources described by that metadata.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import keyword
 import os
@@ -203,12 +204,23 @@ def write_text_atomic(path: Path, text: str) -> None:
         os.replace(pending, path)
 
 
+def write_module(path: Path, text: str) -> Path:
+    write_text_atomic(path, text)
+    # Bytecode compiled from the replaced text within the same second would otherwise still be imported.
+    Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
+    return path
+
+
 def _described(path: Path, data: dict[str, Any]) -> dict[str, Any]:
     return annotation.current(data, annotation.read(annotation.located(path)))
 
 
+def description_text(described: dict[str, Any]) -> str:
+    return json.dumps(described, indent=2, ensure_ascii=False, default=str) + "\n"
+
+
 def _write_description(path: Path, described: dict[str, Any]) -> None:
-    write_text_atomic(path, json.dumps(described, indent=2, ensure_ascii=False, default=str) + "\n")
+    write_text_atomic(path, description_text(described))
     root = find_biotope_root(path.parent)
     if root is not None:
         warn_ignored(root, [path])

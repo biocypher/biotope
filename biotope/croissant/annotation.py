@@ -49,10 +49,10 @@ def located(manifest: Path) -> Path | None:
 def read(path: Path | None) -> dict[str, Any]:
     if path is None or not path.is_file():
         return {}
-    return _loaded(path, path.read_text(encoding="utf-8"))
+    return parsed(path, path.read_text(encoding="utf-8"))
 
 
-def _loaded(path: Path, text: str) -> dict[str, Any]:
+def parsed(path: Path, text: str) -> dict[str, Any]:
     yaml = YAML(typ="safe", pure=True)
     yaml.Constructor = _Constructor
     try:
@@ -148,7 +148,7 @@ def renamed(path: Path, rename: Callable[[str], str]) -> str | None:
     if not path.is_file():
         return None
     text = path.read_text(encoding="utf-8")
-    tables = _mapping(_loaded(path, text).get(TABLES))
+    tables = _mapping(parsed(path, text).get(TABLES))
     if all(rename(identity) == identity for identity in tables):
         return None
 

@@ -6,7 +6,6 @@ writes nothing when it finds a conflict.
 
 from __future__ import annotations
 
-import importlib.util
 import secrets
 import shutil
 from collections import Counter
@@ -43,7 +42,7 @@ from biotope.graph.sources import (
     read_metadata,
     slug,
     walk_fields,
-    write_text_atomic,
+    write_module,
 )
 from biotope.graph.targets import Target, declared_identities, manifest_targets, unidentified_files
 
@@ -463,11 +462,7 @@ def apply_plan(plan: SourcePlan) -> tuple[Path, ...]:
     plan.root.mkdir(parents=True, exist_ok=True)
     written = [path for directory, files in plan.new_packages.items() for path in _create_package(directory, files)]
     written += [path for path, text in plan.new_files.items() if _create_file(path, text)]
-    for path, text in plan.generated_files.items():
-        write_text_atomic(path, text)
-        # Bytecode compiled from the replaced text within the same second would otherwise still be imported.
-        Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
-        written.append(path)
+    written += [write_module(path, text) for path, text in plan.generated_files.items()]
     return tuple(written)
 
 

@@ -23,6 +23,7 @@ import fnmatch
 import json
 import os
 import shutil
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
@@ -34,15 +35,15 @@ from rich.panel import Panel
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
 from biotope.extraction.run import STATES
-from biotope.graph.moves import follow_ids, follow_manifest
-from biotope.graph.sources import write_text_atomic
+from biotope.graph.moves import follow_manifest, package_files, planned_ids, write_ids
+from biotope.graph.sources import description_text, write_module, write_text_atomic
+from biotope.graph.targets import Target
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
     ensure_no_legacy_file_objects,
     file_coverage_in_manifest,
     manifest_for,
-    resolve_target,
 )
 from biotope.utils import (
     calculate_file_checksum,
@@ -194,170 +195,154 @@ def _validate_move_operation(
 def _execute_move(source: Path, destination: Path, biotope_root: Path, console: Console) -> None:
     """Execute the actual move operation."""
     destination.parent.mkdir(parents=True, exist_ok=True)
-
     metadata_files = _find_metadata_files_for_file(source, biotope_root)
-
     if not metadata_files:
         click.echo("⚠️  No metadata files found referencing this file")
         return
-
-    # If any owning manifest is multi-file, fork to the in-place update path.
-    # The legacy "move manifest alongside" logic only fires when every owning
-    # manifest is single-file (one FileObject, no FileSet) — i.e. the
-    # historical 1-manifest-per-file shape.
-    if any(m != resolve_target(source, biotope_root).metadata_path for m in metadata_files):
-        _execute_move_for_multifile(source, destination, biotope_root, metadata_files, console)
-        return
-
-    # Calculate source and destination relative paths for metadata file naming
-    source_rel = source.relative_to(biotope_root)
-    destination_rel = destination.relative_to(biotope_root)
-
-    # Pre-validate that we can update all metadata files
-    validation_results = []
-    for metadata_file in metadata_files:
-        # Test if we can read and update the metadata file
-        try:
-            metadata = _load_metadata_file(metadata_file)
-
-            # Check if the file reference exists in this metadata
-            has_reference = False
-            for distribution in metadata.get("distribution", []):
-                if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == str(source_rel):
-                    has_reference = True
-                    break
-
-            if has_reference:
-                # Test if we can write to the metadata file
-                test_metadata = metadata.copy()
-                for distribution in test_metadata.get("distribution", []):
-                    if distribution.get("@type") == FILE_OBJECT_TYPE and distribution.get("contentUrl") == str(
-                        source_rel
-                    ):
-                        distribution["contentUrl"] = str(destination_rel)
-                        distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
-                        break
-
-                # Test write by writing to a temporary file
-                import tempfile
-
-                with tempfile.NamedTemporaryFile(mode="w", delete=False, dir=metadata_file.parent) as temp_file:
-                    json.dump(test_metadata, temp_file, indent=2)
-                    temp_file_path = Path(temp_file.name)
-
-                # Clean up test file
-                temp_file_path.unlink()
-                validation_results.append((metadata_file, True))
-            else:
-                validation_results.append((metadata_file, False))
-
-        except (json.JSONDecodeError, IOError, OSError) as e:
-            validation_results.append((metadata_file, False, str(e)))
-
-    # Check if all metadata files can be updated
-    failed_validations = [r for r in validation_results if not r[1]]
-    if failed_validations:
-        console.print("[bold red]❌ Failed to validate metadata updates:[/]")
-        for failed in failed_validations:
-            if len(failed) > 2:
-                console.print(f"  - {failed[0]}: {failed[2]}")
-            else:
-                console.print(f"  - {failed[0]}: Unknown error")
-        raise click.Abort
-
-    # Move the actual data file
-    try:
-        shutil.move(str(source), str(destination))
-    except OSError as e:
-        console.print(f"[bold red]❌ Failed to move file: {e}[/]")
-        raise click.Abort
-    _move_annotation(source, destination, biotope_root)
-
-    # Calculate new checksum after move
-    try:
-        new_checksum = calculate_file_checksum(destination)
-    except OSError as e:
-        # Rollback: move file back
-        try:
-            shutil.move(str(destination), str(source))
-            _move_annotation(destination, source, biotope_root)
-        except OSError:
-            console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
-        console.print(f"[bold red]❌ Failed to calculate checksum: {e}[/]")
-        raise click.Abort
-
-    updated_files = []
-    moved_metadata_files = []
-    rollback_needed = False
-
-    try:
-        for metadata_file in metadata_files:
-            # Update the content of the metadata file
-            if _update_metadata_file_path(
-                metadata_file,
-                str(source_rel),
-                str(destination_rel),
-                new_checksum,
-                biotope_root,
-            ):
-                updated_files.append(metadata_file)
-
-                new_metadata_path = resolve_target(destination, biotope_root).metadata_path
-
-                # Move the metadata file to mirror the new data file structure
-                if new_metadata_path != metadata_file:
-                    new_metadata_path.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        _move_manifest(biotope_root, metadata_file, new_metadata_path)
-                        moved_metadata_files.append((metadata_file, new_metadata_path))
-                    except OSError as e:
-                        console.print(f"[bold red]❌ Failed to move metadata file: {e}[/]")
-                        rollback_needed = True
-                        break
-
-    except Exception as e:
-        console.print(f"[bold red]❌ Failed to update metadata: {e}[/]")
-        rollback_needed = True
-
-    # Rollback if needed
-    if rollback_needed:
-        console.print("[bold yellow]🔄 Rolling back changes...[/]")
-
-        # Rollback metadata file moves
-        for old_path, new_path in reversed(moved_metadata_files):
-            try:
-                if new_path.exists():
-                    shutil.move(str(new_path), str(old_path))
-            except OSError as e:
-                console.print(f"[bold red]❌ Failed to rollback metadata file move: {e}[/]")
-
-        # Rollback data file move
-        try:
-            shutil.move(str(destination), str(source))
-            _move_annotation(destination, source, biotope_root)
-        except OSError:
-            console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
-
-        raise click.Abort
-
-    written = [*updated_files, *(new for _, new in moved_metadata_files)]
-    warn_ignored(biotope_root, [path for path in written if path.exists()])
-
+    plans = _planned(metadata_files, [(source, destination)], biotope_root)
+    _apply(source, destination, plans, biotope_root, console)
     console.print(
         Panel(
             f"[bold green]✅ Moved:[/] {source}\n"
             f"[bold green]To:[/] {destination}\n"
-            f"[bold blue]📝 Updated {len(updated_files)} metadata file(s)[/]"
-            + (
-                f"\n[bold blue]📁 Moved {len(moved_metadata_files)} metadata file(s)[/]" if moved_metadata_files else ""
-            ),
+            f"[bold blue]📝 Updated {len(plans)} metadata file(s)[/]",
             title="Move Complete",
         )
     )
-
     console.print("\n💡 Next steps:")
     console.print("  1. Run 'biotope status' to see the changes")
     console.print("  2. Run 'biotope check-data' to verify file integrity")
+
+
+@dataclass
+class _Plan:
+    manifest: Path
+    target: Path
+    text: str
+    annotation: Path | None
+    annotation_text: str | None
+    schemas: dict[Path, str]
+    revised: list[Target]
+
+
+def _planned(manifests: List[Path], moves: list[tuple[Path, Path]], biotope_root: Path) -> list[_Plan]:
+    plans: list[_Plan] = []
+    for manifest in manifests:
+        try:
+            refusal = _refusal(manifest, moves, biotope_root)
+            plan = None if refusal else _plan(manifest, moves, biotope_root)
+        except (OSError, ValueError) as exc:
+            refusal = f"❌ Cannot update {manifest.relative_to(biotope_root)}: {exc}"
+        if refusal:
+            click.echo(refusal)
+            raise click.Abort
+        plans += [plan] if plan is not None else []
+    return plans
+
+
+def _refusal(manifest: Path, moves: list[tuple[Path, Path]], biotope_root: Path) -> str | None:
+    if any(manifest == manifest_for(old, biotope_root) for old, _ in moves):
+        return None
+    metadata = _load_metadata_file(manifest)
+    dataset_dir = dataset_dir_for_manifest(manifest, biotope_root)
+    for old, new in moves:
+        coverage = file_coverage_in_manifest(metadata, dataset_dir, old, biotope_root)
+        if coverage is not None and not new.is_relative_to(dataset_dir):
+            return (
+                f"❌ Cross-dataset move refused. {old.relative_to(biotope_root)} is owned by "
+                f"{manifest.relative_to(biotope_root)}, whose data lives under "
+                f"{dataset_dir.relative_to(biotope_root)}/; {new.relative_to(biotope_root)} is outside it. "
+                "Use biotope add at the new location and biotope rm at the old."
+            )
+        patterns = _fileset_patterns(metadata)
+        if coverage == "fileset" and not any(
+            fnmatch.fnmatch(new.relative_to(dataset_dir).as_posix(), pattern) for pattern in patterns
+        ):
+            return (
+                f"❌ FileSet pattern would no longer cover the file after rename. {old.relative_to(biotope_root)} is "
+                f"covered by a FileSet glob ({', '.join(patterns)}) in {manifest.relative_to(biotope_root)}; "
+                f"{new.relative_to(dataset_dir).as_posix()} does not match it. "
+                "Pick a name that does, or use rm and add."
+            )
+    return None
+
+
+def _plan(
+    manifest: Path, moves: list[tuple[Path, Path]], biotope_root: Path, checksum: str | None = None
+) -> _Plan | None:
+    metadata = _load_metadata_file(manifest)
+    before = copy.deepcopy(metadata)
+    dataset_dir = dataset_dir_for_manifest(manifest, biotope_root).resolve()
+    mapping: dict[str, str] = {}
+    for old, new in moves:
+        present = old if old.exists() else new
+        for distribution in metadata.get("distribution", []):
+            url = distribution.get("contentUrl")
+            if distribution.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
+                continue
+            if url == old.relative_to(biotope_root).as_posix():
+                distribution["contentUrl"] = new.relative_to(biotope_root).as_posix()
+            elif (dataset_dir / url).resolve() == old.resolve():
+                distribution["contentUrl"] = Path(os.path.relpath(new, dataset_dir)).as_posix()
+            else:
+                continue
+            mapping |= moved_ids(metadata, distribution["@id"], _within(old, dataset_dir), _within(new, dataset_dir))
+            distribution.pop(MOVED_FROM, None)
+            distribution["sha256"] = checksum or calculate_file_checksum(present)
+            distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
+            distribution["contentSize"] = present.stat().st_size
+    if not mapping:
+        return None
+    rename(metadata, mapping)
+    own = [new for old, new in moves if manifest == manifest_for(old, biotope_root)]
+    found = annotation.located(manifest)
+    text = annotation.renamed(found, renamer(mapping)) if found is not None else None
+    after = annotation.current(metadata, annotation.parsed(found, text) if found and text else annotation.read(found))
+    schemas, revised = planned_ids(biotope_root / "graph/sources", manifest, before, after, mapping)
+    target = manifest_for(own[0], biotope_root) if own else manifest
+    moved = annotation.annotation_path(own[0]) if own and found is not None else found
+    return _Plan(manifest, target, description_text(after), moved, text, schemas, revised)
+
+
+def _apply(source: Path, destination: Path, plans: list[_Plan], biotope_root: Path, console: Console) -> None:
+    sources = biotope_root / "graph/sources"
+    kept = [
+        *(path for plan in plans for path in (plan.manifest, plan.target, plan.annotation) if path is not None),
+        *(path for plan in plans for path in package_files(sources, plan.manifest)),
+        *(annotation.annotation_path(path) for path in (source, destination) if not source.is_dir()),
+    ]
+    saved = {path: path.read_bytes() if path.is_file() else None for path in kept}
+    try:
+        shutil.move(str(source), str(destination))
+    except OSError as exc:
+        console.print(f"[bold red]❌ Failed to move: {exc}[/]")
+        raise click.Abort from exc
+    written: list[Path] = []
+    try:
+        if destination.is_file():
+            _move_annotation(source, destination, biotope_root)
+        for plan in plans:
+            if plan.annotation is not None and plan.annotation_text is not None:
+                write_text_atomic(plan.annotation, plan.annotation_text)
+                written.append(plan.annotation)
+            write_text_atomic(plan.manifest, plan.text)
+            written += [plan.target, *write_ids(plan.manifest, plan.schemas, plan.revised)]
+            if plan.target != plan.manifest:
+                plan.target.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    _move_manifest(biotope_root, plan.manifest, plan.target)
+                except OSError as exc:
+                    raise OSError(f"Failed to move metadata file {plan.manifest}: {exc}") from exc
+    except Exception as exc:
+        for path, data in saved.items():
+            if data is None:
+                path.unlink(missing_ok=True)
+            else:
+                (write_module if path.suffix == ".py" else write_text_atomic)(path, data.decode("utf-8"))
+        shutil.move(str(destination), str(source))
+        console.print(f"[bold red]❌ {exc}; nothing was moved.[/]")
+        raise click.Abort from exc
+    warn_ignored(biotope_root, [path for path in written if path.exists()])
 
 
 def _find_tracked_files_in_directory(directory: Path, biotope_root: Path) -> List[Path]:
@@ -388,6 +373,22 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
 
     if not tracked_files:
         click.echo("⚠️  No tracked files found in directory")
+        return
+
+    owners = {manifest for path in tracked_files for manifest in _find_metadata_files_for_file(path, biotope_root)}
+    if all(_encloses(dataset_dir_for_manifest(manifest, biotope_root), source) for manifest in owners):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        moves = [(path, destination / path.relative_to(source)) for path in tracked_files]
+        plans = _planned(sorted(owners), moves, biotope_root)
+        _apply(source, destination, plans, biotope_root, console)
+        console.print(
+            Panel(
+                f"[bold green]✅ Moved directory:[/] {source}\n"
+                f"[bold green]To:[/] {destination}\n"
+                f"[bold blue]📝 Updated {len(plans)} metadata file(s) in place[/]",
+                title="Directory Move Complete",
+            )
+        )
         return
 
     # Calculate relative paths
@@ -637,6 +638,10 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
     console.print("  2. Run 'biotope check-data' to verify file integrity")
 
 
+def _encloses(dataset_dir: Path, directory: Path) -> bool:
+    return directory.is_relative_to(dataset_dir) and directory != dataset_dir
+
+
 def _cleanup_empty_metadata_directories(metadata_dir: Path, biotope_root: Path) -> None:
     """Clean up empty metadata directories after moving files."""
     if not metadata_dir.exists():
@@ -819,122 +824,6 @@ def _fileset_patterns(metadata: dict) -> list[str]:
     return patterns
 
 
-def _execute_move_for_multifile(
-    source: Path,
-    destination: Path,
-    biotope_root: Path,
-    metadata_files: List[Path],
-    console: Console,
-) -> None:
-    """Move a single file that lives in a multi-file manifest.
-
-    Constraint: destination must stay under the manifest's dataset directory
-    — moving across dataset boundaries would orphan the manifest's
-    `contentUrl` / `includes` claims about its own dataset dir.
-
-    For each owning manifest:
-      - FileObject coverage: update `contentUrl` in place. Don't move the
-        manifest (other files depend on it).
-      - FileSet coverage: rename succeeds iff the new path still matches the
-        glob. Manifest stays untouched (the pattern still describes the new
-        name). Otherwise refuse.
-    """
-    source_rel = source.relative_to(biotope_root)
-    destination_rel = destination.relative_to(biotope_root)
-
-    # Pre-validate every owning manifest before touching the filesystem.
-    decisions: list[tuple[Path, str, dict]] = []  # (manifest_path, mode, metadata)
-    for metadata_file in metadata_files:
-        try:
-            metadata = _load_metadata_file(metadata_file)
-        except (json.JSONDecodeError, OSError) as exc:
-            console.print(f"[bold red]❌ Cannot read {metadata_file}: {exc}[/]")
-            raise click.Abort
-
-        dataset_dir = dataset_dir_for_manifest(metadata_file, biotope_root)
-        try:
-            destination.relative_to(dataset_dir)
-        except ValueError:
-            console.print(
-                f"[bold red]❌ Cross-dataset move refused.[/]\n"
-                f"   {source_rel} is owned by [cyan]{metadata_file.relative_to(biotope_root)}[/cyan] "
-                f"whose data lives under [cyan]{dataset_dir.relative_to(biotope_root)}/[/cyan].\n"
-                f"   Destination [cyan]{destination_rel}[/cyan] is outside that directory.\n"
-                f"   Use [bold]biotope add[/bold] at the new location and [bold]biotope rm[/bold] at the old."
-            )
-            raise click.Abort
-
-        coverage = file_coverage_in_manifest(metadata, dataset_dir, source, biotope_root)
-        if coverage == "file_object":
-            decisions.append((metadata_file, "update_contentUrl", metadata))
-            continue
-        if coverage == "fileset":
-            new_relative_to_dataset = str(destination.relative_to(dataset_dir))
-            patterns = _fileset_patterns(metadata)
-            if not any(fnmatch.fnmatch(new_relative_to_dataset, p) for p in patterns):
-                console.print(
-                    f"[bold red]❌ FileSet pattern would no longer cover the file after rename.[/]\n"
-                    f"   {source_rel} is covered by a FileSet glob "
-                    f"({', '.join(patterns)}) in "
-                    f"[cyan]{metadata_file.relative_to(biotope_root)}[/cyan].\n"
-                    f"   New path [cyan]{new_relative_to_dataset}[/cyan] doesn't match — "
-                    f"either pick a name that does, or use rm + add."
-                )
-                raise click.Abort
-            decisions.append((metadata_file, "fileset_no_op", metadata))
-            continue
-        # coverage None: discovered by _find_metadata_files_for_file but no
-        # match here — skip without modifying anything.
-        decisions.append((metadata_file, "skip", metadata))
-
-    # Perform the data move.
-    try:
-        shutil.move(str(source), str(destination))
-    except OSError as exc:
-        console.print(f"[bold red]❌ Failed to move file: {exc}[/]")
-        raise click.Abort
-
-    try:
-        new_checksum = calculate_file_checksum(destination)
-    except OSError as exc:
-        try:
-            shutil.move(str(destination), str(source))
-        except OSError:
-            console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
-        console.print(f"[bold red]❌ Failed to calculate checksum: {exc}[/]")
-        raise click.Abort
-
-    updated: list[Path] = []
-    fileset_passthroughs: list[Path] = []
-    for metadata_file, mode, _ in decisions:
-        if mode == "update_contentUrl":
-            if _update_metadata_file_path(
-                metadata_file,
-                str(source_rel),
-                str(destination_rel),
-                new_checksum,
-                biotope_root,
-            ):
-                updated.append(metadata_file)
-        elif mode == "fileset_no_op":
-            fileset_passthroughs.append(metadata_file)
-
-    warn_ignored(biotope_root, updated)
-
-    summary_lines = [
-        f"[bold green]✅ Moved:[/] {source}",
-        f"[bold green]To:[/] {destination}",
-        f"[bold blue]📝 Updated contentUrl in {len(updated)} manifest(s) (in place)[/]",
-    ]
-    if fileset_passthroughs:
-        summary_lines.append(
-            f"[dim]ℹ {len(fileset_passthroughs)} FileSet glob(s) still match — no manifest change needed[/dim]"
-        )
-    console.print(Panel("\n".join(summary_lines), title="Move Complete"))
-    console.print("\n💡 Next steps:")
-    console.print("  1. Run 'biotope status' to see the changes")
-
-
 def _update_metadata_file_path(
     metadata_file: Path,
     old_path: str,
@@ -944,49 +833,16 @@ def _update_metadata_file_path(
 ) -> bool:
     """Update file path in a metadata file."""
     try:
-        metadata = _load_metadata_file(metadata_file)
-        before = copy.deepcopy(metadata)
-
-        dataset_dir = dataset_dir_for_manifest(metadata_file, biotope_root).resolve()
-        moved = (biotope_root / old_path).resolve()
-        destination = (biotope_root / new_path).resolve()
-        mapping: dict[str, str] = {}
-        updated = False
-        for distribution in metadata.get("distribution", []):
-            url = distribution.get("contentUrl")
-            if distribution.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
-                continue
-            if url == old_path:
-                distribution["contentUrl"] = new_path
-            elif (dataset_dir / url).resolve() == moved:
-                distribution["contentUrl"] = Path(os.path.relpath(biotope_root / new_path, dataset_dir)).as_posix()
-            else:
-                continue
-            if isinstance(distribution.get("@id"), str):
-                mapping |= moved_ids(
-                    metadata, distribution["@id"], _within(moved, dataset_dir), _within(destination, dataset_dir)
-                )
-            distribution.pop(MOVED_FROM, None)
-            distribution["sha256"] = new_checksum
-            distribution["dateModified"] = datetime.now(timezone.utc).isoformat()
-            distribution["contentSize"] = (biotope_root / new_path).stat().st_size
-            updated = True
-
-        if updated:
-            rename(metadata, mapping)
-            found = annotation.located(metadata_file)
-            text = annotation.renamed(found, renamer(mapping)) if found is not None else None
-            if found is not None and text is not None:
-                write_text_atomic(found, text)
-                warn_ignored(biotope_root, [found])
-            with open(metadata_file, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-            warn_ignored(biotope_root, follow_ids(biotope_root / "graph/sources", metadata_file, before, mapping))
-
-        return updated
-
-    except (json.JSONDecodeError, IOError, OSError):
+        plan = _plan(metadata_file, [(biotope_root / old_path, biotope_root / new_path)], biotope_root, new_checksum)
+    except (json.JSONDecodeError, IOError, OSError, ValueError):
         return False
+    if plan is None:
+        return False
+    if plan.annotation is not None and plan.annotation_text is not None:
+        write_text_atomic(plan.annotation, plan.annotation_text)
+    write_text_atomic(metadata_file, plan.text)
+    warn_ignored(biotope_root, [metadata_file, *write_ids(metadata_file, plan.schemas, plan.revised)])
+    return True
 
 
 def _move_manifest(biotope_root: Path, old: Path, new: Path) -> None:
