@@ -202,7 +202,10 @@ def acknowledge(root):
 
 
 def test_new_data_of_the_same_shape_rebuilds_after_the_refresh_alone(project):
-    annotation = project / "data/study/.biotope.yaml"
+    study = project / "data/study"
+    (study / "docs/about.html").write_text("<html><body>About the study</body></html>")
+    refresh()
+    annotation = study / ".biotope.yaml"
     annotation.write_text(
         annotation.read_text() + "description: One synthetic study.\n"
         "tables:\n"
@@ -216,18 +219,22 @@ def test_new_data_of_the_same_shape_rebuilds_after_the_refresh_alone(project):
     )
     acknowledge(project)
     written = annotation.read_bytes()
-    study = project / "data/study"
     (study / "push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\np3,Lin\n")
     (study / "push/projects.csv").write_text("project_id,title\nx1,Atlas\n")
-    (study / "docs/report.html").write_text("<html><body>Report, downloaded again</body></html>")
+    (study / "docs/report.html").write_text("<html><body>Page not found</body></html>")
+    (study / "docs/about.html").write_text("<html><body>Page not found</body></html>")
     (study / "archive").mkdir()
     (study / "archive/people.csv").write_text("person_id,name\np0,Old\n")
+    (study / "backup").mkdir()
+    shutil.copy(study / "push/people.csv", study / "backup/people.csv")
 
     refresh()
 
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 3)
     assert annotation.read_bytes() == written
     description = json.loads((project / MANIFEST).read_text())
+    files = {entry["@id"] for entry in description["distribution"]}
+    assert {"docs/about.html", "docs/report.html", "push/people.csv"} <= files
     assert description["description"] == "One synthetic study."
     people = next(record for record in description["recordSet"] if record["@id"] == "push/people.csv#people")
     assert (people["description"], people["key"]) == (

@@ -382,7 +382,12 @@ def _bake_directory(
     found = sorted(_iter_directory_files(abs_dir))
     records = [path for path in found if state_path(biotope_root, path).is_file()]
     files = [path for path in found if path not in records]
-    copies = _identical_copies(files)
+    described = {
+        abs_dir / entry["contentUrl"]
+        for entry in _read_description(target.metadata_path).get("distribution") or []
+        if entry.get("@type") == FILE_OBJECT_TYPE and isinstance(entry.get("contentUrl"), str)
+    }
+    copies = _identical_copies(files, described)
     skipped = {**{copy: "the identical copy" for copy in copies}, **{path: "the extracted records" for path in records}}
     excluded = {escape_glob(str(path.relative_to(abs_dir))): path for path in skipped}
     bake_error = None
@@ -457,17 +462,16 @@ def _build_minimal_directory_metadata(abs_dir: Path, biotope_root: Path, default
     )
 
 
-def _identical_copies(files: list[Path]) -> dict[Path, Path]:
-    """Map each file whose bytes repeat a file earlier in ``files`` to that file."""
+def _identical_copies(files: list[Path], described: set[Path]) -> dict[Path, Path]:
     by_size: dict[int, list[Path]] = defaultdict(list)
-    for file_path in files:
+    for file_path in sorted(files, key=lambda path: path not in described):
         by_size[file_path.stat().st_size].append(file_path)
     copies: dict[Path, Path] = {}
     for paths in by_size.values():
         originals: dict[str, Path] = {}
         for file_path in paths if len(paths) > 1 else ():
             original = originals.setdefault(calculate_file_checksum(file_path), file_path)
-            if original != file_path:
+            if original != file_path and file_path not in described:
                 copies[file_path] = original
     return copies
 
