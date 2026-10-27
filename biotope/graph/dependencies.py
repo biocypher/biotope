@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import ast
-import importlib.metadata
-import inspect
 import re
 import sys
 from collections.abc import Iterable, Mapping
@@ -13,9 +11,12 @@ from pathlib import Path
 
 
 if sys.version_info >= (3, 11):
+    from importlib.metadata import packages_distributions
+
     import tomllib
 else:
     import tomli as tomllib
+    from importlib_metadata import packages_distributions
 
 
 def canonical(name: str) -> str:
@@ -26,13 +27,7 @@ def canonical(name: str) -> str:
 @lru_cache(maxsize=1)
 def installed_modules() -> Mapping[str, list[str]]:
     """Scan the installed distributions once per process; the scan takes a noticeable fraction of a second."""
-    found: dict[str, list[str]] = {}
-    for distribution in importlib.metadata.distributions():
-        declared = (distribution.read_text("top_level.txt") or "").split()
-        inferred = (inspect.getmodulename(file.parts[0]) or file.parts[0] for file in distribution.files or ())
-        for module in declared or {name for name in inferred if "." not in name}:
-            found.setdefault(module, []).append(distribution.metadata["Name"])
-    return found
+    return packages_distributions()
 
 
 def imported_distributions(files: Iterable[Path]) -> dict[str, list[str]]:
