@@ -1,6 +1,7 @@
 import json
 import shutil
 
+import openpyxl
 import pytest
 from graph_project import MANIFEST, built, findings, invoke, ok, refresh
 
@@ -65,6 +66,24 @@ def test_a_folder_moved_to_another_parent_carries_every_description_in_it(single
         "archive/data/archive/raw/people.csv.jsonld",
         "archive/data/study.jsonld",
     ]
+
+
+def test_mv_of_a_workbook_keeps_its_sheet_name_through_the_refresh(project):
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.title = "people"
+    sheet.append(["person_id", "name"])
+    sheet.append(["p1", "Ada"])
+    book.save(project / "data/study/push/people.xlsx")
+    refresh()
+
+    ok("mv", "data/study/push/people.xlsx", "data/study/push/staff.xlsx")
+    refresh()
+
+    tables = {record["@id"] for record in json.loads((project / MANIFEST).read_text())["recordSet"]}
+    assert "push/staff.xlsx#people" in tables
+    assert not [finding for finding in findings(ok("graph", "check", "--json")) if "xlsx" in json.dumps(finding)]
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
 def snapshot(root):

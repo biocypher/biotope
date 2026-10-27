@@ -96,6 +96,16 @@ def _named_inside(record: dict[str, Any], url: str) -> bool:
     return not re.fullmatch(rf"(?:.+__)?{_base(url)}(?:__\d+)?", name) and _inner_name(record, url) != name
 
 
+def _named_after_file(record: dict[str, Any], resource: dict[str, Any], readers: int) -> bool:
+    url = resource.get("contentUrl")
+    return (
+        isinstance(url, str)
+        and readers == 1
+        and not _named_inside(record, url)
+        and WORKBOOKS.isdisjoint(_named(resource.get("encodingFormat")))
+    )
+
+
 def renamer(mapping: dict[str, str]) -> Callable[[str], str]:
     def renamed(value: str) -> str:
         if value in mapping:
@@ -149,11 +159,7 @@ def stable_ids(metadata: dict[str, Any]) -> None:
         url = resource.get("contentUrl")
         if not isinstance(url, str):
             table = str(record.get("name") or record["@id"])
-        elif (
-            readers[source] == 1
-            and not _named_inside(record, url)
-            and WORKBOOKS.isdisjoint(_named(resource.get("encodingFormat")))
-        ):
+        elif _named_after_file(record, resource, readers[source]):
             table = stem(url)
         else:
             table = _inner_name(record, url)
@@ -191,13 +197,14 @@ def _check(distribution: list[dict[str, Any]], records: list[dict[str, Any]]) ->
 
 def moved_ids(metadata: dict[str, Any], old_id: str, old_relative: str, new_relative: str) -> dict[str, str]:
     new_id = file_id(new_relative)
+    resource = next((entry for entry in metadata.get("distribution") or [] if entry.get("@id") == old_id), {})
     tables = [record for record in metadata.get("recordSet") or [] if old_id in read_files(record)]
     mapping = {old_id: new_id}
     for record in tables:
         identity = record.get("@id")
         if isinstance(identity, str) and identity.startswith(old_id + "#"):
             table = identity[len(old_id) + 1 :]
-            if len(tables) == 1 and table == encode(stem(old_relative), slash=False):
+            if table == encode(stem(old_relative), slash=False) and _named_after_file(record, resource, len(tables)):
                 table = encode(stem(new_relative), slash=False)
             mapping[identity] = f"{new_id}#{table}"
     return mapping
