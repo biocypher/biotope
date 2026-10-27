@@ -356,7 +356,8 @@ folder and moves the descriptions of the datasets inside it; it changes nothing
 when it cannot update one of them. `graph check` then passes, and the source reads
 the file at its new path. `mv` refuses, changing nothing, to replace a file a
 description holds or an existing annotation file, even with `--force`, and to give
-a file a path that differs from another's only in case. It renames the data and
+a file a path that differs only in case from another file of its dataset, an
+identical copy the description leaves out included. It renames the data and
 never copies it, so it cannot move data to another filesystem or a folder onto a
 folder that holds files; there it also changes nothing.
 

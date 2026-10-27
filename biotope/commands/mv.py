@@ -10,8 +10,9 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
+from biotope.commands.add import directory_files
 from biotope.croissant import annotation
-from biotope.croissant.ids import MOVED_FROM, check_ids, moved_ids, rename, renamer
+from biotope.croissant.ids import MOVED_FROM, case_clashes, check_ids, moved_ids, rename, renamer
 from biotope.extraction.run import STATES, state_path
 from biotope.graph.moves import (
     carry_description,
@@ -211,6 +212,8 @@ def _plan(
         _check_file_sets(manifest, metadata, base, moves, biotope_root)
         if not mapping:
             return None
+    if folder:
+        _check_case(base, new_base, moves, biotope_root)
     rename(metadata, mapping)
     check_ids(metadata)
     old_name, new_name = (path.relative_to(biotope_root).as_posix() for path in (data, carried))
@@ -252,6 +255,14 @@ def _check_file_sets(
                 f"covered by a FileSet glob ({', '.join(patterns)}) in {manifest.relative_to(biotope_root)}; "
                 f"{new.relative_to(base).as_posix()} does not match it. Pick a name that does, or use rm and add."
             )
+
+
+def _check_case(base: Path, new_base: Path, moves: dict[Path, Path], biotope_root: Path) -> None:
+    files, _ = directory_files(base, biotope_root)
+    moved = [moves.get(path, path) for path in files]
+    clashes = case_clashes(path.relative_to(new_base).as_posix() for path in moved if path.is_relative_to(new_base))
+    if clashes:
+        raise ValueError("cannot give every file and table a stable ID: " + "; ".join(clashes))
 
 
 def _fileset_patterns(metadata: dict[str, Any]) -> list[str]:

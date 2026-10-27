@@ -437,7 +437,7 @@ def acknowledge(root, manifest=MANIFEST):
             schema.write_text(schema.read_text().replace(status.acknowledged, status.revision))
 
 
-def test_an_identical_copy_whose_path_differs_only_in_case_fails_the_refresh_naming_both(project):
+def test_an_identical_copy_whose_path_differs_only_in_case_fails_the_refresh_and_mv_naming_both(project):
     push = project / "data/study/push"
     before = snapshot(project)
     both = not (push / "PEOPLE.csv").exists()
@@ -450,6 +450,20 @@ def test_an_identical_copy_whose_path_differs_only_in_case_fails_the_refresh_nam
         assert "the paths push/PEOPLE.csv and push/people.csv differ only in case" in " ".join(result.output.split())
         (push / "PEOPLE.csv").unlink()
         assert snapshot(project) == before
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+    copy = project / "data/study/x/people.csv"
+    copy.parent.mkdir()
+    shutil.copy(push / "people.csv", copy)
+    refresh()
+    before = snapshot(project)
+    taken = (copy.parent / "PEOPLE.csv").exists()
+
+    refused = invoke("mv", "data/study/push/people.csv", "data/study/x/PEOPLE.csv")
+
+    reason = "exists" if taken else "the paths x/PEOPLE.csv and x/people.csv differ only in case"
+    assert refused.exit_code != 0 and reason in " ".join(refused.output.split())
+    assert snapshot(project) == before
     refresh()
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 

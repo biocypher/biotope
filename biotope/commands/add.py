@@ -395,9 +395,7 @@ def _bake_directory(
     defaults = load_project_metadata(biotope_root)
     now = datetime.now(tz=timezone.utc).isoformat()
 
-    found = sorted(_iter_directory_files(abs_dir))
-    records = [path for path in found if state_path(biotope_root, path).is_file()]
-    files = [path for path in found if path not in records]
+    files, records = directory_files(abs_dir, biotope_root)
     described = {
         abs_dir / entry["contentUrl"]
         for entry in _read_description(target.metadata_path).get("distribution") or []
@@ -541,6 +539,12 @@ def _give_stable_ids(metadata: dict[str, Any], source: Path, data: Path) -> None
         stable_ids(metadata)
     except ValueError as exc:
         raise click.ClickException(f"{source}: {exc}") from exc
+
+
+def directory_files(directory: Path, biotope_root: Path) -> tuple[list[Path], list[Path]]:
+    found = sorted(_iter_directory_files(directory))
+    records = [path for path in found if state_path(biotope_root, path).is_file()]
+    return [path for path in found if path not in records], records
 
 
 def _iter_directory_files(abs_dir: Path):
