@@ -229,6 +229,20 @@ def test_a_mv_that_cannot_rename_the_data_keeps_the_file_it_would_replace(single
 
 
 @pytest.mark.parametrize("force", [(), ("-f",)])
+def test_mv_never_moves_a_folder_onto_an_existing_one(project, force):
+    (project / "data/current/study").mkdir(parents=True)
+    (project / "data/current/study/old.txt").write_text("kept\n")
+    before = snapshot(project)
+
+    refused = invoke("mv", "-r", *force, "data/study", "data/current")
+
+    assert refused.exit_code != 0 and "data/current/study" in refused.output
+    assert snapshot(project) == before
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+
+
+@pytest.mark.parametrize("force", [(), ("-f",)])
 def test_mv_never_replaces_an_annotation_file(single, force):
     (single / "data/raw/staff.csv.biotope.yaml").write_text("# Notes on a file that is still to come.\n")
     before = snapshot(single)
