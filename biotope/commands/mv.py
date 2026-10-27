@@ -131,8 +131,10 @@ def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_r
                 "Remove it with biotope rm first, then move the other file onto its path."
             )
     datasets = biotope_root / ".biotope" / "datasets"
+    manifests = sorted(datasets.rglob("*.jsonld"))
+    _check_into(manifests, source, destination, biotope_root)
     plans: list[_Plan] = []
-    for manifest in sorted(datasets.rglob("*.jsonld")):
+    for manifest in manifests:
         data = biotope_root / dataset_id(manifest, biotope_root)
         carried = _follows(data, source, destination)
         try:
@@ -160,6 +162,22 @@ def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_r
             "mv never replaces an annotation file; move or delete it first."
         )
     return plans
+
+
+def _check_into(manifests: list[Path], source: Path, destination: Path, biotope_root: Path) -> None:
+    data = {manifest: biotope_root / dataset_id(manifest, biotope_root) for manifest in manifests}
+    for manifest, path in data.items():
+        carried = _follows(path, source, destination)
+        for other, base in data.items():
+            if other == manifest or not base.is_dir() or path.is_relative_to(base):
+                continue
+            if carried.is_relative_to(_follows(base, source, destination)):
+                _refuse(
+                    f"Cross-dataset move refused. {path.relative_to(biotope_root)} is described by "
+                    f"{manifest.relative_to(biotope_root)}; {carried.relative_to(biotope_root)} lies inside "
+                    f"{base.relative_to(biotope_root)}/, which {other.relative_to(biotope_root)} describes. Move it "
+                    f"elsewhere, or use biotope rm and then biotope add --rebake {base.relative_to(biotope_root)}."
+                )
 
 
 def _refuse(message: str) -> NoReturn:

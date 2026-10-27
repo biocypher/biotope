@@ -190,21 +190,27 @@ def test_a_failed_mv_over_another_file_keeps_that_file(single):
 
 
 @pytest.mark.parametrize(
-    ("fixture", "moved", "dataset", "table"),
+    ("fixture", "moved", "dataset", "table", "under"),
     [
-        ("project", "data/study/push/people.csv", "data/study", "push/people.csv#people"),
-        ("single", "data/raw/people.csv", "data/raw/people.csv", "people.csv#people"),
+        (
+            "project",
+            "data/study/push/people.csv",
+            "data/study",
+            "push/people.csv#people",
+            "data/study/docs/report.html",
+        ),
+        ("single", "data/raw/people.csv", "data/raw/people.csv", "people.csv#people", ".gitignore"),
     ],
 )
 def test_a_mv_that_fails_on_a_path_under_a_file_puts_every_file_and_folder_back(
-    request, fixture, moved, dataset, table
+    request, fixture, moved, dataset, table, under
 ):
     root = request.getfixturevalue(fixture)
     annotation = root / (f"{dataset}/.biotope.yaml" if fixture == "project" else f"{dataset}.biotope.yaml")
     annotation.write_text(annotation.read_text() + f"tables:\n  {table}:\n    description: People.\n")
     before = snapshot(root)
 
-    failed = invoke("mv", moved, "data/study/docs/report.html/people.csv")
+    failed = invoke("mv", moved, f"{under}/people.csv")
 
     assert failed.exit_code != 0 and "nothing was moved" in failed.output
     assert snapshot(root) == before
@@ -335,3 +341,20 @@ def test_mv_refuses_to_move_a_file_out_of_its_folder_dataset(tmp_path, monkeypat
 
     assert moved.exit_code != 0 and "Cross-dataset" in moved.output
     assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("destination", ["data/study/docs/people.csv", "data/study/push/PEOPLE.csv"])
+def test_mv_refuses_to_move_a_single_file_dataset_into_a_folder_dataset(single, destination):
+    (single / "data/study/push").mkdir()
+    (single / "data/study/push/people.csv").write_text("person_id,name\np5,Kai\n")
+    refresh()
+    before = snapshot(single)
+    taken = (single / destination).exists()
+
+    refused = invoke("mv", "data/raw/people.csv", destination)
+
+    reason = "exists" if taken else "Cross-dataset move refused. data/raw/people.csv is described by"
+    assert refused.exit_code != 0 and reason in refused.output
+    assert snapshot(single) == before
+    refresh("data/study", "data/raw/people.csv")
+    assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
