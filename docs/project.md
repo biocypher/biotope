@@ -360,13 +360,13 @@ when it cannot update one of them. `graph check` then passes, and the source rea
 the file at its new path. `mv` refuses, changing nothing, to replace a file a
 description holds or an existing annotation file, even with `--force`; to give a
 file a path that differs only in case from another file of its dataset, an
-identical copy the description leaves out included; to move a dataset into the
-folder of another dataset, which would then describe it as well; and to move a
-file whose move outside biotope is unresolved, while a package with a written
-loader still declares the ID the file had before it. Resolve that move first as
-`graph check` advises. It renames the data and never copies it, so it cannot move
-data to another filesystem or a folder onto a folder that holds files; there it
-also changes nothing.
+identical copy the description leaves out included; to move a dataset other than
+a records file into the folder of another dataset, whose bake would then describe
+it as well; and to move a file whose move outside biotope is unresolved, while a
+package with a written loader still declares the ID the file had before it.
+Resolve that move first as `graph check` advises. It renames the data and never
+copies it, so it cannot move data to another filesystem or a folder onto a folder
+that holds files; there it also changes nothing.
 
 After `mv` of a document that an extraction schema reads, run `biotope extract run`
 again with every dataset the schema reads and the `--out` the project uses, as in
