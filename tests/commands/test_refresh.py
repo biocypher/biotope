@@ -21,8 +21,9 @@ def test_mv_keeps_the_graph_building_and_a_content_change_alone_is_reported_by_c
     assert any("people.csv" in row and "CORRUPTED" in row for row in rows)
     assert any("report.html" in row and "VALID" in row for row in rows)
 
-    ok("mv", "data/study/push/people.csv", "data/study/current/people.csv")
+    moved = ok("mv", "data/study/push/people.csv", "data/study/current/people.csv")
 
+    assert "biotope graph check" in moved.output
     rows = ok("check-data").output.splitlines()
     assert any("people.csv" in row and "CORRUPTED" in row for row in rows)
     assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 3)

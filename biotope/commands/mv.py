@@ -74,6 +74,7 @@ def mv(source: Path, destination: Path, force: bool, recursive: bool) -> None:
     console.print("\n💡 Next steps:")
     console.print("  1. Run 'biotope status' to see the changes")
     console.print("  2. Run 'biotope check-data' to verify file integrity")
+    console.print("  3. Run 'biotope graph check' when the project has a graph; it must pass")
 
 
 def _resolve_destination_path(source: Path, destination: Path) -> Path:
