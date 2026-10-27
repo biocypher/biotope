@@ -134,6 +134,7 @@ def rename(metadata: dict[str, Any], mapping: dict[str, str]) -> None:
 def stable_ids(metadata: dict[str, Any]) -> None:
     distribution: list[dict[str, Any]] = metadata.get("distribution") or []
     records: list[dict[str, Any]] = metadata.get("recordSet") or []
+    records[:] = [record for record in records if record.get("field")]
     resources = {entry["@id"]: entry for entry in distribution if isinstance(entry.get("@id"), str)}
     mapping = {identity: _own_id(entry) for identity, entry in resources.items()}
     readers: Counter[str] = Counter(name for record in records for name in read_files(record))

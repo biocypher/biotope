@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from croissant_baker.metadata_generator import MetadataGenerator
 
 from biotope.cli import cli
+from biotope.graph.targets import manifest_targets
 
 
 DECOMPOSED = "Résumé notes.pdf"
@@ -148,6 +149,36 @@ def test_a_table_inside_a_file_keeps_its_name_when_the_file_gains_a_second_table
         assert invoke("add", "--rebake", "data/cells").exit_code == 0
         tables.append({record["@id"] for record in json.loads(manifest.read_text())["recordSet"]})
     assert tables == [{"sample.h5ad#obs"}, {"sample.h5ad#obs", "sample.h5ad#var"}]
+
+
+def test_an_empty_json_object_keeps_its_path_as_id_when_a_same_named_file_arrives(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert invoke("init", ".", "--no-prompt").exit_code == 0
+    run = tmp_path / "data/run"
+    (run / "a").mkdir(parents=True)
+    (run / "a/records.jsonl").write_text('{"x": 1}\n')
+    (run / "a/state.json").write_text("{}")
+    manifest = tmp_path / ".biotope/datasets/data/run.jsonld"
+    assert invoke("add", "data/run").exit_code == 0
+    first = json.loads(manifest.read_text())
+    (run / "b").mkdir()
+    (run / "b/state.json").write_text("{ }")
+    assert invoke("add", "--rebake", "data/run").exit_code == 0
+    second = json.loads(manifest.read_text())
+
+    files_and_tables = [
+        ({entry["@id"] for entry in described["distribution"]}, {record["@id"] for record in described["recordSet"]})
+        for described in (first, second)
+    ]
+    assert files_and_tables == [
+        ({"a/records.jsonl", "a/state.json"}, {"a/records.jsonl#records"}),
+        ({"a/records.jsonl", "a/state.json", "b/state.json"}, {"a/records.jsonl#records"}),
+    ]
+    assert sorted(target.identity for target in manifest_targets(second)) == [
+        "a/records.jsonl#records",
+        "a/state.json",
+        "b/state.json",
+    ]
 
 
 class CaseTwins(MetadataGenerator):
