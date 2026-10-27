@@ -174,11 +174,13 @@ def _check_into(manifests: list[Path], source: Path, destination: Path, biotope_
             if other == manifest or not base.is_dir() or path.is_relative_to(base):
                 continue
             if carried.is_relative_to(_follows(base, source, destination)):
+                moved, into = path.relative_to(biotope_root), base.relative_to(biotope_root)
                 _refuse(
-                    f"Cross-dataset move refused. {path.relative_to(biotope_root)} is described by "
-                    f"{manifest.relative_to(biotope_root)}; {carried.relative_to(biotope_root)} lies inside "
-                    f"{base.relative_to(biotope_root)}/, which {other.relative_to(biotope_root)} describes. Move it "
-                    f"elsewhere, or use biotope rm and then biotope add --rebake {base.relative_to(biotope_root)}."
+                    f"Cross-dataset move refused. {moved} is described by {manifest.relative_to(biotope_root)}; "
+                    f"{carried.relative_to(biotope_root)} lies inside {into}/, which "
+                    f"{other.relative_to(biotope_root)} describes. Move it elsewhere. To make it part of {into}/, "
+                    f"run biotope rm --keep-data {moved}, which keeps the data, move it to "
+                    f"{carried.relative_to(biotope_root)} outside biotope, then run biotope add --rebake {into}."
                 )
 
 

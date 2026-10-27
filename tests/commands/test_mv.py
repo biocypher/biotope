@@ -389,3 +389,26 @@ def test_mv_moves_records_into_a_folder_dataset_whose_bake_leaves_them_out(proje
     manifest = json.loads((project / MANIFEST).read_text())
     identities = [entry["@id"] for entry in [*manifest["distribution"], *manifest["recordSet"]]]
     assert [identity for identity in identities if "profile" in identity] == []
+
+
+def test_a_refused_move_into_another_dataset_advises_steps_that_keep_the_data(project):
+    (project / "data/other").mkdir()
+    (project / "data/other/projects.csv").write_text("project_id,title\nx1,Atlas\n")
+    ok("add", "data/other")
+    before = snapshot(project)
+
+    refused = invoke("mv", "-r", "data/other", "data/study/other")
+
+    advice = (
+        "To make it part of data/study/, run biotope rm --keep-data data/other, which keeps the data, "
+        "move it to data/study/other outside biotope, then run biotope add --rebake data/study."
+    )
+    assert refused.exit_code != 0 and advice in " ".join(refused.output.split())
+    assert snapshot(project) == before
+    ok("rm", "--keep-data", "-f", "data/other")
+    shutil.move(project / "data/other", project / "data/study/other")
+    refresh()
+    assert (project / "data/study/other/projects.csv").read_text() == "project_id,title\nx1,Atlas\n"
+    manifest = json.loads((project / MANIFEST).read_text())
+    assert "other/projects.csv#projects" in {record["@id"] for record in manifest["recordSet"]}
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
