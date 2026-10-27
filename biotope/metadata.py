@@ -244,15 +244,17 @@ def names_file(distribution: dict[str, Any], dataset_dir: Path, file_path: Path,
     return located is not None and located.resolve() == file_path.resolve()
 
 
-def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
-    """The data directory mirrored by a manifest under the project root.
+def manifest_for(data: Path, biotope_root: Path) -> Path:
+    return biotope_root / ".biotope" / "datasets" / f"{data.relative_to(biotope_root).as_posix()}.jsonld"
 
-    Manifests live at ``.biotope/datasets/<rel>.jsonld``; the data they cover
-    lives at ``<biotope_root>/<rel>/``.
-    """
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-    rel = manifest_path.relative_to(datasets_dir).with_suffix("")
-    return biotope_root / rel
+
+def dataset_id(manifest_path: Path, biotope_root: Path) -> str:
+    return manifest_path.relative_to(biotope_root / ".biotope" / "datasets").as_posix().removesuffix(".jsonld")
+
+
+def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
+    data = biotope_root / dataset_id(manifest_path, biotope_root)
+    return data.parent if data.is_file() else data
 
 
 def file_coverage_in_manifest(
@@ -337,25 +339,12 @@ def find_owning_manifest(file_path: Path, biotope_root: Path) -> Path | None:
 def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
     """Resolve a file, dir, csv, or jsonld path to one dataset metadata target."""
     resolved = path.resolve()
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-
     if resolved.suffix == ".jsonld":
-        metadata_path = resolved
-        try:
-            rel_metadata = metadata_path.relative_to(datasets_dir)
-        except ValueError as exc:
-            raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets") from exc
-        dataset_dir = biotope_root / rel_metadata.with_suffix("")
-        return DatasetTarget(input_path=resolved, metadata_path=metadata_path, dataset_dir=dataset_dir)
-
-    if resolved.is_dir():
-        rel_dir = resolved.relative_to(biotope_root)
-        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
-        return DatasetTarget(input_path=resolved, metadata_path=metadata_path, dataset_dir=resolved)
-
-    rel_file = resolved.relative_to(biotope_root)
-    metadata_path = (datasets_dir / rel_file).with_suffix(".jsonld")
-    return DatasetTarget(input_path=resolved, metadata_path=metadata_path, dataset_dir=resolved.parent)
+        if not resolved.is_relative_to(biotope_root / ".biotope" / "datasets"):
+            raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets")
+        return DatasetTarget(resolved, resolved, dataset_dir_for_manifest(resolved, biotope_root))
+    dataset_dir = resolved if resolved.is_dir() else resolved.parent
+    return DatasetTarget(resolved, manifest_for(resolved, biotope_root), dataset_dir)
 
 
 def make_file_object(file_path: Path, base: Path) -> dict[str, Any]:

@@ -7,7 +7,7 @@ description: Builds typed knowledge-graph projects with Biotope from local data 
 
 **Terms used throughout.**
 
-- **Manifest**: a dataset's Croissant description, `.biotope/datasets/<path>.jsonld`. Biotope makes it from the data and the dataset's annotation file; never edit it.
+- **Manifest**: a dataset's Croissant description, `.biotope/datasets/<data path>.jsonld`, such as `.biotope/datasets/data/raw/people.csv.jsonld` for the file `data/raw/people.csv`. Biotope makes it from the data and the dataset's annotation file; never edit it.
 - **Annotation file**: `<folder>/.biotope.yaml` for a dataset added as a folder, `<file>.biotope.yaml` for a single file. The one place for everything people and agents write about the dataset.
 - **ID**: files and tables are named by their paths in the dataset, such as `push/people.csv` and its table `push/people.csv#people`, so new data keeps every ID.
 - **Source**: one input the graph may read — a RecordSet, or a file no RecordSet reads (a paper, notes, an image). Each source has a **package**, `graph/sources/<manifest>/<source>/`, holding its schema, `SOURCE` registration and loader.

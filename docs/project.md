@@ -14,7 +14,10 @@ biotope writes only in these places, and in the files you name to `mv`, `rm` or
 
 - `.biotope/`: metadata and technical state. `config.yaml`; `project.yaml`, the
   purpose that `biotope map` records; the Croissant descriptions in
-  `.biotope/datasets/`; the contract revisions in `.biotope/contracts/`; and the
+  `.biotope/datasets/`, each named after its data's whole path, such as
+  `.biotope/datasets/data/study.v2.jsonld` for the folder `data/study.v2` and
+  `.biotope/datasets/data/raw/people.csv.jsonld` for the file
+  `data/raw/people.csv`; the contract revisions in `.biotope/contracts/`; and the
   extraction state in `.biotope/extraction/`. Commit all of it. The document texts
   in `.biotope/texts/` and an interrupted run's progress in `.biotope/progress/`
   ignore themselves in git.
@@ -108,7 +111,7 @@ and `No source` means no package was generated from it yet:
 Current   data
 Changed   study
           graph/sources/study/samples: pinned 73a5e23963bf, now 43036e7de4d8
-No source data/extracted/profile
+No source data/extracted/profile.jsonl
 ```
 
 `biotope check-data` compares the data files with their recorded checksums.

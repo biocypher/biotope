@@ -27,20 +27,14 @@ def annotation_path(data: Path) -> Path:
     return data / FOLDER_FILE if data.is_dir() else data.with_name(data.name + SUFFIX)
 
 
-def located(manifest: Path, description: Mapping[str, Any]) -> Path | None:
+def located(manifest: Path) -> Path | None:
     parts = manifest.resolve().parts
     places = [index for index in range(len(parts) - 1) if parts[index : index + 2] == (".biotope", "datasets")]
-    if not places:
+    if not places or not manifest.name.endswith(".jsonld"):
         return None
-    root, relative = Path(*parts[: places[-1]]), Path(*parts[places[-1] + 2 :]).with_suffix("")
-    if (root / relative).is_dir():
-        return root / relative / FOLDER_FILE
-    urls = [
-        entry["contentUrl"]
-        for entry in description.get("distribution") or []
-        if is_kind(entry, "FileObject") and isinstance(entry.get("contentUrl"), str) and "containedIn" not in entry
-    ]
-    return root / f"{urls[0]}{SUFFIX}" if urls else None
+    data = Path(*parts[: places[-1]], *parts[places[-1] + 2 :])
+    data = data.with_name(data.name.removesuffix(".jsonld"))
+    return annotation_path(data) if data.exists() else None
 
 
 def read(path: Path | None) -> dict[str, Any]:

@@ -41,6 +41,7 @@ from biotope.metadata import (
     dataset_dir_for_manifest,
     ensure_no_legacy_file_objects,
     file_coverage_in_manifest,
+    manifest_for,
     resolve_target,
 )
 from biotope.utils import (
@@ -583,7 +584,7 @@ def _execute_directory_move(source: Path, destination: Path, biotope_root: Path,
                         updated_files.append(metadata_file)
 
                         # Calculate new metadata file path based on the data file's new location
-                        new_metadata_path = biotope_root / ".biotope" / "datasets" / new_rel_path.with_suffix(".jsonld")
+                        new_metadata_path = manifest_for(new_file_path, biotope_root)
 
                         # Move the metadata file to mirror the new data file structure
                         if new_metadata_path != metadata_file:
@@ -973,7 +974,7 @@ def _update_metadata_file_path(
 
         if updated:
             rename(metadata, mapping)
-            found = annotation.located(metadata_file, metadata)
+            found = annotation.located(metadata_file)
             text = annotation.renamed(found, renamer(mapping)) if found is not None else None
             if found is not None and text is not None:
                 write_text_atomic(found, text)

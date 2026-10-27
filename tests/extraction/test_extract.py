@@ -99,7 +99,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     assert evidence["quote"] == ROWS["Full proposal"] and evidence["aligned"] is True and evidence["page"] == 2
     assert study.text(CALL).count("\f") == 1
 
-    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
+    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonl.jsonld").read_text())
     assert manifest["biotope:status"] == "processed"
     assert "creator" not in manifest and "license" not in manifest
     assert manifest["prov:wasDerivedFrom"] == [{"@id": "data/pages"}]
@@ -122,7 +122,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
         "Each experimental or computational method the page lists."
     )
     generated = study.run(
-        "source", "generate", ".biotope/datasets/data/extracted/profile.jsonld", "--out", "graph/sources"
+        "source", "generate", ".biotope/datasets/data/extracted/profile.jsonl.jsonld", "--out", "graph/sources"
     )
     assert generated.exit_code == 0, generated.output
     schema = next((study.root / "graph/sources").rglob("schema.py")).read_text()
@@ -134,7 +134,7 @@ def test_run_stores_records_with_evidence_and_registers_them(study):
     assert sorted(ignored.stdout.split()) == sorted(texts)
     tracked = [
         "data/extracted/profile.jsonl",
-        ".biotope/datasets/data/extracted/profile.jsonld",
+        ".biotope/datasets/data/extracted/profile.jsonl.jsonld",
         ".biotope/datasets/data/pages.jsonld",
         ".biotope/datasets/data/calls.jsonld",
     ]
@@ -224,7 +224,7 @@ def test_an_annotated_extracted_dataset_keeps_its_annotation_and_its_schema_desc
     name = "profile.jsonl#profile/values/name/value"
 
     def described():
-        data = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
+        data = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonl.jsonld").read_text())
         fields = {}
 
         def collect(items):
@@ -353,7 +353,7 @@ def test_a_rerun_registers_records_an_interrupted_run_stored(study, monkeypatch)
     replace = os.replace
 
     def interrupted(source, target):
-        if str(target).endswith("profile.jsonld"):
+        if str(target).endswith("profile.jsonl.jsonld"):
             raise OSError("interrupted")
         replace(source, target)
 
@@ -362,7 +362,7 @@ def test_a_rerun_registers_records_an_interrupted_run_stored(study, monkeypatch)
     monkeypatch.setattr(os, "replace", replace)
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0, result.output
-    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
+    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonl.jsonld").read_text())
     [stored] = [
         entry for entry in manifest["distribution"] if entry.get("contentUrl") == "data/extracted/profile.jsonl"
     ]
@@ -446,13 +446,13 @@ def test_generated_sources_load_extracted_records(study, monkeypatch, runs, desc
             study.configure(**extractor)
         result, _ = study.extract("run", PROFILE, "data/pages")
         assert (result.exit_code == 0) != ("fail" in extractor), result.output
-    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
+    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonl.jsonld").read_text())
     [provenance] = [item for item in manifest["recordSet"][0]["field"] if item["name"] == "provenance"]
     [extractor_field] = [item for item in provenance["subField"] if item["name"] == "extractor"]
     settings = [item for item in extractor_field["subField"] if item["name"] == "settings"]
     assert ({item["name"]: item["dataType"] for item in settings[0]["subField"]} if settings else None) == described
     generated = study.run(
-        "source", "generate", ".biotope/datasets/data/extracted/profile.jsonld", "--out", "graph/sources"
+        "source", "generate", ".biotope/datasets/data/extracted/profile.jsonl.jsonld", "--out", "graph/sources"
     )
     assert generated.exit_code == 0, generated.output
 
@@ -918,7 +918,7 @@ def test_run_warns_when_git_ignores_its_output(study):
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code == 0, result.output
     assert report["ignored"] == [
-        ".biotope/datasets/data/extracted/profile.jsonld",
+        ".biotope/datasets/data/extracted/profile.jsonl.jsonld",
         ".biotope/extraction/data/extracted/profile.json",
         "data/extracted/profile.jsonl",
     ]
@@ -983,7 +983,7 @@ def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
     lind, okafor = study.records("profile")
     assert (lind["supported"], okafor["supported"]) == (False, True)
     assert lind["values"]["group"]["value"] == "Cancer Imaging Group"
-    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
+    manifest = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonl.jsonld").read_text())
     assert "profile.jsonl#profile/supported" in {item["@id"] for item in manifest["recordSet"][0]["field"]}
 
     shown = " ".join(study.run("extract", "run", PROFILE, "data/pages").output.split())

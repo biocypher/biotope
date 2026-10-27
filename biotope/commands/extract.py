@@ -43,6 +43,7 @@ from biotope.metadata import (
     STATUS_PROCESSED,
     dataset_dir_for_manifest,
     get_derived_from,
+    manifest_for,
     resolve_content_url,
 )
 from biotope.utils import find_biotope_root, ignored_by_git
@@ -189,7 +190,7 @@ def run_command(
     state = root / STATES / relative.with_suffix(".json")
     progress = root / PROGRESS / relative
     result = run(root, schema, extractor, sources, target, state, progress, chosen, output.progress, parallel)
-    manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
+    manifest = manifest_for(target, root)
     if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
     ignored = ignored_by_git(root, [target, manifest, state])

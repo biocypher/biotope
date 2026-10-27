@@ -61,7 +61,7 @@ def test_add_file_absolute_path_writes_cr_file_object(git_repo, sample_file):
     result = add_file(target_file, git_repo, datasets_dir, False)
     assert result is True
 
-    metadata_file = datasets_dir / target_file.relative_to(git_repo).with_suffix(".jsonld")
+    metadata_file = datasets_dir / f"{target_file.relative_to(git_repo)}.jsonld"
     assert metadata_file.exists()
 
     with open(metadata_file) as handle:
@@ -100,7 +100,7 @@ def test_add_file_stamps_status_raw_by_default(git_repo):
     datasets_dir = git_repo / ".biotope" / "datasets"
     assert add_file(target, git_repo, datasets_dir, False) is True
 
-    manifest = datasets_dir / "doc.jsonld"
+    manifest = datasets_dir / "doc.txt.jsonld"
     with open(manifest) as f:
         metadata = json.load(f)
     assert get_status(metadata) == STATUS_RAW
@@ -121,7 +121,7 @@ def test_add_file_status_override(git_repo):
         overrides={**_default_overrides_for_test(), "status_override": "processed"},
     )
 
-    manifest = datasets_dir / "doc.jsonld"
+    manifest = datasets_dir / "doc.txt.jsonld"
     with open(manifest) as f:
         metadata = json.load(f)
     assert get_status(metadata) == STATUS_PROCESSED
@@ -139,10 +139,10 @@ def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
     data_file.parent.mkdir(parents=True, exist_ok=True)
     data_file.write_text("pdf")
 
-    manifest = datasets_dir / "kidney.jsonld"
+    manifest = datasets_dir / "kidney.pdf.jsonld"
     manifest.write_text("{}")
 
-    canonical = "data/inputs/kidney"
+    canonical = "data/inputs/kidney.pdf"
     assert resolve_dataset_ref(canonical, project) == canonical
     assert resolve_dataset_ref(str(data_file), project) == canonical
     assert resolve_dataset_ref(str(manifest), project) == canonical
@@ -186,7 +186,7 @@ def test_add_file_derived_from_writes_provenance(git_repo):
         overrides={**_default_overrides_for_test(), "derived_from": ["raw_pdf"]},
     )
 
-    with open(datasets_dir / "extracted.jsonld") as f:
+    with open(datasets_dir / "extracted.json.jsonld") as f:
         metadata = json.load(f)
     assert get_derived_from(metadata) == ["raw_pdf"]
 

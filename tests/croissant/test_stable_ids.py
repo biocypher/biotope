@@ -59,7 +59,7 @@ def baked(monkeypatch, project: Path, folder: str, single: str) -> tuple[dict, d
     datasets = project / ".biotope/datasets"
     return (
         json.loads((datasets / f"{folder}.jsonld").read_text()),
-        json.loads((datasets / Path(single).with_suffix(".jsonld")).read_text()),
+        json.loads((datasets / f"{single}.jsonld").read_text()),
     )
 
 

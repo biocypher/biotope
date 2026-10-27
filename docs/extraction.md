@@ -20,7 +20,7 @@ biotope extract try graph/extraction/profile.py:Profile data/pages/lind.html
 biotope extract text data/pages/lind.html
 biotope extract run graph/extraction/profile.py:Profile data/pages
 biotope extract run graph/extraction/profile.py:Profile data/pages --redo data/pages/lind.html
-biotope source generate .biotope/datasets/data/extracted/profile.jsonld --out graph/sources
+biotope source generate .biotope/datasets/data/extracted/profile.jsonl.jsonld --out graph/sources
 ```
 
 Extraction schemas live in the graph workspace, one module per kind of document:
@@ -269,7 +269,7 @@ sorted by record ID. Commit it with the project; the `.gitignore` that
   records extracted again with `--redo`.
 
 **Registered dataset.** The records file is registered at
-`.biotope/datasets/data/extracted/<schema>.jsonld`, with status `processed`,
+`.biotope/datasets/data/extracted/<schema>.jsonl.jsonld`, with status `processed`,
 `prov:wasDerivedFrom` the input datasets and a RecordSet keyed by `id`. Its table
 is `<schema>.jsonl#<schema>`, such as `funding_round.jsonl#funding_round`. It has
 no `creator` or `license` unless its annotation file gives them: biotope cannot

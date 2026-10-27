@@ -240,7 +240,7 @@ def warnings_of():
     yield ("annotate", "set", "data/things", "description=Two tables."), [manifest, "data/things/.biotope.yaml"]
     yield ("source", "generate", manifest, "--out", "graph/sources"), [contract]
     yield ("mark", "data/things", "mapped"), [manifest]
-    records = ["data/extracted/profile.jsonl", ".biotope/datasets/data/extracted/profile.jsonld"]
+    records = ["data/extracted/profile.jsonl", ".biotope/datasets/data/extracted/profile.jsonl.jsonld"]
     yield ("extract", "run", PROFILE, "data/pages"), [*records, ".biotope/extraction/data/extracted/profile.json"]
     yield ("mv", "data/things/first.csv", "data/things/renamed.csv"), [manifest]
     yield ("rm", "-f", "data/things/second.csv"), [manifest]

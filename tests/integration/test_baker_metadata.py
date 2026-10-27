@@ -37,7 +37,7 @@ def test_single_workbook_uses_full_assembly_and_only_selected_file(tmp_path):
     _workbook(raw / "nested" / workbook.name, "unselected")
     metadata_dir = tmp_path / ".biotope" / "datasets"
     assert add_file(workbook, tmp_path, metadata_dir, False)
-    manifest = metadata_dir / "raw" / "study[1].jsonld"
+    manifest = metadata_dir / "raw" / "study[1].xlsx.jsonld"
     data = json.loads(manifest.read_text())
     assert {rs["name"] for rs in data["recordSet"]} == {"Measurements", "Study"}
     assert {f["name"] for rs in data["recordSet"] for f in rs["field"]} == {"gene_id", "score", "study_id", "species"}
@@ -121,7 +121,7 @@ def test_nested_parquet_json_and_single_ome_preserve_baker_structure(tmp_path):
     ome = raw / "cells.ome.tif"
     tifffile.imwrite(ome, np.zeros((3, 4), dtype=np.uint8), ome=True, metadata={"axes": "YX"})
     assert add_file(ome, tmp_path, tmp_path / ".biotope" / "datasets", False)
-    single = json.loads((tmp_path / ".biotope" / "datasets" / "raw" / "cells.ome.jsonld").read_text())
+    single = json.loads((tmp_path / ".biotope" / "datasets" / "raw" / "cells.ome.tif.jsonld").read_text())
     assert any(rs["name"] == "ome_images" for rs in single["recordSet"])
     assert "4x3" in single["recordSet"][0]["description"]
     assert "pixel_type" in {f["name"] for rs in single["recordSet"] for f in rs["field"]}
@@ -132,7 +132,7 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     source.write_text(",gene_id,score\n0,G1,2.5\n")
     manifest_dir = tmp_path / ".biotope" / "datasets"
     assert add_file(source, tmp_path, manifest_dir, False)
-    manifest = manifest_dir / "indexed.jsonld"
+    manifest = manifest_dir / "indexed.csv.jsonld"
     raw = json.loads(manifest.read_text())
     unnamed = raw["recordSet"][0]["field"][0]
     assert "name" not in unnamed
@@ -142,4 +142,4 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     inspection = inspect_dataset(dataset)
     assert {f.name for f in inspection.record_sets[0].fields} == {"indexed.csv#indexed/", "gene_id", "score"}
     generate_source_packages(manifest, tmp_path / "sources")
-    assert "indexed.csv#indexed/" in (tmp_path / "sources/indexed/indexed_csv_indexed/schema.py").read_text()
+    assert "indexed.csv#indexed/" in (tmp_path / "sources/indexed_csv/indexed_csv_indexed/schema.py").read_text()

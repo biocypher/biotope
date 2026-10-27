@@ -19,7 +19,9 @@ from biotope.metadata import (
     FILE_OBJECT_TYPE,
     add_derived_from,
     classify_status_from_baker,
+    dataset_id,
     make_file_object,
+    manifest_for,
     merge_metadata,
     normalize_metadata_shape,
     parse_key_value_pairs,
@@ -241,7 +243,7 @@ def _describe(
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     reporter.saved(manifest, described)
-    found = annotation.located(manifest, baked)
+    found = annotation.located(manifest)
     unknown = annotation.unknown(baked, annotation.read(found)) if found is not None else []
     if unknown:
         reporter.warning(data, f"{found} names what the data does not have: {', '.join(unknown)}")
@@ -499,41 +501,15 @@ def resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
     Raises ``ValueError`` when nothing resolves.
     """
     datasets_dir = biotope_root / ".biotope" / "datasets"
-
-    # Bare canonical id (no suffix); accept as-is if a manifest exists.
-    candidate_manifest = datasets_dir / f"{ref}.jsonld"
-    if candidate_manifest.is_file():
+    if (datasets_dir / f"{ref}.jsonld").is_file():
         return ref
-
-    p = Path(ref)
-    if not p.is_absolute():
-        p = (biotope_root / p).resolve()
-    else:
-        p = p.resolve()
-
-    # Path to a manifest under .biotope/datasets/.
-    try:
-        rel_manifest = p.relative_to(datasets_dir)
-        if rel_manifest.suffix == ".jsonld" and p.is_file():
-            return str(rel_manifest.with_suffix(""))
-    except ValueError:
-        pass
-
-    # Path to a data file/dir inside the project — derive the canonical id.
-    try:
-        rel = p.relative_to(biotope_root)
-    except ValueError as exc:
-        msg = f"--derived-from {ref!r}: path is outside the biotope project"
-        raise ValueError(msg) from exc
-
-    file_manifest = (datasets_dir / rel).with_suffix(".jsonld")
-    if file_manifest.is_file():
-        return str(rel.with_suffix("") if rel.suffix else rel)
-
-    # If it's a data dir we just baked, the canonical id is the dir rel path.
-    dir_manifest = (datasets_dir / rel).with_suffix(".jsonld")
-    if dir_manifest.is_file():
-        return str(rel)
+    p = (biotope_root / ref).resolve()
+    if p.is_relative_to(datasets_dir) and p.suffix == ".jsonld" and p.is_file():
+        return dataset_id(p, biotope_root)
+    if not p.is_relative_to(biotope_root):
+        raise ValueError(f"--derived-from {ref!r}: path is outside the biotope project")
+    if manifest_for(p, biotope_root).is_file():
+        return p.relative_to(biotope_root).as_posix()
 
     msg = (
         f"--derived-from {ref!r}: no manifest found under .biotope/datasets/. "

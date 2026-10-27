@@ -110,7 +110,7 @@ def read_metadata(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected a Croissant JSON object")
     data = cast(dict[str, Any], data)
-    if annotation.located(path, data) is not None:
+    if annotation.located(path) is not None:
         described = _described(path, data)
         if described != data:
             _write_description(path, described)
@@ -204,7 +204,7 @@ def write_text_atomic(path: Path, text: str) -> None:
 
 
 def _described(path: Path, data: dict[str, Any]) -> dict[str, Any]:
-    return annotation.current(data, annotation.read(annotation.located(path, data)))
+    return annotation.current(data, annotation.read(annotation.located(path)))
 
 
 def _write_description(path: Path, described: dict[str, Any]) -> None:

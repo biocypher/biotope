@@ -4,6 +4,7 @@ import click
 
 from biotope.graph.revisions import short_revision
 from biotope.graph.survey import survey_sources
+from biotope.metadata import dataset_id
 from biotope.utils import find_biotope_root
 
 
@@ -31,7 +32,7 @@ def status() -> None:
     if not manifests:
         click.echo("No datasets. Describe data with biotope add <path>.")
     for manifest in manifests:
-        name = manifest.relative_to(datasets).with_suffix("").as_posix()
+        name = dataset_id(manifest, root)
         changed = drifts.get(manifest.resolve())
         label = "Changed" if changed else "Current" if manifest.resolve() in generated else "No source"
         click.echo(f"{label:<9} {name}")

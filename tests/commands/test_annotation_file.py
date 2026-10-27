@@ -138,7 +138,7 @@ def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
         assert column(people, "name")["description"] not in ("", "The person's ID.")
 
     shows_every_annotation(described(fresh))
-    samples = described(fresh, ".biotope/datasets/data/raw/samples.jsonld")
+    samples = described(fresh, ".biotope/datasets/data/raw/samples.csv.jsonld")
     assert (samples["creator"]["name"], samples["license"]) == ("Project Lead", "https://example.org/licence")
 
     (fresh / "data/study/push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\np3,Lin\n")
@@ -216,8 +216,35 @@ def test_mv_carries_the_annotations_of_the_moved_file(fresh):
     assert yaml.safe_load((fresh / "data/raw/sheets.csv.biotope.yaml").read_text()) == {
         "description": "One row per sample."
     }
-    assert described(fresh, ".biotope/datasets/data/raw/sheets.jsonld")["description"] == "One row per sample."
+    assert described(fresh, ".biotope/datasets/data/raw/sheets.csv.jsonld")["description"] == "One row per sample."
 
     shutil.move(fresh / "data/study/current/people.csv", fresh / "data/study/push/people.csv")
     rebaked = ok("add", "--rebake", "data/study")
     assert f"table '{moved}'" in " ".join(rebaked.output.split())
+
+
+def test_annotations_reach_a_dotted_folder_and_a_file_beside_a_folder_of_its_stem(fresh):
+    (fresh / "data/study.v2/push").mkdir(parents=True)
+    (fresh / "data/study.v2/push/people.csv").write_text("person_id,name\np1,Ada\n")
+    (fresh / "data/study.v2/push/other.csv").write_text("x,y\n1,2\n")
+    ok("add", "data/study", "--description", "Release 1.")
+    ok("add", "data/study.v2", "--description", "Release 2.")
+    ok("add", "data/raw/samples.csv", "--description", "Our samples.")
+    (fresh / "data/raw/samples").mkdir()
+    (fresh / "data/raw/samples/notes.txt").write_text("An unrelated folder.\n")
+
+    ok("annotate", "set", "data/study.v2", "--table", PEOPLE, "description=One row per person.")
+    ok("annotate", "set", "data/raw/samples.csv", "description=Edited.")
+    ok("queue")
+
+    first = described(fresh, ".biotope/datasets/data/study.jsonld")
+    second = described(fresh, ".biotope/datasets/data/study.v2.jsonld")
+    assert (first["description"], second["description"]) == ("Release 1.", "Release 2.")
+    assert table(second, PEOPLE)["description"] == "One row per person."
+    assert described(fresh, ".biotope/datasets/data/raw/samples.csv.jsonld")["description"] == "Edited."
+    ok("mv", "data/study.v2/push/people.csv", "data/study.v2/push/staff.csv")
+    ok("rm", "-f", "data/study.v2/push/other.csv")
+    assert (
+        table(described(fresh, ".biotope/datasets/data/study.v2.jsonld"), "push/staff.csv#staff")["description"]
+        == "One row per person."
+    )

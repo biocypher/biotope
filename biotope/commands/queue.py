@@ -24,6 +24,7 @@ from biotope.metadata import (
     STATUS_PROCESSED,
     STATUS_RAW,
     STATUS_VALUES,
+    dataset_id,
     get_derived_from,
     get_status,
 )
@@ -120,10 +121,9 @@ def _scan_manifests(biotope_root: Path) -> list[_QueueEntry]:
             metadata = read_metadata(manifest_path)
         except (OSError, ValueError):
             continue
-        dataset_id = str(manifest_path.relative_to(datasets_dir).with_suffix(""))
         entries.append(
             _QueueEntry(
-                dataset_id=dataset_id,
+                dataset_id=dataset_id(manifest_path, biotope_root),
                 status=get_status(metadata),
                 derived_from=tuple(get_derived_from(metadata)),
                 date_created=metadata.get("dateCreated"),

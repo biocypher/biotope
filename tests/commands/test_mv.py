@@ -57,7 +57,7 @@ def biotope_project_with_file(tmp_path):
     }
     metadata_dir = datasets_dir / "data" / "inputs"
     metadata_dir.mkdir(parents=True, exist_ok=True)
-    (metadata_dir / "test.jsonld").write_text(json.dumps(metadata, indent=2))
+    (metadata_dir / "test.csv.jsonld").write_text(json.dumps(metadata, indent=2))
     return tmp_path
 
 
@@ -157,7 +157,7 @@ def test_mv_successful_move(runner, biotope_project_with_file):
         assert "Move Complete" in result.output
         assert not source_file.exists()
         assert destination.exists()
-        metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.jsonld"
+        metadata_file = biotope_project_with_file / ".biotope" / "datasets" / "data" / "outputs" / "test.csv.jsonld"
         assert json.loads(metadata_file.read_text())["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
     finally:
         os.chdir(original_cwd)
@@ -186,7 +186,7 @@ def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_
     original_move = shutil.move
 
     def mock_move_side_effect(src, dst):
-        if "test.jsonld" in str(src):
+        if "test.csv.jsonld" in str(src):
             raise OSError("Metadata move failed")
         return original_move(src, dst)
 
