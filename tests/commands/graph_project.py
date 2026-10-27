@@ -1,5 +1,6 @@
 import json
 import shutil
+import sys
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -49,6 +50,8 @@ def findings(result) -> list[dict]:
 
 
 def buildable(tmp_path, monkeypatch, people="data/study/push/people.csv"):
+    # Tests rewrite schemas within one second, and bytecode cached from the old text would hide the edit.
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
     monkeypatch.setenv("COLUMNS", "300")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     root = tmp_path / "project"
