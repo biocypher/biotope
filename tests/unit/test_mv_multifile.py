@@ -19,7 +19,6 @@ def runner() -> CliRunner:
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     (tmp_path / ".biotope" / "datasets").mkdir(parents=True)
-    (tmp_path / ".git").mkdir()
     return tmp_path
 
 

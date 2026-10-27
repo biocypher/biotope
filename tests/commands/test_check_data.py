@@ -20,7 +20,6 @@ def runner():
 @pytest.fixture
 def tracked_project(tmp_path):
     project_root = tmp_path
-    (project_root / ".git").mkdir()
     datasets_dir = project_root / ".biotope" / "datasets" / "data" / "inputs"
     datasets_dir.mkdir(parents=True)
     data_file = project_root / "data" / "inputs" / "test.csv"
@@ -78,7 +77,6 @@ def test_check_data_resolves_dataset_relative_content_url(runner, tmp_path):
     import hashlib
 
     project_root = tmp_path
-    (project_root / ".git").mkdir()
     (project_root / ".biotope" / "datasets" / "data").mkdir(parents=True)
 
     data_dir = project_root / "data" / "inputs"

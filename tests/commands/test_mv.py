@@ -31,7 +31,6 @@ def biotope_project_with_file(tmp_path):
     biotope_dir = tmp_path / ".biotope"
     datasets_dir = biotope_dir / "datasets"
     datasets_dir.mkdir(parents=True)
-    (tmp_path / ".git").mkdir()
 
     data_dir = tmp_path / "data" / "inputs"
     data_dir.mkdir(parents=True)
