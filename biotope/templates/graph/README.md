@@ -44,8 +44,8 @@ installed version of each. See
 Run Biotope commands from the parent project directory, where the data, its
 annotation files and `.biotope/` live. `paths.py` supplies `PROJECT_ROOT` and
 `GRAPH_ROOT`; use package-relative imports. Biotope never writes to git: commit
-this workspace with the project. `.gitignore` here keeps `build/` and
-`metagraph.html` out.
+this workspace with the project. `.gitignore` here keeps `build/`, the
+`.build-*/` folders a build stages in, and `metagraph.html` out.
 
 ## Workflow
 

@@ -23,8 +23,8 @@ biotope writes only in these places, and in the files you name to `mv`, `rm` or
   ignore themselves in git.
 - `graph/`: the graph workspace, the project's code and the graph it builds,
   extraction schemas in `graph/extraction/<kind>.py` included. The
-  `graph/.gitignore` that `biotope graph scaffold` writes ignores `graph/build/`
-  and `graph/metagraph.html`.
+  `graph/.gitignore` that `biotope graph scaffold` writes ignores `graph/build/`,
+  the `graph/.build-*/` folders a build stages in, and `graph/metagraph.html`.
 - `data/extracted/<schema>.jsonl`: the records `biotope extract run` writes by
   default. Commit them. `--out` names another path.
 - Annotation files, next to each dataset you add: `<folder>/.biotope.yaml` or

@@ -2,7 +2,9 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -154,6 +156,20 @@ def test_graph_check_writes_nothing_outside_its_places_while_pyright_runs(projec
     result = invoke("graph", "check")
     assert result.exit_code == 0, result.output
     assert seen == [before]
+
+
+def test_a_build_killed_outright_leaves_nothing_for_git_to_pick_up(project):
+    git(project, "init", "-q")
+    loader = project / "graph/sources/study/push_people_csv_people/loader.py"
+    text = loader.read_text().replace("import csv\n", "import csv\nimport os\nimport signal\n")
+    loader.write_text(text.replace("    with path.open(", "    os.kill(os.getpid(), signal.SIGKILL)\n    with path.open("))
+    before, untracked = snapshot(project), git(project, "ls-files", "--others", "--exclude-standard")
+
+    killed = subprocess.run([sys.executable, "-m", "biotope.cli", "graph", "build"], cwd=project, capture_output=True)
+
+    assert killed.returncode == -signal.SIGKILL, killed.stderr
+    assert {path for path in snapshot(project).keys() - before.keys() if not path.endswith(".pyc")}
+    assert git(project, "ls-files", "--others", "--exclude-standard") == untracked
 
 
 def test_init_creates_no_repository_and_keeps_project_yaml_in_biotope(tmp_path):
