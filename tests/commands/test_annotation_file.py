@@ -323,3 +323,26 @@ def test_files_whose_names_differ_only_in_extension_and_a_folder_of_their_stem_k
         "results.tsv.jsonld": "Labels.",
         "results.jsonld": "Notes.",
     }
+
+
+def test_column_names_written_as_numbers_in_the_annotation_file_reach_their_columns(fresh):
+    (fresh / "data/stats").mkdir()
+    (fresh / "data/stats/counts.csv").write_text("region,2019,2020\nnorth,1,2\n")
+    ok("add", "data/stats")
+    annotation = fresh / "data/stats/.biotope.yaml"
+    annotation.write_text(
+        annotation.read_text()
+        + "tables:\n"
+        + "  counts.csv#counts:\n"
+        + "    key: 2020\n"
+        + "    columns:\n"
+        + "      2020:\n"
+        + "        description: Count in 2020.\n"
+    )
+
+    rebaked = ok("add", "--rebake", "data/stats")
+
+    assert "does not have" not in rebaked.output
+    counts = table(described(fresh, ".biotope/datasets/data/stats.jsonld"), "counts.csv#counts")
+    assert column(counts, "2020")["description"] == "Count in 2020."
+    assert counts["key"] == {"@id": column(counts, "2020")["@id"]}

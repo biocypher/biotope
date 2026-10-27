@@ -84,8 +84,8 @@ def current(description: Mapping[str, Any], annotation: Mapping[str, Any]) -> di
         for key, value in _mapping(given).items():
             if key == COLUMNS:
                 for name, values in _mapping(value).items():
-                    for field_key, field_value in _mapping(values).items() if name in fields else ():
-                        _put(fields[name], field_key, field_value)
+                    for field_key, field_value in _mapping(values).items() if str(name) in fields else ():
+                        _put(fields[str(name)], field_key, field_value)
             elif key == KEY:
                 if _empty(value) or _key(value, fields):
                     _put(record, KEY, _key(value, fields))
@@ -124,7 +124,7 @@ def unknown(description: Mapping[str, Any], annotation: Mapping[str, Any]) -> li
             found.append(f"table {identity!r}")
             continue
         fields = columns(records[identity])
-        named = [*_mapping(_mapping(given).get(COLUMNS)), *names(_mapping(given).get(KEY))]
+        named = [*map(str, _mapping(_mapping(given).get(COLUMNS))), *names(_mapping(given).get(KEY))]
         found += [f"column {name!r} of {identity!r}" for name in dict.fromkeys(named) if name not in fields]
     return found
 
@@ -220,12 +220,14 @@ def _lineage(value: object) -> object:
 
 
 def names(value: object) -> list[str]:
-    return [value] if isinstance(value, str) else [str(item) for item in value] if isinstance(value, list) else []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [] if value is None or isinstance(value, dict) else [str(value)]
 
 
 def _key(value: object, fields: Mapping[str, dict[str, Any]]) -> object:
     references = [{"@id": fields[name]["@id"]} for name in names(value) if name in fields]
-    return references[0] if isinstance(value, str) and references else references
+    return references[0] if not isinstance(value, list) and references else references
 
 
 def columns(record: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
