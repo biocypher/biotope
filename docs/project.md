@@ -49,6 +49,13 @@ __pycache__/
 a `/data/` rule with `/data/**` and add the three exceptions: git cannot re-include
 a file inside an ignored folder, so the exceptions do not work under `/data/`.
 
+Replace an unanchored `data/` rule the same way. It ignores every folder named
+`data` at any depth, and that includes `.biotope/datasets/data/`: descriptions
+mirror the data path, so every description of a dataset under `data/` lives there
+and git ignores all of them. Biotope warns about each ignored file it writes. If
+other `data` folders must stay ignored, list each with a leading slash, such as
+`/src/app/data/`.
+
 ## The graph workspace
 
 `biotope graph scaffold` creates `graph/`; its `README.md` describes the layout.
