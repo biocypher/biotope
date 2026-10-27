@@ -40,23 +40,37 @@ def findings(result) -> list[dict]:
     return json.loads(result.stdout)["findings"]
 
 
-def buildable(tmp_path, monkeypatch):
+def buildable(tmp_path, monkeypatch, people="data/study/push/people.csv"):
     monkeypatch.setenv("COLUMNS", "300")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     root = tmp_path / "project"
     study = root / "data/study"
-    (study / "push").mkdir(parents=True)
-    (study / "docs").mkdir()
-    (study / "push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\n")
+    (study / "docs").mkdir(parents=True)
+    (root / people).parent.mkdir(parents=True, exist_ok=True)
+    (root / people).write_text("person_id,name\np1,Ada\np2,Grace\n")
     (study / "docs/report.html").write_text("<html><body>Report, first download</body></html>")
     monkeypatch.chdir(root)
+    datasets = ["data/study"] if people.startswith("data/study/") else ["data/study", people]
     ok("init", ".", "--no-prompt")
-    ok("add", "data/study")
+    ok("add", *datasets)
     ok("graph", "scaffold")
-    ok("source", "generate", MANIFEST, "--out", "graph/sources")
+    for dataset in datasets:
+        ok("source", "generate", f".biotope/datasets/{dataset}.jsonld", "--out", "graph/sources")
     shutil.copytree(GRAPH, root / "graph", dirs_exist_ok=True)
+    if people != "data/study/push/people.csv":
+        _read_people_from_its_own_dataset(root / "graph")
     pipeline = root / "graph/pipelines/build_graph.py"
     text = pipeline.read_text().replace('name="",', 'name="study:people",')
     pipeline.write_text(text.replace('scope="",', 'scope="Synthetic people of one study.",'))
-    assert built(root) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+    assert built(root) == ({people, "data/study/docs/report.html"}, 2)
     return root
+
+
+def _read_people_from_its_own_dataset(graph: Path) -> None:
+    loader = graph / "sources/study/push_people_csv_people/loader.py"
+    loader.replace(graph / "sources/people_csv/people_csv_people/loader.py")
+    loader.parent.rmdir()
+    for module in graph.rglob("*.py"):
+        text = module.read_text()
+        renamed = text.replace("study.push_people_csv_people", "people_csv.people_csv_people")
+        module.write_text(renamed.replace("PushPeopleCsvPeople", "PeopleCsvPeople"))

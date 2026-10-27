@@ -1091,3 +1091,38 @@ def test_files_beside_the_records_with_the_same_name_before_the_extension_stay_i
     result, report = study.extract("run", PROFILE, "data/pages", "--out", "data/pages/lind.jsonl")
     assert result.exit_code == 0, result.output
     assert (statuses(report)[LIND], report["disappeared"], len(study.endpoint.requests)) == ("reused", [], sent)
+
+
+def test_moving_folders_and_records_carries_their_extraction_state_and_table_id(study):
+    assert study.run("add", "data").exit_code == 0
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    for move, pages, records in (
+        (("data/extracted", "data/records"), "data/pages", "data/records/profile.jsonl"),
+        (
+            ("data/records/profile.jsonl", "data/records/2026/profile.jsonl"),
+            "data/pages",
+            "data/records/2026/profile.jsonl",
+        ),
+        (("data", "inputs"), "inputs/pages", "inputs/records/2026/profile.jsonl"),
+    ):
+        moved = study.run("mv", "-r", *move)
+        assert moved.exit_code == 0, moved.output
+        sent = len(study.endpoint.requests)
+
+        result, _ = study.extract("run", PROFILE, pages, "--out", records)
+
+        assert result.exit_code == 0, result.output
+        assert len(study.endpoint.requests) == sent, move
+        described = json.loads((study.root / f".biotope/datasets/{records}.jsonld").read_text())
+        assert [record["@id"] for record in described["recordSet"]] == ["profile.jsonl#profile"]
+    assert sorted(path.name for path in (study.root / ".biotope/extraction").rglob("*")) == [
+        "2026",
+        "inputs",
+        "profile.jsonl.json",
+        "records",
+    ]
+    assert study.run("add", "--rebake", "inputs").exit_code == 0
+    folder = json.loads((study.root / ".biotope/datasets/inputs.jsonld").read_text())
+    identities = [entry["@id"] for entry in [*folder["distribution"], *folder.get("recordSet", [])]]
+    assert "pages/lind.html" in identities
+    assert [identity for identity in identities if "profile" in identity] == []

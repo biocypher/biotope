@@ -1,6 +1,7 @@
 import json
 import shutil
 
+import pytest
 from graph_project import MANIFEST, built, findings, invoke, ok, refresh
 
 from biotope.graph.inventory import plan_sources
@@ -39,20 +40,68 @@ def test_the_refresh_after_a_dataset_is_renamed_generates_into_the_root_that_hol
     assert built(project) == ({"data/current/push/people.csv", "data/current/docs/report.html"}, 2)
 
 
-def test_mv_changes_nothing_while_the_annotation_file_is_invalid_and_works_once_it_is_fixed(project):
+def test_a_single_file_dataset_moved_into_a_subfolder_keeps_its_id_through_the_refresh(single):
+    ok("mv", "data/raw/people.csv", "data/raw/2026/people.csv")
+    refresh("data/raw/2026/people.csv")
+
+    assert built(single) == ({"data/raw/2026/people.csv", "data/study/docs/report.html"}, 2)
+
+
+def test_a_folder_moved_to_another_parent_carries_every_description_in_it(single):
+    ok("mv", "-r", "data/raw", "data/archive/raw")
+    refresh("data/archive/raw/people.csv")
+    assert built(single) == ({"data/archive/raw/people.csv", "data/study/docs/report.html"}, 2)
+
+    ok("mv", "-r", "data", "archive/data")
+    refresh("archive/data/study", "archive/data/archive/raw/people.csv")
+
+    assert built(single) == ({"archive/data/archive/raw/people.csv", "archive/data/study/docs/report.html"}, 2)
+    descriptions = single / ".biotope/datasets"
+    assert sorted(path.relative_to(descriptions).as_posix() for path in descriptions.rglob("*")) == [
+        "archive",
+        "archive/data",
+        "archive/data/archive",
+        "archive/data/archive/raw",
+        "archive/data/archive/raw/people.csv.jsonld",
+        "archive/data/study.jsonld",
+    ]
+
+
+def snapshot(root):
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+
+@pytest.mark.parametrize(
+    ("move", "dataset", "people"),
+    [
+        (
+            ("data/study/push/people.csv", "data/study/current/people.csv"),
+            "data/study",
+            "data/study/current/people.csv",
+        ),
+        (("-r", "data/study", "data/current"), "data/current", "data/current/push/people.csv"),
+    ],
+)
+def test_mv_changes_nothing_while_the_annotation_file_is_invalid_and_works_once_it_is_fixed(
+    project, move, dataset, people
+):
     annotation = project / "data/study/.biotope.yaml"
     valid = annotation.read_text()
     annotation.write_text(valid + "tables: [\n")
-    before = (project / MANIFEST).read_bytes()
+    before = snapshot(project)
 
-    failed = invoke("mv", "data/study/push/people.csv", "data/study/current/people.csv")
+    failed = invoke("mv", *move)
 
     assert failed.exit_code != 0 and "data/study/.biotope.yaml" in failed.output
-    assert (project / "data/study/push/people.csv").is_file()
-    assert (project / MANIFEST).read_bytes() == before
+    assert snapshot(project) == before
     annotation.write_text(valid)
-    ok("mv", "data/study/push/people.csv", "data/study/current/people.csv")
-    assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 2)
+    ok("mv", *move)
+    refresh(dataset)
+    assert built(project) == ({people, f"{dataset}/docs/report.html"}, 2)
 
 
 def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(project):

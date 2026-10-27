@@ -12,13 +12,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from biotope.commands.mv import (
-    _find_metadata_files_for_file,
-    _resolve_destination_path,
-    _update_metadata_file_path,
-    _validate_move_operation,
-    mv,
-)
+from biotope.commands.mv import _resolve_destination_path, _validate_move_operation, mv
 
 
 @pytest.fixture
@@ -58,26 +52,6 @@ def biotope_project_with_file(tmp_path):
     metadata_dir.mkdir(parents=True, exist_ok=True)
     (metadata_dir / "test.csv.jsonld").write_text(json.dumps(metadata, indent=2))
     return tmp_path
-
-
-def test_find_and_update_metadata(biotope_project_with_file):
-    test_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
-    metadata_files = _find_metadata_files_for_file(test_file, biotope_project_with_file)
-    assert len(metadata_files) == 1
-
-    dest_dir = biotope_project_with_file / "data" / "outputs"
-    dest_dir.mkdir(parents=True)
-    dest_file = dest_dir / "test.csv"
-    dest_file.write_text("gene,expression\nBRCA1,12.5")
-
-    metadata_file = metadata_files[0]
-    assert _update_metadata_file_path(
-        metadata_file, "data/inputs/test.csv", "data/outputs/test.csv", "new_checksum_123", biotope_project_with_file
-    )
-
-    updated = json.loads(metadata_file.read_text())
-    assert updated["distribution"][0]["contentUrl"] == "data/outputs/test.csv"
-    assert updated["distribution"][0]["sha256"] == "new_checksum_123"
 
 
 @pytest.mark.parametrize(
