@@ -27,7 +27,7 @@ from biotope.graph.reports import (
     PythonCheckFailed,
 )
 from biotope.graph.signatures import MappingContract, SignatureError, contract
-from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, read_metadata
+from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, refresh_description
 from biotope.graph.standardization import describe_standardization
 from biotope.graph.survey import inventory_findings, sources_of, survey_sources
 from biotope.graph.topology import CHECKABLE_TYPES, RESERVED_PROPERTIES, unchecked_fields
@@ -300,7 +300,7 @@ def check_pipeline(
                 seen.add(source.name)
                 if files is not None and source.schema.resolve() not in declared:
                     raise ValueError(f"{source.schema}: include source schemas in code_paths")
-                metadata = read_metadata(source.metadata)
+                metadata = refresh_description(source.metadata)
                 if not source.records or len(set(source.records)) != len(source.records):
                     raise ValueError(f"{source.name}: declare at least one source record type without duplicates")
                 revisions: list[str] = []

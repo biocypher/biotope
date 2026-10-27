@@ -6,7 +6,7 @@ import click
 
 from biotope.commands.add import resolve_dataset_ref
 from biotope.croissant import annotation
-from biotope.graph.sources import read_metadata, write_description, write_text_atomic
+from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import DERIVED_FROM, STATUS, STATUS_VALUES, add_derived_from, get_derived_from, set_status
 from biotope.utils import find_biotope_root, warn_ignored
 
@@ -55,7 +55,7 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
 
     found = annotation.located(manifest_path)
     try:
-        metadata = read_metadata(manifest_path)
+        metadata = refresh_description(manifest_path)
         if found is None:
             set_status(metadata, status)
             for source in resolved_sources:

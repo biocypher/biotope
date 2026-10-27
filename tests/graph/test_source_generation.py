@@ -14,7 +14,7 @@ from biotope.graph.discovery import read_declaration
 from biotope.graph.inventory import apply_plan, generate_source_packages, plan_sources
 from biotope.graph.render import render_inventory
 from biotope.graph.reports import PythonCheckFailed
-from biotope.graph.sources import LEGACY_HEADER, check_source_record, read_metadata, record_set_targets
+from biotope.graph.sources import LEGACY_HEADER, check_source_record, record_set_targets, refresh_description
 from biotope.graph.standardization import field_bindings
 from biotope.graph.targets import manifest_targets
 from biotope.graph.workspace import select_workspace
@@ -133,7 +133,7 @@ def test_a_generated_schema_binds_and_types_every_field_shape_and_imports_withou
         assert annotations["details"].startswith("list[")
         assert "UnknownValue" in annotations["matrix"] and "UnknownValue" in annotations["custom"]
         assert record.__missing_values__ == frozenset({""})
-        assert check_source_record(read_metadata(manifest), record) == record.__source_digest__
+        assert check_source_record(refresh_description(manifest), record) == record.__source_digest__
     project.mark_implemented("study/t")
     assert project.codes("error") == {}
     assert project.codes("warning")["source.opaque"] == ["study/t.T.matrix", "study/t.T.custom"]
@@ -272,7 +272,7 @@ SOURCE = SourceContract(
 
 def test_a_09_package_is_adopted_and_its_root_rewritten(project):
     manifest = project.study(record_set("rows", "value"))
-    [target] = manifest_targets(read_metadata(manifest))
+    [target] = manifest_targets(refresh_description(manifest))
     package = project.sources / "study/rows"
     package.mkdir(parents=True)
     (package / "schema.py").write_text(LEGACY_SCHEMA.format(header=LEGACY_HEADER, revision=target.revision))

@@ -7,7 +7,7 @@ from typing import Any
 import click
 
 from biotope.croissant import annotation
-from biotope.graph.sources import read_metadata, write_text_atomic
+from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import resolve_target
 from biotope.utils import find_biotope_root, warn_ignored
 
@@ -45,7 +45,7 @@ def set_values(data: Path, values: tuple[str, ...], table: str | None, column: s
     if not target.metadata_path.is_file():
         raise click.ClickException(f"{data} is not a dataset; describe it with biotope add {data}")
     try:
-        description = read_metadata(target.metadata_path)
+        description = refresh_description(target.metadata_path)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     if table is not None:
@@ -55,7 +55,7 @@ def set_values(data: Path, values: tuple[str, ...], table: str | None, column: s
     path = annotation.annotation_path(data.resolve())
     try:
         write_text_atomic(path, annotation.edited(path, scope, given))
-        read_metadata(target.metadata_path)
+        write_description(target.metadata_path, description)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     warn_ignored(root, [path, target.metadata_path])

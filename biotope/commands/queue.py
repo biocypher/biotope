@@ -18,7 +18,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from biotope.graph.sources import read_metadata
+from biotope.graph.sources import refresh_description
 from biotope.metadata import (
     STATUS_MAPPED,
     STATUS_PROCESSED,
@@ -118,7 +118,7 @@ def _scan_manifests(biotope_root: Path) -> list[_QueueEntry]:
     entries: list[_QueueEntry] = []
     for manifest_path in sorted(datasets_dir.rglob("*.jsonld")):
         try:
-            metadata = read_metadata(manifest_path)
+            metadata = refresh_description(manifest_path)
         except (OSError, ValueError):
             continue
         entries.append(

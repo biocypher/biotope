@@ -39,7 +39,7 @@ from biotope.graph.sources import (
     Kind,
     digest,
     objects,
-    read_metadata,
+    refresh_description,
     slug,
     walk_fields,
     write_module,
@@ -387,7 +387,7 @@ def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str) -> 
 def plan_sources(metadata: Path, output: Path, package: str | None = None) -> SourcePlan:
     """Reconcile one manifest with its root without writing anything."""
     root = root_directory(metadata, output, package)
-    data = read_metadata(metadata)
+    data = refresh_description(metadata)
     packages = discover_packages(root)
     plan = SourcePlan(metadata, output, root, ContractStore.for_manifest(metadata), manifest_targets(data), packages)
     contested_root = _root_conflicts(metadata, output, root)

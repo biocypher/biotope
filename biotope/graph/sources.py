@@ -1,8 +1,3 @@
-"""Croissant descriptions: reading, registration, naming and binding authored schemas.
-
-This module reads metadata, never the resources described by that metadata.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -102,8 +97,7 @@ def digest(value: object) -> str:
     return hashlib.sha256(CANONICAL_JSON.encode(value).encode()).hexdigest()
 
 
-def read_metadata(path: Path) -> dict[str, Any]:
-    """Read JSON metadata while retaining extensions and original identities."""
+def refresh_description(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -243,7 +237,7 @@ def register_metadata(root: Path, source: Path, name: str) -> Path:
         raise ValueError("Managed metadata must stay under .biotope/datasets")
     if target.exists():
         raise ValueError(f"{target} already exists")
-    write_text_atomic(target, json.dumps(read_metadata(source), indent=2, ensure_ascii=False) + "\n")
+    write_text_atomic(target, json.dumps(refresh_description(source), indent=2, ensure_ascii=False) + "\n")
     return target
 
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, ParamSpec, Protocol, TypeVar
 
 from biotope.croissant.ids import read_files
-from biotope.graph.sources import objects, read_metadata
+from biotope.graph.sources import objects, refresh_description
 from biotope.graph.standardization import Term
 from biotope.graph.topology import ConceptSchema, Topology
 from biotope.metadata import dataset_dir_for_manifest, resolve_content_url
@@ -62,7 +62,7 @@ class SourceContract:
 
     def path(self) -> Path:
         manifest = self.metadata.resolve()
-        data = read_metadata(manifest)
+        data = refresh_description(manifest)
         record = self.records[0]
         identity = getattr(record, "__file_object__", None) or getattr(record, "__file_set__", None)
         if identity is None:

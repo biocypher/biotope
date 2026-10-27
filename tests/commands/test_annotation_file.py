@@ -276,3 +276,18 @@ def test_a_rebake_keeps_the_lineage_and_the_status_people_gave(fresh):
     clean = described(fresh, ".biotope/datasets/data/clean.jsonld")
     assert clean["prov:wasDerivedFrom"] == [{"@id": "data/study"}, {"@id": "data/raw/samples.csv"}]
     assert clean["biotope:status"] == "mapped"
+
+
+def test_map_inspect_refuses_an_invalid_annotation_file_and_names_a_single_file_description(fresh, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "1000")
+    ok("add", "data/study", "data/raw/samples.csv")
+    (fresh / "data/raw/alpha.csv").write_text("a\n1\n")
+    ok("add", "data/raw/alpha.csv")
+    annotation = fresh / "data/study/.biotope.yaml"
+    annotation.write_text(annotation.read_text() + "description: Second.\ntables: [oops\n")
+
+    refused = invoke("map", "inspect", MANIFEST)
+    assert refused.exit_code != 0 and "data/study/.biotope.yaml" in " ".join(refused.output.split())
+    pointed = invoke("map", "inspect", "data/raw/samples.csv.biotope.yaml")
+    assert pointed.exit_code != 0
+    assert "biotope map inspect .biotope/datasets/data/raw/samples.csv.jsonld" in " ".join(pointed.output.split())

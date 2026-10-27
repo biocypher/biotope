@@ -14,7 +14,7 @@ import click
 from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
 from biotope.croissant.ids import note_moves, stable_ids
-from biotope.graph.sources import read_metadata, write_description, write_text_atomic
+from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import (
     DERIVED_FROM,
     FILE_OBJECT_TYPE,
@@ -381,7 +381,7 @@ def _bake_directory(
     _register_distinct_files(metadata_dict, abs_dir, biotope_root, files, copies)
     _give_stable_ids(metadata_dict, rel_dir, abs_dir)
     if target.metadata_path.is_file():
-        note_moves(read_metadata(target.metadata_path), metadata_dict)
+        note_moves(refresh_description(target.metadata_path), metadata_dict)
     _apply_pipeline_state(metadata_dict, overrides)
     _describe(abs_dir, target.metadata_path, metadata_dict, given, reporter)
     return metadata_dict, len(files)
