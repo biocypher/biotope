@@ -348,7 +348,9 @@ source package's `schema.py` and, if the package was current, its
 annotation file moves with it. `biotope mv -r` does the same for every file in a
 folder and moves the descriptions of the datasets inside it; it changes nothing
 when it cannot update one of them. `graph check` then passes, and the source reads
-the file at its new path.
+the file at its new path. `mv` refuses, changing nothing, to replace a file a
+description holds or an existing annotation file, even with `--force`, and to give
+a file a path that differs from another's only in case.
 
 A move made outside biotope, by a file manager, `git mv` or a download script,
 gives the file a new ID at the next refresh. `source generate` creates a package
