@@ -22,9 +22,10 @@ def ok(*args):
     return result
 
 
-def refresh(dataset="data/study"):
-    ok("add", "--rebake", dataset)
-    ok("source", "generate", MANIFEST, "--out", "graph/sources")
+def refresh(*datasets):
+    for dataset in datasets or ("data/study",):
+        ok("add", "--rebake", dataset)
+        ok("source", "generate", f".biotope/datasets/{dataset}.jsonld", "--out", "graph/sources")
 
 
 def built(root: Path) -> tuple[set[str], int]:

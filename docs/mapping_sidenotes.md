@@ -21,7 +21,7 @@ subset of Croissant; it does not perform general JSON-LD reasoning.
 
 `--out` is the sources package. Each manifest owns one root,
 `graph/sources/<manifest>/`, named after the manifest file unless `--package`
-overrides it. Its targets are every top-level record set, plus every leaf
+overrides it or the manifest is already generated into one root, which it keeps. Its targets are every top-level record set, plus every leaf
 `FileObject` or `FileSet` that no record-set field reads; a resource that others are
 `containedIn` is packaging, not a target. Each target gets a package holding
 `schema.py`, a `SOURCE` registration in `__init__.py` and a placeholder

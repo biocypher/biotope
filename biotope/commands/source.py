@@ -81,7 +81,11 @@ def _report(plan: SourcePlan, *, written: bool) -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Sources package, e.g. graph/sources.",
 )
-@click.option("--package", default=None, help="Root package for this manifest; defaults to the manifest filename.")
+@click.option(
+    "--package",
+    default=None,
+    help="Root package for this manifest; defaults to the root that holds it, else the manifest filename.",
+)
 @click.option("--check", is_flag=True, help="Report what generation would change, without writing.")
 def generate(metadata: Path, out: Path, package: str | None, check: bool) -> None:
     """Reconcile one manifest with its source packages; create only what is missing.

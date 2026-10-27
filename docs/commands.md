@@ -69,7 +69,8 @@ schema, registration or loader; on a conflict it writes nothing. Only `biotope m
 changes them: it rewrites a moved file's IDs and the pinned revision in its schema,
 and a moved description's path in the registrations. Generation prints each package's
 status (created, completed, current, drift, orphaned or conflict) and records every
-contract revision in `.biotope/contracts/`. `--package` overrides the
+contract revision in `.biotope/contracts/`. A description already generated into
+one root, such as one `biotope mv` renamed, keeps that root; `--package` overrides the
 manifest-derived root name; `--check` writes nothing and fails only when generation
 would create or change a file. Removed sources leave orphan packages: exclude them,
 then delete their directories.

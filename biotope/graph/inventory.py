@@ -100,6 +100,9 @@ def root_directory(metadata: Path, output: Path, package: str | None = None) -> 
     """Resolve and validate the manifest root beneath a sources package."""
     if output.suffix == ".py" or output.is_symlink() or (output.exists() and not output.is_dir()):
         raise ValueError(f"{output} is not a directory; --out is the sources package, e.g. graph/sources")
+    held = [root.path for root in discover_roots(output) if root.metadata == metadata.resolve()]
+    if package is None and len(held) == 1:
+        return held[0]
     name = package or slug(metadata.stem)
     if not is_package_name(name) or name in RESERVED_NAMES or name in SOURCES_PACKAGE_NAMES:
         raise ValueError(f"{name!r} is not a usable root package name; pass --package <name>")

@@ -29,6 +29,16 @@ def test_mv_of_a_folder_inside_a_dataset_keeps_the_graph_building(project):
     assert "current/people.csv#people" in {record["@id"] for record in manifest["recordSet"]}
 
 
+def test_the_refresh_after_a_dataset_is_renamed_generates_into_the_root_that_holds_it(project):
+    ok("mv", "-r", "data/study", "data/current")
+    (project / "data/current/push/projects.csv").write_text("project_id,title\nx1,Atlas\n")
+
+    refresh("data/current")
+
+    assert (project / "graph/sources/study/push_projects_csv_projects/schema.py").is_file()
+    assert built(project) == ({"data/current/push/people.csv", "data/current/docs/report.html"}, 2)
+
+
 def test_mv_changes_nothing_while_the_annotation_file_is_invalid_and_works_once_it_is_fixed(project):
     annotation = project / "data/study/.biotope.yaml"
     valid = annotation.read_text()
