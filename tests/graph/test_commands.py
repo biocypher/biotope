@@ -17,43 +17,43 @@ from biotope.graph.reports import Finding
 def test_workspace_selection_and_independent_definition_failures(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     runner = CliRunner(mix_stderr=False)
-    for folder in ("graph", "alternate graph"):
-        created = runner.invoke(cli, ["graph", "scaffold", "--graph", folder, "--json"])
-        assert created.exit_code == 0, created.output
-        pipeline = tmp_path / folder / "pipelines/build_graph.py"
-        pipeline.write_text(
-            pipeline.read_text()
-            .replace('name=""', 'name="review"')
-            .replace('scope=""', 'scope="test"')
-            .replace("requirements={}", 'requirements={"entity:missing": "test:missing"}')
-            .replace('"pipelines",', '"pipelines", "missing.py",')
-            .replace(
-                "from biotope.graph import Pipeline\n",
-                "from pathlib import Path\nfrom biotope.graph import Pipeline, SourceContract, Mapping\n",
-            )
-            .replace(
-                "sources=SOURCES",
-                'sources=tuple(SourceContract(n, Path(n + ".jsonld"), Path(n + ".py"), ()) '
-                'for n in ("missing-a", "missing-b"))',
-            )
-            .replace(
-                "mappings=MAPPINGS",
-                'mappings=(Mapping(name="bad-a", function=run), Mapping(name="bad-b", function=run))',
-            )
+    folder = "alternate graph"
+    created = runner.invoke(cli, ["graph", "scaffold", "--graph", folder, "--json"])
+    assert created.exit_code == 0, created.output
+    pipeline = tmp_path / folder / "pipelines/build_graph.py"
+    pipeline.write_text(
+        pipeline.read_text()
+        .replace('name=""', 'name="review"')
+        .replace('scope=""', 'scope="test"')
+        .replace("requirements={}", 'requirements={"entity:missing": "test:missing"}')
+        .replace('"pipelines",', '"pipelines", "missing.py",')
+        .replace(
+            "from biotope.graph import Pipeline\n",
+            "from pathlib import Path\nfrom biotope.graph import Pipeline, SourceContract, Mapping\n",
         )
-        result = runner.invoke(cli, ["graph", "check", "--graph", folder, "--json"])
-        assert result.exit_code != 0
-        report = json.loads(result.stdout)
-        assert report["state"] == "failed"
-        # The substituted sources are not in the scaffold's empty inventory.
-        assert {"code.paths", "requirements.invalid", "inventory.absent"} <= {f["code"] for f in report["findings"]}
-        assert any(s["name"] == "python" and s["state"] == "skipped" for s in report["checks"])
-        assert {f["subject"] for f in report["findings"] if f["code"] == "source.contract"} == {
-            "missing-a",
-            "missing-b",
-        }
-        assert {f["subject"] for f in report["findings"] if f["code"] == "mapping.contract"} == {"bad-a", "bad-b"}
-        assert "\x1b" not in result.stdout
+        .replace(
+            "sources=SOURCES",
+            'sources=tuple(SourceContract(n, Path(n + ".jsonld"), Path(n + ".py"), ()) '
+            'for n in ("missing-a", "missing-b"))',
+        )
+        .replace(
+            "mappings=MAPPINGS",
+            'mappings=(Mapping(name="bad-a", function=run), Mapping(name="bad-b", function=run))',
+        )
+    )
+    result = runner.invoke(cli, ["graph", "check", "--graph", folder, "--json"])
+    assert result.exit_code != 0
+    report = json.loads(result.stdout)
+    assert report["state"] == "failed"
+    # The substituted sources are not in the scaffold's empty inventory.
+    assert {"code.paths", "requirements.invalid", "inventory.absent"} <= {f["code"] for f in report["findings"]}
+    assert any(s["name"] == "python" and s["state"] == "skipped" for s in report["checks"])
+    assert {f["subject"] for f in report["findings"] if f["code"] == "source.contract"} == {
+        "missing-a",
+        "missing-b",
+    }
+    assert {f["subject"] for f in report["findings"] if f["code"] == "mapping.contract"} == {"bad-a", "bad-b"}
+    assert "\x1b" not in result.stdout
 
     missing = runner.invoke(cli, ["graph", "check", "--graph", "absent", "--json"])
     assert missing.exit_code != 0

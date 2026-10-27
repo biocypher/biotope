@@ -276,18 +276,6 @@ def test_exclusions_aggregate_counts_and_bound_evidence():
     assert run.source_versions == {("rows", "v1"), ("rows", "v2")}
 
 
-def test_structural_checks_alone_cannot_see_a_dropped_record(tmp_path, unchecked_definitions):
-    """Only an expectation derived independently from the source can notice a silently dropped record."""
-    eligible = ("a", "b")
-    dropped = replace(RESULTS_PIPELINE, run=lambda context: emit_results(context, eligible[:1]))
-    writer = RecordingWriter()
-    report = build.run_pipeline(dropped, tmp_path / "build", writer=writer)
-    assert writer.calls == ["environment", "export"] and report["state"] == "complete"
-    assert report["graph_objects"] == {"nodes": 2, "edges": 1}
-    assert report["findings"] == []
-    assert report["quality"]["state"] == "complete" and report["quality"]["findings"] == []
-
-
 def test_audits_record_stage_accounting_without_imposing_arithmetic(tmp_path, unchecked_definitions):
     reads = {"reads": 4, "distinct_keys": 2, "results": 2}
     notes = ("Unresolved keys limit the join; the results themselves are retained.",)

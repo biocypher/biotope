@@ -102,7 +102,7 @@ def _signature(name: str, parameter: str, returns: str) -> str:
     return line if len(line) <= LINE_LENGTH else f"def {name}(\n    {parameter},\n) -> {returns}:"
 
 
-def render_loader(kind: Kind, class_name: str) -> str:
+def render_loader(kind: Kind, class_name: str, *, one_file: bool) -> str:
     if kind == "recordSet":
         summary = "Yield one record per source row, preserving every described field."
         detail = (
@@ -121,8 +121,10 @@ def render_loader(kind: Kind, class_name: str) -> str:
     returns = f"Iterator[SourceRecord[{class_ref}]]"
     return _template("loader.py.tmpl").substitute(
         class_import=class_import,
-        read_signature=_signature("_read", "config: None", returns),
+        path_import="from pathlib import Path\n" if one_file else "",
+        read_signature=_signature("_read", "path: Path" if one_file else "config: None", returns),
         load_signature=_signature("load", "context: RunContext", returns),
+        config="SOURCE.path()" if one_file else "None",
         read_summary=summary,
         read_detail="\n    ".join(detail.splitlines()),
     )

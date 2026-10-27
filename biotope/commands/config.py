@@ -643,7 +643,7 @@ def set_project_metadata() -> None:
     # License
     license_url = click.prompt(
         "Default license URL",
-        default=current_metadata.get("license", "https://creativecommons.org/licenses/by/4.0/"),
+        default=current_metadata.get("license", ""),
         show_default=True,
     )
     if license_url:

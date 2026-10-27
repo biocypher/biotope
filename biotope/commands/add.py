@@ -4,24 +4,31 @@ from __future__ import annotations
 
 import json
 import shlex
-import subprocess
+import shutil
 from collections import defaultdict
 from datetime import datetime, timezone
 from glob import escape as escape_glob
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import click
-import yaml
 
 from biotope.commands._add_output import AddOutput
-from biotope.graph.sources import protect_curated, write_text_atomic
+from biotope.croissant import annotation
+from biotope.croissant.ids import MOVED_FROM, case_clashes, file_id, note_moves, stable_ids
+from biotope.extraction.run import state_path
+from biotope.graph.inventory import declared_files
+from biotope.graph.moves import carry_description, kept, package_files
+from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import (
+    DERIVED_FROM,
     FILE_OBJECT_TYPE,
-    SCAFFOLD_FILENAME,
+    STATUS,
     add_derived_from,
     classify_status_from_baker,
+    dataset_id,
     make_file_object,
+    manifest_for,
     merge_metadata,
     normalize_metadata_shape,
     parse_key_value_pairs,
@@ -34,20 +41,16 @@ from biotope.utils import (
     find_biotope_root,
     is_file_tracked,
     load_project_metadata,
-    stage_git_changes,
+    warn_ignored,
 )
 
 
 @click.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, path_type=Path))
-@click.option("--force", "-f", is_flag=True, help="Force add even if file already tracked")
-@click.option("--rebake", is_flag=True, help="Refresh an already-tracked directory's manifest from disk")
-@click.option("--json", "as_json", is_flag=True, help="Emit a complete machine-readable scan report on stdout")
 @click.option(
-    "--bake-to",
-    type=click.Path(path_type=Path),
-    help="Bake one input to a new review file without changing managed metadata or tracking",
+    "--rebake", is_flag=True, help="Describe an already-tracked dataset again from its data and annotation file"
 )
+@click.option("--json", "as_json", is_flag=True, help="Emit a complete machine-readable scan report on stdout")
 @click.option("--name", help="Dataset name override")
 @click.option("--description", help="Dataset description override")
 @click.option("--license", "license_value", help="Dataset license")
@@ -80,10 +83,8 @@ from biotope.utils import (
 )
 def add(
     paths: tuple[Path, ...],
-    force: bool,
     rebake: bool,
     as_json: bool,
-    bake_to: Path | None,
     name: str | None,
     description: str | None,
     license_value: str | None,
@@ -125,95 +126,54 @@ def add(
         except ValueError as exc:
             raise click.BadParameter(str(exc)) from exc
 
-        overrides = {
-            "name": name,
-            "description": description,
-            "license": license_value,
-            "creator": creator,
-            "creator_email": creator_email,
-            "url": url,
-            "citation": citation,
-            "version": version,
-            "keywords": list(keywords),
-            "access_restrictions": access_restrictions,
-            "legal_obligations": legal_obligations,
-            "collaboration_partner": collaboration_partner,
-            "rai_fields": rai_fields,
-            "status_override": status_override,
-            "derived_from": resolved_provenance,
+        given = {
+            key: value
+            for key, value in (
+                ("name", name),
+                ("description", description),
+                ("license", license_value),
+                ("url", url),
+                ("citeAs", citation),
+                ("version", version),
+                ("cr:accessRestrictions", access_restrictions),
+                ("cr:legalObligations", legal_obligations),
+                ("cr:collaborationPartner", collaboration_partner),
+            )
+            if value is not None
         }
+        if creator is not None or creator_email is not None:
+            given["creator"] = {key: value for key, value in (("name", creator), ("email", creator_email)) if value}
+        if keywords:
+            given["keywords"] = list(keywords)
+        given.update(rai_fields)
+        if status_override is not None:
+            given[STATUS] = status_override
+        if resolved_provenance:
+            given[DERIVED_FROM] = resolved_provenance
 
         datasets_dir = biotope_root / ".biotope" / "datasets"
-        if bake_to is not None:
-            if len(paths) != 1 or force or rebake:
-                raise click.BadParameter("--bake-to requires one input and cannot be combined with --force or --rebake")
-            destination = bake_to.resolve()
-            source = paths[0].resolve()
-            if destination.exists() or destination.is_relative_to(datasets_dir.resolve()):
-                raise click.BadParameter("--bake-to must name a new file outside .biotope/datasets")
-            if source.is_dir() and destination.is_relative_to(source):
-                raise click.BadParameter("--bake-to must be outside the input directory")
-            if source.is_file():
-                success = add_file(
-                    source, biotope_root, datasets_dir, False, overrides, output=destination, reporter=reporter
-                )
-            else:
-                success = (
-                    _bake_directory(source, biotope_root, overrides, output=destination, reporter=reporter) is not None
-                )
-            if not success:
-                raise click.ClickException("Review bake failed; managed metadata was not changed")
-            reporter.sources[-1]["status"] = "review"
-            reporter.row("Next", "Reconcile the review bake, then use biotope source register --replace.")
-            return
         datasets_dir.mkdir(parents=True, exist_ok=True)
 
         added_entries: list[Path] = []
-        baked_dirs: list[tuple[Path, dict[str, Any]]] = []
-
         for path in paths:
             if path.is_file():
-                result = add_file(path, biotope_root, datasets_dir, force, overrides, reporter=reporter)
-                if result:
+                if add_file(path, biotope_root, datasets_dir, rebake, given=given, reporter=reporter):
                     added_entries.append(path)
                 continue
 
             target = resolve_target(path, biotope_root)
-            already_tracked = target.metadata_path.exists()
-            if already_tracked and not force and not rebake:
+            if target.metadata_path.exists() and not rebake:
                 reporter.skipped(
                     path, f"{target.metadata_path.relative_to(biotope_root)} already exists; use --rebake to refresh."
                 )
                 continue
+            if _bake_directory(path, biotope_root, given=given, reporter=reporter) is not None:
+                added_entries.append(path)
 
-            baked = _bake_directory(path, biotope_root, overrides, reporter=reporter)
-            if baked is None:
-                continue
-
-            metadata_dict, _n_source_files = baked
-            added_entries.append(path)
-            baked_dirs.append((path.resolve(), metadata_dict))
-
-        if added_entries:
-            stage_git_changes(biotope_root)
-
-        for source_dir, metadata_dict in baked_dirs:
-            _generate_biotope_scaffold_from_baked(source_dir, metadata_dict, biotope_root, reporter=reporter)
-
-        if added_entries:
-            if baked_dirs:
-                for source_dir, _metadata_dict in baked_dirs:
-                    if any(
-                        s.get("annotation_template") and s["input"] == reporter.path(source_dir)
-                        for s in reporter.sources
-                    ):
-                        reporter.row(
-                            "Apply", f"biotope annotate apply {shlex.quote(str(source_dir.relative_to(biotope_root)))}"
-                        )
-            else:
-                for entry in added_entries:
-                    manifest = resolve_target(entry.resolve(), biotope_root).metadata_path.relative_to(biotope_root)
-                    reporter.row("Next", f"biotope map inspect {shlex.quote(str(manifest))}")
+        for entry in added_entries:
+            manifest = resolve_target(entry.resolve(), biotope_root).metadata_path
+            warn_ignored(biotope_root, [manifest, annotation.annotation_path(entry.resolve())])
+            reporter.row("Next", f"biotope map inspect {shlex.quote(str(manifest.relative_to(biotope_root)))}")
         if any(source["status"] == "failed" for source in reporter.sources):
             raise click.ClickException("One or more inputs could not be baked.")
 
@@ -225,11 +185,11 @@ def add_file(
     force: bool,
     overrides: dict[str, Any] | None = None,
     *,
-    output: Path | None = None,
+    given: dict[str, Any] | None = None,
     reporter: AddOutput | None = None,
 ) -> bool:
     """Add a single file to the biotope project."""
-    overrides = overrides or default_overrides()
+    overrides = overrides or {}
     reporter = reporter or AddOutput()
     reporter.root = biotope_root
     abs_file = file_path.resolve()
@@ -239,15 +199,9 @@ def add_file(
         reporter.skipped(file_path, "Outside the biotope project.")
         return False
 
-    if output is None and not force and is_file_tracked(abs_file, biotope_root):
-        reporter.skipped(file_path, "Already tracked; use --force to override.")
+    if not force and is_file_tracked(abs_file, biotope_root):
+        reporter.skipped(file_path, "Already tracked; use --rebake to refresh.")
         return False
-
-    try:
-        if output is None:
-            protect_curated(resolve_target(abs_file, biotope_root).metadata_path)
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
 
     defaults = load_project_metadata(biotope_root)
     now = datetime.now(tz=timezone.utc).isoformat()
@@ -257,12 +211,13 @@ def add_file(
             "description": (
                 overrides.get("description") or defaults.get("description") or f"Dataset for {abs_file.name}"
             ),
-            "distribution": [make_file_object(abs_file, biotope_root)],
+            "distribution": [make_file_object(abs_file, abs_file.parent)],
             "dateCreated": now,
         }
     )
 
     _enrich_with_baker(metadata, abs_file, reporter=reporter)
+    _give_stable_ids(metadata, relative_path, abs_file)
     # Baker's single-file assembly is rooted at the file's parent. File tracking
     # in a single-file manifest uses project-relative paths.
     parent = abs_file.parent.relative_to(biotope_root)
@@ -274,14 +229,103 @@ def add_file(
             distribution["includes"] = (
                 str(parent / includes) if isinstance(includes, str) else [str(parent / pattern) for pattern in includes]
             )
-    _apply_dataset_metadata(metadata, defaults, overrides, biotope_root)
+    _apply_dataset_metadata(metadata, defaults, overrides)
     _apply_pipeline_state(metadata, overrides)
-
-    target = resolve_target(abs_file, biotope_root)
-    write_text_atomic(output or target.metadata_path, json.dumps(metadata, indent=2) + "\n")
-    reporter.saved(output or target.metadata_path, metadata)
-
+    manifest = resolve_target(abs_file, biotope_root).metadata_path
+    previous = manifest if manifest.exists() else _gone_copy(abs_file, biotope_root)
+    if previous is not None:
+        described = _read_description(previous)
+        note_moves(described, metadata)
+        declared = declared_files(biotope_root / "graph/sources", previous)
+        _note_relocation(described, metadata, dataset_id(previous, biotope_root), relative_path.as_posix(), declared)
+    if previous in (None, manifest):
+        _describe(abs_file, manifest, metadata, given, reporter)
+    else:
+        _take_over(previous, abs_file, manifest, metadata, given, biotope_root, reporter)
     return True
+
+
+def _note_relocation(previous: dict[str, Any], baked: dict[str, Any], old: str, new: str, declared: set[str]) -> None:
+    origin = previous.get(MOVED_FROM)
+    if not isinstance(origin, str) or (_file(old) in declared and _file(origin) != _file(old)):
+        origin = old
+    if origin != new:
+        baked[MOVED_FROM] = origin
+
+
+def _file(path: str) -> str:
+    return file_id(PurePosixPath(path).name)
+
+
+def _gone_copy(data: Path, biotope_root: Path) -> Path | None:
+    checksum = calculate_file_checksum(data)
+    descriptions = sorted((biotope_root / ".biotope" / "datasets").rglob("*.jsonld"))
+    found = [path for path in descriptions if _describes_gone_copy(path, checksum, biotope_root)]
+    return found[0] if len(found) == 1 else None
+
+
+def _take_over(
+    previous: Path,
+    data: Path,
+    manifest: Path,
+    baked: dict[str, Any],
+    given: dict[str, Any] | None,
+    biotope_root: Path,
+    reporter: AddOutput,
+) -> None:
+    gone = biotope_root / dataset_id(previous, biotope_root)
+    left, notes = annotation.annotation_path(gone), annotation.annotation_path(data)
+    carried = {left: notes} if left.is_file() and not notes.exists() else {}
+    try:
+        annotation.current(baked, annotation.read(next(iter(carried), notes)))
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    with kept([previous, manifest, notes, *carried, *package_files(biotope_root / "graph/sources", previous)]):
+        warn_ignored(biotope_root, carry_description(biotope_root, previous, manifest))
+        for old, new in carried.items():
+            shutil.move(old, new)
+        _describe(data, manifest, baked, given, reporter)
+    reporter.warning(
+        data,
+        f"{gone.relative_to(biotope_root)} is gone and this file has its content, so its description now "
+        "describes this file and source generate reports each ID that changed. Move described files with biotope mv",
+    )
+
+
+def _read_description(path: Path) -> dict[str, Any]:
+    try:
+        described = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return described if isinstance(described, dict) else {}
+
+
+def _describes_gone_copy(description: Path, checksum: str, biotope_root: Path) -> bool:
+    data = dataset_id(description, biotope_root)
+    if (biotope_root / data).exists():
+        return False
+    described = _read_description(description)
+    files = [entry for entry in described.get("distribution") or [] if entry.get("@type") == FILE_OBJECT_TYPE]
+    return [(entry.get("contentUrl"), entry.get("sha256")) for entry in files] == [(data, checksum)]
+
+
+def _describe(
+    data: Path, manifest: Path, baked: dict[str, Any], given: dict[str, Any] | None, reporter: AddOutput
+) -> None:
+    try:
+        if given is not None:
+            path = annotation.annotation_path(data)
+            if given or not path.exists():
+                write_text_atomic(path, annotation.edited(path, (), given))
+            reporter.annotation(data, path)
+        described = write_description(manifest, baked)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    reporter.saved(manifest, described)
+    found = annotation.located(manifest)
+    unknown = annotation.unknown(baked, annotation.read(found)) if found is not None else []
+    if unknown:
+        reporter.warning(data, f"{found} names what the data does not have: {', '.join(unknown)}")
 
 
 def _enrich_with_baker(metadata: dict[str, Any], file_path: Path, *, reporter: AddOutput | None = None) -> None:
@@ -308,136 +352,36 @@ def _enrich_with_baker(metadata: dict[str, Any], file_path: Path, *, reporter: A
                 if key not in {"name", "description", "dateCreated"}:
                     metadata[key] = value
         report.finish(generator.scan_report.to_dict(), {})
-    if bake_error is not None:
-        if str(bake_error) != "No supported files found in the dataset":
-            report.result.update(status="failed", error=str(bake_error))
-            raise bake_error
-        # Keep the original file-tracking pointer, without claiming structure.
-        metadata["distribution"][0]["contentUrl"] = file_path.name
+    if bake_error is not None and str(bake_error) != "No supported files found in the dataset":
+        report.result.update(status="failed", error=str(bake_error))
+        raise bake_error
 
 
-def _git_user_identity(cwd: Path) -> tuple[str | None, str | None]:
-    """Return (name, email) from git config, preferring repo-local config."""
-    try:
-        name = subprocess.run(
-            ["git", "config", "--get", "user.name"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout.strip()
-        email = subprocess.run(
-            ["git", "config", "--get", "user.email"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        ).stdout.strip()
-    except FileNotFoundError:
-        return None, None
-
-    if not isinstance(name, str):
-        name = None
-    if not isinstance(email, str):
-        email = None
-
-    return (name or None), (email or None)
-
-
-def _apply_dataset_metadata(
-    metadata: dict[str, Any],
-    defaults: dict[str, Any],
-    overrides: dict[str, Any],
-    biotope_root: Path,
-) -> None:
-    """Apply top-level dataset metadata from project defaults and CLI overrides."""
-    creator_node = _resolve_creator(defaults, overrides, biotope_root)
-    if creator_node:
-        metadata["creator"] = creator_node
-
-    field_mapping = {
-        "name": "name",
-        "description": "description",
-        "url": "url",
-        "license": "license",
-        "citation": "citation",
-        "version": "version",
-    }
-    for override_key, metadata_key in field_mapping.items():
-        value = overrides.get(override_key)
-        if value is not None:
-            metadata[metadata_key] = value
-        elif metadata_key not in metadata and defaults.get(metadata_key):
-            metadata[metadata_key] = defaults[metadata_key]
-
-    if overrides.get("keywords"):
-        metadata["keywords"] = list(overrides["keywords"])
-
-    extension_mapping = {
-        "cr:projectName": defaults.get("cr:projectName"),
-        "cr:accessRestrictions": overrides.get("access_restrictions")
-        if overrides.get("access_restrictions") is not None
-        else defaults.get("cr:accessRestrictions"),
-        "cr:legalObligations": overrides.get("legal_obligations")
-        if overrides.get("legal_obligations") is not None
-        else defaults.get("cr:legalObligations"),
-        "cr:collaborationPartner": overrides.get("collaboration_partner")
-        if overrides.get("collaboration_partner") is not None
-        else defaults.get("cr:collaborationPartner"),
-    }
-    for key, value in extension_mapping.items():
-        if value:
-            metadata[key] = value
-
-    for key, value in overrides.get("rai_fields", {}).items():
-        metadata[key] = value
-
-
-def _resolve_creator(
-    defaults: dict[str, Any],
-    overrides: dict[str, Any],
-    biotope_root: Path,
-) -> dict[str, str] | None:
-    """Resolve creator info from CLI, git, or project defaults."""
-    default_creator = defaults.get("creator")
-    default_name = default_creator.get("name") if isinstance(default_creator, dict) else None
-
-    git_name, git_email = _git_user_identity(biotope_root)
-
-    creator_name = overrides.get("creator") or default_name or git_name or overrides.get("creator_email")
-    creator_email = overrides.get("creator_email") or git_email
-
-    if not creator_name:
-        return None
-
-    creator_node = {"@type": "Person", "name": creator_name}
-    if creator_email:
-        creator_node["email"] = creator_email
-    return creator_node
-
-
-def _creator_for_baker(
-    defaults: dict[str, Any],
-    overrides: dict[str, Any],
-    biotope_root: Path,
-) -> list[dict[str, str]] | None:
-    """Resolve creator info in croissant-baker's expected shape."""
-    creator_node = _resolve_creator(defaults, overrides, biotope_root)
-    if creator_node is None:
-        return None
-    return [{key: value for key, value in creator_node.items() if key in {"name", "email", "url"}}]
+def _apply_dataset_metadata(metadata: dict[str, Any], defaults: dict[str, Any], overrides: dict[str, Any]) -> None:
+    for key in ("creator", "license"):
+        if defaults.get(key):
+            metadata[key] = defaults[key]
+        else:
+            metadata.pop(key, None)
+    for key in ("name", "description"):
+        if overrides.get(key) is not None:
+            metadata[key] = overrides[key]
+    for key in ("url", "citation"):
+        if key not in metadata and defaults.get(key):
+            metadata[key] = defaults[key]
+    for key in ("cr:projectName", "cr:accessRestrictions", "cr:legalObligations", "cr:collaborationPartner"):
+        if defaults.get(key):
+            metadata[key] = defaults[key]
 
 
 def _bake_directory(
     directory: Path,
     biotope_root: Path,
-    overrides: dict[str, Any] | None = None,
     *,
-    output: Path | None = None,
+    given: dict[str, Any] | None = None,
     reporter: AddOutput | None = None,
 ) -> tuple[dict[str, Any], int] | None:
     """Run croissant-baker over ``directory`` and write one directory-level JSON-LD."""
-    overrides = overrides or default_overrides()
     reporter = reporter or AddOutput()
     reporter.root = biotope_root
     abs_dir = directory.resolve()
@@ -448,53 +392,46 @@ def _bake_directory(
         return None
 
     target = resolve_target(abs_dir, biotope_root)
-    try:
-        if output is None:
-            protect_curated(target.metadata_path)
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
     defaults = load_project_metadata(biotope_root)
     now = datetime.now(tz=timezone.utc).isoformat()
 
-    files = sorted(_iter_directory_files(abs_dir))
-    copies = _identical_copies(files)
-    excluded = {escape_glob(str(copy.relative_to(abs_dir))): copy for copy in copies}
+    files, records = directory_files(abs_dir, biotope_root)
+    described = {
+        abs_dir / entry["contentUrl"]
+        for entry in _read_description(target.metadata_path).get("distribution") or []
+        if entry.get("@type") == FILE_OBJECT_TYPE and isinstance(entry.get("contentUrl"), str)
+    }
+    clashes = case_clashes(path.relative_to(abs_dir).as_posix() for path in files)
+    if clashes:
+        raise click.ClickException(f"{rel_dir}: cannot give every file and table a stable ID: {'; '.join(clashes)}")
+    copies = _identical_copies(files, described)
+    skipped = {path.relative_to(abs_dir) for path in [*copies, *records]}
     bake_error = None
     with reporter.scan(abs_dir, abs_dir) as report:
-        for relative in (path.relative_to(abs_dir) for path in files if path not in copies):
-            caught = next((copy for pattern, copy in excluded.items() if relative.match(pattern)), None)
-            if caught is not None:
-                reporter.warning(
-                    abs_dir,
-                    f"{relative} was not parsed: croissant-baker matches exclusions by path suffix, "
-                    f"so skipping the identical copy {caught.relative_to(abs_dir)} also skipped it",
-                )
         try:
             from croissant_baker.metadata_generator import MetadataGenerator
+            from croissant_baker.report import ScanReport
         except ImportError as exc:
             raise click.ClickException("croissant-baker is unavailable; check its installation.") from exc
 
         generator = MetadataGenerator(
             dataset_path=str(abs_dir),
-            name=overrides.get("name") or str(rel_dir),
-            description=overrides.get("description") or defaults.get("description"),
-            url=overrides.get("url") or defaults.get("url"),
-            license=overrides.get("license") or defaults.get("license"),
-            citation=overrides.get("citation") or defaults.get("citation"),
-            version=overrides.get("version"),
+            name=str(rel_dir),
+            description=defaults.get("description"),
+            url=defaults.get("url"),
+            citation=defaults.get("citation"),
             date_created=now,
-            creators=_creator_for_baker(defaults, overrides, biotope_root),
-            keywords=list(overrides.get("keywords") or []) or None,
             excludes=[
-                SCAFFOLD_FILENAME,
-                f"**/{SCAFFOLD_FILENAME}",
+                annotation.FOLDER_FILE,
+                f"**/{annotation.FOLDER_FILE}",
+                f"*{annotation.SUFFIX}",
+                f"**/*{annotation.SUFFIX}",
                 ".biotope/**",
                 "**/.biotope/**",
                 ".git/**",
                 "**/.git/**",
-                *excluded,
             ],
-            rai_fields=overrides.get("rai_fields") or None,
+            handlers=_passing_over(skipped),
         )
         report.attach(generator)
 
@@ -502,56 +439,61 @@ def _bake_directory(
             metadata_dict = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
         except ValueError as exc:
             bake_error = exc
-        report.finish(generator.scan_report.to_dict(), copies)
+        scanned = [entry for entry in generator.scan_report.entries if entry.path not in skipped]
+        report.finish(ScanReport(scanned).to_dict(), copies)
 
     if bake_error is not None:
         if str(bake_error) != "No supported files found in the dataset":
             report.result.update(status="failed", error=str(bake_error))
             reporter.row("FAIL", str(rel_dir), str(bake_error))
             return None
-        metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, overrides, defaults)
+        metadata_dict = _build_minimal_directory_metadata(abs_dir, biotope_root, defaults)
 
     metadata_dict.setdefault("dateCreated", now)
-    _apply_dataset_metadata(metadata_dict, defaults, overrides, biotope_root)
+    _apply_dataset_metadata(metadata_dict, defaults, {})
     _register_distinct_files(metadata_dict, abs_dir, biotope_root, files, copies)
-    _apply_pipeline_state(metadata_dict, overrides)
-
-    write_text_atomic(output or target.metadata_path, json.dumps(metadata_dict, indent=2, default=str) + "\n")
-    reporter.saved(output or target.metadata_path, metadata_dict)
+    _give_stable_ids(metadata_dict, rel_dir, abs_dir)
+    if target.metadata_path.is_file():
+        note_moves(refresh_description(target.metadata_path), metadata_dict)
+    _apply_pipeline_state(metadata_dict, {})
+    _describe(abs_dir, target.metadata_path, metadata_dict, given, reporter)
     return metadata_dict, len(files)
 
 
-def _build_minimal_directory_metadata(
-    abs_dir: Path,
-    biotope_root: Path,
-    overrides: dict[str, Any],
-    defaults: dict[str, Any],
-) -> dict[str, Any]:
+def _build_minimal_directory_metadata(abs_dir: Path, biotope_root: Path, defaults: dict[str, Any]) -> dict[str, Any]:
     """Build a minimal dataset for directories without baker-supported files."""
     relative_dir = abs_dir.relative_to(biotope_root)
-    metadata = merge_metadata(
+    return merge_metadata(
         {
-            "name": overrides.get("name") or str(relative_dir),
-            "description": (
-                overrides.get("description") or defaults.get("description") or f"Dataset for {relative_dir}"
-            ),
+            "name": str(relative_dir),
+            "description": defaults.get("description") or f"Dataset for {relative_dir}",
             "distribution": [],
         }
     )
-    return metadata
 
 
-def _identical_copies(files: list[Path]) -> dict[Path, Path]:
-    """Map each file whose bytes repeat a file earlier in ``files`` to that file."""
+def _passing_over(skipped: set[Path]) -> Any:
+    from croissant_baker.handlers.registry import HandlerRegistry, HandlerSelection, default_registry
+
+    class PassingOver(HandlerRegistry):
+        def select(self, file_path: Path, relative_path: Path | None = None) -> HandlerSelection:
+            if relative_path in skipped:
+                return HandlerSelection(refusal="left out by biotope")
+            return super().select(file_path, relative_path)
+
+    return PassingOver(default_registry())
+
+
+def _identical_copies(files: list[Path], described: set[Path]) -> dict[Path, Path]:
     by_size: dict[int, list[Path]] = defaultdict(list)
-    for file_path in files:
+    for file_path in sorted(files, key=lambda path: path not in described):
         by_size[file_path.stat().st_size].append(file_path)
     copies: dict[Path, Path] = {}
     for paths in by_size.values():
         originals: dict[str, Path] = {}
         for file_path in paths if len(paths) > 1 else ():
             original = originals.setdefault(calculate_file_checksum(file_path), file_path)
-            if original != file_path:
+            if original != file_path and file_path not in described:
                 copies[file_path] = original
     return copies
 
@@ -588,7 +530,21 @@ def _register_distinct_files(
                 item["excludes"] = [*_patterns(item.get("excludes")), *skipped]
     for file_path in files:
         if file_path not in copies and file_path.resolve() not in covered:
-            distributions.append(make_file_object(file_path, biotope_root))
+            distributions.append(make_file_object(file_path, abs_dir))
+
+
+def _give_stable_ids(metadata: dict[str, Any], source: Path, data: Path) -> None:
+    try:
+        annotation.name_file_sets(metadata, annotation.read(annotation.annotation_path(data)))
+        stable_ids(metadata)
+    except ValueError as exc:
+        raise click.ClickException(f"{source}: {exc}") from exc
+
+
+def directory_files(directory: Path, biotope_root: Path) -> tuple[list[Path], list[Path]]:
+    found = sorted(_iter_directory_files(directory))
+    records = [path for path in found if state_path(biotope_root, path).is_file()]
+    return [path for path in found if path not in records], records
 
 
 def _iter_directory_files(abs_dir: Path):
@@ -597,30 +553,9 @@ def _iter_directory_files(abs_dir: Path):
         if not file_path.is_file():
             continue
         relative = file_path.relative_to(abs_dir)
-        if any(part.startswith(".") for part in relative.parts):
+        if any(part.startswith(".") for part in relative.parts) or file_path.name.endswith(annotation.SUFFIX):
             continue
         yield file_path
-
-
-def default_overrides() -> dict[str, Any]:
-    """Return the default add metadata overrides."""
-    return {
-        "name": None,
-        "description": None,
-        "license": None,
-        "creator": None,
-        "creator_email": None,
-        "url": None,
-        "citation": None,
-        "version": None,
-        "keywords": [],
-        "access_restrictions": None,
-        "legal_obligations": None,
-        "collaboration_partner": None,
-        "rai_fields": {},
-        "status_override": None,
-        "derived_from": [],
-    }
 
 
 def _apply_pipeline_state(metadata: dict[str, Any], overrides: dict[str, Any]) -> None:
@@ -650,41 +585,15 @@ def resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
     Raises ``ValueError`` when nothing resolves.
     """
     datasets_dir = biotope_root / ".biotope" / "datasets"
-
-    # Bare canonical id (no suffix); accept as-is if a manifest exists.
-    candidate_manifest = datasets_dir / f"{ref}.jsonld"
-    if candidate_manifest.is_file():
+    if (datasets_dir / f"{ref}.jsonld").is_file():
         return ref
-
-    p = Path(ref)
-    if not p.is_absolute():
-        p = (biotope_root / p).resolve()
-    else:
-        p = p.resolve()
-
-    # Path to a manifest under .biotope/datasets/.
-    try:
-        rel_manifest = p.relative_to(datasets_dir)
-        if rel_manifest.suffix == ".jsonld" and p.is_file():
-            return str(rel_manifest.with_suffix(""))
-    except ValueError:
-        pass
-
-    # Path to a data file/dir inside the project — derive the canonical id.
-    try:
-        rel = p.relative_to(biotope_root)
-    except ValueError as exc:
-        msg = f"--derived-from {ref!r}: path is outside the biotope project"
-        raise ValueError(msg) from exc
-
-    file_manifest = (datasets_dir / rel).with_suffix(".jsonld")
-    if file_manifest.is_file():
-        return str(rel.with_suffix("") if rel.suffix else rel)
-
-    # If it's a data dir we just baked, the canonical id is the dir rel path.
-    dir_manifest = (datasets_dir / rel).with_suffix(".jsonld")
-    if dir_manifest.is_file():
-        return str(rel)
+    p = (biotope_root / ref).resolve()
+    if p.is_relative_to(datasets_dir) and p.suffix == ".jsonld" and p.is_file():
+        return dataset_id(p, biotope_root)
+    if not p.is_relative_to(biotope_root):
+        raise ValueError(f"--derived-from {ref!r}: path is outside the biotope project")
+    if manifest_for(p, biotope_root).is_file():
+        return p.relative_to(biotope_root).as_posix()
 
     msg = (
         f"--derived-from {ref!r}: no manifest found under .biotope/datasets/. "
@@ -692,128 +601,3 @@ def resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
         ".jsonld path of an existing dataset."
     )
     raise ValueError(msg)
-
-
-def _generate_biotope_scaffold_from_baked(
-    source_dir: Path,
-    metadata_dict: dict[str, Any],
-    biotope_root: Path,
-    *,
-    reporter: AddOutput | None = None,
-) -> None:
-    """Generate a scoped YAML scaffold for one directory-baked dataset."""
-    scaffold_path = source_dir / SCAFFOLD_FILENAME
-
-    dist_by_id = {
-        distribution.get("@id"): distribution
-        for distribution in metadata_dict.get("distribution", [])
-        if distribution.get("@id")
-    }
-
-    creator_name = ""
-    creator_email = ""
-    creator_node = metadata_dict.get("creator")
-    if isinstance(creator_node, dict):
-        creator_name = creator_node.get("name", "") or ""
-        creator_email = creator_node.get("email", "") or ""
-
-    keywords = metadata_dict.get("keywords", [])
-    if isinstance(keywords, list):
-        keywords_value = [str(k) for k in keywords]
-    elif keywords:
-        keywords_value = [str(keywords)]
-    else:
-        keywords_value = []
-
-    dataset_block = {
-        "source_path": str(source_dir.relative_to(biotope_root)),
-        "name": metadata_dict.get("name", "") or "",
-        "description": metadata_dict.get("description", "") or "",
-        "creator": creator_name,
-        "creator_email": creator_email,
-        "license": metadata_dict.get("license", "") or "",
-        "url": metadata_dict.get("url", "") or "",
-        "citation": metadata_dict.get("citation", "") or "",
-        "version": metadata_dict.get("version", "") or "",
-        "keywords": keywords_value,
-        "access_restrictions": metadata_dict.get("cr:accessRestrictions", "") or "",
-        "legal_obligations": metadata_dict.get("cr:legalObligations", "") or "",
-        "collaboration_partner": metadata_dict.get("cr:collaborationPartner", "") or "",
-    }
-
-    record_set_blocks: list[dict[str, Any]] = []
-    for record_set in metadata_dict.get("recordSet", []) or []:
-        source_id = _first_field_source_id(record_set)
-        distribution = dist_by_id.get(source_id, {})
-        record_set_blocks.append(
-            {
-                "id": record_set.get("@id", "") or "",
-                "source_path": _human_source_path(distribution, source_dir, biotope_root),
-                "name": record_set.get("name", "") or "",
-                "description": record_set.get("description", "") or "",
-                "encoding_format": distribution.get("encodingFormat", "") or "",
-            }
-        )
-
-    payload = {"dataset": dataset_block, "record_sets": record_set_blocks}
-    header = (
-        f"# {SCAFFOLD_FILENAME} — edit, then `biotope annotate apply {source_dir.relative_to(biotope_root)}`\n"
-        "# Empty strings are placeholders; fill in or leave blank.\n"
-        "# Schema: dataset (one block) + record_sets (list, joined by `id`).\n\n"
-    )
-    try:
-        with open(scaffold_path, "w", encoding="utf-8") as handle:
-            handle.write(header)
-            yaml.safe_dump(payload, handle, sort_keys=False, allow_unicode=True)
-        if reporter is not None:
-            reporter.template(source_dir, scaffold_path)
-    except Exception as exc:  # noqa: BLE001
-        message = f"Could not generate {SCAFFOLD_FILENAME}: {exc}"
-        if reporter is not None:
-            reporter.warning(source_dir, message)
-        else:
-            click.echo(message, err=True)
-        return
-
-    stale_csv = source_dir / ".biotope.csv"
-    if stale_csv.is_file():
-        message = f"Old .biotope.csv found; use {SCAFFOLD_FILENAME} for annotations."
-        if reporter is not None:
-            reporter.warning(source_dir, message)
-        else:
-            click.echo(message, err=True)
-
-
-def _human_source_path(distribution: dict[str, Any], source_dir: Path, biotope_root: Path) -> str:
-    """Return a human-readable source path for one record set row."""
-    entry_type = distribution.get("@type")
-    if entry_type == FILE_OBJECT_TYPE:
-        content_url = distribution.get("contentUrl", "") or ""
-        candidate = resolve_content_url(content_url, source_dir, biotope_root)
-        if candidate is not None:
-            return str(candidate.relative_to(biotope_root))
-        return content_url
-
-    if entry_type == "cr:FileSet":
-        includes = distribution.get("includes")
-        pattern = includes if isinstance(includes, str) else (includes[0] if includes else "")
-        if not pattern:
-            return str(source_dir.relative_to(biotope_root))
-        base = Path(pattern).parent
-        source_path = source_dir / base if str(base) != "." else source_dir
-        return str(source_path.relative_to(biotope_root))
-
-    return str(source_dir.relative_to(biotope_root))
-
-
-def _first_field_source_id(record_set: dict[str, Any]) -> str | None:
-    """Return the @id of the FileSet/FileObject that the first field sources."""
-    for field in record_set.get("field", []) or []:
-        source = field.get("source") or {}
-        for key in ("fileSet", "fileObject"):
-            value = source.get(key)
-            if isinstance(value, dict) and value.get("@id"):
-                return value["@id"]
-            if isinstance(value, str) and value:
-                return value
-    return None

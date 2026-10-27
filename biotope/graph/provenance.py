@@ -7,9 +7,9 @@ from pathlib import Path
 
 from biotope.graph.contracts import Evidence, GraphRecord
 from biotope.graph.runtime import RunContext
+from biotope.graph.topology import PROVENANCE_PROPERTY
 
 
-PROVENANCE_PROPERTY = "biotope_provenance_id"
 PROVENANCE_CATALOG = "provenance.json"
 PROVENANCE_REFERENCE = {"property": PROVENANCE_PROPERTY, "catalog": PROVENANCE_CATALOG, "indexing": "zero-based"}
 ProvenanceKey = tuple[tuple[str, ...], tuple[Evidence, ...]]

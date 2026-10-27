@@ -11,7 +11,9 @@ from rich.console import Console
 from rich.panel import Panel
 
 from biotope.croissant.inspector import inspect_dataset, render_inspection
-from biotope.croissant.spec import CroissantDatasetModel, load_from_path, load_from_url
+from biotope.croissant.spec import CroissantDatasetModel, load_from_url
+from biotope.graph.sources import refresh_description
+from biotope.metadata import resolve_target
 from biotope.project_model import Project, find_project
 from biotope.utils import find_biotope_root
 
@@ -250,16 +252,18 @@ def _load_croissant(path: str) -> CroissantDatasetModel:
         p = resolved
 
     suffix = p.name.lower()
-    if suffix.endswith((".biotope.yaml", ".biotope.yml")) or p.name == ".biotope.yaml":
-        suggestion = _suggest_croissant_jsonld(p)
+    if suffix.endswith(".biotope.yaml"):
+        root = find_biotope_root()
+        data = p.parent if p.name == ".biotope.yaml" else p.with_name(p.name.removesuffix(".biotope.yaml"))
+        manifest = resolve_target(data, root).metadata_path if root is not None and data.exists() else None
         console.print(
             Panel(
-                "This is a [yellow]biotope annotate scaffold[/yellow], not a Croissant JSON-LD file.\n"
+                "This is an [yellow]annotation file[/yellow], not a Croissant JSON-LD file.\n"
                 "`biotope map` expects the Croissant metadata for a dataset, which lives under "
                 "[cyan].biotope/datasets/[/cyan].\n\n"
                 + (
-                    f"Try:  [bold]biotope map inspect {suggestion}[/bold]"
-                    if suggestion
+                    f"Try:  [bold]biotope map inspect {manifest.relative_to(root)}[/bold]"
+                    if manifest is not None and root is not None and manifest.is_file()
                     else "Run [bold]biotope add <data>[/bold] first to generate the Croissant file under "
                     "[cyan].biotope/datasets/[/cyan]."
                 ),
@@ -276,12 +280,13 @@ def _load_croissant(path: str) -> CroissantDatasetModel:
         raise click.Abort
 
     try:
-        return load_from_path(path)
-    except ValidationError as exc:
+        return CroissantDatasetModel.model_validate(refresh_description(p))
+    except ValueError as exc:
+        reason = exc.errors()[0].get("msg", exc) if isinstance(exc, ValidationError) else exc
         console.print(
             Panel(
                 f"[cyan]{path}[/cyan] is not a valid Croissant JSON-LD file.\n\n"
-                f"Underlying error: {exc.errors()[0].get('msg', exc)}\n\n"
+                f"Underlying error: {reason}\n\n"
                 "Pass a Croissant file from [cyan].biotope/datasets/[/cyan] (created by "
                 "`biotope add`).",
                 title="Invalid Croissant file",
@@ -311,39 +316,3 @@ def _resolve_data_dir_to_croissant(data_dir: Path) -> Path | None:
         return canonical
     nested = sorted((datasets_root / rel).rglob("*.jsonld")) + sorted((datasets_root / rel).rglob("*.croissant.json"))
     return nested[0] if nested else None
-
-
-def _suggest_croissant_jsonld(annotate_scaffold: Path) -> str | None:
-    """Given a `.biotope.yaml` scaffold path, guess where its Croissant JSON-LD lives.
-
-    `biotope add` writes the per-directory Croissant JSON-LD at
-    ``.biotope/datasets/<same-relative-path>.jsonld`` — *a file named after the
-    directory*, not a directory containing per-file jsonlds. We try that
-    canonical form first, then fall back to a broader glob.
-    """
-    project_root = find_biotope_root()
-    if project_root is None:
-        return None
-    datasets_root = project_root / ".biotope" / "datasets"
-    if not datasets_root.is_dir():
-        return None
-    try:
-        rel = annotate_scaffold.resolve().parent.relative_to(project_root.resolve())
-    except ValueError:
-        rel = None
-
-    candidates: list[Path] = []
-    if rel is not None:
-        canonical = datasets_root / f"{rel}.jsonld"
-        if canonical.is_file():
-            candidates.append(canonical)
-        candidates += sorted((datasets_root / rel).rglob("*.jsonld"))
-        candidates += sorted((datasets_root / rel).rglob("*.croissant.json"))
-    if not candidates:
-        candidates = sorted(datasets_root.rglob("*.jsonld")) + sorted(datasets_root.rglob("*.croissant.json"))
-    if not candidates:
-        return None
-    try:
-        return str(candidates[0].relative_to(project_root))
-    except ValueError:
-        return str(candidates[0])

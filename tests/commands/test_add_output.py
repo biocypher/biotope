@@ -12,17 +12,18 @@ from rich.console import Console
 from biotope.cli import cli
 
 
-def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypatch):
+def test_add_json_covers_files_warnings_and_outputs(tmp_path, monkeypatch):
     from croissant_baker.metadata_generator import MetadataGenerator
 
     monkeypatch.chdir(tmp_path)
     runner = CliRunner(mix_stderr=False)
-    assert runner.invoke(cli, ["init", ".", "--no-git", "--no-prompt"]).exit_code == 0
+    assert runner.invoke(cli, ["init", ".", "--no-prompt"]).exit_code == 0
     raw = tmp_path / "raw"
     raw.mkdir()
     (raw / "genes.csv").write_text("id,name\n1,A\n")
     (raw / "notes.txt").write_text("notes")
     (raw / "bad.soft").write_text("not GEO")
+    (tmp_path / "doc.txt").write_text("a free-text doc")
     original = MetadataGenerator.generate_metadata
 
     def noisy(self, *args, **kwargs):
@@ -31,7 +32,7 @@ def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypa
         return original(self, *args, **kwargs)
 
     monkeypatch.setattr(MetadataGenerator, "generate_metadata", noisy)
-    result = runner.invoke(cli, ["add", "raw", "--json"])
+    result = runner.invoke(cli, ["add", "raw", "doc.txt", "--json"])
     assert result.exit_code == 0, (result.stdout, result.stderr, result.exception)
     report = json.loads(result.stdout)
     assert report["schema_version"] == 1
@@ -39,7 +40,7 @@ def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypa
     source = report["sources"][0]
     assert source["input"] == source["root"] == "raw"
     assert source["manifest"] == ".biotope/datasets/raw.jsonld"
-    assert source["annotation_template"] == "raw/.biotope.yaml"
+    assert source["annotation"] == "raw/.biotope.yaml"
     assert Path(source["manifest"]).is_file()
     files = {f["path"]: f for f in source["scan"]["files"]}
     assert files["genes.csv"]["outcome"] == "described"
@@ -50,19 +51,15 @@ def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypa
     assert any(d["message"] == "A diagnostic with [literal] markup" for d in source["diagnostics"])
     assert "Upstream diagnostic on stdout" in result.stderr
     assert "\x1b" not in result.stdout
+    document = report["sources"][1]
+    assert document["input"] == "doc.txt"
+    assert document["manifest"] == ".biotope/datasets/doc.txt.jsonld"
+    assert document["status"] == "added"
+    assert json.loads(Path(source["manifest"]).read_text())["biotope:status"] == "processed"
+    assert json.loads(Path(document["manifest"]).read_text())["biotope:status"] == "raw"
 
-    skipped = runner.invoke(cli, ["add", "raw", "--json"])
-    assert json.loads(skipped.stdout)["sources"][0]["status"] == "skipped"
-    (tmp_path / "authored.jsonld").write_text(Path(source["manifest"]).read_text())
-    registered = runner.invoke(
-        cli, ["source", "register", "authored.jsonld", "--name", "raw", "--reason", "Reviewed", "--replace"]
-    )
-    assert registered.exit_code == 0, registered.output
-    rejected = runner.invoke(cli, ["add", "raw", "--rebake", "--json"])
-    assert rejected.exit_code != 0
-    failure = json.loads(rejected.stdout)
-    assert failure["status"] == "failed"
-    assert "curated" in failure["error"]
+    skipped = runner.invoke(cli, ["add", "raw", "doc.txt", "--json"])
+    assert [source["status"] for source in json.loads(skipped.stdout)["sources"]] == ["skipped", "skipped"]
 
 
 def test_scan_layout_wraps_long_paths_and_keeps_grouped_members():

@@ -27,10 +27,10 @@ from biotope.graph.reports import (
     PythonCheckFailed,
 )
 from biotope.graph.signatures import MappingContract, SignatureError, contract
-from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, read_metadata
+from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, refresh_description
 from biotope.graph.standardization import describe_standardization
 from biotope.graph.survey import inventory_findings, sources_of, survey_sources
-from biotope.graph.topology import CHECKABLE_TYPES, unchecked_fields
+from biotope.graph.topology import CHECKABLE_TYPES, RESERVED_PROPERTIES, unchecked_fields
 from biotope.graph.workspace import Workspace, WorkspaceLoadFailed
 from biotope.project_model import Project, find_project
 
@@ -66,8 +66,8 @@ def check_types(pipeline: Pipeline, *, on_finding: FindingSink | None = None) ->
         "reportMissingTypeStubs": "none",
     }
     files = code_files(pipeline)
-    with tempfile.TemporaryDirectory(prefix="biotope-pyright-", dir=Path.cwd()) as temporary:
-        path = Path(temporary) / "pyrightconfig.json"
+    with tempfile.TemporaryDirectory(prefix="biotope-pyright-") as temporary:
+        path = Path(temporary).resolve() / "pyrightconfig.json"
         config["include"] = [os.path.relpath(item, path.parent) for item in files]
         path.write_text(json.dumps(config), encoding="utf-8")
         result = subprocess.run(
@@ -225,6 +225,26 @@ def check_pipeline(
                 + ", ".join(missing[:20])
                 + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
             )
+        for concept, item in described.items():
+            for name in sorted(RESERVED_PROPERTIES.intersection(item["properties"])):
+                error(
+                    "topology.reserved",
+                    f"{concept}.{name}",
+                    f"{concept}.{name}: the export reserves {name}; rename the property",
+                )
+        if workspace is not None:
+            for cls, place in pipeline.topology.layout().items():
+                found = Path(inspect.getfile(cls)).resolve()
+                if found != (workspace.root / "topology" / place).resolve():
+                    where = f"{workspace.root.name}/topology/{place}"
+                    error(
+                        "topology.layout",
+                        cls.__name__,
+                        f"{cls.__name__}: an edge class belongs in {where}, its source node's folder"
+                        if cls in pipeline.topology.edges
+                        else f"{cls.__name__}: a node class belongs in {where}",
+                        found,
+                    )
         return described
 
     schema = stage("topology", topology)
@@ -246,6 +266,7 @@ def check_pipeline(
         if workspace is not None:
             pyproject = Path(workspace.root.name) / "pyproject.toml"
             declared = declared_distributions(workspace.root / "pyproject.toml")
+            report.data["declared"] = sorted(declared)
             for module, providers in imported.items():
                 if not declared.intersection(providers):
                     warning(
@@ -279,7 +300,7 @@ def check_pipeline(
                 seen.add(source.name)
                 if files is not None and source.schema.resolve() not in declared:
                     raise ValueError(f"{source.schema}: include source schemas in code_paths")
-                metadata = read_metadata(source.metadata)
+                metadata = refresh_description(source.metadata)
                 if not source.records or len(set(source.records)) != len(source.records):
                     raise ValueError(f"{source.name}: declare at least one source record type without duplicates")
                 revisions: list[str] = []

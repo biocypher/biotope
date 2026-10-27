@@ -3,8 +3,6 @@ from __future__ import annotations
 import copy
 import json
 import os
-import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -16,12 +14,13 @@ from rich.table import Table
 from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
-from biotope.commands.add import add_file, default_overrides, resolve_dataset_ref
+from biotope.commands.add import add_file, resolve_dataset_ref
+from biotope.croissant import annotation
+from biotope.croissant.ids import stem, table_id
 from biotope.extraction import ExtractionError, Extractor, Schema
 from biotope.extraction.describe import describe
 from biotope.extraction.run import (
     PROGRESS,
-    STATES,
     Outcome,
     Review,
     Source,
@@ -34,17 +33,20 @@ from biotope.extraction.run import (
     review,
     run,
     sha256,
+    state_path,
 )
 from biotope.extraction.text import convert, media_type
-from biotope.graph.sources import write_text_atomic
+from biotope.graph.sources import refresh_description, write_description
+from biotope.graph.topology import snake_case
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     STATUS_PROCESSED,
     dataset_dir_for_manifest,
     get_derived_from,
+    manifest_for,
     resolve_content_url,
 )
-from biotope.utils import find_biotope_root, is_git_repo, stage_git_changes
+from biotope.utils import find_biotope_root, ignored_by_git, unreported
 
 
 class Output:
@@ -144,7 +146,9 @@ def try_command(schema_ref: str, files: tuple[Path, ...], as_json: bool) -> None
 )
 @click.argument("schema_ref", metavar="SCHEMA")
 @click.argument("datasets", nargs=-1, required=True)
-@click.option("--out", type=click.Path(dir_okay=False, path_type=Path), help="Records file [extracted/<schema>.jsonl]")
+@click.option(
+    "--out", type=click.Path(dir_okay=False, path_type=Path), help="Records file [data/extracted/<schema>.jsonl]"
+)
 @click.option(
     "--redo",
     multiple=True,
@@ -166,7 +170,7 @@ def run_command(
     strangers = sorted(chosen - {source.path for source in sources})
     if strangers:
         output.fail(f"{', '.join(strangers)} is not a document of {', '.join(datasets)}")
-    target = out.resolve() if out is not None else root / "extracted" / f"{_snake(schema.name)}.jsonl"
+    target = out.resolve() if out is not None else root / "data/extracted" / f"{snake_case(schema.name)}.jsonl"
     try:
         relative = target.relative_to(root)
     except ValueError:
@@ -183,13 +187,13 @@ def run_command(
         )
         warnings.append(warning)
         output.row("WARN", "untried schema", warning)
-    state = root / STATES / relative.with_suffix(".json")
+    state = state_path(root, target)
     progress = root / PROGRESS / relative
     result = run(root, schema, extractor, sources, target, state, progress, chosen, output.progress, parallel)
-    manifest = root / ".biotope/datasets" / relative.with_suffix(".jsonld")
+    manifest = manifest_for(target, root)
     if not _registered(root, target, manifest, schema, dataset_ids, result.records):
         _register(root, target, manifest, schema, dataset_ids, result.records)
-    ignored = _ignored(root, [target, manifest, state])
+    ignored = ignored_by_git(root, [target, manifest, state])
     output.report.update(
         manifest=manifest.relative_to(root).as_posix(),
         documents=[_document_report(outcome) for outcome in result.documents],
@@ -220,7 +224,7 @@ def run_command(
     for record_id in result.appeared:
         output.row("New", record_id)
     output.row("Saved", relative.as_posix(), f"registered as {manifest.relative_to(root).as_posix()}")
-    for path in ignored:
+    for path in unreported(root, ignored):
         output.row("WARN", f"git ignores {path}", "Commit it with the project: add an exception to .gitignore.")
     output.finish(any(outcome.status in {"failed", "missing"} for outcome in result.documents))
 
@@ -286,14 +290,6 @@ def _tried(schema: Schema) -> Path:
     return cache / "biotope/tried" / schema.revision
 
 
-def _ignored(root: Path, paths: list[Path]) -> list[str]:
-    if not is_git_repo(root):
-        return []
-    relative = [path.relative_to(root).as_posix() for path in paths]
-    checked = subprocess.run(["git", "check-ignore", "--", *relative], cwd=root, capture_output=True, text=True)
-    return sorted(checked.stdout.split())
-
-
 def _prepare(output: Output, schema_ref: str) -> tuple[Path, Schema, Extractor, int]:
     root = find_biotope_root()
     if root is None:
@@ -314,7 +310,7 @@ def _sources(root: Path, dataset_ids: list[str]) -> list[Source]:
     found: dict[str, Source] = {}
     for dataset_id in dataset_ids:
         manifest = root / ".biotope/datasets" / f"{dataset_id}.jsonld"
-        metadata = cast(dict[str, Any], json.loads(manifest.read_text(encoding="utf-8")))
+        metadata = refresh_description(manifest)
         dataset_dir = dataset_dir_for_manifest(manifest, root)
         for entry in cast(list[dict[str, Any]], metadata.get("distribution") or []):
             url = entry.get("contentUrl")
@@ -337,7 +333,6 @@ def _register(
     root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
 ) -> None:
     overrides = {
-        **default_overrides(),
         "name": target.relative_to(root).as_posix(),
         "description": f"{schema.name} records extracted from {', '.join(dataset_ids)}. {schema.description}".strip(),
         "status_override": STATUS_PROCESSED,
@@ -346,15 +341,12 @@ def _register(
     datasets_dir = root / ".biotope/datasets"
     if not add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
-    metadata = json.loads(manifest.read_text(encoding="utf-8"))
-    for unknown in ("creator", "license"):
-        metadata.pop(unknown, None)
+    metadata = annotation.restored(refresh_description(manifest))
     file_object = _file_object(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")
-    describe(metadata, schema, file_object["@id"], target.name, records)
-    write_text_atomic(manifest, json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
-    stage_git_changes(root)
+    describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
+    write_description(manifest, metadata)
 
 
 def _registered(
@@ -362,12 +354,12 @@ def _registered(
 ) -> bool:
     if not manifest.is_file():
         return False
-    metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    metadata = annotation.restored(refresh_description(manifest))
     file_object = _file_object(root, target, metadata)
     if file_object is None or file_object.get("sha256") != sha256(target) or get_derived_from(metadata) != dataset_ids:
         return False
     described = copy.deepcopy(metadata)
-    describe(described, schema, file_object["@id"], target.name, records)
+    describe(described, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
     return described == metadata
 
 
@@ -386,10 +378,6 @@ def _project_path(root: Path, file: Path) -> str:
         return resolved.relative_to(root).as_posix()
     except ValueError:
         return resolved.as_posix()
-
-
-def _snake(name: str) -> str:
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
 def _schema_report(schema: Schema) -> dict[str, Any]:

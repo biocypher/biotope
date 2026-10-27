@@ -20,26 +20,29 @@ source .venv/bin/activate
 If Node.js is unavailable, install `pyright[nodejs]` in this environment as
 shown in [installation](installation.md).
 
-Copy the example to a temporary project and initialize metadata tracking:
+Copy the example to a temporary project and initialize it:
 
 ```bash
 example=$(mktemp -d)
 cp -R examples/typed_graph/. "$example/"
 cd "$example"
-biotope init . --no-git --no-prompt
+biotope init . --no-prompt
 ```
 
-The example supplies a completed `graph/` workspace, its reviewed Croissant
-description in `metadata/study.jsonld` and a `project.yaml` with its purpose.
-Initialization preserves that file. In a new project, `biotope graph scaffold`
-creates an empty layout to complete.
+Initialization writes `.biotope/` and a root `.gitignore`; it runs no git command.
+The example supplies a completed `graph/` workspace, a Croissant description of its
+two CSV files written by hand in `metadata/study.jsonld`, and a `project.yaml` with
+its purpose, which its pipeline names as its intent. In a new project,
+`biotope add` describes the data and `biotope graph scaffold` creates an empty
+layout to complete.
 
 ## Register and generate sources
 
-The fixture's description covers both CSV record sets:
+The description covers both CSV record sets. Because it is written by hand rather
+than baked from the data, `source register` registers it:
 
 ```bash
-biotope source register metadata/study.jsonld --name study --reason "Reviewed synthetic fixture-v1"
+biotope source register metadata/study.jsonld --name study
 biotope source generate .biotope/datasets/study.jsonld --out graph/sources
 biotope map inspect .biotope/datasets/study.jsonld
 ```
@@ -49,7 +52,7 @@ The example already contains a package per record set,
 reports both as current and writes nothing except their contract revisions in
 `.biotope/contracts/`. In a new project it would scaffold each package: a
 `schema.py` to edit, a `SOURCE` registration and a placeholder loader. It never
-rewrites an existing file.
+rewrites an existing schema, registration or loader.
 
 Read these files to follow the transformation:
 
@@ -107,18 +110,22 @@ Open `graph/metagraph.html` in a browser. The viewer works offline.
 
 ## Change a source contract
 
-Change the score's declared type in `metadata/study.jsonld` from `sc:Float` to
-`sc:Integer`, then register the revised description and reconcile the sources:
+No bake regenerates a description written by hand, so registering it again is how
+it changes. Change the score's declared type in `metadata/study.jsonld` from
+`sc:Float` to `sc:Integer`, register the edited description in place of the old
+one, and reconcile the sources:
 
 ```bash
-biotope source register metadata/study.jsonld --name study --reason "Score reviewed as an integer" --replace
+rm .biotope/datasets/study.jsonld
+biotope source register metadata/study.jsonld --name study
 biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+biotope status
 biotope graph check
 ```
 
-Generation reports `graph/sources/study/samples` as drifted and never rewrites the
-schema; people stays current. The check fails with `source.drift` for
-`study/samples`, naming the change:
+Generation reports `graph/sources/study/samples` as drifted and does not rewrite
+the schema; people stays current. `biotope status` marks `study` as changed. The
+check fails with `source.drift` for `study/samples`, naming the change:
 
 ```text
 field samples/score: dataType "sc:Float" -> "sc:Integer"
@@ -130,6 +137,11 @@ loader keeps parsing the score as a float, so only the acknowledgement remains:
 set `__source_digest__` in `graph/sources/study/samples/schema.py` to the revision
 the finding names, then run `biotope graph check` again. It passes.
 
+In a project whose data `biotope add` describes, the same drift follows a new
+column or a changed column type in the data after `biotope add --rebake`, or a key
+in the dataset's annotation file. Descriptions and equivalent properties change no
+revision; see [project layout](project.md#source-revisions-cover-structure).
+
 The temporary project can be retained for experimentation. `graph/build/` and
-`graph/metagraph.html` are derived outputs; preserve curated metadata, the
-`.biotope/contracts/` history and authored code if you want to reproduce a run.
+`graph/metagraph.html` are derived outputs; keep `.biotope/`, with its
+descriptions and contract history, and the authored code to reproduce a run.

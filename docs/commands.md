@@ -2,26 +2,45 @@
 
 Run project commands from the project root with its environment activated. Use
 `biotope <command> --help` for options. With a uv-managed environment, prefix
-commands with `uv run`.
+commands with `uv run`. [Project layout](project.md) describes where each command
+writes and what the project commits.
 
 ## Initialize and describe
 
-| Command                          | Purpose                                                                                     |
-| -------------------------------- | ------------------------------------------------------------------------------------------- |
-| `biotope init my-kg`             | Create a metadata project in a new subdirectory.                                            |
-| `biotope init . --no-prompt`     | Initialize the current directory using defaults; add `--no-git` to skip Git initialization. |
-| `biotope add <path>...`          | Describe local files or directories with croissant-baker.                                   |
-| `biotope add <path> --json`      | Emit per-file scan outcomes and diagnostics as JSON.                                        |
-| `biotope map inspect <manifest>` | Inspect record sets and declared field types without reading payloads.                      |
+| Command                          | Purpose                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `biotope init my-kg`             | Create a project in a new subdirectory.                                       |
+| `biotope init . --no-prompt`     | Initialize the current directory, such as a repository's root, with defaults. |
+| `biotope add <path>...`          | Describe local files or directories with croissant-baker.                     |
+| `biotope add <path> --json`      | Emit per-file scan outcomes and diagnostics as JSON.                          |
+| `biotope map inspect <manifest>` | Inspect record sets and declared field types without reading payloads.        |
 
-Initialization writes metadata configuration and purpose files. It does not create
-a graph workspace or install Python dependencies. Baking and checksum verification
-read source bytes; metadata inspection does not.
+`init` writes `.biotope/config.yaml` and `.biotope/project.yaml`, and a root
+`.gitignore` only when the project has none. It runs no git command and creates
+no graph workspace. Baking and checksum verification read source bytes; metadata
+inspection does not.
 
-`add --rebake` refreshes a directory description and `add --force` refreshes a file
-description. Curated or annotated manifests are protected from overwrite. Use
-`add <path> --bake-to <new-review.jsonld>` to bake separately for reconciliation.
-Keep that output outside the input directory and `.biotope/datasets/`.
+`add` writes the description to `.biotope/datasets/` and creates the dataset's
+annotation file next to the data. `add --rebake <path>` describes an added dataset
+again from its data and applies its annotation file again; it always succeeds.
+
+## Annotate
+
+```bash
+biotope annotate set data/study description="People of one study."
+biotope annotate set data/study --table 'push/people.csv#people' key=person_id
+biotope annotate set data/study --table 'push/people.csv#people' --column name description="Full name."
+```
+
+`annotate set` writes the values given into the dataset's
+[annotation file](project.md#the-annotation-file): the dataset's without
+`--table`, a table's with `--table <ID>`, and a column's with `--column <name>`.
+`--table` takes the ID as `map inspect` prints it or without its percent-encoding,
+such as `'x - y.csv#x - y'` for `x%20-%20y.csv#x%20-%20y`. A repeated key makes a
+list and an empty value clears. The `add` flags such as
+`--description`, `--license` and `--creator` write dataset fields into the same
+file. `annotate validate --jsonld <file>` runs the external `mlcroissant`
+validator on a description.
 
 ## Extract records from documents
 
@@ -33,33 +52,53 @@ Keep that output outside the input directory and `.biotope/datasets/`.
 | `biotope extract schema <module.py:Schema>`           | Print the JSON Schema, key and revision biotope derives from a schema class.  |
 
 Extraction reads the extractor from `extraction` in `.biotope/config.yaml` and
-reuses stored records until a document, the schema or the extractor changes. See
+reuses stored records until a document, the schema or the extractor changes.
+Schemas live in `graph/extraction/<kind>.py`, and records go to
+`data/extracted/<schema>.jsonl` unless `--out` names another file. See
 [Extraction](extraction.md) for the configuration, schemas, extractors and the
 stored records.
 
-## Curate and generate
+## Generate sources
 
 ```bash
-biotope source register .biotope/reviews/study.jsonld --name study --reason "Reviewed source structure"
-biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 ```
-
-Registration stores the effective curated description. `--replace` replaces an
-existing description after reporting removed structure; it does not merge files.
 
 Generation gives every top-level record set, and every file no record set reads, a
 package under `graph/sources/<manifest>/` with a schema, a `SOURCE` registration and
 a placeholder loader. It creates missing files only and never rewrites an existing
-schema, registration or loader; on a conflict it writes nothing. It prints each
-package's status (created, completed, current, drift, orphaned or conflict) and
-records every contract revision in `.biotope/contracts/`. `--package` overrides the
+schema, registration or loader; on a conflict it writes nothing. Only `biotope mv`
+changes them: it rewrites a moved file's IDs and the pinned revision in its schema,
+and a moved description's path in the registrations. Generation prints each package's
+status (created, completed, current, drift, orphaned or conflict) and records every
+contract revision in `.biotope/contracts/`. A description already generated into
+one root, such as one `biotope mv` renamed, keeps that root; `--package` overrides the
 manifest-derived root name; `--check` writes nothing and fails only when generation
 would create or change a file. Removed sources leave orphan packages: exclude them,
 then delete their directories.
 
-Use `annotate` to edit descriptive metadata and `config` to maintain annotation
-requirements. See [shared annotation policies](cluster-compliance.md) for local
-and remote settings.
+`biotope source register <file.jsonld> --name <name>` registers a Croissant
+description you wrote by hand for data that no bake describes, as the
+[tutorial](tutorial.md) does. It refuses a name that is already registered.
+
+After new data arrives, refresh with commands only:
+
+```bash
+biotope add --rebake data/study
+biotope extract run graph/extraction/<kind>.py:<Class> <every dataset the schema reads>
+biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
+biotope graph check
+biotope graph build
+```
+
+Run `extract run` only when an extraction schema reads documents of the dataset,
+and give it every dataset the schema reads: a run drops the records of documents in
+datasets it is not given.
+See [refresh after new data](project.md#refresh-after-new-data) for what changes and
+how a project keeps new inputs from breaking its build.
+
+`config` maintains annotation requirements and project metadata defaults; see
+[shared annotation policies](cluster-compliance.md).
 
 ## Author and build
 
@@ -94,16 +133,17 @@ for authoring and [report formats](commands_sidenotes.md) for JSON details.
 
 ## Track and review
 
-| Command                                 | Purpose                                                             |
-| --------------------------------------- | ------------------------------------------------------------------- |
-| `biotope queue`, `biotope mark`         | Inspect and maintain coarse `raw`, `processed` and `mapped` states. |
-| `biotope check-data`                    | Read source bytes to verify recorded checksums.                     |
-| `biotope mv`, `biotope rm`              | Maintain tracked paths; `rm` can delete source data.                |
-| `biotope status --detailed`             | Review metadata, annotation issues and local Git changes.           |
-| `biotope commit`, `log`, `push`, `pull` | Work with the project's Git repository.                             |
+| Command                         | Purpose                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `biotope status`                | List the descriptions and mark those whose source packages pin another revision.     |
+| `biotope check-data`            | Read source bytes to verify recorded checksums.                                      |
+| `biotope mv`, `biotope rm`      | Move or remove tracked data and update the descriptions; `mv` also updates packages. |
+| `biotope queue`, `biotope mark` | Inspect and maintain coarse `raw`, `processed` and `mapped` states.                  |
 
-Queue states do not certify graph validity. Metadata commands do not automatically
-stage authored Python; version that code with normal Git. Build outputs can be
-archived separately without changing tracked source data.
+Biotope never writes to git: commit `.biotope/`, `graph/`, annotation files and
+extracted records with your own git commands. Commands that write a file the
+project must commit warn when git ignores it. `mv` works without git; `rm` can
+delete source data. Queue states do not certify graph validity. Build outputs can
+be archived separately without changing tracked source data.
 
 For removed commands and options, see [migration](migration.md).

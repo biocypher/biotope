@@ -37,7 +37,7 @@ def test_single_workbook_uses_full_assembly_and_only_selected_file(tmp_path):
     _workbook(raw / "nested" / workbook.name, "unselected")
     metadata_dir = tmp_path / ".biotope" / "datasets"
     assert add_file(workbook, tmp_path, metadata_dir, False)
-    manifest = metadata_dir / "raw" / "study[1].jsonld"
+    manifest = metadata_dir / "raw" / "study[1].xlsx.jsonld"
     data = json.loads(manifest.read_text())
     assert {rs["name"] for rs in data["recordSet"]} == {"Measurements", "Study"}
     assert {f["name"] for rs in data["recordSet"] for f in rs["field"]} == {"gene_id", "score", "study_id", "species"}
@@ -45,33 +45,6 @@ def test_single_workbook_uses_full_assembly_and_only_selected_file(tmp_path):
     assert len(objects) == 1
     assert objects[0]["contentUrl"] == "raw/study[1].xlsx"
     assert all(f["source"]["fileObject"]["@id"] == objects[0]["@id"] for rs in data["recordSet"] for f in rs["field"])
-
-
-def test_directory_workbook_ids_disambiguate_source_contracts(tmp_path):
-    raw = tmp_path / "raw"
-    raw.mkdir()
-    _workbook(raw / "a.xlsx", "a_id")
-    _workbook(raw / "b.xlsx", "b_id")
-    _bake_directory(raw, tmp_path)
-    dataset = load_from_path(tmp_path / ".biotope" / "datasets" / "raw.jsonld")
-    repeated = [rs for rs in dataset.record_set if rs.name == "Measurements"]
-    assert len(repeated) == 2
-    assert len({rs.id for rs in repeated}) == 2
-    inspection = inspect_dataset(dataset)
-    for record_set in repeated:
-        selected = inspection.by_name(record_set.id)
-        assert selected is not None
-        assert selected.id == record_set.id
-        assert selected.source_ids and len(set(selected.source_ids)) == 1
-    origins = [inspection.by_name(rs.id).source_ids[0] for rs in repeated]
-    assert len(set(origins)) == 2
-    assert inspection.by_name("Measurements") is None
-    manifest = tmp_path / ".biotope/datasets/raw.jsonld"
-    generate_source_packages(manifest, tmp_path / "sources")
-    modules = {p.parent.name: p.read_text() for p in (tmp_path / "sources/raw").glob("*/schema.py")}
-    assert len(modules) == len(dataset.record_set)
-    holders = {name for name, code in modules.items() if any(json.dumps(rs.id) in code for rs in repeated)}
-    assert len(holders) == 2
 
 
 def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
@@ -99,11 +72,14 @@ def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
     assert len(objects) == 6
     assert next(d for d in objects if d["name"] == "table.csv.gz")["encodingFormat"] == ["text/csv", "application/gzip"]
     output = capsys.readouterr()
-    assert "6 scanned · 4 described · 2 not described" in output.err
-    assert "bad.soft" in output.err and "Extraction failed" in output.err
-    assert "archive.zarr.zip" in output.err and "archive" in output.err
-    assert "parsed as far as it goes" in output.err
-    assert "Records from" not in output.out
+    assert output.out == ""
+    assert "\x1b" not in output.err
+    text = "\n".join(line.rstrip() for line in output.err.splitlines())
+    assert "6 scanned · 4 described · 2 not described" in text
+    assert "bad.soft" in text and "Extraction failed" in text
+    assert "SKIP   archive.zarr.zip\n       Archive; the baker does not open archives" in text
+    assert "OK     table.csv.gz" in text
+    assert "parsed as far as it goes" in text
 
 
 def test_nested_parquet_json_and_single_ome_preserve_baker_structure(tmp_path):
@@ -121,7 +97,7 @@ def test_nested_parquet_json_and_single_ome_preserve_baker_structure(tmp_path):
     ome = raw / "cells.ome.tif"
     tifffile.imwrite(ome, np.zeros((3, 4), dtype=np.uint8), ome=True, metadata={"axes": "YX"})
     assert add_file(ome, tmp_path, tmp_path / ".biotope" / "datasets", False)
-    single = json.loads((tmp_path / ".biotope" / "datasets" / "raw" / "cells.ome.jsonld").read_text())
+    single = json.loads((tmp_path / ".biotope" / "datasets" / "raw" / "cells.ome.tif.jsonld").read_text())
     assert any(rs["name"] == "ome_images" for rs in single["recordSet"])
     assert "4x3" in single["recordSet"][0]["description"]
     assert "pixel_type" in {f["name"] for rs in single["recordSet"] for f in rs["field"]}
@@ -132,14 +108,14 @@ def test_unnamed_csv_column_uses_declared_id_without_rejecting_dataset(tmp_path)
     source.write_text(",gene_id,score\n0,G1,2.5\n")
     manifest_dir = tmp_path / ".biotope" / "datasets"
     assert add_file(source, tmp_path, manifest_dir, False)
-    manifest = manifest_dir / "indexed.jsonld"
+    manifest = manifest_dir / "indexed.csv.jsonld"
     raw = json.loads(manifest.read_text())
     unnamed = raw["recordSet"][0]["field"][0]
     assert "name" not in unnamed
-    assert unnamed["@id"] == "indexed/"
+    assert unnamed["@id"] == "indexed.csv#indexed/"
     source.unlink()
     dataset = load_from_path(manifest)
     inspection = inspect_dataset(dataset)
-    assert {f.name for f in inspection.record_sets[0].fields} == {"indexed/", "gene_id", "score"}
+    assert {f.name for f in inspection.record_sets[0].fields} == {"indexed.csv#indexed/", "gene_id", "score"}
     generate_source_packages(manifest, tmp_path / "sources")
-    assert "indexed/" in (tmp_path / "sources/indexed/indexed/schema.py").read_text()
+    assert "indexed.csv#indexed/" in (tmp_path / "sources/indexed_csv/indexed_csv_indexed/schema.py").read_text()

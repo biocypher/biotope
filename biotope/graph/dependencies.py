@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import importlib.metadata
 import re
 import sys
 from collections.abc import Iterable, Mapping
@@ -16,6 +15,11 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+if sys.version_info >= (3, 12):
+    from importlib.metadata import packages_distributions
+else:
+    from importlib_metadata import packages_distributions
+
 
 def canonical(name: str) -> str:
     """Normalize a distribution name the way package indexes compare them."""
@@ -25,7 +29,7 @@ def canonical(name: str) -> str:
 @lru_cache(maxsize=1)
 def installed_modules() -> Mapping[str, list[str]]:
     """Scan the installed distributions once per process; the scan takes a noticeable fraction of a second."""
-    return importlib.metadata.packages_distributions()
+    return packages_distributions()
 
 
 def imported_distributions(files: Iterable[Path]) -> dict[str, list[str]]:

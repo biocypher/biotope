@@ -16,7 +16,7 @@ def prepare(tmp_path):
     root = tmp_path / "project"
     shutil.copytree(EXAMPLE, root, ignore=shutil.ignore_patterns("__pycache__", ".biotope", "build"))
     (root / ".biotope").mkdir(exist_ok=True)
-    manifest = register_metadata(root, root / "metadata/study.jsonld", "study", reason="Reviewed synthetic fixture-v1")
+    manifest = register_metadata(root, root / "metadata/study.jsonld", "study")
     plan = generate_source_packages(manifest, root / "graph/sources")
     assert {status.state for status in plan.statuses} == {"current"} and not plan.changes
     assert len(list((root / ".biotope/contracts").iterdir())) == 2

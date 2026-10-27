@@ -26,6 +26,7 @@ This roadmap is written from issue [#53](https://github.com/biocypher/biotope/is
 1. **Stable IDs follow common industry practice.** Every build is a full rebuild. A project whose IDs nothing outside the build stores, such as InTRAC with its Ensembl gene IDs, needs nothing more. A project whose IDs are stored outside the build, as REACH's are in its Airtable rows, also keeps one committed key map: every alias (DOI, PMID, email, ORCID and so on) points to a permanent ID, an ID merged into another redirects to it, and no ID is ever reused. Human corrections are an input dataset that every build applies. The key map stays project code until a second project needs the same thing; then it moves into biotope.
 1. **Public documents only** go to external models in this version: public web pages, public ERC calls and InTRAC's published papers.
 1. **Testing and development** use only `deepseek/deepseek-v4.1-flash` through OpenRouter. The bar is reasonable results and an end-to-end run, not full accuracy.
+1. **Git belongs to the project, not to biotope.** Biotope does not presume or require git, and it never writes to git: no `git init`, no staging, no commits, and `biotope commit`, `log`, `push` and `pull` are retired. When a repository exists, biotope may read it, for example to warn that git ignores a file biotope needs committed. See [project layout](project.md#git-belongs-to-the-project).
 
 ## This sprint
 

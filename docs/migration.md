@@ -1,4 +1,53 @@
-# Migrating to Biotope 0.10
+# Migration
+
+## Migrating from 0.10
+
+The release after 0.10 makes biotope one part of a project. It writes only in its
+own places and never to git, keeps what people write about a dataset in one
+annotation file, names files and tables by their paths, and fixes where extraction
+schemas and topology classes live. [Project layout](project.md) describes the
+result.
+
+| Removed or changed                                                      | Replacement                                                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `biotope commit`, `log`, `push`, `pull`; staging by every command       | Your own git commands; biotope never writes to git                                    |
+| `init --no-git`, `init --visible`, a root `project.yaml`                | `init` runs no git command and always writes `.biotope/project.yaml`                  |
+| `status --detailed`, `--porcelain`, `--biotope-only`                    | `status` lists descriptions and drift; `check-data` compares checksums                |
+| A creator from the git user and croissant-baker's CC BY 4.0 licence     | Only the creator and licence someone gave, in the annotation file or `add` flags      |
+| The `.biotope.yaml` template, `annotate apply`, `edit`, `interactive`   | The [annotation file](project.md#the-annotation-file), by hand or with `annotate set` |
+| `add --bake-to`, `source register --replace` and `--reason`             | `add --rebake`, which always succeeds and applies the annotation file again           |
+| IDs such as `file_0`, `file_<sha256>` and record sets named by basename | [IDs from paths](project.md#file-and-table-ids), such as `push/people.csv#people`     |
+| A description change reported as `source.drift`                         | Only structure counts; descriptions and checksums change no revision                  |
+| `extraction/<kind>.py` and `extracted/<schema>.jsonl` at the top level  | `graph/extraction/<kind>.py` and `data/extracted/<schema>.jsonl`                      |
+| Topology classes anywhere in `code_paths`                               | `graph/topology/<node>/node.py` and one file per edge, checked as `topology.layout`   |
+| `Pipeline(dependencies=)`                                               | `graph/pyproject.toml`; `run.json` records every declared and imported distribution   |
+| A property named `preferred_id` failing at export                       | `graph check` reports it as `topology.reserved`                                       |
+
+To migrate a 0.10 project:
+
+1. Commit your work: biotope no longer commits anything.
+1. Move a root `project.yaml` into `.biotope/`. In the root `.gitignore`, replace
+   `/data/` with `/data/**` and add the exceptions in
+   [project layout](project.md#biotopes-places).
+1. Move extraction schemas into `graph/extraction/`, and each records file with
+   `biotope mv extracted/<schema>.jsonl data/extracted/<schema>.jsonl`, which
+   moves its description and extraction state too.
+1. Replace each `.biotope.yaml` template with an annotation file. Move the values
+   under `dataset:` to the top level and those under `record_sets:` to `tables:`,
+   keyed by the new table IDs, and drop every empty string: an empty value now
+   clears. Write the corrections you registered with `--replace` into the same
+   file. Then run `biotope add --rebake <path>` for each dataset.
+1. Run `biotope source generate <manifest> --out graph/sources` once per
+   description. Packages whose IDs changed are reported as orphaned beside new
+   packages for the new IDs: move your schema and loader into the new package,
+   then delete the orphan. A generated loader reads the file at `SOURCE.path()`.
+1. Move each node class into `graph/topology/<node>/node.py` and each edge class
+   into its source node's folder, remove `dependencies=` from the `Pipeline`, and
+   rename any property called `preferred_id` or `biotope_provenance_id`.
+
+Then run `biotope graph check` and resolve its findings.
+
+## Migrating to 0.10
 
 Biotope 0.10 makes the shape of a graph project explicit. Every described input is
 inventoried and either selected or excluded with a reason; source schemas are
@@ -6,7 +55,7 @@ scaffolded once and then authored; a changed description is reported as drift;
 and interpretation travels in descriptions, policies and scope instead of a query
 context. Project validation callbacks are retired.
 
-## What 0.10 no longer does
+### What 0.10 no longer does
 
 These are deliberate reductions. Plan for them before upgrading.
 
@@ -40,7 +89,7 @@ These are deliberate reductions. Plan for them before upgrading.
    the manifest and the directories that already exist, so it can differ from a
    from-scratch generation.
 
-## Removed and changed APIs
+### Removed and changed APIs in 0.10
 
 | Removed or changed                                                                                                       | Replacement                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
@@ -56,7 +105,7 @@ Removed keywords fail with ordinary unknown-keyword `TypeError`s. Export labels 
 use a concept's local name (`Gene` rather than `CvdGene`), widened only when two
 concepts collide.
 
-## Migrate a 0.9 project
+### Migrate a 0.9 project to 0.10
 
 1. Delete `graph/checks.py` and `graph/query_context.py`, and remove their
    `Pipeline` arguments (`validation_checks=`, `query_context=`) and `code_paths`
@@ -70,7 +119,8 @@ concepts collide.
    `Pipeline`.
 1. Move old `graph/build/<run>/` directories out of the way.
 1. Delete `graph/reports/`.
-1. Move drafts in `graph/metadata/` to `.biotope/reviews/`.
+1. Delete drafts in `graph/metadata/`; corrections now go into each dataset's
+   annotation file.
 1. Run `biotope source generate <manifest> --out graph/sources` once per manifest.
    It adopts the existing packages, rewrites each 0.9 root into the collecting
    form, creates `graph/sources/inventory.py` and packages for inputs that had

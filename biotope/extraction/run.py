@@ -29,6 +29,10 @@ SHORT = 10
 DISTINCTIVE = 30
 
 
+def state_path(root: Path, records: Path) -> Path:
+    return root / STATES / f"{records.relative_to(root).as_posix()}.json"
+
+
 @dataclass(frozen=True)
 class Source:
     path: str

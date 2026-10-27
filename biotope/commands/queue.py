@@ -18,11 +18,13 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from biotope.graph.sources import refresh_description
 from biotope.metadata import (
     STATUS_MAPPED,
     STATUS_PROCESSED,
     STATUS_RAW,
     STATUS_VALUES,
+    dataset_id,
     get_derived_from,
     get_status,
 )
@@ -116,14 +118,12 @@ def _scan_manifests(biotope_root: Path) -> list[_QueueEntry]:
     entries: list[_QueueEntry] = []
     for manifest_path in sorted(datasets_dir.rglob("*.jsonld")):
         try:
-            with open(manifest_path) as handle:
-                metadata = json.load(handle)
+            metadata = refresh_description(manifest_path)
         except (OSError, ValueError):
             continue
-        dataset_id = str(manifest_path.relative_to(datasets_dir).with_suffix(""))
         entries.append(
             _QueueEntry(
-                dataset_id=dataset_id,
+                dataset_id=dataset_id(manifest_path, biotope_root),
                 status=get_status(metadata),
                 derived_from=tuple(get_derived_from(metadata)),
                 date_created=metadata.get("dateCreated"),

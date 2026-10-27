@@ -18,7 +18,8 @@
 
 | Location                                 | Responsibility                                                       |
 | ---------------------------------------- | -------------------------------------------------------------------- |
-| `.biotope/datasets/`                     | Managed description; lives outside the graph workspace               |
+| `<dataset>/.biotope.yaml`                | The dataset's annotation file; `<file>.biotope.yaml` for one file    |
+| `.biotope/datasets/`                     | Description made from the data and the annotation file; never edited |
 | `.biotope/contracts/`                    | Recorded contract revisions; written by `biotope source generate`    |
 | `graph/standardization.py`               | Shared `Term`s that fields of several sources bind to                |
 | `graph/sources/<m>/<source>/schema.py`   | Authored record dataclass and its field bindings; scaffolded once    |
@@ -28,7 +29,9 @@
 | `graph/sources/inventory.py`             | Generated `INVENTORY` of every root                                  |
 | `graph/sources/__init__.py`              | Authored `SOURCES` and reasoned `EXCLUDED_SOURCES`                   |
 | `graph/alignment/`                       | Cross-source identity resolution, run before mappings                |
-| `graph/topology/<concept>/`              | Node dataclass, identifier type, outgoing relation modules           |
+| `graph/extraction/<kind>.py`             | Extraction schemas, type-checked with the graph code                 |
+| `graph/topology/<node>/node.py`          | Node dataclass and identifier type; folder named after the class     |
+| `graph/topology/<node>/<edge>.py`        | One edge whose source is that node, named after the edge class       |
 | `graph/mappings/<concept>/`              | Typed transformation functions; `MAPPINGS` in `mappings/__init__.py` |
 | `graph/pipelines/compose.py`             | The stage sequence: load, align, map                                 |
 | `graph/pipelines/build_graph.py`         | `PIPELINE`: registries, scope, policies and settings                 |
@@ -40,9 +43,9 @@ Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and m
 
 ## Import the contracts from `biotope.graph`
 
-- `SourceContract(name, metadata, schema, records)` links a manifest, the source's schema module and its record classes. Generation writes it; keep the registration as generated, apart from its import when you rename the record class.
+- `SourceContract(name, metadata, schema, records)` links a manifest, the source's schema module and its record classes. Generation writes it; keep the registration as generated, apart from its import when you rename the record class. `SOURCE.path()` returns the one file the source reads, as the manifest names it now, so a loader keeps working after `biotope mv`. A table read from a file set has no single file: there `SOURCE.path()` raises, so the generated loader passes no path and finds the set's files itself.
 - `Evidence(artifact, version, record_set, location)` identifies a contributor. `SourceRecord(value, evidence)` carries a typed value and its references.
-- `Loader[Config, Row]` takes explicit configuration and yields source records. Implement it beside the schema with an established parsing library; Biotope ships no source-format readers.
+- `Loader[Config, Row]` takes one argument and yields source records; the generated loader's `_read(path)` takes the file path that `load` passes from `SOURCE.path()`. Implement it beside the schema with an established parsing library; Biotope ships no source-format readers.
 - `Term(standard_name, description, values=None)` and `source_field(...)` bind source fields to shared meanings.
 - `Topology(nodes=(...), edges=(...))` registers dataclasses. Each declares `schema_id: ClassVar[str]`. Nodes have distinct `NewType(..., str)` identifiers; edges use those types for `source` and `target`.
 
@@ -67,7 +70,7 @@ Use `dataclasses.field` rather than a wrapper: a helper returning a value makes 
 
 ## A schema is scaffolded once, then authored
 
-`biotope source generate` writes each `schema.py` once and never rewrites it. Its types, nesting and nullability start from the manifest: curated `biotope:nullable: false` asserts non-nullability; known scalars, nested records and repeated fields are supported; unknown types and `arrayShape` fields are opaque and nullable (`UnknownValue | None`). Refine that metadata before loading non-null values; an unused nullable opaque field can stay `None`. Extraction rules and descriptions stay in the Croissant file; do not copy them into Python.
+`biotope source generate` writes each `schema.py` once and never rewrites it; only `biotope mv` updates the IDs in it. Its types, nesting and nullability start from the manifest: `biotope:nullable: false` asserts non-nullability; known scalars, nested records and repeated fields are supported; unknown types and `arrayShape` fields are opaque and nullable (`UnknownValue | None`). Give an opaque field a concrete type in the schema before loading non-null values; an unused nullable opaque field can stay `None`. Descriptions stay in the annotation file and the manifest; do not copy them into Python.
 
 Every described field is bound exactly once:
 
@@ -87,7 +90,7 @@ class Row:
 
 - `source_field("<suffix>")` names the field `<record set @id>/<suffix>`; a bare attribute binds its own name; a full `@id` works when the suffix is empty or itself scoped; `source_field(None)` declares an attribute the source does not supply.
 - Aliases (`aliases={"low": "low_expression"}`), missing tokens and species context belong to the source that uses them. `source_field(aliases=...)`, `__value_aliases__` and `__missing_values__` are declarations only: the check validates them and `run.json` reports them, but `context.load` applies none of them, so the loader maps each alias and turns each missing token into `None` itself. A `Term` holds only the meaning, and optionally the closed vocabulary, several sources share. A field bound to a term is an attribute named after the term's `standard_name`. Bind every field the graph reads as that meaning; matching column names establish no equivalence, and a field kept as its source reported it needs no term.
-- Authored types are not compared with Croissant `dataType`. `__source_digest__` records the revision you reviewed; when the manifest changes, `graph check` reports `source.drift` with the changes, and you acknowledge them by updating it.
+- Authored types are not compared with Croissant `dataType`. `__source_digest__` records the revision you reviewed. A revision covers structure only: when fields, types, nullability, keys or file references change, `graph check` reports `source.drift` with the changes, and you acknowledge them by updating it. Descriptions and a file's changed content never do.
 - A 0.9 schema with `__field_refs__` still binds; it cannot be combined with `source_field` metadata.
 
 Export supports nullable scalars and string lists without nulls. Strings are one line, and list items contain no `;` or line break; a build stops at the first graph object that breaks this and names its mapping, concept and property. Any other property shape needs an explicit project representation.
@@ -113,7 +116,7 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 
 ## Compose execution through `RunContext`
 
-`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `requirements`, `deferrals`, `dependencies`, `variability`, `terms`, `source_inventory` and `excluded_sources`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY` and `excluded_sources=EXCLUDED_SOURCES`. List `standardization.py`, `alignment`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Its `run` receives a `RunContext`:
+`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `requirements`, `deferrals`, `variability`, `terms`, `source_inventory` and `excluded_sources`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY` and `excluded_sources=EXCLUDED_SOURCES`. List `standardization.py`, `alignment`, `extraction`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Declare reader libraries in `graph/pyproject.toml`, not in the `Pipeline`: `run.json` records the installed version of everything declared there and everything the graph code imports. Its `run` receives a `RunContext`:
 
 - `context.load(contract, loader, config)` invokes a registered loader and validates its records without coercion. A selected source's loader must run to completion during the build.
 - `context.apply(mapping, *records, **keywords)` checks the call against the mapping's signature and returns typed, evidence-bearing outputs.

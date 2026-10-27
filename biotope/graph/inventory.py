@@ -6,14 +6,14 @@ writes nothing when it finds a conflict.
 
 from __future__ import annotations
 
-import importlib.util
 import secrets
 import shutil
 from collections import Counter
 from dataclasses import dataclass, field, replace
-from pathlib import Path
-from typing import Any, Literal, cast
+from pathlib import Path, PurePosixPath
+from typing import Any, Literal
 
+from biotope.croissant.ids import MOVED_FROM, file_id, moved_from
 from biotope.graph.discovery import (
     Package,
     discover_packages,
@@ -33,18 +33,20 @@ from biotope.graph.render import (
     render_root,
     render_schema,
 )
-from biotope.graph.revisions import ContractStore, Drift, explain_drift
+from biotope.graph.revisions import ContractStore, Drift, explain_drift, project_root
 from biotope.graph.sources import (
-    FILE_KINDS,
     KINDS,
     RESERVED_NAMES,
     Kind,
     digest,
-    read_metadata,
+    objects,
+    refresh_description,
     slug,
-    write_text_atomic,
+    walk_fields,
+    write_module,
 )
 from biotope.graph.targets import Target, declared_identities, manifest_targets, unidentified_files
+from biotope.metadata import dataset_id
 
 
 SOURCES_PACKAGE_NAMES = frozenset({"inventory", "INVENTORY", "SOURCES", "EXCLUDED_SOURCES"})
@@ -100,6 +102,9 @@ def root_directory(metadata: Path, output: Path, package: str | None = None) -> 
     """Resolve and validate the manifest root beneath a sources package."""
     if output.suffix == ".py" or output.is_symlink() or (output.exists() and not output.is_dir()):
         raise ValueError(f"{output} is not a directory; --out is the sources package, e.g. graph/sources")
+    held = [root.path for root in discover_roots(output) if root.metadata == metadata.resolve()]
+    if package is None and len(held) == 1:
+        return held[0]
     name = package or slug(metadata.stem)
     if not is_package_name(name) or name in RESERVED_NAMES or name in SOURCES_PACKAGE_NAMES:
         raise ValueError(f"{name!r} is not a usable root package name; pass --package <name>")
@@ -273,10 +278,17 @@ def _occupied(root: Path) -> tuple[set[str], set[str]]:
     return occupied | ROOT_MODULE_NAMES, reusable
 
 
-def _package_files(metadata: Path, root: Path, directory: Path, kind: Kind, class_name: str) -> dict[str, str]:
+def _package_files(metadata: Path, root: Path, directory: Path, target: Target, class_name: str) -> dict[str, str]:
+    one_file = target.kind == "fileObject" or (
+        target.kind == "recordSet"
+        and not any(
+            isinstance(source := node.item.get("source"), dict) and "fileSet" in source
+            for node in walk_fields(target.entry, target.identity)
+        )
+    )
     return {
         "__init__.py": render_package(metadata, directory, f"{root.name}/{directory.name}", class_name),
-        "loader.py": render_loader(kind, class_name),
+        "loader.py": render_loader(target.kind, class_name, one_file=one_file),
     }
 
 
@@ -300,7 +312,7 @@ def _reconcile_existing(plan: SourcePlan, target: Target, package: Package) -> t
             detail = "cannot complete the package: no class declares its identity"
             return _conflict(package.schema, detail, package.name, target.identity), {}
         missing = _missing(
-            package.path, _package_files(plan.metadata, plan.root, package.path, target.kind, declaration.class_name)
+            package.path, _package_files(plan.metadata, plan.root, package.path, target, declaration.class_name)
         )
     drifted = declaration.revision != target.revision
     status = PackageStatus(
@@ -322,7 +334,7 @@ def _scaffold(plan: SourcePlan, target: Target, directory: Path) -> tuple[Packag
     class_name = new_class_name(target, directory.name)
     files = {
         "schema.py": render_schema(target, class_name),
-        **_package_files(plan.metadata, plan.root, directory, target.kind, class_name),
+        **_package_files(plan.metadata, plan.root, directory, target, class_name),
     }
     if not directory.is_dir():
         return PackageStatus(
@@ -336,23 +348,18 @@ def _scaffold(plan: SourcePlan, target: Target, directory: Path) -> tuple[Packag
     return status, {path.name: text for path, text in missing.items()}
 
 
-def _orphans(plan: SourcePlan, owned: dict[str, Package], statuses: list[PackageStatus]) -> list[PackageStatus]:
+def _orphans(
+    plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package], owners: dict[str, Path]
+) -> list[PackageStatus]:
     live = {target.identity for target in plan.targets}
-    unauthored = {
-        status.identity: status.package
-        for status in statuses
-        if status.kind in FILE_KINDS
-        and (
-            status.state in ("created", "completed")
-            or (status.state == "current" and is_placeholder(status.path / "loader.py"))
-        )
-    }
     found: list[PackageStatus] = []
     for identity, package in sorted(owned.items(), key=lambda entry: entry[1].name):
         if identity in live:
             continue
-        detail = f"{identity!r} is no longer described by {plan.metadata.name}; delete the directory to remove it"
-        hint = _rebind_hint(plan, package, unauthored)
+        gone = f"{identity!r} is no longer described by {plan.metadata.name}"
+        detail = (
+            _moved(plan, data, package.path, identity, gone, owners) or f"{gone}; delete the directory to remove it"
+        )
         declaration = package.declaration
         found.append(
             PackageStatus(
@@ -361,39 +368,88 @@ def _orphans(plan: SourcePlan, owned: dict[str, Package], statuses: list[Package
                 "orphaned",
                 identity,
                 declaration.kind,
-                detail + (f". {hint}" if hint else ""),
+                detail,
                 declaration.revision,
             )
         )
     return found
 
 
-def _rebind_hint(plan: SourcePlan, orphan: Package, unauthored: dict[str | None, str]) -> str:
-    """Name the new file resource that describes the same file as an orphaned document package.
+def _relocated(plan: SourcePlan, data: dict[str, Any], status: PackageStatus) -> PackageStatus:
+    origin = data.get(MOVED_FROM)
+    project = project_root(plan.metadata)
+    if not isinstance(origin, str) or project is None or status.state not in ("current", "drift"):
+        return status
+    if str(status.identity).split("#", 1)[0] != file_id(PurePosixPath(origin).name):
+        return status
+    now = dataset_id(plan.metadata.resolve(), project)
+    detail = (
+        f"{status.identity!r} keeps its ID, but its file moved outside biotope from {origin!r} to {now!r}. "
+        "Move the file back, rebake and use biotope mv"
+    )
+    return replace(status, state="orphaned", detail=detail)
 
-    ``unauthored`` maps new file resources to their packages that hold no authored work yet.
-    """
-    revision = orphan.declaration.revision
-    if orphan.declaration.kind not in FILE_KINDS or plan.store is None or not revision:
+
+def _moved(
+    plan: SourcePlan, data: dict[str, Any], orphan: Path, identity: str, gone: str, owners: dict[str, Path]
+) -> str:
+    moves = {
+        old: entry["@id"]
+        for entry in objects(data.get("distribution", []), "/distribution")
+        if isinstance(entry.get("@id"), str)
+        for old in moved_from(entry)
+    }
+    old = identity.split("#", 1)[0]
+    if old not in moves:
         return ""
-    recorded = plan.store.get(revision)
-    resource: object = recorded.get("distribution") if recorded is not None else None
-    content = cast(dict[str, object], resource).get("contentUrl") if isinstance(resource, dict) else None
-    if not isinstance(content, str):
-        return ""
-    for target in plan.targets:
-        if target.kind in FILE_KINDS and target.entry.get("contentUrl") == content and target.identity in unauthored:
-            return (
-                f"{target.identity!r} now describes the same file ({content}): to keep the authored work, "
-                f"set {orphan.name}/schema.py to declare {target.identity!r} and delete {unauthored[target.identity]}/"
-            )
-    return ""
+    new = moves[old]
+    now = [target.identity for target in plan.targets if target.identity.split("#", 1)[0] == new]
+    described = ", ".join(repr(item) for item in now) or repr(new)
+    moved = f"{gone}: its file {old!r} moved outside biotope to {new!r}, now described as {described}."
+    project = project_root(plan.metadata)
+
+    def shown(paths: list[Path]) -> str:
+        return " and ".join(path.resolve().relative_to(project).as_posix() if project else str(path) for path in paths)
+
+    if _placeholder(orphan):
+        return f"{moved} Delete {shown([orphan])}, whose loader is still a placeholder"
+    declaring = [owners[item] for item in now if item in owners]
+    placeholders = shown([path for path in declaring if _placeholder(path)])
+    if placeholders:
+        return (
+            f"{moved} Delete {placeholders}, then declare the new ID in this package and set the revision graph "
+            f"check names; or move the file back, rebake, use biotope mv and delete {placeholders}"
+        )
+    if declaring:
+        return (
+            f"{moved} {shown(declaring)} already declares the new ID; move what you need from this package there "
+            f"and delete {shown([orphan])}"
+        )
+    return (
+        f"{moved} Declare the new ID in this package and set the revision graph check names, or move the file "
+        "back, rebake and use biotope mv"
+    )
+
+
+def _placeholder(package: Path) -> bool:
+    loader = package / "loader.py"
+    return not loader.exists() or is_placeholder(loader)
+
+
+def declared_files(sources: Path, metadata: Path) -> set[str]:
+    return {
+        package.declaration.identity.split("#", 1)[0]
+        for root in discover_roots(sources)
+        if root.metadata == metadata.resolve()
+        for package in discover_packages(root.path)
+        if package.declaration.identity is not None and not _placeholder(package.path)
+    }
 
 
 def plan_sources(metadata: Path, output: Path, package: str | None = None) -> SourcePlan:
     """Reconcile one manifest with its root without writing anything."""
     root = root_directory(metadata, output, package)
-    data = read_metadata(metadata)
+    data = refresh_description(metadata)
     packages = discover_packages(root)
     plan = SourcePlan(metadata, output, root, ContractStore.for_manifest(metadata), manifest_targets(data), packages)
     contested_root = _root_conflicts(metadata, output, root)
@@ -412,6 +468,7 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
         existing = ownership.owned.get(target.identity)
         if existing is not None:
             status, missing = _reconcile_existing(plan, target, existing)
+            status = _relocated(plan, data, status)
             new_files.update(missing)
         elif ownership.unreadable:
             continue
@@ -422,7 +479,13 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
             else:
                 new_files.update({status.path / name: text for name, text in files.items()})
         statuses.append(status)
-    statuses += _orphans(plan, ownership.owned, statuses)
+    owners = {identity: package.path for identity, package in ownership.owned.items()}
+    owners |= {
+        status.identity: status.path
+        for status in statuses
+        if status.state in ("created", "completed") and status.identity is not None
+    }
+    statuses += _orphans(plan, data, ownership.owned, owners)
     return replace(
         plan,
         statuses=tuple(statuses),
@@ -468,11 +531,7 @@ def apply_plan(plan: SourcePlan) -> tuple[Path, ...]:
     plan.root.mkdir(parents=True, exist_ok=True)
     written = [path for directory, files in plan.new_packages.items() for path in _create_package(directory, files)]
     written += [path for path, text in plan.new_files.items() if _create_file(path, text)]
-    for path, text in plan.generated_files.items():
-        write_text_atomic(path, text)
-        # Bytecode compiled from the replaced text within the same second would otherwise still be imported.
-        Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
-        written.append(path)
+    written += [write_module(path, text) for path, text in plan.generated_files.items()]
     return tuple(written)
 
 

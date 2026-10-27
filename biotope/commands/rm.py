@@ -28,13 +28,16 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from biotope.commands.add import resolve_dataset_ref
+from biotope.croissant.ids import read_files
+from biotope.graph.sources import write_description
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
     file_coverage_in_manifest,
     find_owning_manifest,
+    names_file,
 )
-from biotope.utils import find_biotope_root, stage_git_changes
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 console = Console()
@@ -127,7 +130,6 @@ def _remove_whole_dataset(
     if not keep_data and data_dir.is_dir():
         shutil.rmtree(data_dir)
 
-    stage_git_changes(biotope_root)
     console.print(
         f"[green]✓[/green] Removed dataset [cyan]{manifest.stem}[/cyan]" + ("" if keep_data else " (data deleted)")
     )
@@ -168,13 +170,18 @@ def _remove_single_file(
 
     file_rel = str(file_path.relative_to(biotope_root))
     distribution = metadata.get("distribution", []) or []
-    before = len(distribution)
-    metadata["distribution"] = [
-        d for d in distribution if not (d.get("@type") == FILE_OBJECT_TYPE and d.get("contentUrl") == file_rel)
+    matches = [
+        d
+        for d in distribution
+        if d.get("@type") == FILE_OBJECT_TYPE and names_file(d, dataset_dir, file_path, biotope_root)
     ]
-    if len(metadata["distribution"]) == before:
+    if not matches:
         click.echo(f"❌ {file_rel}: no matching FileObject in {manifest_path}.")
         raise click.Abort
+    metadata["distribution"] = [d for d in distribution if all(d is not match for match in matches)]
+    removed = {match.get("@id") for match in matches} - {None}
+    if "recordSet" in metadata:
+        metadata["recordSet"] = [rs for rs in metadata["recordSet"] if not read_files(rs) & removed]
 
     if not force:
         what = "file" if keep_data else "tracking entry and the file on disk"
@@ -193,13 +200,12 @@ def _remove_single_file(
         _prune_empty_manifest_parents(manifest_path, biotope_root)
         manifest_gone = True
     else:
-        with open(manifest_path, "w") as handle:
-            json.dump(metadata, handle, indent=2)
+        write_description(manifest_path, metadata)
+        warn_ignored(biotope_root, [manifest_path])
 
     if not keep_data and file_path.is_file():
         file_path.unlink()
 
-    stage_git_changes(biotope_root)
     msg = f"[green]✓[/green] Untracked [cyan]{file_rel}[/cyan]"
     if not keep_data:
         msg += " (file deleted)"

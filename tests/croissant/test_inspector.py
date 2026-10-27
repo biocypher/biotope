@@ -87,7 +87,12 @@ def test_cli_json_preserves_nested_identity_sources_and_annotations(tmp_path: Pa
         "description": "Metadata curated from the study supplement.",
         "distribution": [
             {"@type": "cr:FileObject", "@id": "workbook", "contentUrl": workbook, "sha256": "abc"},
-            {"@type": "cr:FileSet", "@id": "parts", "includes": ["part,one.parquet", "part,two.parquet"]},
+            {
+                "@type": "cr:FileSet",
+                "@id": "parts",
+                "includes": ["part,one.parquet", "part,two.parquet"],
+                "encodingFormat": ["application/vnd.apache.parquet", "application/gzip"],
+            },
         ],
         "recordSet": [
             {
@@ -99,7 +104,7 @@ def test_cli_json_preserves_nested_identity_sources_and_annotations(tmp_path: Pa
                         "@id": "sheet/a/samples",
                         "name": "samples",
                         "description": "Column 'samples' of sheet 'Participants' in " + workbook,
-                        "isArray": True,
+                        "cr:isArray": True,
                         "cr:arrayShape": "2,3",
                         "source": {"fileObject": {"@id": "workbook"}, "extract": {"sheet": "Participants"}},
                         "subField": [
@@ -118,13 +123,12 @@ def test_cli_json_preserves_nested_identity_sources_and_annotations(tmp_path: Pa
             {
                 "@id": "sheet/b",
                 "name": "Visits",
-                "field": [
-                    {
-                        "@id": "sheet/b/id",
-                        "name": "id",
-                        "source": {"fileObject": {"@id": "workbook"}, "extract": {"sheet": "Visits"}},
-                    }
-                ],
+                "field": {
+                    "@id": "sheet/b/id",
+                    "name": "id",
+                    "source": {"fileObject": {"@id": "workbook"}, "extract": {"sheet": "Visits"}},
+                    "subField": {"@id": "sheet/b/id/value", "name": "value", "dataType": "cr:Int64"},
+                },
             },
             {
                 "@id": "joined",
@@ -152,10 +156,14 @@ def test_cli_json_preserves_nested_identity_sources_and_annotations(tmp_path: Pa
     samples = payload["record_sets"][0]["fields"][0]
     assert samples["id"] == "sheet/a/samples"
     assert samples["repeated"] is True and samples["array_shape"] == "2,3"
+    assert samples["kind"] == "array"
     assert samples["source"] == manifest["recordSet"][0]["field"][0]["source"]
     assert [f["id"] for f in samples["sub_fields"]] == ["sheet/a/samples/id", "sheet/a/samples/date"]
     assert samples["sub_fields"][1]["data_type"] == "sc:DateTime"
     assert samples["sub_fields"][0]["attributes"]["references"] == {"field": {"@id": "sheet/b/id"}}
+    [visit_id] = payload["record_sets"][1]["fields"]
+    assert visit_id["id"] == "sheet/b/id" and visit_id["kind"] == "struct"
+    assert [f["kind"] for f in visit_id["sub_fields"]] == ["integer"]
     unnamed = payload["record_sets"][2]["fields"][0]
     assert unnamed["id"] == unnamed["name"] == "joined/"
     assert unnamed["source"]["transform"] == [{"regex": ".*"}]

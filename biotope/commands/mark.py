@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-import json
-
 import click
 
 from biotope.commands.add import resolve_dataset_ref
-from biotope.metadata import (
-    STATUS_VALUES,
-    add_derived_from,
-    get_derived_from,
-    set_status,
-)
-from biotope.utils import find_biotope_root
+from biotope.croissant import annotation
+from biotope.graph.sources import refresh_description, write_description, write_text_atomic
+from biotope.metadata import DERIVED_FROM, STATUS, STATUS_VALUES, add_derived_from, get_derived_from, set_status
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 @click.command()
@@ -58,13 +53,21 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
         except ValueError as exc:
             raise click.BadParameter(str(exc)) from exc
 
-    with open(manifest_path) as handle:
-        metadata = json.load(handle)
-    set_status(metadata, status)
-    for source in resolved_sources:
-        add_derived_from(metadata, source)
-    with open(manifest_path, "w") as handle:
-        json.dump(metadata, handle, indent=2)
+    found = annotation.located(manifest_path)
+    try:
+        metadata = refresh_description(manifest_path)
+        if found is None:
+            set_status(metadata, status)
+            for source in resolved_sources:
+                add_derived_from(metadata, source)
+        else:
+            lineage = list(dict.fromkeys([*get_derived_from(metadata), *resolved_sources]))
+            given = {STATUS: status, **({DERIVED_FROM: lineage} if resolved_sources else {})}
+            write_text_atomic(found, annotation.edited(found, (), given))
+        metadata = write_description(manifest_path, metadata)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    warn_ignored(biotope_root, [manifest_path, *([found] if found is not None else [])])
 
     summary = f"✓ {target_id} → {status}"
     new_provenance = [s for s in resolved_sources if s in get_derived_from(metadata)]

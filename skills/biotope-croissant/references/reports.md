@@ -4,13 +4,13 @@ Use this reference while resolving findings and reviewing a build's claims.
 
 ## Check boundaries
 
-| Layer             | Establishes                                                                                     | Limitation                                                |
-| ----------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Manifest          | The structure the Croissant description declares                                                | Does not establish completeness or loadability            |
-| Inventory         | Every described input has a package, is selected or excluded, and matches its reviewed revision | Does not say whether an exclusion is scientifically right |
-| Definition check  | Contracts, field coverage, terms, topology, requirement bindings, descriptions and Python types | Does not execute loaders or inspect source values         |
-| Runtime integrity | Loaded types, closed vocabularies, completed loaders, object consistency and resolved endpoints | Does not decide which records should have been loaded     |
-| Quality           | Counts, missing properties, connectivity, endpoint concentration and self-loops                 | Measures only emitted objects                             |
+| Layer             | Establishes                                                                                                   | Limitation                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Manifest          | The structure the Croissant description declares                                                              | Does not establish completeness or loadability                                       |
+| Inventory         | Every described input has a package, is selected or excluded, and its structure matches its reviewed revision | Does not say whether an exclusion is scientifically right, or notice changed content |
+| Definition check  | Contracts, field coverage, terms, topology, requirement bindings, descriptions and Python types               | Does not execute loaders or inspect source values                                    |
+| Runtime integrity | Loaded types, closed vocabularies, completed loaders, object consistency and resolved endpoints               | Does not decide which records should have been loaded                                |
+| Quality           | Counts, missing properties, connectivity, endpoint concentration and self-loops                               | Measures only emitted objects                                                        |
 
 Static types do not establish biological equivalence, and no check compares the
 graph with the science it claims. A dropped eligible record passes every layer.
@@ -22,19 +22,19 @@ way to notice it. A failed build is incomplete even if it produced some files.
 `graph/build/run.json` is `schema_version` 2; Biotope still reads and replaces
 version 1 reports.
 
-| Field in `run.json`             | Review it for                                                         |
-| ------------------------------- | --------------------------------------------------------------------- |
-| `state`, `error` and findings   | Whether the build finished and which stage failed                     |
-| `scope`, `policies`, `settings` | The selection the graph embodies and the rules behind every exclusion |
-| `definitions.inventory`         | Roots, packages, registered, selected and excluded source counts      |
-| `definitions.excluded_sources`  | Each excluded source and its reason                                   |
-| `definitions.standardization`   | Term bindings, preserved fields, aliases and missing-value policies   |
-| `loaded_records`                | Records read per source                                               |
-| `audits`                        | Stage input/output grains, selection rules and named counts           |
-| Findings with `kind: exclusion` | Policy counts and bounded evidence                                    |
-| `graph_objects`, `graph_digest` | What was exported, and a deterministic fingerprint of it              |
-| `exporter`                      | Verified writer version and physical format                           |
-| `dependencies`                  | Installed versions of Biotope, its tools and every imported library   |
+| Field in `run.json`             | Review it for                                                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `state`, `error` and findings   | Whether the build finished and which stage failed                                                                                |
+| `scope`, `policies`, `settings` | The selection the graph embodies and the rules behind every exclusion                                                            |
+| `definitions.inventory`         | Roots, packages, registered, selected and excluded source counts                                                                 |
+| `definitions.excluded_sources`  | Each excluded source and its reason                                                                                              |
+| `definitions.standardization`   | Term bindings, preserved fields, aliases and missing-value policies                                                              |
+| `loaded_records`                | Records read per source                                                                                                          |
+| `audits`                        | Stage input/output grains, selection rules and named counts                                                                      |
+| Findings with `kind: exclusion` | Policy counts and bounded evidence                                                                                               |
+| `graph_objects`, `graph_digest` | What was exported, and a deterministic fingerprint of it                                                                         |
+| `exporter`                      | Verified writer version and physical format                                                                                      |
+| `dependencies`                  | Installed versions of Biotope, its tools, every library `graph/pyproject.toml` declares and every library the graph code imports |
 
 A failed rebuild leaves the previous build in place and writes
 `graph/build/last_failure.json` beside it; the next success removes it. A build

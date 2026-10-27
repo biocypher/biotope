@@ -1,17 +1,3 @@
-"""``biotope init`` — scaffold a new biotope project.
-
-Default behavior is **pure scaffold**: write the project configuration and an
-empty ``project.yaml``, run ``git init``. No content questions. The agent (or
-the user via ``biotope map``) fills in the competence questions afterwards.
-
-The agent-facing contract is the **biotope** plugin skills (``skills/biotope-croissant``
-and ``skills/biocypher``), installed via the virtual-human marketplace. Load only
-the skill that matches the current pipeline stage.
-
-Use ``--interactive`` to open ``$EDITOR`` on the freshly-written
-``project.yaml`` so the user can fill ``purpose:`` before exiting init.
-"""
-
 from __future__ import annotations
 
 import os
@@ -33,6 +19,8 @@ PURPOSE_PROMPT = (
 )
 
 console = Console()
+
+GITIGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**\n__pycache__/\n*.pyc\n.venv/\n"
 
 
 DEFAULT_BIOTOPE_CONFIG: dict = {
@@ -85,18 +73,6 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
     help="Never prompt interactively. Combined with no --purpose, leaves it empty.",
 )
 @click.option(
-    "--no-git",
-    is_flag=True,
-    default=False,
-    help="Skip running `git init`. The .biotope/ directory is still created.",
-)
-@click.option(
-    "--visible",
-    is_flag=True,
-    default=False,
-    help="Write project.yaml at the project root instead of inside .biotope/.",
-)
-@click.option(
     "--interactive",
     is_flag=True,
     default=False,
@@ -107,16 +83,13 @@ def init(
     dir: Path,  # noqa: A002
     purpose: str | None,
     no_prompt: bool,
-    no_git: bool,
-    visible: bool,
     interactive: bool,
 ) -> None:
     """Scaffold a new biotope project.
 
     Default invocation: ``biotope init my-project``. Creates ``my-project/`` with
     configuration in ``.biotope/`` and starter project files. Data, mapping and
-    metadata directories are created only when needed. Runs ``git init`` unless
-    ``--no-git`` is set.
+    metadata directories are created only when needed.
     """
     if name is None:
         name = click.prompt("Project name", type=str)
@@ -144,47 +117,12 @@ def init(
     config_path.write_text(yaml.safe_dump(DEFAULT_BIOTOPE_CONFIG, sort_keys=False))
 
     project = Project(name=name, purpose=purpose)
-    project_yaml_path = resolve_project_path(project_dir, visible=visible)
-    project_yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    project_yaml_path = resolve_project_path(project_dir)
     project.dump(project_yaml_path)
 
     gitignore = project_dir / ".gitignore"
     if not gitignore.exists():
-        gitignore.write_text("/data/\n__pycache__/\n*.pyc\n.venv/\n")
-
-    if not no_git:
-        try:
-            subprocess.run(["git", "init", "-q"], cwd=project_dir, check=True)
-        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-            click.echo(f"⚠️  git init failed: {exc}")
-        else:
-            scaffold_paths = [".gitignore", ".biotope/"]
-            if visible:
-                scaffold_paths.append(project_yaml_path.relative_to(project_dir).as_posix())
-            try:
-                subprocess.run(["git", "add", *scaffold_paths], cwd=project_dir, check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-                click.echo(f"⚠️  Could not stage scaffold files: {exc}")
-            else:
-                # Commit the scaffold so `biotope status` starts clean — otherwise
-                # init artefacts sit in the index and confuse new users into thinking
-                # they themselves staged config.yaml and project.yaml Falls back to
-                # leaving the scaffold staged if git identity isn't configured.
-                try:
-                    subprocess.run(
-                        ["git", "commit", "-q", "-m", "chore: initialize biotope project"],
-                        cwd=project_dir,
-                        check=True,
-                        capture_output=True,
-                    )
-                except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-                    detail = ""
-                    if isinstance(exc, subprocess.CalledProcessError) and exc.stderr:
-                        detail = f": {exc.stderr.decode(errors='replace').strip().splitlines()[-1]}"
-                    click.echo(
-                        f"⚠️  Could not create initial commit{detail}. "
-                        "Scaffold files remain staged; commit them manually."
-                    )
+        gitignore.write_text(GITIGNORE)
 
     if interactive:
         editor = os.environ.get("EDITOR", "vi")
