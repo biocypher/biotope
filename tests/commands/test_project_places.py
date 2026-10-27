@@ -262,8 +262,10 @@ def test_writers_warn_when_git_ignores_what_they_write(tmp_path, monkeypatch):
             if not repository:
                 assert "git ignores" not in shown, args
                 continue
+            warned = re.findall(r"git ignores (\S+?)\.? Commit", shown)
+            assert len(warned) == len(set(warned)), (args, warned)
             for path in expected:
-                assert re.search(rf"git ignores {re.escape(path)}", shown), (args, path, result.output)
+                assert any(item.startswith(path) for item in warned), (args, path, result.output)
             assert (root / ".gitignore").read_bytes() == rules
         if repository:
             assert (

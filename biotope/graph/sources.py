@@ -17,7 +17,6 @@ from typing import Any, Literal, cast, get_type_hints
 from biotope.croissant import annotation
 from biotope.graph.annotations import is_string, nested_records
 from biotope.graph.standardization import field_aliases, field_bindings
-from biotope.utils import find_biotope_root, warn_ignored
 
 
 # The 0.9 generator's header: schemas carrying it are authored files now, and a root carrying it is regenerated.
@@ -215,9 +214,6 @@ def description_text(described: dict[str, Any]) -> str:
 
 def _write_description(path: Path, described: dict[str, Any]) -> None:
     write_text_atomic(path, description_text(described))
-    root = find_biotope_root(path.parent)
-    if root is not None:
-        warn_ignored(root, [path])
 
 
 def write_description(path: Path, baked: dict[str, Any]) -> dict[str, Any]:
