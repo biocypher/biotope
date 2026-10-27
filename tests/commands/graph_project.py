@@ -49,11 +49,15 @@ def findings(result) -> list[dict]:
     return json.loads(result.stdout)["findings"]
 
 
-def buildable(tmp_path, monkeypatch, people="data/study/push/people.csv"):
+def isolate(tmp_path, monkeypatch):
     # Tests rewrite schemas within one second, and bytecode cached from the old text would hide the edit.
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
     monkeypatch.setenv("COLUMNS", "300")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+
+def buildable(tmp_path, monkeypatch, people="data/study/push/people.csv"):
+    isolate(tmp_path, monkeypatch)
     root = tmp_path / "project"
     study = root / "data/study"
     (study / "docs").mkdir(parents=True)
