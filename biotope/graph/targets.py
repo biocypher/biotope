@@ -8,6 +8,7 @@ from functools import cached_property
 from pathlib import PurePosixPath
 from typing import Any, cast
 
+from biotope.croissant.ids import read_files
 from biotope.graph.sources import (
     KINDS,
     Kind,
@@ -56,14 +57,7 @@ def _identities(value: object) -> set[str]:
 
 def _read_files(records: tuple[RecordSetTarget, ...]) -> set[str]:
     """The file resources some RecordSet field reads."""
-    found: set[str] = set()
-    for record in records:
-        for node in walk_fields(record.record, record.identity):
-            source: object = node.item.get("source")
-            if isinstance(source, dict):
-                typed = cast(dict[str, object], source)
-                found |= _identities(typed.get("fileObject")) | _identities(typed.get("fileSet"))
-    return found
+    return {name for record in records for name in read_files(record.record)}
 
 
 def _preferred_name(resource: dict[str, Any], identity: str) -> str:

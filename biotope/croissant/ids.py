@@ -60,7 +60,8 @@ def _own_id(entry: dict[str, Any]) -> str:
 
 def _named(value: object) -> list[str]:
     items = value if isinstance(value, list) else [value]
-    return [item["@id"] if isinstance(item, dict) else item for item in items if isinstance(item, dict | str)]
+    names = [item.get("@id") if isinstance(item, dict) else item for item in items]
+    return [name for name in names if isinstance(name, str)]
 
 
 def includes(entry: dict[str, Any]) -> str:

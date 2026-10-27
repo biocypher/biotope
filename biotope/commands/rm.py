@@ -28,6 +28,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from biotope.commands.add import resolve_dataset_ref
+from biotope.croissant.ids import read_files
 from biotope.graph.sources import write_description
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
@@ -180,7 +181,7 @@ def _remove_single_file(
     metadata["distribution"] = [d for d in distribution if all(d is not match for match in matches)]
     removed = {match.get("@id") for match in matches} - {None}
     if "recordSet" in metadata:
-        metadata["recordSet"] = [rs for rs in metadata["recordSet"] if not _sources_of(rs) & removed]
+        metadata["recordSet"] = [rs for rs in metadata["recordSet"] if not read_files(rs) & removed]
 
     if not force:
         what = "file" if keep_data else "tracking entry and the file on disk"
@@ -225,12 +226,3 @@ def _prune_empty_manifest_parents(manifest_path: Path, biotope_root: Path) -> No
         except OSError:
             return
         current = current.parent
-
-
-def _sources_of(record_set: dict) -> set:
-    return {
-        reference.get("@id") if isinstance(reference, dict) else reference
-        for field in record_set.get("field") or []
-        for key in ("fileObject", "fileSet")
-        if (reference := (field.get("source") or {}).get(key))
-    }
