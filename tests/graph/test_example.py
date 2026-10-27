@@ -4,8 +4,11 @@ import csv
 import json
 import re
 import shutil
+from pathlib import Path
 
 from typed_example import EXAMPLE, prepare, run
+
+import biotope
 
 
 def test_real_checker_revision_and_biocypher_build(tmp_path):
@@ -127,3 +130,9 @@ def test_real_checker_revision_and_biocypher_build(tmp_path):
     repaired = json.loads((root / "graph/build/repaired/run.json").read_text())
     assert repaired["state"] == "complete"
     assert repaired["definitions"]["topology_digest"] != first["definitions"]["topology_digest"]
+
+
+def test_the_example_graph_ignores_every_file_the_scaffold_ignores():
+    scaffold = Path(biotope.__file__).parent / "templates/graph/.gitignore"
+    ignored = set((EXAMPLE / "graph/.gitignore").read_text().splitlines())
+    assert set(scaffold.read_text().splitlines()) <= ignored
