@@ -388,20 +388,12 @@ def _bake_directory(
         if entry.get("@type") == FILE_OBJECT_TYPE and isinstance(entry.get("contentUrl"), str)
     }
     copies = _identical_copies(files, described)
-    skipped = {**{copy: "the identical copy" for copy in copies}, **{path: "the extracted records" for path in records}}
-    excluded = {escape_glob(str(path.relative_to(abs_dir))): path for path in skipped}
+    skipped = {path.relative_to(abs_dir) for path in [*copies, *records]}
     bake_error = None
     with reporter.scan(abs_dir, abs_dir) as report:
-        for relative in (path.relative_to(abs_dir) for path in files if path not in copies):
-            caught = next((copy for pattern, copy in excluded.items() if relative.match(pattern)), None)
-            if caught is not None:
-                reporter.warning(
-                    abs_dir,
-                    f"{relative} was not parsed: croissant-baker matches exclusions by path suffix, "
-                    f"so skipping {skipped[caught]} {caught.relative_to(abs_dir)} also skipped it",
-                )
         try:
             from croissant_baker.metadata_generator import MetadataGenerator
+            from croissant_baker.report import ScanReport
         except ImportError as exc:
             raise click.ClickException("croissant-baker is unavailable; check its installation.") from exc
 
@@ -421,8 +413,8 @@ def _bake_directory(
                 "**/.biotope/**",
                 ".git/**",
                 "**/.git/**",
-                *excluded,
             ],
+            handlers=_passing_over(skipped),
         )
         report.attach(generator)
 
@@ -430,7 +422,8 @@ def _bake_directory(
             metadata_dict = normalize_metadata_shape(generator.generate_metadata(progress_callback=report))
         except ValueError as exc:
             bake_error = exc
-        report.finish(generator.scan_report.to_dict(), copies)
+        scanned = [entry for entry in generator.scan_report.entries if entry.path not in skipped]
+        report.finish(ScanReport(scanned).to_dict(), copies)
 
     if bake_error is not None:
         if str(bake_error) != "No supported files found in the dataset":
@@ -460,6 +453,18 @@ def _build_minimal_directory_metadata(abs_dir: Path, biotope_root: Path, default
             "distribution": [],
         }
     )
+
+
+def _passing_over(skipped: set[Path]) -> Any:
+    from croissant_baker.handlers.registry import HandlerRegistry, HandlerSelection, default_registry
+
+    class PassingOver(HandlerRegistry):
+        def select(self, file_path: Path, relative_path: Path | None = None) -> HandlerSelection:
+            if relative_path in skipped:
+                return HandlerSelection(refusal="left out by biotope")
+            return super().select(file_path, relative_path)
+
+    return PassingOver(default_registry())
 
 
 def _identical_copies(files: list[Path], described: set[Path]) -> dict[Path, Path]:

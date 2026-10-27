@@ -283,6 +283,7 @@ def test_new_data_of_the_same_shape_rebuilds_after_the_refresh_alone(project):
     (study / "archive/people.csv").write_text("person_id,name\np0,Old\n")
     (study / "backup").mkdir()
     shutil.copy(study / "push/people.csv", study / "backup/people.csv")
+    shutil.copy(study / "push/people.csv", study / "people.csv")
 
     refresh()
 

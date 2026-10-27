@@ -68,7 +68,7 @@ The ID follows the path, never the content, so a re-downloaded document keeps it
 
 A file outside every added folder is described by adding it, `biotope add <file>`, never by a FileObject written by hand.
 
-`biotope add` registers byte-identical files once, under the first path in sorted order, and names each copy it skipped. Baker never parses a copy, and a FileSet whose pattern covers one lists it under `excludes`. Baker matches exclusions by path suffix, so a distinct file whose path ends with a copy's path, such as `x/b/t.csv` for the copy `b/t.csv`, is not parsed either. `biotope add` warns about it and still gives it a file entry; read it as for a structured file Baker cannot parse.
+`biotope add` registers byte-identical files once and names each copy it skipped. A file the dataset's description already holds stays registered; otherwise the first path in sorted order does. Baker never parses a copy, and a FileSet whose pattern covers one lists it under `excludes`.
 
 Whether a file can be ingested and whether it should be read are separate questions. A described file that the graph does not need is excluded with a reason in `graph/sources/__init__.py`, not removed from the manifest.
 

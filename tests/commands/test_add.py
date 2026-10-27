@@ -294,9 +294,14 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
     assert source["duplicates"] == [
         {"path": f"data/b/{name}", "duplicate_of": f"data/a/{name}"} for name in ("codes.txt", "pixel.png", "table.csv")
     ]
-    assert sorted(file["path"] for file in source["scan"]["files"]) == ["a/codes.txt", "a/pixel.png", "a/table.csv"]
-    [diagnostic] = source["diagnostics"]
-    assert diagnostic["message"].startswith("x/b/table.csv was not parsed")
+    assert sorted(file["path"] for file in source["scan"]["files"]) == [
+        "a/codes.txt",
+        "a/pixel.png",
+        "a/table.csv",
+        "x/b/table.csv",
+    ]
+    assert source["diagnostics"] == []
+    assert "x/b/table.csv#table" in {record["@id"] for record in metadata_dict["recordSet"]}
     urls = {item["@type"]: [] for item in metadata_dict["distribution"]}
     for item in metadata_dict["distribution"]:
         urls[item["@type"]].append(item.get("contentUrl") or item.get("excludes"))
@@ -307,8 +312,8 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
     text = " ".join(capsys.readouterr().err.split())
     assert "SKIP b/table.csv Identical to a/table.csv; registered once" in text
     assert "OK b/" not in text
-    assert "3 scanned · 2 described · 1 not described · 3 identical · 1 diagnostic" in text
-    assert text.index("Identical to a/table.csv") < text.index("3 scanned")
+    assert "4 scanned · 3 described · 1 not described · 3 identical" in text
+    assert text.index("Identical to a/table.csv") < text.index("4 scanned")
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
