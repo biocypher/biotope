@@ -190,19 +190,26 @@ def test_a_failed_mv_over_another_file_keeps_that_file(single):
 
 
 @pytest.mark.parametrize(
-    ("fixture", "moved"),
-    [("project", "data/study/push/people.csv"), ("single", "data/raw/people.csv")],
+    ("fixture", "moved", "dataset", "table"),
+    [
+        ("project", "data/study/push/people.csv", "data/study", "push/people.csv#people"),
+        ("single", "data/raw/people.csv", "data/raw/people.csv", "people.csv#people"),
+    ],
 )
-def test_a_mv_that_fails_on_a_path_under_a_file_puts_every_file_and_folder_back(request, fixture, moved):
+def test_a_mv_that_fails_on_a_path_under_a_file_puts_every_file_and_folder_back(
+    request, fixture, moved, dataset, table
+):
     root = request.getfixturevalue(fixture)
-    annotation = root / "data/study/.biotope.yaml"
-    annotation.write_text(annotation.read_text() + "tables:\n  push/people.csv#people:\n    description: People.\n")
+    annotation = root / (f"{dataset}/.biotope.yaml" if fixture == "project" else f"{dataset}.biotope.yaml")
+    annotation.write_text(annotation.read_text() + f"tables:\n  {table}:\n    description: People.\n")
     before = snapshot(root)
 
     failed = invoke("mv", moved, "data/study/docs/report.html/people.csv")
 
     assert failed.exit_code != 0 and "nothing was moved" in failed.output
     assert snapshot(root) == before
+    refresh(dataset)
+    assert built(root) == ({moved, "data/study/docs/report.html"}, 2)
 
 
 def test_a_mv_that_cannot_rename_the_data_keeps_the_file_it_would_replace(single):
@@ -226,6 +233,8 @@ def test_a_mv_that_cannot_rename_the_data_keeps_the_file_it_would_replace(single
 
     assert failed.exit_code != 0 and "nothing was moved" in failed.output
     assert snapshot(single) == before
+    refresh("data/raw/people.csv")
+    assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
 
 
 @pytest.mark.parametrize("force", [(), ("-f",)])
