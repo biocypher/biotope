@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -225,9 +226,7 @@ def test_rm_accepts_a_file_baker_described_in_a_folder_manifest(tmp_path: Path, 
     root = tmp_path / "baked"
     monkeypatch.chdir(root)
     things = root / "data/things"
-    things.mkdir(parents=True)
-    (things / "first.csv").write_text("a,b\n1,2\n")
-    (things / "second.csv").write_text("x,y,z\n1,2,3\n")
+    shutil.copytree(Path(__file__).resolve().parents[1] / "fixtures/things", things)
     assert runner.invoke(cli, ["add", "data/things"]).exit_code == 0
     removed = runner.invoke(cli, ["rm", "-f", "data/things/second.csv"])
     assert removed.exit_code == 0, removed.output

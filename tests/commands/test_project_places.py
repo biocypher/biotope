@@ -35,9 +35,11 @@ def invoke(*args):
 
 
 def data(root):
-    people = root / "data/raw/people"
-    people.mkdir(parents=True)
-    (people / "people.csv").write_text("person_id,name\np1,Ada\np2,Grace\n")
+    study = root / "data/raw/study"
+    (study / "push").mkdir(parents=True)
+    (study / "docs").mkdir()
+    (study / "push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\n")
+    (study / "docs/report.html").write_text("<html><body>Report</body></html>")
     (root / "data/raw/samples.csv").write_text("sample_id,person_id\ns1,p1\n")
     (root / "data/pages").mkdir()
     for page in ("lind.html", "okafor.html"):
@@ -70,7 +72,7 @@ def configure(root):
 
 
 def author_graph(root):
-    shutil.copytree(FIXTURES / "host_graph", root / "graph", dirs_exist_ok=True)
+    shutil.copytree(FIXTURES / "study_graph", root / "graph", dirs_exist_ok=True)
     pipeline = root / "graph/pipelines/build_graph.py"
     text = pipeline.read_text().replace('name="",', 'name="host:people",')
     pipeline.write_text(text.replace('scope="",', 'scope="Synthetic people of the host.",'))
@@ -80,16 +82,16 @@ def author_graph(root):
 def steps(root):
     yield ("init", ".", "--no-prompt"), ()
     configure(root)
-    yield ("add", "data/raw/people", "data/raw/samples.csv", "data/pages"), ()
-    yield ("annotate", "set", "data/raw/people", "description=People who work at the host."), ()
+    yield ("add", "data/raw/study", "data/raw/samples.csv", "data/pages"), ()
+    yield ("annotate", "set", "data/raw/study", "description=People who work at the host."), ()
     yield ("graph", "scaffold"), ()
-    yield ("source", "generate", ".biotope/datasets/data/raw/people.jsonld", "--out", "graph/sources"), ()
+    yield ("source", "generate", ".biotope/datasets/data/raw/study.jsonld", "--out", "graph/sources"), ()
     author_graph(root)
     yield ("graph", "check"), ()
     yield ("graph", "build"), ()
     yield ("graph", "metagraph"), ()
     yield ("extract", "run", PROFILE, "data/pages"), ()
-    moved = ("data/raw/people/people.csv", "data/raw/people/staff.csv")
+    moved = ("data/raw/study/push/people.csv", "data/raw/study/push/staff.csv")
     yield ("mv", *moved), moved
     yield ("rm", "-f", "data/raw/samples.csv"), ("data/raw/samples.csv",)
 
@@ -156,7 +158,7 @@ def test_init_gitignore_keeps_annotations_and_records_and_ignores_data(tmp_path,
     git(root, "init", "-q")
     data(root)
     configure(root)
-    assert invoke("add", "data/raw/people", "data/raw/samples.csv", "data/pages").exit_code == 0
+    assert invoke("add", "data/raw/study", "data/raw/samples.csv", "data/pages").exit_code == 0
     (root / "data/raw/samples.csv.biotope.yaml").write_text("description: Samples.\n")
     assert invoke("graph", "scaffold").exit_code == 0
     shutil.copy(FIXTURES / "extraction/schemas.py", root / "graph/extraction/profile.py")
@@ -167,12 +169,12 @@ def test_init_gitignore_keeps_annotations_and_records_and_ignores_data(tmp_path,
         (root / path).write_text("")
     kept = git(root, "ls-files", "--others", "--exclude-standard").splitlines()
     assert {path for path in kept if path.startswith("data/")} == {
-        "data/raw/people/.biotope.yaml",
+        "data/raw/study/.biotope.yaml",
         "data/pages/.biotope.yaml",
         "data/raw/samples.csv.biotope.yaml",
         "data/extracted/profile.jsonl",
     }
-    ignored = ["data/raw/people/people.csv", "data/raw/samples.csv", "data/pages/lind.html"]
+    ignored = ["data/raw/study/push/people.csv", "data/raw/samples.csv", "data/pages/lind.html"]
     ignored += ["__pycache__/cache.cpython-312.pyc", "src/module.pyc", ".venv/bin/python"]
     assert sorted(git(root, "check-ignore", *ignored).split()) == sorted(ignored)
 
@@ -204,16 +206,16 @@ def test_commands_and_status_run_without_git(tmp_path, monkeypatch):
         assert refused.exit_code != 0 and "No such option" in refused.output
     listed = invoke("status")
     assert listed.exit_code == 0, listed.output
-    manifests = ("data/extracted/profile", "data/pages", "data/raw/people")
+    manifests = ("data/extracted/profile", "data/pages", "data/raw/study")
     assert all(manifest in listed.output for manifest in manifests)
     assert "Changed" not in listed.output
-    schema = next((root / "graph/sources/people").rglob("schema.py"))
+    schema = next((root / "graph/sources/study").rglob("schema.py"))
     pinned = re.search(r'__source_digest__: ClassVar\[str\] = "(\w+)"', schema.read_text()).group(1)
     schema.write_text(schema.read_text().replace(pinned, "0" * 64))
     changed = invoke("status")
     assert changed.exit_code == 0, changed.output
     marked = [line for line in changed.output.splitlines() if line.startswith("Changed")]
-    assert len(marked) == 1 and "data/raw/people" in marked[0]
+    assert len(marked) == 1 and "data/raw/study" in marked[0]
 
 
 def ignoring_project(root, repository):
@@ -221,10 +223,7 @@ def ignoring_project(root, repository):
         git(root, "init", "-q")
         (root / ".gitignore").write_text("/.biotope/\n/data/\n")
     assert invoke("init", ".", "--no-prompt").exit_code == 0
-    things = root / "data/things"
-    things.mkdir(parents=True)
-    (things / "first.csv").write_text("a,b\n1,2\n")
-    (things / "second.csv").write_text("x,y,z\n1,2,3\n")
+    shutil.copytree(FIXTURES / "things", root / "data/things")
     (root / "data/pages").mkdir()
     shutil.copy(FIXTURES / "extraction/lind.html", root / "data/pages/lind.html")
     (root / "graph/extraction").mkdir(parents=True)

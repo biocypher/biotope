@@ -207,10 +207,7 @@ def baked(tmp_path, monkeypatch):
     assert runner.invoke(cli, ["init", "baked", "--dir", str(tmp_path), "--no-prompt"]).exit_code == 0
     root = tmp_path / "baked"
     monkeypatch.chdir(root)
-    things = root / "data/things"
-    things.mkdir(parents=True)
-    (things / "first.csv").write_text("a,b\n1,2\n")
-    (things / "second.csv").write_text("x,y,z\n1,2,3\n")
+    shutil.copytree(Path(__file__).resolve().parents[1] / "fixtures/things", root / "data/things")
     (root / "data/solo").mkdir()
     (root / "data/solo/only.csv").write_text("id\n1\n")
     added = runner.invoke(cli, ["add", "data/things", "data/solo"])
