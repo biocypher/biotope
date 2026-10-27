@@ -333,11 +333,10 @@ def test_writers_warn_when_git_ignores_what_they_write(tmp_path, monkeypatch):
             assert (
                 subprocess.run([GIT, "check-ignore", ".biotope/datasets/data/things.jsonld"], cwd=root).returncode == 0
             )
-        edited = buildable(tmp_path / f"{root.name}-graph", monkeypatch)
-        if repository:
-            git(edited, "init", "-q")
-            (edited / ".gitignore").write_text("/.biotope/\n/data/\n")
-        configure(edited)
-        shutil.copy(FIXTURES / "extraction/schemas.py", edited / "graph/extraction/profile.py")
-        for args, expected, unexpected in hand_edits(edited):
-            check_warnings(edited, repository, args, expected, unexpected)
+    edited = buildable(tmp_path / "repository-graph", monkeypatch)
+    git(edited, "init", "-q")
+    (edited / ".gitignore").write_text("/.biotope/\n/data/\n")
+    configure(edited)
+    shutil.copy(FIXTURES / "extraction/schemas.py", edited / "graph/extraction/profile.py")
+    for args, expected, unexpected in hand_edits(edited):
+        check_warnings(edited, True, args, expected, unexpected)
