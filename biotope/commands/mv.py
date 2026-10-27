@@ -36,7 +36,7 @@ from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
 from biotope.extraction.run import STATES
 from biotope.graph.moves import follow_manifest, package_files, planned_ids, write_ids
-from biotope.graph.sources import description_text, write_module, write_text_atomic
+from biotope.graph.sources import description_text, write_description, write_module, write_text_atomic
 from biotope.graph.targets import Target
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
@@ -793,8 +793,7 @@ def _rewrite_manifest_paths(manifest_path: Path, old_prefix: str, new_prefix: st
         elif content_url.startswith(old_with_sep):
             distribution["contentUrl"] = new_prefix + content_url[len(old_prefix) :]
 
-    with open(manifest_path, "w") as handle:
-        json.dump(metadata, handle, indent=2)
+    write_description(manifest_path, metadata)
 
 
 def _prune_datasets_subtree(start: Path, datasets_root: Path) -> None:

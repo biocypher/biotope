@@ -291,3 +291,14 @@ def test_map_inspect_refuses_an_invalid_annotation_file_and_names_a_single_file_
     pointed = invoke("map", "inspect", "data/raw/samples.csv.biotope.yaml")
     assert pointed.exit_code != 0
     assert "biotope map inspect .biotope/datasets/data/raw/samples.csv.jsonld" in " ".join(pointed.output.split())
+
+
+def test_every_command_writes_the_description_in_utf_8(fresh):
+    (fresh / "data/study/push/other.csv").write_text("x,y\n1,2\n")
+    (fresh / "data/sets").mkdir()
+    ok("add", "data/study", "--description", "Données de l'étude")
+    ok("mark", "data/study", "mapped")
+    ok("mv", "data/study/push/people.csv", "data/study/push/staff.csv")
+    ok("rm", "-f", "data/study/push/other.csv")
+    ok("mv", "-r", "data/study", "data/sets/study")
+    assert "Données" in (fresh / ".biotope/datasets/data/sets/study.jsonld").read_text(encoding="utf-8")

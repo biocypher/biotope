@@ -233,7 +233,7 @@ def register_metadata(root: Path, source: Path, name: str) -> Path:
         raise ValueError("Managed metadata must stay under .biotope/datasets")
     if target.exists():
         raise ValueError(f"{target} already exists")
-    write_text_atomic(target, json.dumps(refresh_description(source), indent=2, ensure_ascii=False) + "\n")
+    write_description(target, refresh_description(source))
     return target
 
 

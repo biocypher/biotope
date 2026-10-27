@@ -28,6 +28,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from biotope.commands.add import resolve_dataset_ref
+from biotope.graph.sources import write_description
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
@@ -198,8 +199,7 @@ def _remove_single_file(
         _prune_empty_manifest_parents(manifest_path, biotope_root)
         manifest_gone = True
     else:
-        with open(manifest_path, "w") as handle:
-            json.dump(metadata, handle, indent=2)
+        write_description(manifest_path, metadata)
         warn_ignored(biotope_root, [manifest_path])
 
     if not keep_data and file_path.is_file():
