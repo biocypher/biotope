@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -86,3 +87,17 @@ def follow_manifest(sources: Path, old: Path, new: Path) -> list[Path]:
             if before in text:
                 written.append(write_module(registration, text.replace(before, after)))
     return written
+
+
+def carry_description(root: Path, old: Path, new: Path) -> list[Path]:
+    new.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(old, new)
+    written = follow_manifest(root / "graph/sources", old, new)
+    prune(old.parent, root / ".biotope/datasets")
+    return written
+
+
+def prune(directory: Path, stop: Path) -> None:
+    while directory != stop and directory.is_relative_to(stop) and directory.is_dir() and not any(directory.iterdir()):
+        directory.rmdir()
+        directory = directory.parent

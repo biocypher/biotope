@@ -17,7 +17,7 @@ from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
 from biotope.croissant.ids import note_moves, stable_ids
 from biotope.extraction.run import state_path
-from biotope.graph.moves import follow_manifest
+from biotope.graph.moves import carry_description
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import (
     DERIVED_FROM,
@@ -249,8 +249,7 @@ def _take_over(data: Path, manifest: Path, biotope_root: Path, reporter: AddOutp
     [previous] = found
     described = json.loads(previous.read_text(encoding="utf-8"))
     gone = biotope_root / dataset_id(previous, biotope_root)
-    shutil.move(previous, manifest)
-    warn_ignored(biotope_root, follow_manifest(biotope_root / "graph" / "sources", previous, manifest))
+    warn_ignored(biotope_root, carry_description(biotope_root, previous, manifest))
     if annotation.annotation_path(gone).is_file() and not annotation.annotation_path(data).exists():
         shutil.move(annotation.annotation_path(gone), annotation.annotation_path(data))
     reporter.warning(

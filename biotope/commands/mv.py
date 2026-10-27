@@ -15,7 +15,7 @@ from rich.panel import Panel
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
 from biotope.extraction.run import STATES, state_path
-from biotope.graph.moves import follow_manifest, package_files, planned_ids, write_ids
+from biotope.graph.moves import carry_description, package_files, planned_ids, prune, write_ids
 from biotope.graph.sources import description_text, write_module, write_text_atomic
 from biotope.graph.targets import Target
 from biotope.metadata import FILE_OBJECT_TYPE, dataset_id, ensure_no_legacy_file_objects, manifest_for
@@ -279,12 +279,7 @@ def _apply(
             write_text_atomic(plan.manifest, plan.text)
             written += [plan.target, *write_ids(plan.manifest, plan.schemas, plan.revised)]
             if plan.target != plan.manifest:
-                plan.target.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    shutil.move(str(plan.manifest), str(plan.target))
-                except OSError as exc:
-                    raise OSError(f"Failed to move metadata file {plan.manifest}: {exc}") from exc
-                written += follow_manifest(biotope_root / "graph/sources", plan.manifest, plan.target)
+                written += carry_description(biotope_root, plan.manifest, plan.target)
     except Exception as exc:
         shutil.move(str(destination), str(source))
         for path, data in saved.items():
@@ -294,14 +289,6 @@ def _apply(
                 (write_module if path.suffix == ".py" else write_text_atomic)(path, data.decode("utf-8"))
         console.print(f"[bold red]❌ {exc}; nothing was moved.[/]")
         raise click.Abort from exc
-    for plan in plans:
-        _prune(plan.manifest.parent, biotope_root / ".biotope" / "datasets")
     for old in states:
-        _prune(old.parent, biotope_root / STATES)
+        prune(old.parent, biotope_root / STATES)
     warn_ignored(biotope_root, [path for path in written if path.exists()])
-
-
-def _prune(directory: Path, stop: Path) -> None:
-    while directory != stop and directory.is_relative_to(stop) and directory.is_dir() and not any(directory.iterdir()):
-        directory.rmdir()
-        directory = directory.parent

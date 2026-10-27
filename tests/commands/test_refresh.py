@@ -1,5 +1,6 @@
 import json
 import shutil
+from pathlib import Path
 
 import openpyxl
 import pytest
@@ -129,9 +130,17 @@ def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(pr
     ), findings(result)
 
 
-def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(single):
-    shutil.move(single / "data/raw/people.csv", single / "data/raw/staff.csv")
-    refresh("data/raw/staff.csv")
+def descriptions(root):
+    return sorted(
+        path.relative_to(root / ".biotope/datasets").as_posix() for path in root.glob(".biotope/datasets/**/*")
+    )
+
+
+@pytest.mark.parametrize("moved", ["data/raw/staff.csv", "data/current/staff.csv"])
+def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(single, moved):
+    (single / moved).parent.mkdir(exist_ok=True)
+    shutil.move(single / "data/raw/people.csv", single / moved)
+    refresh(moved)
 
     result = invoke("graph", "check", "--json")
 
@@ -140,12 +149,15 @@ def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_
         "'people.csv#people'" in finding["message"] and "'staff.csv#staff'" in finding["message"]
         for finding in findings(result)
     ), findings(result)
-    shutil.move(single / "data/raw/staff.csv", single / "data/raw/people.csv")
+    assert descriptions(single) == sorted(
+        {"data", "data/study.jsonld", Path(moved).parent.as_posix(), f"{moved}.jsonld"}
+    )
+    shutil.move(single / moved, single / "data/raw/people.csv")
     ok("add", "--rebake", "data/raw/people.csv")
-    ok("mv", "data/raw/people.csv", "data/raw/staff.csv")
+    ok("mv", "data/raw/people.csv", moved)
     shutil.rmtree(single / "graph/sources/people_csv/staff_csv_staff")
-    refresh("data/raw/staff.csv")
-    assert built(single) == ({"data/raw/staff.csv", "data/study/docs/report.html"}, 2)
+    refresh(moved)
+    assert built(single) == ({moved, "data/study/docs/report.html"}, 2)
 
 
 def acknowledge(root):
