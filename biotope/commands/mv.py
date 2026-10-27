@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from biotope.croissant import annotation
-from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
+from biotope.croissant.ids import MOVED_FROM, check_ids, moved_ids, rename, renamer
 from biotope.extraction.run import STATES, state_path
 from biotope.graph.moves import carry_description, kept, package_files, planned_ids, prune, write_ids
 from biotope.graph.sources import description_text, write_text_atomic
@@ -203,6 +203,7 @@ def _plan(
         if not mapping:
             return None
     rename(metadata, mapping)
+    check_ids(metadata)
     old_name, new_name = (path.relative_to(biotope_root).as_posix() for path in (data, carried))
     for item in (metadata, metadata.get(annotation.FROM_DATA) or {}):
         if item.get("name") == old_name:

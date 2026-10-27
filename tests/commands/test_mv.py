@@ -214,6 +214,19 @@ def test_mv_never_replaces_a_described_file(project):
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
+def test_mv_refuses_a_name_that_differs_from_another_file_only_in_case(project):
+    (project / "data/study/push/staff.csv").write_text("person_id,name\ns1,Lin\n")
+    refresh()
+    before = snapshot(project)
+
+    refused = invoke("mv", "data/study/push/staff.csv", "data/study/push/PEOPLE.csv")
+
+    assert refused.exit_code != 0 and "push/PEOPLE.csv and push/people.csv differ only in case" in refused.output
+    assert snapshot(project) == before
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def baked(tmp_path, monkeypatch):
     from biotope.cli import cli
 

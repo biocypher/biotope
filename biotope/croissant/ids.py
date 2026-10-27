@@ -165,12 +165,14 @@ def stable_ids(metadata: dict[str, Any]) -> None:
             table = _inner_name(record, url)
         mapping[record["@id"]] = table_id(owner, table)
     rename(metadata, mapping)
-    _check(distribution, records)
+    check_ids(metadata)
     distribution.sort(key=lambda entry: str(entry.get("@id")))
     records.sort(key=lambda record: str(record.get("@id")))
 
 
-def _check(distribution: list[dict[str, Any]], records: list[dict[str, Any]]) -> None:
+def check_ids(metadata: dict[str, Any]) -> None:
+    distribution: list[dict[str, Any]] = metadata.get("distribution") or []
+    records: list[dict[str, Any]] = metadata.get("recordSet") or []
     problems: list[str] = []
     cases: defaultdict[str, set[str]] = defaultdict(set)
     for entry in distribution:
