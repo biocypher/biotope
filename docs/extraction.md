@@ -294,7 +294,7 @@ file's annotation file, `data/extracted/<schema>.jsonl.biotope.yaml`, for exampl
 with `biotope annotate set data/extracted/funding_round.jsonl url=...`. `extract run`
 creates no annotation file, keeps one you wrote and never fails because of it.
 
-**Run state.** `.biotope/extraction/data/extracted/<schema>.json` records, per
+**Run state.** `.biotope/extraction/data/extracted/<schema>.jsonl.json` records, per
 document, the digest, schema revision and extractor that produced its stored
 records, including documents that gave none. Commit it. `biotope mv` moves it with
 the records file, so a run with `--out` naming the new path reuses every record.

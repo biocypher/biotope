@@ -30,7 +30,7 @@ DISTINCTIVE = 30
 
 
 def state_path(root: Path, records: Path) -> Path:
-    return root / STATES / records.relative_to(root).with_suffix(".json")
+    return root / STATES / f"{records.relative_to(root).as_posix()}.json"
 
 
 @dataclass(frozen=True)

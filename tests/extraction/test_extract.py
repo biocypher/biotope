@@ -769,7 +769,7 @@ def test_an_interrupted_run_changes_the_output_only_when_a_later_run_completes(s
         "Bridge call", {"records": [funding_round("Bridge", "1 June 2027", None, "Bridge 1 June 2027")]}
     )
     assert study.extract("run", ROUND, "data/calls")[0].exit_code == 0
-    stored = ("data/extracted/funding_round.jsonl", ".biotope/extraction/data/extracted/funding_round.json")
+    stored = ("data/extracted/funding_round.jsonl", ".biotope/extraction/data/extracted/funding_round.jsonl.json")
     committed = [(study.root / path).read_bytes() for path in stored]
 
     def untracked():
@@ -812,7 +812,7 @@ def test_documents_keep_their_records_when_they_cannot_be_read_or_lost_their_run
     replace = os.replace
 
     def interrupted(source, target):
-        if str(target).endswith("profile.json"):
+        if str(target).endswith("profile.jsonl.json"):
             raise OSError("interrupted")
         replace(source, target)
 
@@ -827,7 +827,7 @@ def test_documents_keep_their_records_when_they_cannot_be_read_or_lost_their_run
     assert report["disappeared"] == [] and [record["id"] for record in study.records("profile")] == [LIND, OKAFOR]
 
     (study.root / LIND).write_bytes(page)
-    (study.root / ".biotope/extraction/data/extracted/profile.json").unlink()
+    (study.root / ".biotope/extraction/data/extracted/profile.jsonl.json").unlink()
     study.endpoint.reply("Mara Lind", 400)
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code != 0 and statuses(report)[LIND] == "failed" and report["documents"][0]["records"] == 1
@@ -919,7 +919,7 @@ def test_run_warns_when_git_ignores_its_output(study):
     assert result.exit_code == 0, result.output
     assert report["ignored"] == [
         ".biotope/datasets/data/extracted/profile.jsonl.jsonld",
-        ".biotope/extraction/data/extracted/profile.json",
+        ".biotope/extraction/data/extracted/profile.jsonl.json",
         "data/extracted/profile.jsonl",
     ]
     shown = study.run("extract", "run", PROFILE, "data/pages")
@@ -957,7 +957,7 @@ def test_schemas_live_in_the_graph_and_records_in_data(study):
 
     moved = study.run("mv", "data/extracted/profile.jsonl", "data/extracted/people.jsonl")
     assert moved.exit_code == 0, moved.output
-    assert (study.root / ".biotope/extraction/data/extracted/people.json").is_file()
+    assert (study.root / ".biotope/extraction/data/extracted/people.jsonl.json").is_file()
     sent = len(study.endpoint.requests)
     result, report = study.extract("run", schema, "data/pages", "--out", "data/extracted/people.jsonl")
     assert result.exit_code == 0, result.output
@@ -1074,3 +1074,20 @@ def test_a_folder_dataset_holding_the_records_does_not_describe_them_again(study
     identities = [entry["@id"] for entry in [*described["distribution"], *described.get("recordSet", [])]]
     assert "pages/lind.html" in identities
     assert [identity for identity in identities if "extracted" in identity] == []
+
+
+def test_files_beside_the_records_with_the_same_name_before_the_extension_stay_in_their_folder_dataset(study):
+    (study.root / "data/pages/lind.csv").write_text("name,group\nMara Lind,Atlas\n")
+    result, _ = study.extract("run", PROFILE, "data/pages", "--out", "data/pages/lind.jsonl")
+    assert result.exit_code == 0, result.output
+
+    rebaked = study.run("add", "--rebake", "data/pages")
+
+    assert rebaked.exit_code == 0, rebaked.output
+    described = json.loads((study.root / ".biotope/datasets/data/pages.jsonld").read_text())
+    identities = {entry["@id"] for entry in described["distribution"]}
+    assert {"lind.csv", "lind.html", "okafor.html"} <= identities and "lind.jsonl" not in identities
+    sent = len(study.endpoint.requests)
+    result, report = study.extract("run", PROFILE, "data/pages", "--out", "data/pages/lind.jsonl")
+    assert result.exit_code == 0, result.output
+    assert (statuses(report)[LIND], report["disappeared"], len(study.endpoint.requests)) == ("reused", [], sent)
