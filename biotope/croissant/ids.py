@@ -20,6 +20,7 @@ WORKBOOKS = frozenset(
     }
 )
 MOVED_FROM = "biotope:movedFrom"
+NAMED_AFTER_FILE = "biotope:namedAfterFile"
 
 
 def encode(text: str, *, slash: bool = True) -> str:
@@ -161,6 +162,7 @@ def stable_ids(metadata: dict[str, Any]) -> None:
             table = str(record.get("name") or record["@id"])
         elif _named_after_file(record, resource, readers[source]):
             table = stem(url)
+            record[NAMED_AFTER_FILE] = True
         else:
             table = _inner_name(record, url)
         mapping[record["@id"]] = table_id(owner, table)
@@ -197,18 +199,16 @@ def check_ids(metadata: dict[str, Any]) -> None:
         raise ValueError("cannot give every file and table a stable ID: " + "; ".join(problems))
 
 
-def moved_ids(metadata: dict[str, Any], old_id: str, old_relative: str, new_relative: str) -> dict[str, str]:
+def moved_ids(metadata: dict[str, Any], old_id: str, new_relative: str) -> dict[str, str]:
     new_id = file_id(new_relative)
-    resource = next((entry for entry in metadata.get("distribution") or [] if entry.get("@id") == old_id), {})
-    tables = [record for record in metadata.get("recordSet") or [] if old_id in read_files(record)]
     mapping = {old_id: new_id}
-    for record in tables:
+    for record in metadata.get("recordSet") or []:
         identity = record.get("@id")
-        if isinstance(identity, str) and identity.startswith(old_id + "#"):
-            table = identity[len(old_id) + 1 :]
-            if table == encode(stem(old_relative), slash=False) and _named_after_file(record, resource, len(tables)):
-                table = encode(stem(new_relative), slash=False)
-            mapping[identity] = f"{new_id}#{table}"
+        if old_id in read_files(record) and isinstance(identity, str) and identity.startswith(old_id + "#"):
+            inner = identity[len(old_id) + 1 :]
+            mapping[identity] = (
+                table_id(new_id, stem(new_relative)) if record.get(NAMED_AFTER_FILE) else f"{new_id}#{inner}"
+            )
     return mapping
 
 

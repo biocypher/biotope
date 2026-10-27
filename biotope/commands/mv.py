@@ -190,9 +190,7 @@ def _plan(
         if staying and not new.is_relative_to(base):
             raise _Refused(_cross_dataset(old, new, manifest, base, biotope_root))
         moved_url = new.relative_to(new_base if folder else biotope_root).as_posix()
-        ids = moved_ids(
-            metadata, distribution["@id"], old.relative_to(base).as_posix(), new.relative_to(new_base).as_posix()
-        )
+        ids = moved_ids(metadata, distribution["@id"], new.relative_to(new_base).as_posix())
         if moved_url == url and all(old_id == new_id for old_id, new_id in ids.items()):
             continue
         mapping |= ids

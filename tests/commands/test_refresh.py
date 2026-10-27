@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 from unittest import mock
 
+import h5py
+import numpy as np
 import openpyxl
 import pytest
 from graph_project import MANIFEST, built, findings, invoke, ok, refresh, snapshot
@@ -105,21 +107,41 @@ def test_mv_after_a_new_key_in_the_annotation_file_leaves_the_key_for_graph_chec
     ), findings(result)
 
 
-def test_mv_of_a_workbook_keeps_its_sheet_name_through_the_refresh(project):
+def workbook(path: Path) -> None:
     book = openpyxl.Workbook()
     sheet = book.active
     sheet.title = "people"
     sheet.append(["person_id", "name"])
     sheet.append(["p1", "Ada"])
-    book.save(project / "data/study/push/people.xlsx")
+    book.save(path)
+
+
+def anndata(path: Path) -> None:
+    with h5py.File(path, "w") as stored:
+        stored.attrs["encoding-type"] = "anndata"
+        frame = stored.create_group("obs")
+        frame.attrs.update({"encoding-type": "dataframe", "_index": "_index", "column-order": ["label"]})
+        frame.create_dataset("_index", data=np.array([b"a", b"b"]))
+        frame.create_dataset("label", data=np.array([1, 2]))
+
+
+@pytest.mark.parametrize(
+    ("write", "old", "new", "table"),
+    [
+        (workbook, "people.xlsx", "staff.xlsx", "push/staff.xlsx#people"),
+        (anndata, "obs.h5ad", "sample.h5ad", "push/sample.h5ad#obs"),
+    ],
+)
+def test_mv_of_a_file_keeps_the_name_of_a_table_inside_it_through_the_refresh(project, write, old, new, table):
+    write(project / "data/study/push" / old)
     refresh()
 
-    ok("mv", "data/study/push/people.xlsx", "data/study/push/staff.xlsx")
+    ok("mv", f"data/study/push/{old}", f"data/study/push/{new}")
     refresh()
 
-    tables = {record["@id"] for record in json.loads((project / MANIFEST).read_text())["recordSet"]}
-    assert "push/staff.xlsx#people" in tables
-    assert not [finding for finding in findings(ok("graph", "check", "--json")) if "xlsx" in json.dumps(finding)]
+    assert table in {record["@id"] for record in json.loads((project / MANIFEST).read_text())["recordSet"]}
+    suffix = Path(old).suffix
+    assert not [finding for finding in findings(ok("graph", "check", "--json")) if suffix in json.dumps(finding)]
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
