@@ -137,6 +137,25 @@ def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(pr
     ), findings(result)
 
 
+def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(single):
+    shutil.move(single / "data/raw/people.csv", single / "data/raw/staff.csv")
+    refresh("data/raw/staff.csv")
+
+    result = invoke("graph", "check", "--json")
+
+    assert result.exit_code != 0
+    assert any(
+        "'people.csv#people'" in finding["message"] and "'staff.csv#staff'" in finding["message"]
+        for finding in findings(result)
+    ), findings(result)
+    shutil.move(single / "data/raw/staff.csv", single / "data/raw/people.csv")
+    ok("add", "--rebake", "data/raw/people.csv")
+    ok("mv", "data/raw/people.csv", "data/raw/staff.csv")
+    shutil.rmtree(single / "graph/sources/people_csv/staff_csv_staff")
+    refresh("data/raw/staff.csv")
+    assert built(single) == ({"data/raw/staff.csv", "data/study/docs/report.html"}, 2)
+
+
 def acknowledge(root):
     for status in plan_sources(root / MANIFEST, root / "graph/sources").statuses:
         if status.state == "drift":

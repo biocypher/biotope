@@ -347,5 +347,12 @@ for the new ID and reports the old one as orphaned, and `graph check` fails with
 file back, rebake and use biotope mv
 ```
 
-To recover, move the file back, run `biotope add --rebake`, move it with
-`biotope mv`, and delete the package `source generate` created for the new path.
+A dataset that is a single file has no folder to rebake, so its refresh runs
+`biotope add` on the file at its new path and `source generate` on the description
+that names it. When exactly one description names a file that is gone and has the
+same content, `add` moves that description and its annotation file to the new path,
+and `graph check` fails in the same way.
+
+To recover, move the file back, run `biotope add --rebake` on its dataset, or on
+the file for a single-file dataset, move it with `biotope mv`, and delete the package
+`source generate` created for the new path.
