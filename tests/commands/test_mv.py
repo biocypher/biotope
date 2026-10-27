@@ -188,6 +188,19 @@ def test_a_failed_mv_over_another_file_keeps_that_file(single):
     assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
 
 
+@pytest.mark.parametrize("force", [(), ("-f",)])
+def test_mv_never_replaces_an_annotation_file(single, force):
+    (single / "data/raw/staff.csv.biotope.yaml").write_text("# Notes on a file that is still to come.\n")
+    before = snapshot(single)
+
+    refused = invoke("mv", *force, "data/raw/people.csv", "data/raw/staff.csv")
+
+    assert refused.exit_code != 0 and "data/raw/staff.csv.biotope.yaml" in refused.output
+    assert snapshot(single) == before
+    refresh("data/raw/people.csv")
+    assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def baked(tmp_path, monkeypatch):
     from biotope.cli import cli
 

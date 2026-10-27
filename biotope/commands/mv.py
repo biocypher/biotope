@@ -129,6 +129,12 @@ def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_r
     for plan in plans:
         if plan.target != plan.manifest and plan.target.exists() and plan.target not in moving:
             _refuse(f"Destination manifest already exists: {plan.target.relative_to(biotope_root)}")
+    notes = annotation.annotation_path(destination)
+    if source.is_file() and annotation.annotation_path(source).is_file() and notes.exists():
+        _refuse(
+            f"Destination annotation file already exists: {notes.relative_to(biotope_root)}. "
+            "mv never replaces an annotation file; move or delete it first."
+        )
     return plans
 
 
