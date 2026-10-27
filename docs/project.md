@@ -361,8 +361,9 @@ for the new ID and reports the old one as orphaned, and `graph check` fails with
 
 ```text
 'push/people.csv#people' is no longer described by study.jsonld: its file 'push/people.csv' moved outside biotope to
-'current/people.csv', now described as 'current/people.csv#people'. Declare the new ID in this package, or move the
-file back, rebake and use biotope mv
+'current/people.csv', now described as 'current/people.csv#people'. Delete
+graph/sources/study/current_people_csv_people, then declare the new ID in this package and set the revision graph
+check names; or move the file back, rebake, use biotope mv and delete graph/sources/study/current_people_csv_people
 ```
 
 A dataset that is a single file has no folder to rebake, so its refresh runs
@@ -373,4 +374,7 @@ and `graph check` fails in the same way.
 
 To recover, move the file back, run `biotope add --rebake` on its dataset, or on
 the file for a single-file dataset, move it with `biotope mv`, and delete the package
-`source generate` created for the new path.
+`source generate` created for the new path. When the file stays at its new path, as
+when a download script puts it there, delete that package first, replace the old ID
+with the new one in the old package's `schema.py`, run `source generate` again and
+set `__source_digest__` to the revision `graph check` names.

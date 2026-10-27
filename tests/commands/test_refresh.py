@@ -188,6 +188,27 @@ def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(pr
     ), findings(result)
 
 
+def test_the_new_id_declared_where_the_check_says_after_a_move_outside_biotope_builds(project):
+    (project / "data/study/current").mkdir()
+    shutil.move(project / "data/study/push/people.csv", project / "data/study/current/people.csv")
+    refresh()
+    generated = "graph/sources/study/current_people_csv_people"
+
+    [message] = [
+        finding["message"]
+        for finding in findings(invoke("graph", "check", "--json"))
+        if finding["code"] == "inventory.orphan"
+    ]
+
+    assert f"Delete {generated}, then declare the new ID in this package" in message
+    shutil.rmtree(project / generated)
+    schema = project / "graph/sources/study/push_people_csv_people/schema.py"
+    schema.write_text(schema.read_text().replace('"push/people.csv', '"current/people.csv'))
+    refresh()
+    acknowledge(project)
+    assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def descriptions(root):
     return sorted(
         path.relative_to(root / ".biotope/datasets").as_posix() for path in root.glob(".biotope/datasets/**/*")

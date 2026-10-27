@@ -32,7 +32,7 @@ from biotope.graph.render import (
     render_root,
     render_schema,
 )
-from biotope.graph.revisions import ContractStore, Drift, explain_drift
+from biotope.graph.revisions import ContractStore, Drift, explain_drift, project_root
 from biotope.graph.sources import (
     KINDS,
     RESERVED_NAMES,
@@ -353,7 +353,7 @@ def _orphans(plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package]) 
         if identity in live:
             continue
         gone = f"{identity!r} is no longer described by {plan.metadata.name}"
-        detail = _moved(plan, data, identity, gone) or f"{gone}; delete the directory to remove it"
+        detail = _moved(plan, data, identity, gone, owned) or f"{gone}; delete the directory to remove it"
         declaration = package.declaration
         found.append(
             PackageStatus(
@@ -369,7 +369,7 @@ def _orphans(plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package]) 
     return found
 
 
-def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str) -> str:
+def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str, owned: dict[str, Package]) -> str:
     moves = {
         entry[MOVED_FROM]: entry["@id"]
         for entry in objects(data.get("distribution", []), "/distribution")
@@ -381,9 +381,21 @@ def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str) -> 
     new = moves[old]
     now = [target.identity for target in plan.targets if target.identity.split("#", 1)[0] == new]
     described = ", ".join(repr(item) for item in now) or repr(new)
+    moved = f"{gone}: its file {old!r} moved outside biotope to {new!r}, now described as {described}."
+    project = project_root(plan.metadata)
+    generated = " and ".join(
+        owned[item].path.resolve().relative_to(project).as_posix() if project else str(owned[item].path)
+        for item in now
+        if item in owned
+    )
+    if not generated:
+        return (
+            f"{moved} Declare the new ID in this package and set the revision graph check names, or move the file "
+            "back, rebake and use biotope mv"
+        )
     return (
-        f"{gone}: its file {old!r} moved outside biotope to {new!r}, now described as {described}. Declare the new "
-        "ID in this package, or move the file back, rebake and use biotope mv"
+        f"{moved} Delete {generated}, then declare the new ID in this package and set the revision graph check "
+        f"names; or move the file back, rebake, use biotope mv and delete {generated}"
     )
 
 
