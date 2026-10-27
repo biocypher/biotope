@@ -11,6 +11,7 @@ from unittest import mock
 import click
 import pytest
 from click.testing import CliRunner
+from graph_project import built, invoke, refresh, snapshot
 
 from biotope.commands.mv import _resolve_destination_path, _validate_move_operation, mv
 
@@ -150,27 +151,22 @@ def test_mv_force_overwrite(runner, biotope_project_with_file):
         os.chdir(original_cwd)
 
 
-def test_mv_rollback_on_metadata_file_move_failure(runner, biotope_project_with_file):
-    source_file = biotope_project_with_file / "data" / "inputs" / "test.csv"
-    destination = biotope_project_with_file / "data" / "outputs" / "test.csv"
-    original_cwd = Path.cwd()
-    original_move = shutil.move
+def test_a_failed_mv_puts_every_file_back(project):
+    before = snapshot(project)
+    move = shutil.move
 
-    def mock_move_side_effect(src, dst):
-        if "test.csv.jsonld" in str(src):
-            raise OSError("Metadata move failed")
-        return original_move(src, dst)
+    def failing(source, destination):
+        if str(source).endswith(".jsonld"):
+            raise OSError("disk full")
+        return move(source, destination)
 
-    try:
-        os.chdir(biotope_project_with_file)
-        with mock.patch("biotope.commands.mv.shutil.move", side_effect=mock_move_side_effect):
-            result = runner.invoke(mv, [str(source_file), str(destination)])
-        assert result.exit_code != 0
-        assert "Failed to move metadata file" in result.output
-        assert source_file.exists()
-        assert not destination.exists()
-    finally:
-        os.chdir(original_cwd)
+    with mock.patch("shutil.move", side_effect=failing):
+        failed = invoke("mv", "-r", "data/study", "data/current")
+
+    assert failed.exit_code != 0 and "disk full" in failed.output
+    assert snapshot(project) == before
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
 def baked(tmp_path, monkeypatch):

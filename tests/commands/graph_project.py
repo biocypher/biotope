@@ -36,6 +36,14 @@ def built(root: Path) -> tuple[set[str], int]:
     return read, run["graph_objects"]["nodes"]
 
 
+def snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+
+
 def findings(result) -> list[dict]:
     return json.loads(result.stdout)["findings"]
 

@@ -3,7 +3,7 @@ import shutil
 
 import openpyxl
 import pytest
-from graph_project import MANIFEST, built, findings, invoke, ok, refresh
+from graph_project import MANIFEST, built, findings, invoke, ok, refresh, snapshot
 
 from biotope.graph.inventory import plan_sources
 
@@ -84,14 +84,6 @@ def test_mv_of_a_workbook_keeps_its_sheet_name_through_the_refresh(project):
     assert "push/staff.xlsx#people" in tables
     assert not [finding for finding in findings(ok("graph", "check", "--json")) if "xlsx" in json.dumps(finding)]
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
-
-
-def snapshot(root):
-    return {
-        path.relative_to(root).as_posix(): path.read_bytes()
-        for path in root.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
-    }
 
 
 @pytest.mark.parametrize(
