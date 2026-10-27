@@ -168,6 +168,26 @@ def test_a_failed_mv_puts_every_file_back(project):
     assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
 
 
+def test_a_failed_mv_over_another_file_keeps_that_file(single):
+    (single / "data/raw/staff.csv").write_text("person_id,name\ns1,Lin\n")
+    before = snapshot(single)
+    replace, failed_once = os.replace, []
+
+    def failing(source, destination):
+        if str(destination).endswith("people_csv_people/schema.py") and not failed_once:
+            failed_once.append(destination)
+            raise OSError("disk full")
+        return replace(source, destination)
+
+    with mock.patch("os.replace", side_effect=failing):
+        failed = invoke("mv", "-f", "data/raw/people.csv", "data/raw/staff.csv")
+
+    assert failed.exit_code != 0 and "disk full" in failed.output
+    assert snapshot(single) == before
+    refresh("data/raw/people.csv")
+    assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def baked(tmp_path, monkeypatch):
     from biotope.cli import cli
 

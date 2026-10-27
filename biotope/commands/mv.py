@@ -14,8 +14,8 @@ from rich.panel import Panel
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
 from biotope.extraction.run import STATES, state_path
-from biotope.graph.moves import carry_description, package_files, planned_ids, prune, write_ids
-from biotope.graph.sources import description_text, write_module, write_text_atomic
+from biotope.graph.moves import carry_description, kept, package_files, planned_ids, prune, write_ids
+from biotope.graph.sources import description_text, write_text_atomic
 from biotope.graph.targets import Target
 from biotope.metadata import FILE_OBJECT_TYPE, dataset_id, ensure_no_legacy_file_objects, manifest_for
 from biotope.utils import find_biotope_root, is_file_tracked, warn_ignored
@@ -247,40 +247,30 @@ def _apply(
     annotations = (
         {annotation.annotation_path(source): annotation.annotation_path(destination)} if source.is_file() else {}
     )
-    kept = {
+    paths = {
         *(path for plan in plans for path in (plan.manifest, plan.target, plan.annotation) if path is not None),
         *(path for plan in plans for path in package_files(biotope_root / "graph/sources", plan.manifest)),
         *(path for pair in [*states.items(), *annotations.items()] for path in pair),
     }
-    saved = {path: path.read_bytes() if path.is_file() else None for path in kept}
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        shutil.move(str(source), str(destination))
-    except OSError as exc:
-        console.print(f"[bold red]❌ Failed to move: {exc}[/]")
-        raise click.Abort from exc
     written: list[Path] = []
     try:
-        for old, new in [*annotations.items(), *states.items()]:
-            if old.is_file():
-                new.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old), str(new))
-                written.append(new)
-        for plan in plans:
-            if plan.annotation_target is not None and plan.annotation_text is not None:
-                write_text_atomic(plan.annotation_target, plan.annotation_text)
-                written.append(plan.annotation_target)
-            write_text_atomic(plan.manifest, plan.text)
-            written += [plan.target, *write_ids(plan.manifest, plan.schemas, plan.revised)]
-            if plan.target != plan.manifest:
-                written += carry_description(biotope_root, plan.manifest, plan.target)
+        with kept(paths):
+            for plan in plans:
+                if plan.annotation is not None and plan.annotation_text is not None:
+                    write_text_atomic(plan.annotation, plan.annotation_text)
+                    written.append(plan.annotation_target or plan.annotation)
+                write_text_atomic(plan.manifest, plan.text)
+                written += [plan.target, *write_ids(plan.manifest, plan.schemas, plan.revised)]
+                if plan.target != plan.manifest:
+                    written += carry_description(biotope_root, plan.manifest, plan.target)
+            for old, new in [*annotations.items(), *states.items()]:
+                if old.is_file():
+                    new.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(old), str(new))
+                    written.append(new)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(destination))
     except Exception as exc:
-        shutil.move(str(destination), str(source))
-        for path, data in saved.items():
-            if data is None:
-                path.unlink(missing_ok=True)
-            else:
-                (write_module if path.suffix == ".py" else write_text_atomic)(path, data.decode("utf-8"))
         console.print(f"[bold red]❌ {exc}; nothing was moved.[/]")
         raise click.Abort from exc
     for old in states:
