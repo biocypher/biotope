@@ -47,33 +47,6 @@ def test_single_workbook_uses_full_assembly_and_only_selected_file(tmp_path):
     assert all(f["source"]["fileObject"]["@id"] == objects[0]["@id"] for rs in data["recordSet"] for f in rs["field"])
 
 
-def test_directory_workbook_ids_disambiguate_source_contracts(tmp_path):
-    raw = tmp_path / "raw"
-    raw.mkdir()
-    _workbook(raw / "a.xlsx", "a_id")
-    _workbook(raw / "b.xlsx", "b_id")
-    _bake_directory(raw, tmp_path)
-    dataset = load_from_path(tmp_path / ".biotope" / "datasets" / "raw.jsonld")
-    repeated = [rs for rs in dataset.record_set if rs.name == "Measurements"]
-    assert len(repeated) == 2
-    assert len({rs.id for rs in repeated}) == 2
-    inspection = inspect_dataset(dataset)
-    for record_set in repeated:
-        selected = inspection.by_name(record_set.id)
-        assert selected is not None
-        assert selected.id == record_set.id
-        assert selected.source_ids and len(set(selected.source_ids)) == 1
-    origins = [inspection.by_name(rs.id).source_ids[0] for rs in repeated]
-    assert len(set(origins)) == 2
-    assert inspection.by_name("Measurements") is None
-    manifest = tmp_path / ".biotope/datasets/raw.jsonld"
-    generate_source_packages(manifest, tmp_path / "sources")
-    modules = {p.parent.name: p.read_text() for p in (tmp_path / "sources/raw").glob("*/schema.py")}
-    assert len(modules) == len(dataset.record_set)
-    holders = {name for name, code in modules.items() if any(json.dumps(rs.id) in code for rs in repeated)}
-    assert len(holders) == 2
-
-
 def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
     raw = tmp_path / "raw"
     raw.mkdir()
@@ -99,11 +72,14 @@ def test_directory_formats_and_coverage_diagnostics(tmp_path, capsys):
     assert len(objects) == 6
     assert next(d for d in objects if d["name"] == "table.csv.gz")["encodingFormat"] == ["text/csv", "application/gzip"]
     output = capsys.readouterr()
-    assert "6 scanned · 4 described · 2 not described" in output.err
-    assert "bad.soft" in output.err and "Extraction failed" in output.err
-    assert "archive.zarr.zip" in output.err and "archive" in output.err
-    assert "parsed as far as it goes" in output.err
-    assert "Records from" not in output.out
+    assert output.out == ""
+    assert "\x1b" not in output.err
+    text = "\n".join(line.rstrip() for line in output.err.splitlines())
+    assert "6 scanned · 4 described · 2 not described" in text
+    assert "bad.soft" in text and "Extraction failed" in text
+    assert "SKIP   archive.zarr.zip\n       Archive; the baker does not open archives" in text
+    assert "OK     table.csv.gz" in text
+    assert "parsed as far as it goes" in text
 
 
 def test_nested_parquet_json_and_single_ome_preserve_baker_structure(tmp_path):

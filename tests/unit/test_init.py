@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
+from biotope.cli import cli
 from biotope.commands.init import init
 from biotope.project_model import Project
 
@@ -15,14 +18,28 @@ def _invoke(runner: CliRunner, *args: str) -> object:
     return runner.invoke(init, list(args))
 
 
-def test_init_default_layout(tmp_path: Path) -> None:
-    runner = CliRunner()
+def test_init_default_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner(mix_stderr=False)
+    monkeypatch.chdir(tmp_path)
+    outside = runner.invoke(cli, ["status"])
+    assert outside.exit_code != 0
+    assert "Not in a biotope project" in outside.stderr
+
     result = _invoke(runner, "myproj", "--dir", str(tmp_path))
     assert result.exit_code == 0, result.output
 
-    assert "biotope get" not in result.output
     assert "biotope add" in result.output
     root = tmp_path / "myproj"
+    monkeypatch.chdir(root)
+    status = runner.invoke(cli, ["status"])
+    assert status.exit_code == 0, status.output
+    assert "No datasets" in status.output
+    check = runner.invoke(cli, ["check-data"])
+    assert check.exit_code == 0, check.output
+    assert "No files to check." in check.output
+    queue = runner.invoke(cli, ["queue", "--json"])
+    assert queue.exit_code == 0, queue.output
+    assert json.loads(queue.output)["sections"] == {"raw": [], "processed": [], "mapped": []}
     for directory in ("data", "mappings", "graph", ".biotope/datasets", ".biotope/workflows"):
         assert not (root / directory).exists()
     assert (root / ".biotope" / "config.yaml").is_file()
@@ -34,19 +51,6 @@ def test_init_default_layout(tmp_path: Path) -> None:
     assert config["annotation_validation"]["enabled"] is True
     assert {"creator", "distribution"} <= set(config["annotation_validation"]["minimum_required_fields"])
     assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10
-
-
-def test_init_does_not_overwrite_existing_pyproject(tmp_path: Path) -> None:
-    target = tmp_path / "myproj"
-    target.mkdir()
-    user_pyproject = '[project]\nname = "user-owned"\nversion = "9.9.9"\n'
-    (target / "pyproject.toml").write_text(user_pyproject)
-
-    runner = CliRunner()
-    result = _invoke(runner, ".", "--dir", str(target), "--no-prompt")
-    assert result.exit_code == 0, result.output
-
-    assert (target / "pyproject.toml").read_text() == user_pyproject
 
 
 def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:

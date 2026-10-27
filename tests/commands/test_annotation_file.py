@@ -128,6 +128,7 @@ def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
         "description: People of one study.\n"
         "creator:\n"
         "license: ''\n"
+        "datePublished: 2024-05-01\n"
         "tables:\n"
         f"  {PEOPLE}:\n"
         "    description: One row per person.\n"
@@ -145,6 +146,7 @@ def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
         assert description["description"] == "People of one study."
         assert description["name"] == "data/study"
         assert "creator" not in description and "license" not in description
+        assert description["datePublished"] == "2024-05-01"
         people = table(description, PEOPLE)
         assert people["description"] == "One row per person."
         assert people["key"] == {"@id": f"{PEOPLE}/person_id"}
@@ -269,16 +271,6 @@ def test_annotations_reach_a_dotted_folder_and_a_file_beside_a_folder_of_its_ste
         table(described(fresh, ".biotope/datasets/data/study.v2.jsonld"), "push/staff.csv#staff")["description"]
         == "One row per person."
     )
-
-
-def test_a_date_in_the_annotation_file_reaches_the_description_as_written(fresh):
-    ok("add", "data/study")
-    annotation = fresh / "data/study/.biotope.yaml"
-    annotation.write_text(annotation.read_text() + "datePublished: 2024-05-01\n")
-    ok("mark", "data/study", "mapped")
-    assert (described(fresh)["datePublished"], described(fresh)["biotope:status"]) == ("2024-05-01", "mapped")
-    ok("add", "--rebake", "data/study")
-    assert described(fresh)["datePublished"] == "2024-05-01"
 
 
 def test_a_rebake_keeps_the_lineage_and_the_status_people_gave(fresh):

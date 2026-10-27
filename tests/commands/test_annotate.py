@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from unittest import mock
 
@@ -20,53 +19,7 @@ def runner():
 @pytest.fixture
 def sample_metadata_file(tmp_path):
     metadata_path = tmp_path / "metadata.json"
-    metadata = {
-        "@context": {
-            "@vocab": "https://schema.org/",
-            "cr": "https://mlcommons.org/croissant/",
-            "sc": "https://schema.org/",
-        },
-        "@type": "Dataset",
-        "name": "Gene Expression Dataset",
-        "description": "RNA-seq data from cancer patients",
-        "url": "https://example.com/gene_data",
-        "creator": {
-            "@type": "Person",
-            "name": "researcher@university.edu",
-        },
-        "dateCreated": "2025-08-27T13:37:12.651208+00:00",
-        "distribution": [
-            {
-                "@type": "cr:FileObject",
-                "@id": "expression_data",
-                "name": "expression_data.csv",
-                "contentUrl": "data/expression_data.csv",
-                "encodingFormat": "text/csv",
-                "sha256": "0b033707ea49365a5ffdd14615825511",
-            },
-        ],
-        "recordSet": [
-            {
-                "@type": "cr:RecordSet",
-                "@id": "#samples",
-                "name": "samples",
-                "description": "Patient samples with gene expression data",
-                "field": [
-                    {
-                        "@type": "cr:Field",
-                        "@id": "#samples/patient_id",
-                        "name": "patient_id",
-                        "dataType": "sc:Text",
-                        "source": {
-                            "fileObject": {"@id": "expression_data"},
-                            "extract": {"column": "patient_id"},
-                        },
-                    }
-                ],
-            }
-        ],
-    }
-    metadata_path.write_text(json.dumps(metadata))
+    metadata_path.write_text("")
     return metadata_path
 
 

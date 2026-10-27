@@ -23,6 +23,7 @@ def test_add_json_covers_files_warnings_and_outputs(tmp_path, monkeypatch):
     (raw / "genes.csv").write_text("id,name\n1,A\n")
     (raw / "notes.txt").write_text("notes")
     (raw / "bad.soft").write_text("not GEO")
+    (tmp_path / "doc.txt").write_text("a free-text doc")
     original = MetadataGenerator.generate_metadata
 
     def noisy(self, *args, **kwargs):
@@ -31,7 +32,7 @@ def test_add_json_covers_files_warnings_and_outputs(tmp_path, monkeypatch):
         return original(self, *args, **kwargs)
 
     monkeypatch.setattr(MetadataGenerator, "generate_metadata", noisy)
-    result = runner.invoke(cli, ["add", "raw", "--json"])
+    result = runner.invoke(cli, ["add", "raw", "doc.txt", "--json"])
     assert result.exit_code == 0, (result.stdout, result.stderr, result.exception)
     report = json.loads(result.stdout)
     assert report["schema_version"] == 1
@@ -50,9 +51,15 @@ def test_add_json_covers_files_warnings_and_outputs(tmp_path, monkeypatch):
     assert any(d["message"] == "A diagnostic with [literal] markup" for d in source["diagnostics"])
     assert "Upstream diagnostic on stdout" in result.stderr
     assert "\x1b" not in result.stdout
+    document = report["sources"][1]
+    assert document["input"] == "doc.txt"
+    assert document["manifest"] == ".biotope/datasets/doc.txt.jsonld"
+    assert document["status"] == "added"
+    assert json.loads(Path(source["manifest"]).read_text())["biotope:status"] == "processed"
+    assert json.loads(Path(document["manifest"]).read_text())["biotope:status"] == "raw"
 
-    skipped = runner.invoke(cli, ["add", "raw", "--json"])
-    assert json.loads(skipped.stdout)["sources"][0]["status"] == "skipped"
+    skipped = runner.invoke(cli, ["add", "raw", "doc.txt", "--json"])
+    assert [source["status"] for source in json.loads(skipped.stdout)["sources"]] == ["skipped", "skipped"]
 
 
 def test_scan_layout_wraps_long_paths_and_keeps_grouped_members():

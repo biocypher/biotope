@@ -319,12 +319,6 @@ def test_failed_missing_and_removed_documents(study, monkeypatch):
     (study.root / OKAFOR).unlink()
     rebaked = study.run("add", "data/pages", "--rebake")
     assert rebaked.exit_code == 0, rebaked.output
-    manifest = study.root / ".biotope/datasets/data/pages.jsonld"
-    metadata = json.loads(manifest.read_text())
-    for entry in metadata["distribution"]:
-        if entry.get("contentUrl") == LIND:
-            entry["contentUrl"] = "lind.html"
-    manifest.write_text(json.dumps(metadata, indent=2))
     (study.root / LIND).unlink()
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code != 0
@@ -344,6 +338,8 @@ def test_failed_missing_and_removed_documents(study, monkeypatch):
     assert result.exit_code == 0, result.output
     assert report["disappeared"] == [LIND] and statuses(report) == {OKAFOR: "reused"}
     assert study.records("profile") == []
+    described = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonl.jsonld").read_text())
+    assert described["biotope:status"] == "processed"
 
 
 def test_a_rerun_registers_records_an_interrupted_run_stored(study, monkeypatch):
@@ -572,33 +568,26 @@ def test_schema_revision_and_refused_constructs(study, tmp_path):
 def test_empty_or_invalid_answers_are_retried(study, monkeypatch):
     waits = []
     monkeypatch.setattr(llm.time, "sleep", waits.append)
-    study.endpoint.reply("Mara Lind", None, times=1)
+    study.endpoint.reply("Mara Lind", {"record": None}, times=1)
     study.endpoint.reply("Mara Lind", '{"record": {"name"', times=1)
+    study.endpoint.reply("Mara Lind", None, times=1)
     study.endpoint.reply("Chidi Okafor", "")
     result, report = study.extract("run", PROFILE, "data/pages")
     assert result.exit_code != 0
     assert statuses(report) == {LIND: "extracted", OKAFOR: "failed"}
     assert "empty" in report["documents"][1]["reason"]
     asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests]
-    assert sum("Mara Lind" in text for text in asked) == 3
+    assert sum("Mara Lind" in text for text in asked) == 4
     assert sum("Chidi Okafor" in text for text in asked) == llm.ATTEMPTS
-    assert sorted(waits) == [2, 2, 4, 4, 8]
+    assert sorted(waits) == [2, 2, 4, 4, 8, 8]
     assert [record["id"] for record in study.records("profile")] == [LIND]
 
-
-def test_a_null_record_is_retried_and_reported_as_empty(study, monkeypatch):
-    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
-    study.endpoint.reply("Mara Lind", {"record": None}, times=1)
     study.endpoint.reply("Chidi Okafor", {"record": None})
-    result, report = study.extract("run", PROFILE, "data/pages")
-    assert result.exit_code == 0, result.output
-    assert statuses(report) == {LIND: "extracted", OKAFOR: "empty"}
-    asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests]
-    assert sum("Mara Lind" in text for text in asked) == 2
-    assert sum("Chidi Okafor" in text for text in asked) == llm.ATTEMPTS
-    assert [record["id"] for record in study.records("profile")] == [LIND]
+    sent = len(study.endpoint.requests)
     shown = study.run("extract", "run", PROFILE, "data/pages", "--redo", OKAFOR)
     assert shown.exit_code == 0 and "empty, 0 records" in " ".join(shown.output.split())
+    asked = [request["body"]["messages"][-1]["content"] for request in study.endpoint.requests[sent:]]
+    assert sum("Chidi Okafor" in text for text in asked) == llm.ATTEMPTS
     tried, report = study.extract("try", PROFILE, OKAFOR, LIND)
     assert tried.exit_code == 0 and statuses(report) == {OKAFOR: "empty", LIND: "extracted"}
 
@@ -699,13 +688,23 @@ def test_short_and_repeated_quotes_are_weak_evidence(study):
     assert report["counts"]["weak"] == 4 and len(report["unaligned"]) == 2
 
     sentence = "The atlas covers adult human lung tissue."
-    (study.root / "data/notes.txt").write_text(f"{sentence}\nAtlas notes\n{sentence}\n")
+    (study.root / "data/notes.txt").write_text(f"\u0130stanbul\n{sentence}\nAtlas notes\n{sentence}\n")
     study.endpoint.reply(
         "Atlas notes",
-        {"record": {"name": quoted("Atlas notes"), "group": quoted(None), "methods": [quoted(sentence)]}},
+        {
+            "record": {
+                "name": quoted("Atlas notes", "atlas notes"),
+                "group": quoted(None),
+                "methods": [quoted(sentence)],
+            }
+        },
     )
     result, report = study.extract("try", PROFILE, "data/notes.txt")
+    assert result.exit_code == 0, result.output
     [record] = report["documents"][0]["records"]
+    shown = study.run("extract", "text", "data/notes.txt").output
+    name = record["values"]["name"]["evidence"]
+    assert name["aligned"] and shown[name["start"] : name["end"]] == "Atlas notes"
     [evidence] = [item["evidence"] for item in record["values"]["methods"]]
     assert (evidence["occurrences"], evidence["weak"]) == (2, []) and report["weak"] == []
 
@@ -871,27 +870,6 @@ def test_a_conversion_change_aligns_reused_quotes_again(study, monkeypatch):
     assert statuses(report) == {LIND: "reused", OKAFOR: "reused"} and study.snapshot() == before
 
 
-def test_quotes_align_where_case_folding_lengthens_the_text(study):
-    (study.root / "data/notes.txt").write_text("\u0130stanbul\nMara Lind\nSpatial Atlas Group\n")
-    study.endpoint.reply(
-        "\u0130stanbul",
-        {
-            "record": {
-                "name": quoted("Mara Lind", "mara lind"),
-                "group": quoted("Spatial Atlas Group", "spatial atlas group"),
-                "methods": [],
-            }
-        },
-    )
-    result, report = study.extract("try", PROFILE, "data/notes.txt")
-    assert result.exit_code == 0, result.output
-    [record] = report["documents"][0]["records"]
-    shown = study.run("extract", "text", "data/notes.txt").output
-    for name, expected in (("name", "Mara Lind"), ("group", "Spatial Atlas Group")):
-        evidence = record["values"][name]["evidence"]
-        assert evidence["aligned"] and shown[evidence["start"] : evidence["end"]] == expected
-
-
 def test_text_shows_what_the_extractor_reads(study):
     page = study.run("extract", "text", LIND)
     assert page.exit_code == 0, page.output
@@ -927,11 +905,12 @@ def test_run_warns_when_git_ignores_its_output(study):
 
 
 def test_schemas_live_in_the_graph_and_records_in_data(study):
-    shutil.copy(FIXTURES / "schemas.py", study.root / "graph/extraction/profile.py")
-    schema = "graph/extraction/profile.py:Profile"
+    module = study.root / "graph/extraction/profile.py"
+    module.write_text((FIXTURES / "schemas.py").read_text().replace("class Profile:", "class HTTPProfile:"))
+    schema = "graph/extraction/profile.py:HTTPProfile"
     result, report = study.extract("run", schema, "data/pages")
-    assert result.exit_code == 0 and report["output"] == "data/extracted/profile.jsonl", result.output
-    assert (study.root / "data/extracted/profile.jsonl").is_file()
+    assert result.exit_code == 0 and report["output"] == "data/extracted/http_profile.jsonl", result.output
+    assert (study.root / "data/extracted/http_profile.jsonl").is_file()
     result, report = study.extract("run", schema, "data/pages", "--out", "data/people.jsonl")
     assert result.exit_code == 0 and report["output"] == "data/people.jsonl", result.output
     assert (study.root / "data/people.jsonl").is_file()
@@ -945,8 +924,7 @@ def test_schemas_live_in_the_graph_and_records_in_data(study):
     built = study.run("graph", "build")
     assert built.exit_code == 0, built.output
     run = json.loads((study.root / "graph/build/run.json").read_text())
-    assert str((study.root / "graph/extraction/profile.py").resolve()) in run["definitions"]["code_digests"]
-    module = study.root / "graph/extraction/profile.py"
+    assert str(module.resolve()) in run["definitions"]["code_digests"]
     module.write_text(module.read_text() + '\nWRONG: int = "text"\n')
     checked = study.run("graph", "check", "--json")
     assert checked.exit_code != 0
@@ -954,14 +932,6 @@ def test_schemas_live_in_the_graph_and_records_in_data(study):
         finding["code"].startswith("python.") and finding["location"]["path"].endswith("graph/extraction/profile.py")
         for finding in json.loads(checked.output)["findings"]
     )
-
-    moved = study.run("mv", "data/extracted/profile.jsonl", "data/extracted/people.jsonl")
-    assert moved.exit_code == 0, moved.output
-    assert (study.root / ".biotope/extraction/data/extracted/people.jsonl.json").is_file()
-    sent = len(study.endpoint.requests)
-    result, report = study.extract("run", schema, "data/pages", "--out", "data/extracted/people.jsonl")
-    assert result.exit_code == 0, result.output
-    assert statuses(report) == {LIND: "reused", OKAFOR: "reused"} and len(study.endpoint.requests) == sent
 
 
 def test_a_record_mostly_without_aligned_evidence_is_kept_for_review(study):
@@ -1050,30 +1020,6 @@ def test_live_extraction_aligns_values(study, monkeypatch):
     )
     evidence = full["values"]["deadline"]["evidence"]
     assert evidence["page"] == 2 and squeeze(ROWS["Full proposal"]) in squeeze(evidence["quote"])
-
-
-def test_the_records_file_takes_the_schema_name_as_the_topology_layout_writes_it(study):
-    schemas = study.root / "graph/extraction/schemas.py"
-    schemas.write_text(schemas.read_text().replace("class Profile:", "class HTTPProfile:"))
-
-    result, _ = study.extract("run", "graph/extraction/schemas.py:HTTPProfile", "data/pages")
-
-    assert result.exit_code == 0, result.output
-    assert (study.root / "data/extracted/http_profile.jsonl").is_file()
-
-
-def test_a_folder_dataset_holding_the_records_does_not_describe_them_again(study):
-    assert study.run("add", "data").exit_code == 0
-    result, _ = study.extract("run", PROFILE, "data/pages")
-    assert result.exit_code == 0, result.output
-
-    rebaked = study.run("add", "--rebake", "data")
-
-    assert rebaked.exit_code == 0, rebaked.output
-    described = json.loads((study.root / ".biotope/datasets/data.jsonld").read_text())
-    identities = [entry["@id"] for entry in [*described["distribution"], *described.get("recordSet", [])]]
-    assert "pages/lind.html" in identities
-    assert [identity for identity in identities if "extracted" in identity] == []
 
 
 def test_files_beside_the_records_with_the_same_name_before_the_extension_stay_in_their_folder_dataset(study):

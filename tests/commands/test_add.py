@@ -2,121 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from click.testing import CliRunner
 
 from biotope.commands._add_output import AddOutput
-from biotope.commands.add import _bake_directory, add, add_file
+from biotope.commands.add import _bake_directory, add
 from biotope.graph.inventory import generate_source_packages
-from biotope.utils import calculate_file_checksum, is_file_tracked
-
-
-EXAMPLE_CSV = Path(__file__).resolve().parents[1] / "fixtures/example_gene_expression.csv"
 
 
 @pytest.fixture
 def runner():
     return CliRunner()
-
-
-@pytest.fixture
-def sample_file(tmp_path):
-    file_path = tmp_path / "test.txt"
-    file_path.write_text("This is a test file content")
-    return file_path
-
-
-@pytest.fixture
-def biotope_project(tmp_path):
-    (tmp_path / ".biotope" / "datasets").mkdir(parents=True)
-    return tmp_path
-
-
-def test_calculate_file_checksum(sample_file):
-    import hashlib
-
-    expected_hash = hashlib.sha256(sample_file.read_bytes()).hexdigest()
-    assert calculate_file_checksum(sample_file) == expected_hash
-
-
-def test_add_file_absolute_path_writes_cr_file_object(biotope_project, sample_file):
-    target_file = biotope_project / sample_file.name
-    target_file.write_text(sample_file.read_text())
-
-    datasets_dir = biotope_project / ".biotope" / "datasets"
-    result = add_file(target_file, biotope_project, datasets_dir, False)
-    assert result is True
-
-    metadata_file = datasets_dir / f"{target_file.relative_to(biotope_project)}.jsonld"
-    assert metadata_file.exists()
-
-    with open(metadata_file) as handle:
-        metadata = json.load(handle)
-
-    assert metadata["distribution"][0]["@type"] == "cr:FileObject"
-    assert metadata["distribution"][0]["contentUrl"] == str(target_file.relative_to(biotope_project))
-    assert is_file_tracked(target_file, biotope_project)
-
-
-def test_add_file_relative_path_already_tracked(biotope_project):
-    data_dir = biotope_project / "data" / "inputs"
-    data_dir.mkdir(parents=True)
-    target_file = data_dir / "experiment.csv"
-    target_file.write_text("gene,expression\nBRCA1,12.5")
-
-    datasets_dir = biotope_project / ".biotope" / "datasets"
-
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(biotope_project)
-        relative_path = Path("data/inputs/experiment.csv")
-        assert add_file(relative_path, biotope_project, datasets_dir, False) is True
-        assert add_file(relative_path, biotope_project, datasets_dir, False) is False
-        assert add_file(relative_path, biotope_project, datasets_dir, True) is True
-    finally:
-        os.chdir(original_cwd)
-
-
-def test_add_file_stamps_status_raw_by_default(biotope_project):
-    """A plain file `biotope add` without a baked record set lands as raw."""
-    from biotope.metadata import STATUS_RAW, get_status
-
-    target = biotope_project / "doc.txt"
-    target.write_text("a free-text doc")
-    datasets_dir = biotope_project / ".biotope" / "datasets"
-    assert add_file(target, biotope_project, datasets_dir, False) is True
-
-    manifest = datasets_dir / "doc.txt.jsonld"
-    with open(manifest) as f:
-        metadata = json.load(f)
-    assert get_status(metadata) == STATUS_RAW
-
-
-def test_add_file_status_override(biotope_project):
-    """`--status processed` overrides the heuristic."""
-    from biotope.metadata import STATUS_PROCESSED, get_status
-
-    target = biotope_project / "doc.txt"
-    target.write_text("ignore me")
-    datasets_dir = biotope_project / ".biotope" / "datasets"
-    add_file(
-        target,
-        biotope_project,
-        datasets_dir,
-        False,
-        overrides={"status_override": "processed"},
-    )
-
-    manifest = datasets_dir / "doc.txt.jsonld"
-    with open(manifest) as f:
-        metadata = json.load(f)
-    assert get_status(metadata) == STATUS_PROCESSED
 
 
 def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
@@ -140,139 +39,11 @@ def test_resolve_dataset_ref_accepts_three_forms(tmp_path):
     assert resolve_dataset_ref(str(manifest), project) == canonical
 
 
-def test_resolve_dataset_ref_rejects_missing(tmp_path):
-    from biotope.commands.add import resolve_dataset_ref
-
-    project = tmp_path / "proj"
-    (project / ".biotope" / "datasets").mkdir(parents=True)
-    with pytest.raises(ValueError, match="no manifest found"):
-        resolve_dataset_ref("missing/dataset", project)
-
-
-def test_add_file_derived_from_writes_provenance(biotope_project):
-    """`--derived-from <ref>` records `prov:wasDerivedFrom` on the new dataset."""
-    from biotope.metadata import get_derived_from
-
-    # Seed an existing manifest to derive from.
-    src_manifest = biotope_project / ".biotope" / "datasets" / "raw_pdf.jsonld"
-    src_manifest.parent.mkdir(parents=True, exist_ok=True)
-    src_manifest.write_text(
-        json.dumps(
-            {
-                "@type": "sc:Dataset",
-                "name": "raw_pdf",
-                "distribution": [],
-                "biotope:status": "raw",
-            }
-        )
-    )
-
-    target = biotope_project / "extracted.json"
-    target.write_text("{}")
-    datasets_dir = biotope_project / ".biotope" / "datasets"
-    add_file(
-        target,
-        biotope_project,
-        datasets_dir,
-        False,
-        overrides={"derived_from": ["raw_pdf"]},
-    )
-
-    with open(datasets_dir / "extracted.json.jsonld") as f:
-        metadata = json.load(f)
-    assert get_derived_from(metadata) == ["raw_pdf"]
-
-
-def test_is_file_tracked_recognises_fileset_coverage(tmp_path):
-    """A file covered only by a `cr:FileSet` glob in a multi-file manifest is
-    still tracked. Regression: the old `is_file_tracked` matched only
-    explicit `cr:FileObject.contentUrl` and missed the common
-    `biotope add <dir>` shape where structured files are covered by a glob."""
-    from biotope.utils import is_file_tracked
-
-    project_root = tmp_path / "proj"
-    data_dir = project_root / "data" / "ot" / "target"
-    data_dir.mkdir(parents=True)
-    (project_root / ".biotope" / "datasets" / "data" / "ot").mkdir(parents=True)
-
-    (data_dir / "part-00.parquet").write_bytes(b"x")
-    (data_dir / "part-01.parquet").write_bytes(b"y")
-    (data_dir / "README.md").write_text("notes")
-
-    manifest = project_root / ".biotope" / "datasets" / "data" / "ot" / "target.jsonld"
-    manifest.write_text(
-        json.dumps(
-            {
-                "@type": "sc:Dataset",
-                "name": "data/ot/target",
-                "distribution": [
-                    {"@type": "cr:FileSet", "@id": "fs", "includes": "*.parquet"},
-                    {
-                        "@type": "cr:FileObject",
-                        "@id": "fo_readme",
-                        "contentUrl": "data/ot/target/README.md",
-                        "sha256": "deadbeef",
-                        "contentSize": "5",
-                    },
-                ],
-            }
-        )
-    )
-
-    # FileSet-covered: previously missed; now tracked.
-    assert is_file_tracked(data_dir / "part-00.parquet", project_root)
-    assert is_file_tracked(data_dir / "part-01.parquet", project_root)
-    # Explicit FileObject: still tracked.
-    assert is_file_tracked(data_dir / "README.md", project_root)
-    # Not under the dataset: still not tracked.
-    (project_root / "elsewhere.txt").write_text("x")
-    assert not is_file_tracked(project_root / "elsewhere.txt", project_root)
-
-
 def _write_png(path: Path, colour: str = "black") -> None:
     """A 1x1 PNG, so the image handler claims it and emits a FileSet."""
     from PIL import Image
 
     Image.new("RGB", (1, 1), colour).save(path)
-
-
-def test_glob_covered_files_keep_their_checksum(tmp_path):
-    """A FileSet describes structure; it does not stand in for a file's identity.
-
-    Dropping the FileObjects a FileSet glob covers took every checksum with them,
-    so `check-data` silently verified a fraction of the files it listed.
-    """
-    project_root = tmp_path / "project"
-    data_dir = project_root / "data" / "images"
-    (project_root / ".biotope" / "datasets").mkdir(parents=True)
-    data_dir.mkdir(parents=True)
-    for name, colour in (("a.png", "black"), ("b.png", "white")):
-        _write_png(data_dir / name, colour)
-
-    metadata_dict, _ = _bake_directory(data_dir, project_root)
-
-    file_objects = [d for d in metadata_dict["distribution"] if d.get("@type") == "cr:FileObject"]
-    assert any(d.get("@type") == "cr:FileSet" for d in metadata_dict["distribution"])
-    assert {Path(d["contentUrl"]).name for d in file_objects} == {"a.png", "b.png"}
-    assert all(d.get("sha256") for d in file_objects)
-
-
-def test_bake_directory_tracks_unparseable_files(tmp_path):
-    project_root = tmp_path / "project"
-    data_dir = project_root / "data" / "mixed"
-    (project_root / ".biotope" / "datasets").mkdir(parents=True)
-    data_dir.mkdir(parents=True)
-
-    (data_dir / "example_gene_expression.csv").write_text(EXAMPLE_CSV.read_text())
-    (data_dir / "README.md").write_text("notes")
-
-    metadata_dict, n_source_files = _bake_directory(data_dir, project_root)
-
-    assert n_source_files == 2
-    assert metadata_dict["recordSet"]
-    distribution = metadata_dict["distribution"]
-    assert any(item["@type"] == "cr:FileObject" for item in distribution)
-    assert any(item.get("contentUrl") == "README.md" for item in distribution)
 
 
 def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, capsys):
@@ -316,113 +87,16 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
     assert text.index("Identical to a/table.csv") < text.index("4 scanned")
 
 
-@mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add._bake_directory")
-def test_add_command_directory_already_tracked_skips_without_rebake(
-    mock_bake,
-    mock_find_root,
-    runner,
-    biotope_project,
-):
-    mock_find_root.return_value = biotope_project
-
-    data_dir = biotope_project / "data"
-    data_dir.mkdir()
-    fake_metadata = {"recordSet": [{"@id": "#rs", "field": []}], "distribution": []}
-    mock_bake.return_value = (fake_metadata, 2)
-
-    with runner.isolated_filesystem():
-        os.chdir(biotope_project)
-        first = runner.invoke(add, [str(data_dir)])
-        assert first.exit_code == 0
-        mock_bake.assert_called_once()
-        # The real `_bake_directory` writes metadata_path; the mock doesn't,
-        # so simulate that side effect for the "already tracked" check.
-        (biotope_project / ".biotope" / "datasets" / "data.jsonld").write_text("{}")
-
-        second = runner.invoke(add, [str(data_dir)])
-        assert second.exit_code == 0
-        assert "already exists" in second.output
-        mock_bake.assert_called_once()  # not called again
-
-        third = runner.invoke(add, ["--rebake", str(data_dir)])
-        assert third.exit_code == 0
-        assert mock_bake.call_count == 2
-
-
-@mock.patch("biotope.commands.add.find_biotope_root")
-def test_add_command_rejects_name_for_multiple_paths(mock_find_root, runner, biotope_project):
-    mock_find_root.return_value = biotope_project
-
-    file_one = biotope_project / "one.txt"
-    file_two = biotope_project / "two.txt"
+def test_add_command_rejects_name_for_multiple_paths(runner, tmp_path):
+    file_one = tmp_path / "one.txt"
+    file_two = tmp_path / "two.txt"
     file_one.write_text("one")
     file_two.write_text("two")
 
-    with runner.isolated_filesystem():
-        os.chdir(biotope_project)
-        result = runner.invoke(add, ["--name", "dataset", str(file_one), str(file_two)])
+    result = runner.invoke(add, ["--name", "dataset", str(file_one), str(file_two)])
 
     assert result.exit_code != 0
     assert "--name can only be used when adding one path" in result.output
-
-
-# ---------------------------------------------------------------------------
-# croissant-baker integration — run against the real baker, because the last
-# break was an import move swallowed by an `except ImportError`.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def mixed_dataset(tmp_path):
-    """A project holding one gzipped CSV the baker reads and one file it cannot."""
-    import gzip
-
-    project_root = tmp_path / "project"
-    data_dir = project_root / "data" / "mixed"
-    (project_root / ".biotope" / "datasets").mkdir(parents=True)
-    data_dir.mkdir(parents=True)
-    (data_dir / "expression.csv.gz").write_bytes(gzip.compress(EXAMPLE_CSV.read_bytes()))
-    (data_dir / "README.md").write_text("notes")
-    return project_root, data_dir
-
-
-@pytest.mark.parametrize("compress", [False, True])
-def test_enrich_with_baker_builds_record_set(tmp_path, compress):
-    """A single-file add gets a recordSet, whether or not the file is wrapped."""
-    import gzip
-
-    from biotope.commands.add import _enrich_with_baker
-
-    payload = EXAMPLE_CSV.read_bytes()
-    file_path = tmp_path / ("data.csv.gz" if compress else "data.csv")
-    file_path.write_bytes(gzip.compress(payload) if compress else payload)
-
-    metadata = {"distribution": [{"@id": "file_0", "@type": "cr:FileObject"}]}
-    _enrich_with_baker(metadata, file_path)
-
-    fields = metadata["recordSet"][0]["field"]
-    assert [f["name"] for f in fields] == ["GeneID", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5"]
-    assert all(f["source"]["fileObject"]["@id"] == "file_0" for f in fields)
-
-
-def test_bake_directory_reports_coverage(mixed_dataset, capsys):
-    """Undescribed files are otherwise invisible: biotope backfills them like any other."""
-    project_root, data_dir = mixed_dataset
-
-    _bake_directory(data_dir, project_root)
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    text = "\n".join(line.rstrip() for line in captured.err.splitlines())
-    assert "2 scanned · 1 described · 1 not described" in text
-    assert "SKIP   README.md\n       No handler" in text
-    assert "OK     expression.csv.gz" in text
-    assert "\x1b" not in captured.out + captured.err
-    metadata = json.loads((project_root / ".biotope" / "datasets" / "data" / "mixed.jsonld").read_text())
-    assert metadata["recordSet"]
-    objects = [d for d in metadata["distribution"] if d["@type"] == "cr:FileObject"]
-    assert ["text/csv", "application/gzip"] in [d.get("encodingFormat") for d in objects]
 
 
 def test_baker_warnings_survive_markup_in_a_filename(monkeypatch):

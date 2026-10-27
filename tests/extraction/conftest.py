@@ -29,7 +29,7 @@ class Endpoint:
         self.lock = threading.Lock()
         self.held: dict[str, threading.Event] = {}
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_port}/v1"
 
     def reply(self, marker: str, answer: object, times: int | None = None) -> None:
