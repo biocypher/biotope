@@ -71,6 +71,23 @@ def test_a_folder_moved_to_another_parent_carries_every_description_in_it(single
     ]
 
 
+def test_a_dataset_file_whose_path_also_names_a_file_at_the_project_root_moves_with_its_dataset(project):
+    (project / "data/study/data").mkdir()
+    (project / "data/study/data/people.csv").write_text("person_id,name\np9,Kim\n")
+    (project / "data/people.csv").write_text("person_id,name\np8,Lee\n")
+    refresh()
+
+    ok("mv", "-r", "data", "archive/data")
+
+    refresh("archive/data/study")
+    assert built(project) == ({"archive/data/study/push/people.csv", "archive/data/study/docs/report.html"}, 2)
+    tables = {
+        record["@id"]
+        for record in json.loads((project / ".biotope/datasets/archive/data/study.jsonld").read_text())["recordSet"]
+    }
+    assert "data/people.csv#people" in tables
+
+
 def test_mv_of_a_workbook_keeps_its_sheet_name_through_the_refresh(project):
     book = openpyxl.Workbook()
     sheet = book.active

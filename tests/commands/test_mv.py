@@ -202,3 +202,13 @@ def test_mv_accepts_files_baker_described_in_a_folder_manifest(tmp_path, monkeyp
     assert alone.exit_code == 0, alone.output
     assert described(root, "data/solo")[0] == {"single.csv"}
     assert sorted(path.name for path in (root / ".biotope/datasets/data").iterdir()) == ["solo.jsonld", "things.jsonld"]
+
+
+def test_mv_refuses_to_move_a_file_out_of_its_folder_dataset(tmp_path, monkeypatch):
+    root, run = baked(tmp_path, monkeypatch)
+    before = snapshot(root)
+
+    moved = run("mv", "data/things/first.csv", "data/solo/first.csv")
+
+    assert moved.exit_code != 0 and "Cross-dataset" in moved.output
+    assert snapshot(root) == before

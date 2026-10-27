@@ -166,14 +166,13 @@ def _plan(
         url = distribution.get("contentUrl")
         if distribution.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
             continue
-        from_root = _normal(biotope_root / url) in moves
-        old = _normal((biotope_root if from_root else base) / url)
+        old = _normal((base if folder else biotope_root) / url)
         new = moves.get(old)
         if new is None:
             continue
         if staying and not new.is_relative_to(base):
             raise _Refused(_cross_dataset(old, new, manifest, base, biotope_root))
-        moved_url = new.relative_to(biotope_root if from_root else new_base).as_posix()
+        moved_url = new.relative_to(new_base if folder else biotope_root).as_posix()
         ids = moved_ids(
             metadata, distribution["@id"], old.relative_to(base).as_posix(), new.relative_to(new_base).as_posix()
         )
