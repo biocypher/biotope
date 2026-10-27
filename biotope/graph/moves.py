@@ -4,7 +4,7 @@ import ast
 import json
 import shutil
 from collections.abc import Callable, Generator, Iterable
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +70,11 @@ def write_ids(manifest: Path, schemas: dict[Path, str], revised: list[Target]) -
     return written + [path for path in recorded if path is not None]
 
 
+def contract_files(manifest: Path, revised: list[Target]) -> list[Path]:
+    store = ContractStore.for_manifest(manifest)
+    return [store.path(target.revision) for target in revised] if store is not None else []
+
+
 def package_files(sources: Path, manifest: Path) -> list[Path]:
     roots = [root.path for root in discover_roots(sources) if root.metadata == manifest.resolve()]
     return [path for root in roots for path in root.rglob("*.py")]
@@ -104,15 +109,24 @@ def prune(directory: Path, stop: Path) -> None:
         directory = directory.parent
 
 
+def existing_folder(path: Path) -> Path:
+    return next(folder for folder in [path, *path.parents] if folder.is_dir())
+
+
 @contextmanager
 def kept(paths: Iterable[Path]) -> Generator[None, None, None]:
     saved = {path: path.read_bytes() if path.is_file() else None for path in paths}
+    folders = {path: existing_folder(path.parent) for path in saved}
     try:
         yield
     except BaseException:
         for path, data in saved.items():
-            if data is None:
-                path.unlink(missing_ok=True)
-            else:
-                (write_module if path.suffix == ".py" else write_text_atomic)(path, data.decode("utf-8"))
+            with suppress(OSError):
+                if data is not None:
+                    (write_module if path.suffix == ".py" else write_text_atomic)(path, data.decode("utf-8"))
+                elif path.is_file():
+                    path.unlink()
+        for path, folder in folders.items():
+            with suppress(OSError):
+                prune(path.parent, folder)
         raise

@@ -188,6 +188,22 @@ def test_a_failed_mv_over_another_file_keeps_that_file(single):
     assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
 
 
+@pytest.mark.parametrize(
+    ("fixture", "moved"),
+    [("project", "data/study/push/people.csv"), ("single", "data/raw/people.csv")],
+)
+def test_a_mv_that_fails_on_a_path_under_a_file_puts_every_file_and_folder_back(request, fixture, moved):
+    root = request.getfixturevalue(fixture)
+    annotation = root / "data/study/.biotope.yaml"
+    annotation.write_text(annotation.read_text() + "tables:\n  push/people.csv#people:\n    description: People.\n")
+    before = snapshot(root)
+
+    failed = invoke("mv", moved, "data/study/docs/report.html/people.csv")
+
+    assert failed.exit_code != 0 and "nothing was moved" in failed.output
+    assert snapshot(root) == before
+
+
 @pytest.mark.parametrize("force", [(), ("-f",)])
 def test_mv_never_replaces_an_annotation_file(single, force):
     (single / "data/raw/staff.csv.biotope.yaml").write_text("# Notes on a file that is still to come.\n")

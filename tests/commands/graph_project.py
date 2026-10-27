@@ -36,11 +36,11 @@ def built(root: Path) -> tuple[set[str], int]:
     return read, run["graph_objects"]["nodes"]
 
 
-def snapshot(root: Path) -> dict[str, bytes]:
+def snapshot(root: Path) -> dict[str, bytes | None]:
     return {
-        path.relative_to(root).as_posix(): path.read_bytes()
+        path.relative_to(root).as_posix(): path.read_bytes() if path.is_file() else None
         for path in root.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
+        if "__pycache__" not in path.parts
     }
 
 

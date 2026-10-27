@@ -13,7 +13,16 @@ from rich.panel import Panel
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, check_ids, moved_ids, rename, renamer
 from biotope.extraction.run import STATES, state_path
-from biotope.graph.moves import carry_description, kept, package_files, planned_ids, prune, write_ids
+from biotope.graph.moves import (
+    carry_description,
+    contract_files,
+    existing_folder,
+    kept,
+    package_files,
+    planned_ids,
+    prune,
+    write_ids,
+)
 from biotope.graph.sources import description_text, write_text_atomic
 from biotope.graph.targets import Target
 from biotope.metadata import (
@@ -267,9 +276,11 @@ def _apply(
     paths = {
         *(path for plan in plans for path in (plan.manifest, plan.target, plan.annotation) if path is not None),
         *(path for plan in plans for path in package_files(biotope_root / "graph/sources", plan.manifest)),
+        *(path for plan in plans for path in contract_files(plan.manifest, plan.revised)),
         *(path for pair in [*states.items(), *annotations.items()] for path in pair),
     }
     written: list[Path] = []
+    folder = existing_folder(destination.parent)
     try:
         with kept(paths):
             for plan in plans:
@@ -288,6 +299,7 @@ def _apply(
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(destination))
     except Exception as exc:
+        prune(destination.parent, folder)
         console.print(f"[bold red]❌ {exc}; nothing was moved.[/]")
         raise click.Abort from exc
     for old in states:
