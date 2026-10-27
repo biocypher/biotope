@@ -204,29 +204,6 @@ def add_derived_from(metadata: dict[str, Any], source_id: str) -> None:
     metadata[DERIVED_FROM] = [{"@id": ref} for ref in refs]
 
 
-def update_manifest_status(manifest_path: Path, status: str) -> bool:
-    """Read ``manifest_path``, set ``biotope:status``, write back. Idempotent.
-
-    Returns ``True`` if the manifest was modified, ``False`` if the status was
-    already correct or the file could not be read.
-    """
-    import json
-
-    if not manifest_path.is_file():
-        return False
-    try:
-        with open(manifest_path) as handle:
-            metadata = json.load(handle)
-    except (OSError, ValueError):
-        return False
-    if get_status(metadata) == status:
-        return False
-    set_status(metadata, status)
-    with open(manifest_path, "w") as handle:
-        json.dump(metadata, handle, indent=2)
-    return True
-
-
 def resolve_content_url(content_url: str, dataset_dir: Path, biotope_root: Path) -> Path | None:
     """Resolve a ``contentUrl`` to a file on disk, or None.
 
