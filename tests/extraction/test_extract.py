@@ -1050,3 +1050,13 @@ def test_live_extraction_aligns_values(study, monkeypatch):
     )
     evidence = full["values"]["deadline"]["evidence"]
     assert evidence["page"] == 2 and squeeze(ROWS["Full proposal"]) in squeeze(evidence["quote"])
+
+
+def test_the_records_file_takes_the_schema_name_as_the_topology_layout_writes_it(study):
+    schemas = study.root / "graph/extraction/schemas.py"
+    schemas.write_text(schemas.read_text().replace("class Profile:", "class HTTPProfile:"))
+
+    result, _ = study.extract("run", "graph/extraction/schemas.py:HTTPProfile", "data/pages")
+
+    assert result.exit_code == 0, result.output
+    assert (study.root / "data/extracted/http_profile.jsonl").is_file()

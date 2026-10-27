@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import json
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any, NoReturn, cast
@@ -38,6 +37,7 @@ from biotope.extraction.run import (
 )
 from biotope.extraction.text import convert, media_type
 from biotope.graph.sources import refresh_description, write_description
+from biotope.graph.topology import snake_case
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     STATUS_PROCESSED,
@@ -170,7 +170,7 @@ def run_command(
     strangers = sorted(chosen - {source.path for source in sources})
     if strangers:
         output.fail(f"{', '.join(strangers)} is not a document of {', '.join(datasets)}")
-    target = out.resolve() if out is not None else root / "data/extracted" / f"{_snake(schema.name)}.jsonl"
+    target = out.resolve() if out is not None else root / "data/extracted" / f"{snake_case(schema.name)}.jsonl"
     try:
         relative = target.relative_to(root)
     except ValueError:
@@ -379,10 +379,6 @@ def _project_path(root: Path, file: Path) -> str:
         return resolved.relative_to(root).as_posix()
     except ValueError:
         return resolved.as_posix()
-
-
-def _snake(name: str) -> str:
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
 def _schema_report(schema: Schema) -> dict[str, Any]:
