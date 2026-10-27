@@ -20,6 +20,7 @@ from biotope.graph.discovery import (
     discover_roots,
     is_generated,
     is_package_name,
+    is_placeholder,
     read_declaration,
     root_manifest,
     unimportable_packages,
@@ -347,14 +348,18 @@ def _scaffold(plan: SourcePlan, target: Target, directory: Path) -> tuple[Packag
     return status, {path.name: text for path, text in missing.items()}
 
 
-def _orphans(plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package]) -> list[PackageStatus]:
+def _orphans(
+    plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package], owners: dict[str, Path]
+) -> list[PackageStatus]:
     live = {target.identity for target in plan.targets}
     found: list[PackageStatus] = []
     for identity, package in sorted(owned.items(), key=lambda entry: entry[1].name):
         if identity in live:
             continue
         gone = f"{identity!r} is no longer described by {plan.metadata.name}"
-        detail = _moved(plan, data, identity, gone, owned) or f"{gone}; delete the directory to remove it"
+        detail = (
+            _moved(plan, data, package.path, identity, gone, owners) or f"{gone}; delete the directory to remove it"
+        )
         declaration = package.declaration
         found.append(
             PackageStatus(
@@ -383,7 +388,9 @@ def _relocated(plan: SourcePlan, data: dict[str, Any], status: PackageStatus) ->
     return replace(status, state="orphaned", detail=detail)
 
 
-def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str, owned: dict[str, Package]) -> str:
+def _moved(
+    plan: SourcePlan, data: dict[str, Any], orphan: Path, identity: str, gone: str, owners: dict[str, Path]
+) -> str:
     moves = {
         old: entry["@id"]
         for entry in objects(data.get("distribution", []), "/distribution")
@@ -398,20 +405,33 @@ def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str, own
     described = ", ".join(repr(item) for item in now) or repr(new)
     moved = f"{gone}: its file {old!r} moved outside biotope to {new!r}, now described as {described}."
     project = project_root(plan.metadata)
-    generated = " and ".join(
-        owned[item].path.resolve().relative_to(project).as_posix() if project else str(owned[item].path)
-        for item in now
-        if item in owned
-    )
-    if not generated:
+
+    def shown(paths: list[Path]) -> str:
+        return " and ".join(path.resolve().relative_to(project).as_posix() if project else str(path) for path in paths)
+
+    if _placeholder(orphan):
+        return f"{moved} Delete {shown([orphan])}, whose loader is still a placeholder"
+    declaring = [owners[item] for item in now if item in owners]
+    placeholders = shown([path for path in declaring if _placeholder(path)])
+    if placeholders:
         return (
-            f"{moved} Declare the new ID in this package and set the revision graph check names, or move the file "
-            "back, rebake and use biotope mv"
+            f"{moved} Delete {placeholders}, then declare the new ID in this package and set the revision graph "
+            f"check names; or move the file back, rebake, use biotope mv and delete {placeholders}"
+        )
+    if declaring:
+        return (
+            f"{moved} {shown(declaring)} already declares the new ID; move what you need from this package there "
+            f"and delete {shown([orphan])}"
         )
     return (
-        f"{moved} Delete {generated}, then declare the new ID in this package and set the revision graph check "
-        f"names; or move the file back, rebake, use biotope mv and delete {generated}"
+        f"{moved} Declare the new ID in this package and set the revision graph check names, or move the file "
+        "back, rebake and use biotope mv"
     )
+
+
+def _placeholder(package: Path) -> bool:
+    loader = package / "loader.py"
+    return not loader.exists() or is_placeholder(loader)
 
 
 def plan_sources(metadata: Path, output: Path, package: str | None = None) -> SourcePlan:
@@ -447,7 +467,13 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
             else:
                 new_files.update({status.path / name: text for name, text in files.items()})
         statuses.append(status)
-    statuses += _orphans(plan, data, ownership.owned)
+    owners = {identity: package.path for identity, package in ownership.owned.items()}
+    owners |= {
+        status.identity: status.path
+        for status in statuses
+        if status.state in ("created", "completed") and status.identity is not None
+    }
+    statuses += _orphans(plan, data, ownership.owned, owners)
     return replace(
         plan,
         statuses=tuple(statuses),

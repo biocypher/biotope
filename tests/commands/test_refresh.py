@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import openpyxl
 import pytest
-from graph_project import MANIFEST, built, findings, invoke, ok, refresh, snapshot
+from graph_project import MANIFEST, PEOPLE, built, findings, invoke, ok, refresh, snapshot
 
 from biotope.graph.inventory import plan_sources
 
@@ -188,25 +188,82 @@ def test_a_move_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(pr
     ), findings(result)
 
 
-def test_the_new_id_declared_where_the_check_says_after_a_move_outside_biotope_builds(project):
-    (project / "data/study/current").mkdir()
-    shutil.move(project / "data/study/push/people.csv", project / "data/study/current/people.csv")
-    refresh()
-    generated = "graph/sources/study/current_people_csv_people"
-
-    [message] = [
-        finding["message"]
+def orphans() -> dict[str, str]:
+    return {
+        finding["subject"]: finding["message"]
         for finding in findings(invoke("graph", "check", "--json"))
         if finding["code"] == "inventory.orphan"
-    ]
+    }
+
+
+def declare(root, package, old, new):
+    schema = root / "graph/sources/study" / package / "schema.py"
+    schema.write_text(schema.read_text().replace(f'"{old}', f'"{new}'))
+
+
+def test_the_new_id_declared_where_generate_and_check_say_after_a_move_outside_biotope_builds(project):
+    (project / "data/study/current").mkdir()
+    shutil.move(project / "data/study/push/people.csv", project / "data/study/current/people.csv")
+    ok("add", "--rebake", "data/study")
+    generation = ok("source", "generate", MANIFEST, "--out", "graph/sources").output
+    generated = "graph/sources/study/current_people_csv_people"
+
+    [message] = orphans().values()
 
     assert f"Delete {generated}, then declare the new ID in this package" in message
+    assert message in generation
     shutil.rmtree(project / generated)
-    schema = project / "graph/sources/study/push_people_csv_people/schema.py"
-    schema.write_text(schema.read_text().replace('"push/people.csv', '"current/people.csv'))
+    declare(project, PEOPLE, "push/people.csv", "current/people.csv")
     refresh()
     acknowledge(project)
     assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 2)
+
+
+@pytest.mark.parametrize("implemented", [False, True])
+def test_a_file_moved_back_outside_biotope_names_no_package_that_reads_it_for_deletion(project, implemented):
+    study, interim = project / "data/study", "graph/sources/study/current_people_csv_people"
+    (study / "current").mkdir()
+    shutil.move(study / "push/people.csv", study / "current/people.csv")
+    refresh()
+    if implemented:
+        loader = project / interim / "loader.py"
+        loader.write_text(loader.read_text().split("\n", 1)[1])
+    shutil.move(study / "current/people.csv", study / "push/people.csv")
+    refresh()
+
+    [(subject, message)] = orphans().items()
+
+    assert subject == "study/current_people_csv_people"
+    assert f"Delete graph/sources/study/{PEOPLE}" not in message
+    assert f"delete {interim}" in message.lower()
+    shutil.rmtree(project / interim)
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+
+
+def test_a_file_moved_twice_outside_biotope_names_only_placeholders_for_deletion(project):
+    study = project / "data/study"
+    for old, new in (("push", "current"), ("current", "latest")):
+        (study / new).mkdir()
+        shutil.move(study / old / "people.csv", study / new / "people.csv")
+        refresh()
+    interim, latest = (f"graph/sources/study/{name}_people_csv_people" for name in ("current", "latest"))
+
+    messages = orphans()
+
+    assert f"Delete {latest}, then declare the new ID in this package" in messages[f"study/{PEOPLE}"]
+    assert f"Delete {interim}," in messages["study/current_people_csv_people"]
+    assert latest not in messages["study/current_people_csv_people"]
+    shutil.rmtree(project / latest)
+    declare(project, PEOPLE, "push/people.csv", "latest/people.csv")
+    refresh()
+    [(subject, message)] = orphans().items()
+    assert subject == "study/current_people_csv_people"
+    assert f"Delete {interim}," in message and f"Delete graph/sources/study/{PEOPLE}" not in message
+    shutil.rmtree(project / interim)
+    refresh()
+    acknowledge(project)
+    assert built(project) == ({"data/study/latest/people.csv", "data/study/docs/report.html"}, 2)
 
 
 def descriptions(root):

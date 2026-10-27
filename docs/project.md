@@ -382,3 +382,7 @@ the file for a single-file dataset, move it with `biotope mv`, and delete the pa
 when a download script puts it there, delete that package first, replace the old ID
 with the new one in the old package's `schema.py`, run `source generate` again and
 set `__source_digest__` to the revision `graph check` names.
+
+`source generate` and `graph check` give the same advice, and name another package
+for deletion only while its loader is still a placeholder. A package generated for a
+path the file has since left, as after the file moved back, is told to delete itself.
