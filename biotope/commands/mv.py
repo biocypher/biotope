@@ -17,7 +17,13 @@ from biotope.extraction.run import STATES, state_path
 from biotope.graph.moves import carry_description, kept, package_files, planned_ids, prune, write_ids
 from biotope.graph.sources import description_text, write_text_atomic
 from biotope.graph.targets import Target
-from biotope.metadata import FILE_OBJECT_TYPE, dataset_id, ensure_no_legacy_file_objects, manifest_for
+from biotope.metadata import (
+    FILE_OBJECT_TYPE,
+    dataset_id,
+    ensure_no_legacy_file_objects,
+    find_owning_manifest,
+    manifest_for,
+)
 from biotope.utils import find_biotope_root, is_file_tracked, warn_ignored
 
 
@@ -106,6 +112,13 @@ class _Plan:
 
 
 def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_root: Path) -> list[_Plan]:
+    for new in moves.values():
+        owner = find_owning_manifest(new, biotope_root) if new.is_file() and new not in moves else None
+        if owner is not None:
+            _refuse(
+                f"{new.relative_to(biotope_root)} is described by {owner.relative_to(biotope_root)}. "
+                "Remove it with biotope rm first, then move the other file onto its path."
+            )
     datasets = biotope_root / ".biotope" / "datasets"
     plans: list[_Plan] = []
     for manifest in sorted(datasets.rglob("*.jsonld")):

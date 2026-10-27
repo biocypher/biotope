@@ -201,6 +201,19 @@ def test_mv_never_replaces_an_annotation_file(single, force):
     assert built(single) == ({"data/raw/people.csv", "data/study/docs/report.html"}, 2)
 
 
+def test_mv_never_replaces_a_described_file(project):
+    (project / "data/study/push/staff.csv").write_text("person_id,name\ns1,Lin\n")
+    refresh()
+    before = snapshot(project)
+
+    refused = invoke("mv", "-f", "data/study/push/staff.csv", "data/study/push/people.csv")
+
+    assert refused.exit_code != 0 and "biotope rm" in refused.output
+    assert snapshot(project) == before
+    refresh()
+    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
+
+
 def baked(tmp_path, monkeypatch):
     from biotope.cli import cli
 
