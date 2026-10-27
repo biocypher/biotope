@@ -64,6 +64,7 @@ Biotope graph project:
 **Step 4: Generate the inventory and decide exclusions.**
 
 - Run `biotope source generate .biotope/datasets/<name>.jsonld --out graph/sources` once per manifest. Every source gets a package with a schema, a `SOURCE` registration and a placeholder loader. Existing files are never rewritten, apart from the IDs `biotope mv` updates, and every revision is recorded in `.biotope/contracts/`.
+- Each manifest's packages sit under a root package named after the manifest's last path part. Two datasets with the same last name, such as `data/a/raw` and `data/b/raw`, would share the root `raw`: the second one's first generation reports a conflict and writes nothing until you name its root with `--package`, as in `biotope source generate .biotope/datasets/data/b/raw.jsonld --out graph/sources --package b_raw`. Later generations, the refresh included, find that root without it.
 - In `graph/sources/__init__.py`, each source is either selected or listed in `EXCLUDED_SOURCES` with a reason a reviewer can check. To leave a source out, exclude it. Deleting its package does not remove it: the next generation recreates the package and the check reports it as stale.
 - The scaffold selects every inventoried source, so a new table or file in later data fails the check until its loader is written. When the project must rebuild after new data without you, select sources by name and exclude the rest with one rule, as in "When the data changes" below.
 

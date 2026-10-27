@@ -267,6 +267,19 @@ the percent-encoding undone: the table `push/people.csv#people` gets the package
 A file no table reads is named after its file name:
 `docs/report.html` gets the package `report_html`. Both are yours to rename.
 
+A description's packages sit under one root package, named after its last path
+part: `.biotope/datasets/data/study.jsonld` gets `graph/sources/study/`. Two
+datasets with the same last name, such as `data/a/raw` and `data/b/raw`, would
+share the root `raw`, so the second one's first generation reports a conflict and
+writes nothing. Name its root with `--package`:
+
+```bash
+biotope source generate .biotope/datasets/data/b/raw.jsonld --out graph/sources --package b_raw
+```
+
+Later generations, the refresh included, find the root that holds the description
+without `--package`.
+
 ## Source revisions cover structure
 
 A source package's `schema.py` pins the revision it was written against in
