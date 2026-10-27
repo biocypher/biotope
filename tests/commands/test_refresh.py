@@ -398,6 +398,36 @@ def test_a_single_file_kept_under_the_id_it_got_outside_biotope_and_moved_outsid
     assert built(single) == ({"data/archive/staff.csv", "data/study/docs/report.html"}, 2)
 
 
+@pytest.mark.parametrize("destination", ["data/archive/staff.csv", "data/raw/people.csv"])
+def test_mv_refuses_a_file_whose_rename_outside_biotope_is_unresolved_until_graph_check_is_followed(
+    single, destination
+):
+    for folder in ("current", "archive"):
+        (single / "data" / folder).mkdir()
+    shutil.move(single / "data/raw/people.csv", single / "data/current/staff.csv")
+    refresh("data/current/staff.csv")
+    before = snapshot(single)
+
+    refused = invoke("mv", "data/current/staff.csv", destination)
+
+    assert refused.exit_code != 0
+    assert "'people.csv'" in refused.output and "biotope graph check" in refused.output
+    assert snapshot(single) == before
+    refresh("data/current/staff.csv")
+    result = invoke("graph", "check", "--json")
+    assert result.exit_code != 0
+    assert any(
+        "'people.csv#people'" in finding["message"]
+        and "'staff.csv#staff'" in finding["message"]
+        and "Delete graph/sources/people_csv/staff_csv_staff" in finding["message"]
+        for finding in findings(result)
+    ), findings(result)
+    keep_the_new_id(single, "data/current/staff.csv")
+    ok("mv", "data/current/staff.csv", destination)
+    refresh(destination)
+    assert built(single) == ({destination, "data/study/docs/report.html"}, 2)
+
+
 @pytest.mark.parametrize(("failure", "message"), [("annotation", "people.csv.biotope.yaml"), ("disk", "disk full")])
 def test_a_takeover_that_fails_changes_nothing_and_works_once_retried(single, failure, message):
     annotation = single / "data/raw/people.csv.biotope.yaml"

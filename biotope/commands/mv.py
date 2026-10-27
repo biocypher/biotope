@@ -12,8 +12,9 @@ from rich.panel import Panel
 
 from biotope.commands.add import directory_files
 from biotope.croissant import annotation
-from biotope.croissant.ids import MOVED_FROM, case_clashes, check_ids, moved_ids, rename, renamer
+from biotope.croissant.ids import MOVED_FROM, case_clashes, check_ids, moved_from, moved_ids, rename, renamer
 from biotope.extraction.run import STATES, state_path
+from biotope.graph.inventory import declared_files
 from biotope.graph.moves import (
     carry_description,
     contract_files,
@@ -204,6 +205,7 @@ def _plan(
         ids = moved_ids(metadata, distribution["@id"], new.relative_to(new_base).as_posix())
         if moved_url == url and all(old_id == new_id for old_id, new_id in ids.items()):
             continue
+        _check_resolved(old, distribution, metadata, manifest, biotope_root)
         mapping |= ids
         distribution["contentUrl"] = moved_url
         distribution.pop(MOVED_FROM, None)
@@ -238,6 +240,23 @@ def _cross_dataset(old: Path, new: Path, manifest: Path, base: Path, biotope_roo
         f"{manifest.relative_to(biotope_root)}, whose data lives under {base.relative_to(biotope_root)}/; "
         f"{new.relative_to(biotope_root)} is outside it. Use biotope add at the new location and biotope rm at the old."
     )
+
+
+def _check_resolved(
+    old: Path, distribution: dict[str, Any], metadata: dict[str, Any], manifest: Path, biotope_root: Path
+) -> None:
+    earlier = moved_from(distribution)
+    if not earlier:
+        return
+    described = {entry.get("@id") for entry in metadata.get("distribution") or []}
+    declared = declared_files(biotope_root / "graph/sources", manifest)
+    unresolved = [identity for identity in earlier if identity in declared and identity not in described]
+    if unresolved:
+        raise _Refused(
+            f"{old.relative_to(biotope_root)} had the ID {', '.join(map(repr, unresolved))} before a move outside "
+            "biotope, and a source package with a written loader still declares it. Resolve that move first as "
+            "biotope graph check advises, then use biotope mv."
+        )
 
 
 def _check_file_sets(
