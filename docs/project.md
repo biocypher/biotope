@@ -140,7 +140,7 @@ description: People and reports of one synthetic study.
 license:
 creator: Ada Lovelace
 file_sets:
-  events partition files: events
+  events/*.parquet: events
 tables:
   push/people.csv#people:
     description: One row per person.
@@ -158,8 +158,9 @@ tables:
   a `Person`. Here `license:` is empty, so the description has no licence.
   `biotope:status` holds the workflow state you set, and `prov:wasDerivedFrom` a
   list of the dataset IDs this dataset was derived from.
-- `file_sets` renames a file set: the key is the name croissant-baker gave it, the
-  value yours. The new name becomes the file set's ID.
+- `file_sets` renames a file set: the key is its include pattern, such as
+  `events/*.parquet`, the value the name you give it. The new name becomes the file
+  set's ID.
 - `tables` is keyed by table ID. A table takes a `description`, a `key` (a column
   name or a list of them) and other Croissant keys. `columns` is keyed by each
   column's name in the data and takes a `description`, an `equivalentProperty` and
@@ -244,8 +245,9 @@ cannot give every file and table a stable ID: the paths push/People.csv and push
 cannot give every file and table a stable ID: the file set name 'parts' is used 2 times, by the file sets of a/*.parquet and b/*.parquet; rename one
 ```
 
-Rename one of the files, or rename one file set in the annotation file. No ID gets
-a suffix that depends on order or on other files.
+Rename one of the files, or rename one file set in the annotation file by its
+include pattern, as in `file_sets: {a/*.parquet: a parts}`. No ID gets a suffix
+that depends on order or on other files.
 
 `biotope source generate` names packages and record classes after the IDs: the
 table `push/people.csv#people` gets the package `push_people_csv_people` and the

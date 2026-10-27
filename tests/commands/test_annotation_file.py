@@ -164,7 +164,7 @@ def test_a_file_set_takes_its_name_from_the_annotation_file_until_the_name_is_re
     annotation = fresh / "data/study/.biotope.yaml"
     baked = described(fresh)
     annotation.write_text(
-        "file_sets:\n  events partition files: events\ntables:\n  events#events:\n    description: Events.\n"
+        "file_sets:\n  events/*.parquet: events\ntables:\n  events#events:\n    description: Events.\n"
     )
     ok("map", "inspect", MANIFEST)
     named = described(fresh)

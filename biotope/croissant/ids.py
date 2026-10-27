@@ -63,6 +63,10 @@ def _named(value: object) -> list[str]:
     return [item["@id"] if isinstance(item, dict) else item for item in items if isinstance(item, dict | str)]
 
 
+def includes(entry: dict[str, Any]) -> str:
+    return ", ".join(map(str, _named(entry.get("includes"))))
+
+
 def read_files(record: dict[str, Any], key: str = "field") -> set[str]:
     found: set[str] = set()
     fields = record.get(key)
@@ -158,7 +162,7 @@ def _check(distribution: list[dict[str, Any]], records: list[dict[str, Any]]) ->
     sets: defaultdict[str, list[str]] = defaultdict(list)
     for entry in distribution:
         if is_kind(entry, "FileSet"):
-            sets[str(entry.get("name") or entry["@id"])].append(", ".join(map(str, _named(entry.get("includes")))))
+            sets[str(entry.get("name") or entry["@id"])].append(includes(entry))
     problems += [
         f"the file set name {name!r} is used {len(found)} times, by the file sets of {' and '.join(found)}; rename one"
         for name, found in sets.items()

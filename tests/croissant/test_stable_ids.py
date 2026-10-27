@@ -157,3 +157,9 @@ def test_paths_differing_only_in_case_and_a_file_set_name_used_twice_fail_naming
     message = " ".join(result.output.split())
     assert all(name in message for name in named), message
     assert not (tmp_path / ".biotope/datasets/data/study.jsonld").exists()
+    if kind == "file set":
+        (dataset / ".biotope.yaml").write_text("file_sets:\n  a/sales/*.parquet: a_sales\n")
+        assert invoke("add", "data/study").exit_code == 0
+        described = json.loads((tmp_path / ".biotope/datasets/data/study.jsonld").read_text())
+        sets = {entry["@id"] for entry in described["distribution"] if entry["@type"] == "cr:FileSet"}
+        assert sets == {"a_sales", "sales%20partition%20files"}

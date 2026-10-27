@@ -11,7 +11,7 @@ from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.constructor import SafeConstructor
 from ruamel.yaml.util import load_yaml_guess_indent
 
-from biotope.croissant.ids import is_kind, stable_ids
+from biotope.croissant.ids import includes, is_kind, stable_ids
 
 
 FOLDER_FILE = ".biotope.yaml"
@@ -70,12 +70,7 @@ def current(description: Mapping[str, Any], annotation: Mapping[str, Any]) -> di
         is_kind(entry, "FileSet") and "name" in (entry.get(FROM_DATA) or {})
         for entry in description.get("distribution") or []
     )
-    given_names = _mapping(annotation.get(FILE_SETS))
-    for entry in data.get("distribution") or []:
-        if is_kind(entry, "FileSet") and entry.get("name") in given_names:
-            _put(entry, "name", given_names[entry["name"]])
-            renamed = True
-    if renamed:
+    if name_file_sets(data, annotation) or renamed:
         stable_ids(data)
     for key, value in annotation.items():
         if key not in (TABLES, FILE_SETS):
@@ -99,6 +94,16 @@ def current(description: Mapping[str, Any], annotation: Mapping[str, Any]) -> di
     return data
 
 
+def name_file_sets(data: dict[str, Any], annotation: Mapping[str, Any]) -> bool:
+    given = _mapping(annotation.get(FILE_SETS))
+    named = [
+        entry for entry in data.get("distribution") or [] if is_kind(entry, "FileSet") and includes(entry) in given
+    ]
+    for entry in named:
+        _put(entry, "name", given[includes(entry)])
+    return bool(named)
+
+
 def restored(description: Mapping[str, Any]) -> dict[str, Any]:
     data = copy.deepcopy(dict(description))
     for item in _items(data):
@@ -111,10 +116,8 @@ def restored(description: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def unknown(description: Mapping[str, Any], annotation: Mapping[str, Any]) -> list[str]:
-    files = {
-        entry.get("name") for entry in restored(description).get("distribution") or [] if is_kind(entry, "FileSet")
-    }
-    found = [f"file set {name!r}" for name in _mapping(annotation.get(FILE_SETS)) if name not in files]
+    files = {includes(entry) for entry in restored(description).get("distribution") or [] if is_kind(entry, "FileSet")}
+    found = [f"file set {pattern!r}" for pattern in _mapping(annotation.get(FILE_SETS)) if pattern not in files]
     records = {record.get("@id"): record for record in current(description, annotation).get("recordSet") or []}
     for identity, given in _mapping(annotation.get(TABLES)).items():
         if identity not in records:

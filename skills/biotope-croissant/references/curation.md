@@ -24,7 +24,7 @@ tables:
 
 - Top-level keys are dataset fields, written into the manifest as Croissant keys: `name`, `description`, `license`, `creator`, `citeAs`, `keywords`, `url`, `version` and the like. A `creator` given as a name or a mapping becomes a `Person`.
 - `tables` is keyed by table ID, as `biotope map inspect <manifest> --json` prints it. A table takes a `description`, a `key` (a column name or a list of them) and other Croissant keys; `columns` is keyed by each column's name in the data and takes a `description`, an `equivalentProperty` and other Croissant keys.
-- `file_sets` renames a file set, which also renames its ID: `file_sets: {events partition files: events}`.
+- `file_sets` renames a file set, keyed by its include pattern, which also renames its ID: `file_sets: {events/*.parquet: events}`.
 - Column types and nullability belong in each source's `schema.py`, not here.
 
 Write values by hand or with commands, which write only the values given and keep comments:
