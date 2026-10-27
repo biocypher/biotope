@@ -43,7 +43,7 @@ dependencies = [
     "pydantic>=2.6",
     "croissant-baker>=0.5,<1",
     "tomli>=1.1; python_version < '3.11'",
-    "importlib-metadata>=6.3; python_version < '3.11'",
+    "importlib-metadata>=6.3; python_version < '3.12'",
     "pypdfium2>=5.14,<6",
     "ruamel-yaml>=0.18,<0.19",
 ]

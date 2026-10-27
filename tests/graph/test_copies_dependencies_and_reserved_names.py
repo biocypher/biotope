@@ -1,6 +1,8 @@
 import gzip
+import importlib.machinery
 import importlib.metadata
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -39,6 +41,30 @@ def test_run_json_records_every_declared_and_every_imported_distribution(tmp_pat
     recorded = json.loads((root / "graph/build/recorded/run.json").read_text())["dependencies"]
     for name in ("biotope", "pyyaml", "rich"):
         assert recorded[name]["version"] == importlib.metadata.version(name)
+
+
+def test_graph_check_counts_a_compiled_module_that_declares_no_top_level_names(tmp_path):
+    root = prepare(tmp_path)
+    site = tmp_path / "site"
+    info = site / "fastmod-1.0.dist-info"
+    info.mkdir(parents=True)
+    (site / ("fastmod" + importlib.machinery.EXTENSION_SUFFIXES[0])).write_bytes(b"")
+    (site / "fastmod.pyi").write_text("VALUE: int\n")
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: fastmod\nVersion: 1.0\n")
+    (info / "RECORD").touch()
+    installed = sorted(path.relative_to(site).as_posix() for path in site.rglob("*") if path.is_file())
+    (info / "RECORD").write_text("".join(f"{name},,\n" for name in installed))
+    (root / "graph/mappings/fast.py").write_text("from fastmod import VALUE\n\nDOUBLED = 2 * VALUE\n")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "biotope.cli", "graph", "check", "--json"],
+        cwd=root,
+        env={**os.environ, "PYTHONPATH": str(site)},
+        text=True,
+        capture_output=True,
+    )
+
+    assert json.loads(result.stdout)["imports"] == {"fastmod": ["fastmod"]}, result.stdout + result.stderr
 
 
 def test_graph_check_reports_a_reserved_property_name_without_running_a_loader(tmp_path):

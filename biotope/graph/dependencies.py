@@ -11,11 +11,13 @@ from pathlib import Path
 
 
 if sys.version_info >= (3, 11):
-    from importlib.metadata import packages_distributions
-
     import tomllib
 else:
     import tomli as tomllib
+
+if sys.version_info >= (3, 12):
+    from importlib.metadata import packages_distributions
+else:
     from importlib_metadata import packages_distributions
 
 
