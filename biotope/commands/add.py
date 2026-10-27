@@ -231,8 +231,10 @@ def add_file(
     _apply_dataset_metadata(metadata, defaults, overrides)
     _apply_pipeline_state(metadata, overrides)
     manifest = resolve_target(abs_file, biotope_root).metadata_path
-    previous = None if manifest.exists() else _gone_copy(abs_file, biotope_root)
-    if previous is None:
+    previous = manifest if manifest.exists() else _gone_copy(abs_file, biotope_root)
+    if previous is not None:
+        note_moves(_read_description(previous), metadata)
+    if previous in (None, manifest):
         _describe(abs_file, manifest, metadata, given, reporter)
     else:
         _take_over(previous, abs_file, manifest, metadata, given, biotope_root, reporter)
@@ -262,7 +264,6 @@ def _take_over(
         annotation.current(baked, annotation.read(next(iter(carried), notes)))
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
-    note_moves(json.loads(previous.read_text(encoding="utf-8")), baked)
     with kept([previous, manifest, notes, *carried, *package_files(biotope_root / "graph/sources", previous)]):
         warn_ignored(biotope_root, carry_description(biotope_root, previous, manifest))
         for old, new in carried.items():
@@ -275,14 +276,19 @@ def _take_over(
     )
 
 
+def _read_description(path: Path) -> dict[str, Any]:
+    try:
+        described = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return described if isinstance(described, dict) else {}
+
+
 def _describes_gone_copy(description: Path, checksum: str, biotope_root: Path) -> bool:
     data = dataset_id(description, biotope_root)
     if (biotope_root / data).exists():
         return False
-    try:
-        described = json.loads(description.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
+    described = _read_description(description)
     files = [entry for entry in described.get("distribution") or [] if entry.get("@type") == FILE_OBJECT_TYPE]
     return [(entry.get("contentUrl"), entry.get("sha256")) for entry in files] == [(data, checksum)]
 

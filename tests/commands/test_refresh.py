@@ -142,15 +142,15 @@ def descriptions(root):
 def test_a_single_file_moved_outside_biotope_fails_the_check_naming_the_old_and_the_new_id(single, moved):
     (single / moved).parent.mkdir(exist_ok=True)
     shutil.move(single / "data/raw/people.csv", single / moved)
-    refresh(moved)
 
-    result = invoke("graph", "check", "--json")
-
-    assert result.exit_code != 0
-    assert any(
-        "'people.csv#people'" in finding["message"] and "'staff.csv#staff'" in finding["message"]
-        for finding in findings(result)
-    ), findings(result)
+    for _ in range(2):
+        refresh(moved)
+        result = invoke("graph", "check", "--json")
+        assert result.exit_code != 0
+        assert any(
+            "'people.csv#people'" in finding["message"] and "'staff.csv#staff'" in finding["message"]
+            for finding in findings(result)
+        ), findings(result)
     assert descriptions(single) == sorted(
         {"data", "data/study.jsonld", Path(moved).parent.as_posix(), f"{moved}.jsonld"}
     )
