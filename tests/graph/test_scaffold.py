@@ -184,7 +184,8 @@ def test_definition_check_reports_missing_purpose_and_requirements(tmp_path, mon
     monkeypatch.chdir(tmp_path)
     pipeline = Pipeline("review", Topology(()), (), (), lambda ctx: None, scope="definitions", code_paths=(__file__,))
     assert any(f["code"] == "intent.absent" for f in check_pipeline(pipeline, static=False)["findings"])
-    intent = Path("project.yaml")
+    intent = Path(".biotope/project.yaml")
+    intent.parent.mkdir()
     Project(name="review").dump(intent)
     warnings = [f["message"] for f in check_pipeline(pipeline, static=False)["findings"] if f["severity"] == "warning"]
     assert any("No research purpose" in item for item in warnings)
