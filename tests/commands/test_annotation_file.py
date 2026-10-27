@@ -296,12 +296,15 @@ def test_map_inspect_refuses_an_invalid_annotation_file_and_names_a_single_file_
 def test_every_command_writes_the_description_in_utf_8(fresh):
     (fresh / "data/study/push/other.csv").write_text("x,y\n1,2\n")
     (fresh / "data/sets").mkdir()
-    ok("add", "data/study", "--description", "Données de l'étude")
-    ok("mark", "data/study", "mapped")
-    ok("mv", "data/study/push/people.csv", "data/study/push/staff.csv")
-    ok("rm", "-f", "data/study/push/other.csv")
-    ok("mv", "-r", "data/study", "data/sets/study")
-    assert "Données" in (fresh / ".biotope/datasets/data/sets/study.jsonld").read_text(encoding="utf-8")
+    for command, manifest in (
+        (("add", "data/study", "--description", "Données de l'étude"), MANIFEST),
+        (("mark", "data/study", "mapped"), MANIFEST),
+        (("mv", "data/study/push/people.csv", "data/study/push/staff.csv"), MANIFEST),
+        (("rm", "-f", "data/study/push/other.csv"), MANIFEST),
+        (("mv", "-r", "data/study", "data/sets/study"), ".biotope/datasets/data/sets/study.jsonld"),
+    ):
+        ok(*command)
+        assert "Données" in (fresh / manifest).read_text(encoding="utf-8"), command
 
 
 def test_files_whose_names_differ_only_in_extension_and_a_folder_of_their_stem_keep_their_own_descriptions(fresh):
