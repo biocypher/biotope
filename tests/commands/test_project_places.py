@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 from click.testing import CliRunner
+from graph_project import buildable
 
 from biotope.cli import cli
 
@@ -279,6 +280,45 @@ def warnings_of():
     yield ("rm", "-f", "data/things/second.csv"), [manifest]
 
 
+def hand_edits(root):
+    manifest = ".biotope/datasets/data/study.jsonld"
+    notes = root / "data/study/.biotope.yaml"
+    readers = [
+        ("source", "generate", manifest, "--out", "graph/sources"),
+        ("graph", "check"),
+        ("graph", "build"),
+        ("status",),
+        ("map", "inspect", manifest),
+        ("queue",),
+        ("extract", "run", PROFILE, "data/study"),
+    ]
+    for number, args in enumerate(readers):
+        notes.write_text(f"description: Edited by hand, {number}.\n")
+        yield args, [manifest], []
+        yield args, [], [manifest]
+    notes.write_text("description: Edited by hand again.\n")
+    yield ("annotate", "set", "data/study", "description=Set."), [manifest, "data/study/.biotope.yaml"], []
+    (root / "data/extracted/profile.jsonl.biotope.yaml").write_text("url: https://example.org/profiles\n")
+    yield ("extract", "run", PROFILE, "data/study"), [".biotope/datasets/data/extracted/profile.jsonl.jsonld"], []
+
+
+def check_warnings(root, repository, args, expected, unexpected=()):
+    rules = (root / ".gitignore").read_bytes()
+    result = invoke(*args)
+    assert result.exit_code == 0, (args, result.output)
+    assert (root / ".gitignore").read_bytes() == rules
+    shown = " ".join(result.output.split())
+    if not repository:
+        assert "git ignores" not in shown, args
+        return
+    warned = re.findall(r"git ignores (\S+?)\.? Commit", shown)
+    assert len(warned) == len(set(warned)), (args, warned)
+    for path in expected:
+        assert any(item.startswith(path) for item in warned), (args, path, result.output)
+    for path in unexpected:
+        assert not any(item.startswith(path) for item in warned), (args, path, result.output)
+
+
 def test_writers_warn_when_git_ignores_what_they_write(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
@@ -287,20 +327,17 @@ def test_writers_warn_when_git_ignores_what_they_write(tmp_path, monkeypatch):
         root.mkdir()
         monkeypatch.chdir(root)
         ignoring_project(root, repository)
-        rules = (root / ".gitignore").read_bytes()
         for args, expected in warnings_of():
-            result = invoke(*args)
-            assert result.exit_code == 0, (args, result.output)
-            shown = " ".join(result.output.split())
-            if not repository:
-                assert "git ignores" not in shown, args
-                continue
-            warned = re.findall(r"git ignores (\S+?)\.? Commit", shown)
-            assert len(warned) == len(set(warned)), (args, warned)
-            for path in expected:
-                assert any(item.startswith(path) for item in warned), (args, path, result.output)
-            assert (root / ".gitignore").read_bytes() == rules
+            check_warnings(root, repository, args, expected)
         if repository:
             assert (
                 subprocess.run([GIT, "check-ignore", ".biotope/datasets/data/things.jsonld"], cwd=root).returncode == 0
             )
+        edited = buildable(tmp_path / f"{root.name}-graph", monkeypatch)
+        if repository:
+            git(edited, "init", "-q")
+            (edited / ".gitignore").write_text("/.biotope/\n/data/\n")
+        configure(edited)
+        shutil.copy(FIXTURES / "extraction/schemas.py", edited / "graph/extraction/profile.py")
+        for args, expected, unexpected in hand_edits(edited):
+            check_warnings(edited, repository, args, expected, unexpected)

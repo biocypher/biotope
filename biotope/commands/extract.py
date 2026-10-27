@@ -46,7 +46,7 @@ from biotope.metadata import (
     manifest_for,
     resolve_content_url,
 )
-from biotope.utils import find_biotope_root, ignored_by_git
+from biotope.utils import find_biotope_root, ignored_by_git, unreported
 
 
 class Output:
@@ -224,7 +224,7 @@ def run_command(
     for record_id in result.appeared:
         output.row("New", record_id)
     output.row("Saved", relative.as_posix(), f"registered as {manifest.relative_to(root).as_posix()}")
-    for path in ignored:
+    for path in unreported(root, ignored):
         output.row("WARN", f"git ignores {path}", "Commit it with the project: add an exception to .gitignore.")
     output.finish(any(outcome.status in {"failed", "missing"} for outcome in result.documents))
 

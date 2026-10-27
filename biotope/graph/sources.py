@@ -18,6 +18,7 @@ from urllib.parse import unquote
 from biotope.croissant import annotation
 from biotope.graph.annotations import is_string, nested_records
 from biotope.graph.standardization import field_aliases, field_bindings
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 # The 0.9 generator's header: schemas carrying it are authored files now, and a root carrying it is regenerated.
@@ -109,6 +110,9 @@ def refresh_description(path: Path) -> dict[str, Any]:
         described = _described(path, data)
         if described != data:
             _write_description(path, described)
+            root = find_biotope_root(path.parent)
+            if root is not None:
+                warn_ignored(root, [path.absolute()])
             data = described
     seen: set[str] = set()
 

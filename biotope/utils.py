@@ -120,8 +120,16 @@ def ignored_by_git(root: Path, paths: Iterable[Path]) -> list[str]:
     return sorted(path for path in checked.stdout.split("\0") if path) if checked.returncode == 0 else []
 
 
+def unreported(root: Path, ignored: Iterable[str]) -> list[str]:
+    context = click.get_current_context(silent=True)
+    reported: set[Path] = set() if context is None else context.meta.setdefault("biotope.reported_ignored", set())
+    fresh = [path for path in ignored if root.resolve() / path not in reported]
+    reported.update(root.resolve() / path for path in fresh)
+    return fresh
+
+
 def warn_ignored(root: Path, paths: Iterable[Path]) -> None:
-    for path in ignored_by_git(root, paths):
+    for path in unreported(root, ignored_by_git(root, paths)):
         click.echo(
             f"Warning: git ignores {path}. Commit it with the project: add an exception to .gitignore.", err=True
         )
