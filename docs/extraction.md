@@ -273,7 +273,9 @@ sorted by record ID. Commit it with the project; the `.gitignore` that
 `prov:wasDerivedFrom` the input datasets and a RecordSet keyed by `id`. Its table
 is `<schema>.jsonl#<schema>`, such as `funding_round.jsonl#funding_round`. It has
 no `creator` or `license` unless its annotation file gives them: biotope cannot
-know them.
+know them. It is the records' only description: a folder dataset that holds a
+records file, as `biotope add data` holds `data/extracted/`, leaves the file out,
+so the records get one source package.
 Croissant-baker describes the file. Biotope then writes the RecordSet's fields from
 the schema, because the baker infers fields from the values present: it would drop
 a field that is null in every record and describe lists as opaque arrays. Each

@@ -14,6 +14,7 @@ import click
 from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
 from biotope.croissant.ids import note_moves, stable_ids
+from biotope.extraction.run import state_path
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import (
     DERIVED_FROM,
@@ -320,9 +321,12 @@ def _bake_directory(
     defaults = load_project_metadata(biotope_root)
     now = datetime.now(tz=timezone.utc).isoformat()
 
-    files = sorted(_iter_directory_files(abs_dir))
+    found = sorted(_iter_directory_files(abs_dir))
+    records = [path for path in found if state_path(biotope_root, path).is_file()]
+    files = [path for path in found if path not in records]
     copies = _identical_copies(files)
-    excluded = {escape_glob(str(copy.relative_to(abs_dir))): copy for copy in copies}
+    skipped = {**{copy: "the identical copy" for copy in copies}, **{path: "the extracted records" for path in records}}
+    excluded = {escape_glob(str(path.relative_to(abs_dir))): path for path in skipped}
     bake_error = None
     with reporter.scan(abs_dir, abs_dir) as report:
         for relative in (path.relative_to(abs_dir) for path in files if path not in copies):
@@ -331,7 +335,7 @@ def _bake_directory(
                 reporter.warning(
                     abs_dir,
                     f"{relative} was not parsed: croissant-baker matches exclusions by path suffix, "
-                    f"so skipping the identical copy {caught.relative_to(abs_dir)} also skipped it",
+                    f"so skipping {skipped[caught]} {caught.relative_to(abs_dir)} also skipped it",
                 )
         try:
             from croissant_baker.metadata_generator import MetadataGenerator

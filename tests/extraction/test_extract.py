@@ -1060,3 +1060,17 @@ def test_the_records_file_takes_the_schema_name_as_the_topology_layout_writes_it
 
     assert result.exit_code == 0, result.output
     assert (study.root / "data/extracted/http_profile.jsonl").is_file()
+
+
+def test_a_folder_dataset_holding_the_records_does_not_describe_them_again(study):
+    assert study.run("add", "data").exit_code == 0
+    result, _ = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+
+    rebaked = study.run("add", "--rebake", "data")
+
+    assert rebaked.exit_code == 0, rebaked.output
+    described = json.loads((study.root / ".biotope/datasets/data.jsonld").read_text())
+    identities = [entry["@id"] for entry in [*described["distribution"], *described.get("recordSet", [])]]
+    assert "pages/lind.html" in identities
+    assert [identity for identity in identities if "extracted" in identity] == []

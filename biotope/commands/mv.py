@@ -34,7 +34,7 @@ from rich.panel import Panel
 
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
-from biotope.extraction.run import STATES
+from biotope.extraction.run import state_path
 from biotope.graph.moves import follow_manifest, package_files, planned_ids, write_ids
 from biotope.graph.sources import description_text, write_description, write_module, write_text_atomic
 from biotope.graph.targets import Target
@@ -126,9 +126,7 @@ def _move_annotation(source: Path, destination: Path, biotope_root: Path) -> Non
 
 
 def _move_extraction_state(source: Path, destination: Path, biotope_root: Path) -> None:
-    old, new = (
-        biotope_root / STATES / path.relative_to(biotope_root).with_suffix(".json") for path in (source, destination)
-    )
+    old, new = (state_path(biotope_root, path) for path in (source, destination))
     if old.is_file() and destination.is_file() and not source.exists():
         new.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(old), str(new))

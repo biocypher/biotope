@@ -21,7 +21,6 @@ from biotope.extraction import ExtractionError, Extractor, Schema
 from biotope.extraction.describe import describe
 from biotope.extraction.run import (
     PROGRESS,
-    STATES,
     Outcome,
     Review,
     Source,
@@ -34,6 +33,7 @@ from biotope.extraction.run import (
     review,
     run,
     sha256,
+    state_path,
 )
 from biotope.extraction.text import convert, media_type
 from biotope.graph.sources import refresh_description, write_description
@@ -187,7 +187,7 @@ def run_command(
         )
         warnings.append(warning)
         output.row("WARN", "untried schema", warning)
-    state = root / STATES / relative.with_suffix(".json")
+    state = state_path(root, target)
     progress = root / PROGRESS / relative
     result = run(root, schema, extractor, sources, target, state, progress, chosen, output.progress, parallel)
     manifest = manifest_for(target, root)
