@@ -42,7 +42,6 @@ from biotope.utils import (
 
 @click.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, path_type=Path))
-@click.option("--force", "-f", is_flag=True, help="Force add even if file already tracked")
 @click.option(
     "--rebake", is_flag=True, help="Describe an already-tracked dataset again from its data and annotation file"
 )
@@ -79,7 +78,6 @@ from biotope.utils import (
 )
 def add(
     paths: tuple[Path, ...],
-    force: bool,
     rebake: bool,
     as_json: bool,
     name: str | None,
@@ -155,14 +153,12 @@ def add(
         added_entries: list[Path] = []
         for path in paths:
             if path.is_file():
-                if add_file(
-                    path, biotope_root, datasets_dir, force or rebake, overrides, given=given, reporter=reporter
-                ):
+                if add_file(path, biotope_root, datasets_dir, rebake, overrides, given=given, reporter=reporter):
                     added_entries.append(path)
                 continue
 
             target = resolve_target(path, biotope_root)
-            if target.metadata_path.exists() and not force and not rebake:
+            if target.metadata_path.exists() and not rebake:
                 reporter.skipped(
                     path, f"{target.metadata_path.relative_to(biotope_root)} already exists; use --rebake to refresh."
                 )

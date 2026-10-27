@@ -23,7 +23,6 @@ inspection does not.
 `add` writes the description to `.biotope/datasets/` and creates the dataset's
 annotation file next to the data. `add --rebake <path>` describes an added dataset
 again from its data and applies its annotation file again; it always succeeds.
-`--force` does the same.
 
 ## Annotate
 

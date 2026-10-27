@@ -148,8 +148,8 @@ def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
     shows_every_annotation(described(fresh))
     assert table(described(fresh), "push/projects.csv#projects")
 
-    retired = invoke("add", "data/study", "--bake-to", "review.jsonld")
-    assert retired.exit_code != 0 and "No such option" in retired.output
+    for retired in (invoke("add", "data/study", "--bake-to", "review.jsonld"), invoke("add", "data/study", "--force")):
+        assert retired.exit_code != 0 and "No such option" in retired.output
     (fresh / "authored.jsonld").write_text(json.dumps({"name": "study", "recordSet": []}))
     retired = invoke("source", "register", "authored.jsonld", "--name", "study", "--replace")
     assert retired.exit_code != 0 and "No such option" in retired.output
