@@ -68,16 +68,10 @@ def resolve_project_path(start: Path | None = None) -> Path:
 
 
 def find_project(start: Path | None = None) -> Path | None:
-    """Walk upward from ``start`` to find the nearest ``project.yaml``.
-
-    Checks both the visible (``project.yaml``) and hidden
-    (``.biotope/project.yaml``) locations.
-    """
     cur = (start if start is not None else Path.cwd()).resolve()
     for parent in [cur, *cur.parents]:
-        for candidate in (parent / ".biotope" / "project.yaml", parent / "project.yaml"):
-            if candidate.is_file():
-                return candidate
+        if (candidate := resolve_project_path(parent)).is_file():
+            return candidate
     return None
 
 
