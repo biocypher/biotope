@@ -27,7 +27,7 @@ Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of tru
 - `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `extraction/` the extraction stage (schemas, the extractor protocol, the LLM extractor, document text and stored records), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
 - `skills/`: the agent skills shipped in the Claude plugin (`.claude-plugin/`): `biotope-croissant` (project workflow and its ownership rules) and `biocypher`.
 - `tests/`: `unit/`, `commands/`, `croissant/`, `graph/`, `extraction/` (against a fake OpenAI-compatible endpoint) and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
-- `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync), `roadmap.md`, `specs/` (one spec per milestone, format in `specs/README.md`) and `research/` (notes behind tool and model choices).
+- `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync), `roadmap.md`, `specs/` (the spec rule and format in `specs/README.md`; a milestone's spec lives only on its branch) and `research/` (notes behind tool and model choices).
 
 ### Commands
 
@@ -56,7 +56,8 @@ uv run mkdocs build --strict                 # docs
 Work is planned in milestones, one spec and one PR each. The orchestrator runs it with fleet's `orchestrate` skill. Every agent follows these rules:
 
 - Never commit to `main`. Only Vlad merges.
-- A merged spec in `docs/specs/` is frozen. Never weaken, drop or reinterpret an acceptance criterion. If one is wrong or impossible, comment `BLOCKED on AC-n` with your evidence and options, and stop work on it.
+- Newer specs supersede older ones. The current spec is the first commit of its milestone's draft PR, and a final commit deletes it before merge; there is no separate spec PR. The lifecycle is in `docs/specs/README.md`.
+- Once Vlad approves a spec, it is frozen until merge. Never weaken, drop or reinterpret an acceptance criterion. If one is wrong or impossible, comment `BLOCKED on AC-n` with your evidence and options, and stop work on it.
 - Never make a test pass by weakening it: no new skip or xfail, no removed assertions, no loosened tolerances, no mocking of the code under test.
 - Generated files, such as run records and lock files, are marked `linguist-generated=true` in `.gitattributes`. Upstream code is pinned to a release or commit, never copied in.
 - Out-of-scope findings become GitHub issues, not extra scope.
