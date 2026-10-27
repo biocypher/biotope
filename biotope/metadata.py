@@ -21,6 +21,8 @@ STATUS_RAW = "raw"
 STATUS_PROCESSED = "processed"
 STATUS_MAPPED = "mapped"
 STATUS_VALUES = (STATUS_RAW, STATUS_PROCESSED, STATUS_MAPPED)
+STATUS = "biotope:status"
+DERIVED_FROM = "prov:wasDerivedFrom"
 
 
 @dataclass(frozen=True)
@@ -143,7 +145,7 @@ def get_status(metadata: dict[str, Any]) -> str:
     Legacy manifests (no ``biotope:status`` field) are treated as ``raw`` —
     the conservative default since nothing has explicitly declared otherwise.
     """
-    value = metadata.get("biotope:status")
+    value = metadata.get(STATUS)
     if value in STATUS_VALUES:
         return value
     return STATUS_RAW
@@ -154,7 +156,7 @@ def set_status(metadata: dict[str, Any], status: str) -> None:
     if status not in STATUS_VALUES:
         msg = f"invalid status {status!r}; expected one of {STATUS_VALUES}"
         raise ValueError(msg)
-    metadata["biotope:status"] = status
+    metadata[STATUS] = status
 
 
 def classify_status_from_baker(metadata: dict[str, Any]) -> str:
@@ -178,7 +180,7 @@ def get_derived_from(metadata: dict[str, Any]) -> list[str]:
     Accepts both the single-value form (``"X"`` or ``{"@id": "X"}``) and the
     list form. Returns ``[]`` when absent.
     """
-    raw = metadata.get("prov:wasDerivedFrom")
+    raw = metadata.get(DERIVED_FROM)
     if raw is None:
         return []
     items = raw if isinstance(raw, list) else [raw]
@@ -199,7 +201,7 @@ def add_derived_from(metadata: dict[str, Any], source_id: str) -> None:
     if source_id in existing:
         return
     refs = existing + [source_id]
-    metadata["prov:wasDerivedFrom"] = [{"@id": ref} for ref in refs]
+    metadata[DERIVED_FROM] = [{"@id": ref} for ref in refs]
 
 
 def update_manifest_status(manifest_path: Path, status: str) -> bool:

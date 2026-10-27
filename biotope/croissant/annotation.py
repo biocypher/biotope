@@ -21,6 +21,7 @@ TABLES = "tables"
 COLUMNS = "columns"
 FILE_SETS = "file_sets"
 KEY = "key"
+LINEAGE = "prov:wasDerivedFrom"
 
 
 class _Constructor(SafeConstructor):
@@ -78,7 +79,7 @@ def current(description: Mapping[str, Any], annotation: Mapping[str, Any]) -> di
         stable_ids(data)
     for key, value in annotation.items():
         if key not in (TABLES, FILE_SETS):
-            _put(data, key, _creators(value) if key == "creator" else value)
+            _put(data, key, _creators(value) if key == "creator" else _lineage(value) if key == LINEAGE else value)
     records = {record.get("@id"): record for record in data.get("recordSet") or []}
     for identity, given in _mapping(annotation.get(TABLES)).items():
         record = records.get(identity)
@@ -209,6 +210,10 @@ def _creators(value: object) -> object:
     if _empty(value):
         return value
     return [_person(item) for item in value] if isinstance(value, list) else _person(value)
+
+
+def _lineage(value: object) -> object:
+    return [{"@id": item} if isinstance(item, str) else item for item in value] if isinstance(value, list) else value
 
 
 def names(value: object) -> list[str]:

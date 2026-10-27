@@ -156,6 +156,8 @@ tables:
   `creator`, `citeAs`, `keywords`, `url`, `version` and the like. A `creator`
   given as a name or a mapping, such as `{name: Ada Lovelace, email: ...}`, becomes
   a `Person`. Here `license:` is empty, so the description has no licence.
+  `biotope:status` holds the workflow state you set, and `prov:wasDerivedFrom` a
+  list of the dataset IDs this dataset was derived from.
 - `file_sets` renames a file set: the key is the name croissant-baker gave it, the
   value yours. The new name becomes the file set's ID.
 - `tables` is keyed by table ID. A table takes a `description`, a `key` (a column
@@ -180,7 +182,10 @@ biotope annotate set data/study --table 'push/people.csv#people' --column person
   `--url`, `--citation` (written as `citeAs`), `--version`, `--keyword`
   (repeatable, written as `keywords`), `--access-restrictions`,
   `--legal-obligations`, `--collaboration-partner`, and `--rai KEY=VALUE`, written
-  as given.
+  as given. `--status` writes `biotope:status` and `--derived-from` (repeatable)
+  `prov:wasDerivedFrom`.
+- `biotope mark DATA STATUS` writes `biotope:status`, and its `--derived-from`
+  adds to `prov:wasDerivedFrom`.
 - `biotope annotate set DATA KEY=VALUE...` writes into the annotation file of
   `DATA`, the path you added. Without `--table` the values describe the dataset,
   with `--table <ID>` that table, and with `--column <name>` that column. A

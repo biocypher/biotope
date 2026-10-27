@@ -16,7 +16,9 @@ from biotope.croissant import annotation
 from biotope.croissant.ids import note_moves, stable_ids
 from biotope.graph.sources import read_metadata, write_description, write_text_atomic
 from biotope.metadata import (
+    DERIVED_FROM,
     FILE_OBJECT_TYPE,
+    STATUS,
     add_derived_from,
     classify_status_from_baker,
     dataset_id,
@@ -141,7 +143,11 @@ def add(
         if keywords:
             given["keywords"] = list(keywords)
         given.update(rai_fields)
-        overrides = {**default_overrides(), "status_override": status_override, "derived_from": resolved_provenance}
+        if status_override is not None:
+            given[STATUS] = status_override
+        if resolved_provenance:
+            given[DERIVED_FROM] = resolved_provenance
+        overrides = default_overrides()
 
         datasets_dir = biotope_root / ".biotope" / "datasets"
         datasets_dir.mkdir(parents=True, exist_ok=True)

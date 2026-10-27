@@ -258,3 +258,15 @@ def test_a_date_in_the_annotation_file_reaches_the_description_as_written(fresh)
     assert (described(fresh)["datePublished"], described(fresh)["biotope:status"]) == ("2024-05-01", "mapped")
     ok("add", "--rebake", "data/study")
     assert described(fresh)["datePublished"] == "2024-05-01"
+
+
+def test_a_rebake_keeps_the_lineage_and_the_status_people_gave(fresh):
+    (fresh / "data/clean").mkdir()
+    (fresh / "data/clean/people.csv").write_text("person_id\np1\n")
+    ok("add", "data/study", "data/raw/samples.csv")
+    ok("add", "data/clean", "--derived-from", "data/study")
+    ok("mark", "data/clean", "mapped", "--derived-from", "data/raw/samples.csv")
+    ok("add", "--rebake", "data/clean")
+    clean = described(fresh, ".biotope/datasets/data/clean.jsonld")
+    assert clean["prov:wasDerivedFrom"] == [{"@id": "data/study"}, {"@id": "data/raw/samples.csv"}]
+    assert clean["biotope:status"] == "mapped"
