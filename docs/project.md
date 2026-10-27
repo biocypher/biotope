@@ -242,6 +242,8 @@ the file's content or the machine. Content hashes are checksums, never IDs.
   `<file set name>#<table>`: `events%20partition%20files#events`, or
   `events#events` after the rename above.
 - A field's ID is `<table ID>/<column>`: `push/people.csv#people/person_id`.
+- A file whose one table has no columns, such as a JSON file holding only `{}`,
+  is a file, not a table: `run/state.json` keeps that ID and gets a file package.
 - `biotope add data/raw/samples.csv` adds a single file, whose root is its folder:
   its table is `samples.csv#samples`.
 
