@@ -214,6 +214,43 @@ def test_run_reuses_stored_records_until_an_input_changes(study, monkeypatch):
     assert report["appeared"] == [] and report["disappeared"] == []
 
 
+def test_an_annotated_extracted_dataset_keeps_its_annotation_and_its_schema_descriptions(study):
+    assert study.extract("run", PROFILE, "data/pages")[0].exit_code == 0
+    given = ("description=Profiles of the researchers.", "url=https://example.org/profiles")
+    annotated = study.run("annotate", "set", "data/extracted/profile.jsonl", *given)
+    assert annotated.exit_code == 0, annotated.output
+    annotation = study.root / "data/extracted/profile.jsonl.biotope.yaml"
+    written = annotation.read_bytes()
+    name = "profile.jsonl#profile/values/name/value"
+
+    def described():
+        data = json.loads((study.root / ".biotope/datasets/data/extracted/profile.jsonld").read_text())
+        fields = {}
+
+        def collect(items):
+            for item in items:
+                fields[item["@id"]] = item.get("description")
+                collect(item.get("subField", []))
+
+        collect(data["recordSet"][0]["field"])
+        return (data["description"], data["url"]), fields[name]
+
+    assert described() == (
+        ("Profiles of the researchers.", "https://example.org/profiles"),
+        "The researcher's full name, without academic titles.",
+    )
+    schema = study.root / "graph/extraction/schemas.py"
+    schema.write_text(schema.read_text().replace("without academic titles", "as written"))
+    result, report = study.extract("run", PROFILE, "data/pages")
+    assert result.exit_code == 0, result.output
+    assert statuses(report) == {LIND: "extracted", OKAFOR: "extracted"}
+    assert annotation.read_bytes() == written
+    assert described() == (
+        ("Profiles of the researchers.", "https://example.org/profiles"),
+        "The researcher's full name, as written.",
+    )
+
+
 def test_record_ids_follow_the_record_key(study):
     assert study.extract("run", ROUND, "data/calls")[0].exit_code == 0
     first = study.records("funding_round")

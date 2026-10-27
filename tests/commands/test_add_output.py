@@ -12,7 +12,7 @@ from rich.console import Console
 from biotope.cli import cli
 
 
-def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypatch):
+def test_add_json_covers_files_warnings_and_outputs(tmp_path, monkeypatch):
     from croissant_baker.metadata_generator import MetadataGenerator
 
     monkeypatch.chdir(tmp_path)
@@ -39,7 +39,7 @@ def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypa
     source = report["sources"][0]
     assert source["input"] == source["root"] == "raw"
     assert source["manifest"] == ".biotope/datasets/raw.jsonld"
-    assert source["annotation_template"] == "raw/.biotope.yaml"
+    assert source["annotation"] == "raw/.biotope.yaml"
     assert Path(source["manifest"]).is_file()
     files = {f["path"]: f for f in source["scan"]["files"]}
     assert files["genes.csv"]["outcome"] == "described"
@@ -53,16 +53,6 @@ def test_add_json_covers_files_warnings_outputs_and_rejection(tmp_path, monkeypa
 
     skipped = runner.invoke(cli, ["add", "raw", "--json"])
     assert json.loads(skipped.stdout)["sources"][0]["status"] == "skipped"
-    (tmp_path / "authored.jsonld").write_text(Path(source["manifest"]).read_text())
-    registered = runner.invoke(
-        cli, ["source", "register", "authored.jsonld", "--name", "raw", "--reason", "Reviewed", "--replace"]
-    )
-    assert registered.exit_code == 0, registered.output
-    rejected = runner.invoke(cli, ["add", "raw", "--rebake", "--json"])
-    assert rejected.exit_code != 0
-    failure = json.loads(rejected.stdout)
-    assert failure["status"] == "failed"
-    assert "curated" in failure["error"]
 
 
 def test_scan_layout_wraps_long_paths_and_keeps_grouped_members():

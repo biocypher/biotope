@@ -1,0 +1,192 @@
+import json
+import re
+
+import pytest
+import yaml
+from graph_project import MANIFEST, findings, invoke, ok
+
+
+PEOPLE = "push/people.csv#people"
+COMMENT = "# Ada: ask the lab who keeps the second sheet.\n"
+
+
+def described(root, manifest=MANIFEST):
+    return json.loads((root / manifest).read_text())
+
+
+def table(description, identity):
+    return next(record for record in description["recordSet"] if record["@id"] == identity)
+
+
+def column(record, name):
+    return next(field for field in record["field"] if field["name"] == name)
+
+
+@pytest.fixture
+def fresh(tmp_path, monkeypatch):
+    root = tmp_path / "project"
+    (root / "data/study/push").mkdir(parents=True)
+    (root / "data/study/push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\n")
+    (root / "data/raw").mkdir()
+    (root / "data/raw/samples.csv").write_text("sample_id,person_id\ns1,p1\n")
+    monkeypatch.chdir(root)
+    ok("init", ".", "--no-prompt")
+    return root
+
+
+def test_add_and_annotate_write_only_the_values_given_and_keep_comments(fresh):
+    ok("add", "data/study", "data/raw/samples.csv")
+    folder, single = fresh / "data/study/.biotope.yaml", fresh / "data/raw/samples.csv.biotope.yaml"
+    assert not (fresh / "graph").exists()
+    for annotation in (folder, single):
+        assert not yaml.safe_load(annotation.read_text())
+        annotation.write_text(annotation.read_text() + COMMENT)
+
+    ok("add", "--rebake", "data/study", "--description", "People of one study.", "--license", "")
+    ok("add", "--rebake", "data/raw/samples.csv", "--creator", "Ada Lovelace", "--keyword", "samples")
+    ok("annotate", "set", "data/study", "--table", PEOPLE, "description=One row per person.", "key=person_id")
+    ok(
+        "annotate",
+        "set",
+        "data/study",
+        "--table",
+        PEOPLE,
+        "--column",
+        "person_id",
+        "description=The person's ID.",
+        "equivalentProperty=https://schema.org/identifier",
+    )
+    ok(
+        "annotate",
+        "set",
+        "data/raw/samples.csv",
+        "--table",
+        "samples.csv#samples",
+        "--column",
+        "sample_id",
+        "description=",
+    )
+    for unknown in (("--table", "push/missing.csv#missing"), ("--table", PEOPLE, "--column", "missing")):
+        before = folder.read_bytes()
+        refused = invoke("annotate", "set", "data/study", *unknown, "description=Nothing.")
+        assert refused.exit_code != 0 and unknown[-1] in refused.output
+        assert folder.read_bytes() == before
+
+    assert yaml.safe_load(folder.read_text()) == {
+        "description": "People of one study.",
+        "license": None,
+        "tables": {
+            PEOPLE: {
+                "description": "One row per person.",
+                "key": "person_id",
+                "columns": {
+                    "person_id": {
+                        "description": "The person's ID.",
+                        "equivalentProperty": "https://schema.org/identifier",
+                    }
+                },
+            }
+        },
+    }
+    assert yaml.safe_load(single.read_text()) == {
+        "creator": {"name": "Ada Lovelace"},
+        "keywords": ["samples"],
+        "tables": {"samples.csv#samples": {"columns": {"sample_id": {"description": None}}}},
+    }
+    for annotation in (folder, single):
+        assert COMMENT in annotation.read_text()
+
+
+def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
+    config = fresh / ".biotope/config.yaml"
+    settings = yaml.safe_load(config.read_text())
+    settings["project_metadata"] = {"creator": "Project Lead", "license": "https://example.org/licence"}
+    config.write_text(yaml.safe_dump(settings))
+    annotation = fresh / "data/study/.biotope.yaml"
+    annotation.write_text(
+        "# Written before the first add.\n"
+        "description: People of one study.\n"
+        "creator:\n"
+        "license: ''\n"
+        "tables:\n"
+        f"  {PEOPLE}:\n"
+        "    description: One row per person.\n"
+        "    key: person_id\n"
+        "    columns:\n"
+        "      person_id:\n"
+        "        description: The person's ID.\n"
+        "        equivalentProperty: https://schema.org/identifier\n"
+    )
+    written = annotation.read_bytes()
+    ok("add", "data/study")
+    ok("add", "data/raw/samples.csv")
+
+    def shows_every_annotation(description):
+        assert description["description"] == "People of one study."
+        assert description["name"] == "data/study"
+        assert "creator" not in description and "license" not in description
+        people = table(description, PEOPLE)
+        assert people["description"] == "One row per person."
+        assert people["key"] == {"@id": f"{PEOPLE}/person_id"}
+        assert column(people, "person_id")["description"] == "The person's ID."
+        assert column(people, "person_id")["equivalentProperty"] == "https://schema.org/identifier"
+        assert column(people, "name")["description"] not in ("", "The person's ID.")
+
+    shows_every_annotation(described(fresh))
+    samples = described(fresh, ".biotope/datasets/data/raw/samples.jsonld")
+    assert (samples["creator"]["name"], samples["license"]) == ("Project Lead", "https://example.org/licence")
+
+    (fresh / "data/study/push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\np3,Lin\n")
+    (fresh / "data/study/push/projects.csv").write_text("project_id,title\nx1,Atlas\n")
+    ok("add", "--rebake", "data/study")
+    assert annotation.read_bytes() == written
+    shows_every_annotation(described(fresh))
+    assert table(described(fresh), "push/projects.csv#projects")
+
+    retired = invoke("add", "data/study", "--bake-to", "review.jsonld")
+    assert retired.exit_code != 0 and "No such option" in retired.output
+    (fresh / "authored.jsonld").write_text(json.dumps({"name": "study", "recordSet": []}))
+    retired = invoke("source", "register", "authored.jsonld", "--name", "study", "--replace")
+    assert retired.exit_code != 0 and "No such option" in retired.output
+
+
+def test_a_hand_edit_of_the_annotation_file_reaches_graph_check_and_build(project):
+    annotation = project / "data/study/.biotope.yaml"
+    annotation.write_text(
+        annotation.read_text() + f"tables:\n  {PEOPLE}:\n    columns:\n      name:\n        description: Full name.\n"
+    )
+    ok("graph", "check")
+    assert column(table(described(project), PEOPLE), "name")["description"] == "Full name."
+    ok("graph", "build")
+
+    annotation.write_text(annotation.read_text() + "    key: person_id\n")
+    checked = invoke("graph", "check", "--json")
+    assert checked.exit_code != 0
+    assert [finding["code"] for finding in findings(checked) if finding["severity"] == "error"] == ["source.drift"]
+    assert table(described(project), PEOPLE)["key"] == {"@id": f"{PEOPLE}/person_id"}
+    assert invoke("graph", "build").exit_code != 0
+
+    annotation.write_text(annotation.read_text().replace("    key: person_id\n", ""))
+    ok("graph", "check")
+    assert "key" not in table(described(project), PEOPLE)
+    ok("graph", "build")
+
+
+def test_mv_carries_the_annotations_of_the_moved_file(fresh):
+    ok("add", "data/study", "data/raw/samples.csv")
+    ok("annotate", "set", "data/study", "--table", PEOPLE, "--column", "name", "description=Full name.")
+    ok("annotate", "set", "data/raw/samples.csv", "description=One row per sample.")
+    folder = fresh / "data/study/.biotope.yaml"
+    folder.write_text(folder.read_text().replace(f"  {PEOPLE}:\n", f"  {PEOPLE}:  # the PuSH export\n"))
+
+    ok("mv", "data/study/push/people.csv", "data/study/current/people.csv")
+    ok("mv", "data/raw/samples.csv", "data/raw/sheets.csv")
+
+    moved = "current/people.csv#people"
+    assert re.search(rf"^  {re.escape(moved)}: +# the PuSH export$", folder.read_text(), re.MULTILINE)
+    assert column(table(described(fresh), moved), "name")["description"] == "Full name."
+    assert not (fresh / "data/raw/samples.csv.biotope.yaml").exists()
+    assert yaml.safe_load((fresh / "data/raw/sheets.csv.biotope.yaml").read_text()) == {
+        "description": "One row per sample."
+    }
+    assert described(fresh, ".biotope/datasets/data/raw/sheets.jsonld")["description"] == "One row per sample."

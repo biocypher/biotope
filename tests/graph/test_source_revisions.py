@@ -60,6 +60,33 @@ def test_descriptions_equivalent_properties_checksums_and_context_change_no_revi
     assert project.snapshot() == reviewed and project.store == recorded
 
 
+def test_descriptions_and_equivalent_properties_in_an_annotation_file_change_no_revision(project):
+    manifest = project.implemented_study(record_set("rows", "a", "b"))
+    reviewed, recorded = project.snapshot(), set(project.store)
+    annotation = project.root / "study/.biotope.yaml"
+    annotation.parent.mkdir()
+    annotation.write_text(
+        "description: A synthetic study.\n"
+        "tables:\n"
+        "  rows:\n"
+        "    description: One row per sample.\n"
+        "    columns:\n"
+        "      a:\n"
+        "        description: The sample.\n"
+        "        equivalentProperty: https://schema.org/identifier\n"
+    )
+    assert project.codes("error") == {}
+    assert states(project.generate(manifest)) == {"rows": "current"}
+    assert project.snapshot() == reviewed and project.store == recorded
+    rows = json.loads(manifest.read_text())["recordSet"][0]
+    assert (rows["description"], rows["field"][0]["equivalentProperty"]) == (
+        "One row per sample.",
+        "https://schema.org/identifier",
+    )
+    project.edit(manifest, lambda data: data["recordSet"][0]["field"].append(record_set("rows", "c")["field"][0]))
+    assert [finding["subject"] for finding in project.findings() if finding["code"] == "source.drift"] == ["study/rows"]
+
+
 def test_a_new_column_a_changed_type_and_a_changed_file_reference_drift(project):
     paper = file_object("paper", "p.pdf", fmt="application/pdf")
     other = file_object("other", "other.csv")

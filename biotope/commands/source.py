@@ -13,32 +13,23 @@ from biotope.utils import find_biotope_root, warn_ignored
 
 @click.group(name="source")
 def source_group() -> None:
-    """Register curated metadata and scaffold project-owned source packages."""
+    """Register authored descriptions and scaffold project-owned source packages."""
 
 
 @source_group.command(name="register")
 @click.argument("metadata", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--name", required=True, help="Managed dataset name/path, without .jsonld.")
-@click.option("--reason", required=True, help="Review evidence and known gaps.")
-@click.option("--replace", is_flag=True, help="Replace this managed description after reviewing corrections.")
-def register(metadata: Path, name: str, reason: str, replace: bool) -> None:
-    """Register authored Croissant, protecting it from subsequent rebakes."""
+def register(metadata: Path, name: str) -> None:
+    """Register an authored Croissant description of data no bake describes."""
     root = find_biotope_root()
     if root is None:
         raise click.ClickException("Run biotope init first")
     try:
-        target = register_metadata(
-            root,
-            metadata,
-            name,
-            reason=reason,
-            replace=replace,
-            on_warning=lambda message: click.echo(f"Warning: {message}", err=True),
-        )
+        target = register_metadata(root, metadata, name)
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     warn_ignored(root, [target])
-    click.echo(f"Registered curated metadata: {target}\nReview source contracts and regenerate before building.")
+    click.echo(f"Registered {target}\nGenerate its source packages before building.")
 
 
 def _shown(path: Path) -> str:

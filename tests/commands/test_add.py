@@ -288,20 +288,6 @@ def test_bake_directory_tracks_unparseable_files(tmp_path):
     assert any(item["@type"] == "cr:FileObject" for item in distribution)
     assert any(item.get("contentUrl") == "README.md" for item in distribution)
 
-    scaffold_path = data_dir / ".biotope.yaml"
-    import yaml
-
-    from biotope.commands.add import _generate_biotope_scaffold_from_baked
-
-    _generate_biotope_scaffold_from_baked(data_dir, metadata_dict, project_root)
-    assert scaffold_path.exists()
-    payload = yaml.safe_load(scaffold_path.read_text())
-    assert isinstance(payload, dict)
-    assert isinstance(payload["dataset"], dict)
-    assert payload["dataset"]["source_path"] == "data/mixed"
-    assert isinstance(payload["record_sets"], list)
-    assert payload["record_sets"]
-
 
 def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, capsys):
     project_root = tmp_path / "project"
@@ -341,9 +327,7 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
 
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add._bake_directory")
-@mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 def test_add_command_directory_recurses_by_default(
-    mock_csv,
     mock_bake,
     mock_find_root,
     runner,
@@ -362,14 +346,11 @@ def test_add_command_directory_recurses_by_default(
 
     assert result.exit_code == 0
     mock_bake.assert_called_once()
-    mock_csv.assert_called_once()
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")
 @mock.patch("biotope.commands.add._bake_directory")
-@mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
 def test_add_command_directory_already_tracked_skips_without_rebake(
-    mock_csv,
     mock_bake,
     mock_find_root,
     runner,
@@ -399,32 +380,6 @@ def test_add_command_directory_already_tracked_skips_without_rebake(
         third = runner.invoke(add, ["--rebake", str(data_dir)])
         assert third.exit_code == 0
         assert mock_bake.call_count == 2
-
-
-@mock.patch("biotope.commands.add.find_biotope_root")
-@mock.patch("biotope.commands.add._bake_directory")
-@mock.patch("biotope.commands.add._generate_biotope_scaffold_from_baked")
-def test_add_command_resolves_relative_directory(
-    mock_csv,
-    mock_bake,
-    mock_find_root,
-    runner,
-    git_repo,
-):
-    """Regression: relative dir argument must not break CSV scaffold writing."""
-    mock_find_root.return_value = git_repo
-
-    (git_repo / "data").mkdir()
-    fake_metadata = {"recordSet": [], "distribution": []}
-    mock_bake.return_value = (fake_metadata, 1)
-
-    os.chdir(git_repo)
-    result = runner.invoke(add, ["data"])
-
-    assert result.exit_code == 0, result.output
-    csv_source_dir = mock_csv.call_args.args[0]
-    assert csv_source_dir.is_absolute()
-    assert csv_source_dir == (git_repo / "data").resolve()
 
 
 @mock.patch("biotope.commands.add.find_biotope_root")

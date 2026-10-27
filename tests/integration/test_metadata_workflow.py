@@ -70,7 +70,7 @@ def test_no_git_project_can_describe_and_track_metadata(tmp_path, monkeypatch):
     (root / "raw" / "genes.csv").write_text("id,name\n1,A\n")
     for args in (
         ["add", "raw"],
-        ["annotate", "apply", "raw", "--set", "description=Reviewed"],
+        ["annotate", "set", "raw", "description=Reviewed"],
         ["queue", "--json"],
         ["mark", "raw", "mapped"],
         ["status"],

@@ -16,6 +16,7 @@ from rich.text import Text
 
 from biotope.commands._add_output import AddOutput
 from biotope.commands.add import add_file, default_overrides, resolve_dataset_ref
+from biotope.croissant import annotation
 from biotope.croissant.ids import stem, table_id
 from biotope.extraction import ExtractionError, Extractor, Schema
 from biotope.extraction.describe import describe
@@ -36,7 +37,7 @@ from biotope.extraction.run import (
     sha256,
 )
 from biotope.extraction.text import convert, media_type
-from biotope.graph.sources import write_text_atomic
+from biotope.graph.sources import read_metadata, write_description
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     STATUS_PROCESSED,
@@ -308,7 +309,7 @@ def _sources(root: Path, dataset_ids: list[str]) -> list[Source]:
     found: dict[str, Source] = {}
     for dataset_id in dataset_ids:
         manifest = root / ".biotope/datasets" / f"{dataset_id}.jsonld"
-        metadata = cast(dict[str, Any], json.loads(manifest.read_text(encoding="utf-8")))
+        metadata = read_metadata(manifest)
         dataset_dir = dataset_dir_for_manifest(manifest, root)
         for entry in cast(list[dict[str, Any]], metadata.get("distribution") or []):
             url = entry.get("contentUrl")
@@ -340,12 +341,12 @@ def _register(
     datasets_dir = root / ".biotope/datasets"
     if not add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
-    metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    metadata = annotation.restored(read_metadata(manifest))
     file_object = _file_object(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")
     describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
-    write_text_atomic(manifest, json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
+    write_description(manifest, metadata)
 
 
 def _registered(
@@ -353,7 +354,7 @@ def _registered(
 ) -> bool:
     if not manifest.is_file():
         return False
-    metadata = json.loads(manifest.read_text(encoding="utf-8"))
+    metadata = annotation.restored(read_metadata(manifest))
     file_object = _file_object(root, target, metadata)
     if file_object is None or file_object.get("sha256") != sha256(target) or get_derived_from(metadata) != dataset_ids:
         return False

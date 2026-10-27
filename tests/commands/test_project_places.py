@@ -81,7 +81,7 @@ def steps(root):
     yield ("init", ".", "--no-prompt"), ()
     configure(root)
     yield ("add", "data/raw/people", "data/raw/samples.csv", "data/pages"), ()
-    yield ("annotate", "apply", "data/raw/people", "--set", "description=People who work at the host."), ()
+    yield ("annotate", "set", "data/raw/people", "description=People who work at the host."), ()
     yield ("graph", "scaffold"), ()
     yield ("source", "generate", ".biotope/datasets/data/raw/people.jsonld", "--out", "graph/sources"), ()
     author_graph(root)
@@ -237,7 +237,7 @@ def warnings_of():
     manifest = ".biotope/datasets/data/things.jsonld"
     pages = [".biotope/datasets/data/pages.jsonld", "data/pages/.biotope.yaml"]
     yield ("add", "data/things", "data/pages"), [manifest, "data/things/.biotope.yaml", *pages]
-    yield ("annotate", "apply", "data/things", "--set", "description=Two tables."), [manifest]
+    yield ("annotate", "set", "data/things", "description=Two tables."), [manifest, "data/things/.biotope.yaml"]
     yield ("source", "generate", manifest, "--out", "graph/sources"), [contract]
     yield ("mark", "data/things", "mapped"), [manifest]
     records = ["data/extracted/profile.jsonl", ".biotope/datasets/data/extracted/profile.jsonld"]

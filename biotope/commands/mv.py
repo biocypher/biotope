@@ -31,9 +31,11 @@ import click
 from rich.console import Console
 from rich.panel import Panel
 
-from biotope.croissant.ids import MOVED_FROM, moved_ids, rename
+from biotope.croissant import annotation
+from biotope.croissant.ids import MOVED_FROM, moved_ids, rename, renamer
 from biotope.extraction.run import STATES
 from biotope.graph.moves import follow_ids, follow_manifest
+from biotope.graph.sources import write_text_atomic
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
@@ -112,6 +114,13 @@ def mv(
     else:
         _execute_move(source, actual_destination, biotope_root, console)
         _move_extraction_state(source, actual_destination, biotope_root)
+
+
+def _move_annotation(source: Path, destination: Path, biotope_root: Path) -> None:
+    old, new = annotation.annotation_path(source), annotation.annotation_path(destination)
+    if old.is_file():
+        shutil.move(str(old), str(new))
+        warn_ignored(biotope_root, [new])
 
 
 def _move_extraction_state(source: Path, destination: Path, biotope_root: Path) -> None:
@@ -261,6 +270,7 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
     except OSError as e:
         console.print(f"[bold red]❌ Failed to move file: {e}[/]")
         raise click.Abort
+    _move_annotation(source, destination, biotope_root)
 
     # Calculate new checksum after move
     try:
@@ -269,6 +279,7 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
         # Rollback: move file back
         try:
             shutil.move(str(destination), str(source))
+            _move_annotation(destination, source, biotope_root)
         except OSError:
             console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
         console.print(f"[bold red]❌ Failed to calculate checksum: {e}[/]")
@@ -322,6 +333,7 @@ def _execute_move(source: Path, destination: Path, biotope_root: Path, console: 
         # Rollback data file move
         try:
             shutil.move(str(destination), str(source))
+            _move_annotation(destination, source, biotope_root)
         except OSError:
             console.print(f"[bold red]❌ Failed to rollback file move. File is at {destination}[/]")
 
@@ -961,6 +973,11 @@ def _update_metadata_file_path(
 
         if updated:
             rename(metadata, mapping)
+            found = annotation.located(metadata_file, metadata)
+            text = annotation.renamed(found, renamer(mapping)) if found is not None else None
+            if found is not None and text is not None:
+                write_text_atomic(found, text)
+                warn_ignored(biotope_root, [found])
             with open(metadata_file, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
             warn_ignored(biotope_root, follow_ids(biotope_root / "graph/sources", metadata_file, before, mapping))

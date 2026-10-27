@@ -16,9 +16,6 @@ FILE_OBJECT_TYPE = "cr:FileObject"
 LEGACY_FILE_OBJECT_TYPE = "sc:FileObject"
 
 
-SCAFFOLD_FILENAME = ".biotope.yaml"
-
-
 # biotope:status values — see docs/agent flow.
 STATUS_RAW = "raw"
 STATUS_PROCESSED = "processed"
@@ -33,7 +30,6 @@ class DatasetTarget:
     input_path: Path
     metadata_path: Path
     dataset_dir: Path
-    scaffold_path: Path
 
 
 def get_standard_context() -> dict[str, str]:
@@ -350,42 +346,16 @@ def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
         except ValueError as exc:
             raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets") from exc
         dataset_dir = biotope_root / rel_metadata.with_suffix("")
-        return DatasetTarget(
-            input_path=resolved,
-            metadata_path=metadata_path,
-            dataset_dir=dataset_dir,
-            scaffold_path=dataset_dir / SCAFFOLD_FILENAME,
-        )
+        return DatasetTarget(input_path=resolved, metadata_path=metadata_path, dataset_dir=dataset_dir)
 
     if resolved.is_dir():
         rel_dir = resolved.relative_to(biotope_root)
         metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
-        return DatasetTarget(
-            input_path=resolved,
-            metadata_path=metadata_path,
-            dataset_dir=resolved,
-            scaffold_path=resolved / SCAFFOLD_FILENAME,
-        )
-
-    if resolved.name == SCAFFOLD_FILENAME:
-        dataset_dir = resolved.parent
-        rel_dir = dataset_dir.relative_to(biotope_root)
-        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
-        return DatasetTarget(
-            input_path=resolved,
-            metadata_path=metadata_path,
-            dataset_dir=dataset_dir,
-            scaffold_path=resolved,
-        )
+        return DatasetTarget(input_path=resolved, metadata_path=metadata_path, dataset_dir=resolved)
 
     rel_file = resolved.relative_to(biotope_root)
     metadata_path = (datasets_dir / rel_file).with_suffix(".jsonld")
-    return DatasetTarget(
-        input_path=resolved,
-        metadata_path=metadata_path,
-        dataset_dir=resolved.parent,
-        scaffold_path=resolved.parent / SCAFFOLD_FILENAME,
-    )
+    return DatasetTarget(input_path=resolved, metadata_path=metadata_path, dataset_dir=resolved.parent)
 
 
 def make_file_object(file_path: Path, base: Path) -> dict[str, Any]:
