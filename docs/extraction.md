@@ -15,13 +15,19 @@ them. Send only public documents to an external model.
 
 ```bash
 biotope add data/pages
-biotope extract schema extraction/schemas.py:Profile
-biotope extract try extraction/schemas.py:Profile data/pages/lind.html
+biotope extract schema graph/extraction/profile.py:Profile
+biotope extract try graph/extraction/profile.py:Profile data/pages/lind.html
 biotope extract text data/pages/lind.html
-biotope extract run extraction/schemas.py:Profile data/pages
-biotope extract run extraction/schemas.py:Profile data/pages --redo data/pages/lind.html
-biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/sources
+biotope extract run graph/extraction/profile.py:Profile data/pages
+biotope extract run graph/extraction/profile.py:Profile data/pages --redo data/pages/lind.html
+biotope source generate .biotope/datasets/data/extracted/profile.jsonld --out graph/sources
 ```
+
+Extraction schemas live in the graph workspace, one module per kind of document:
+`graph/extraction/<kind>.py`. Write them after `biotope graph scaffold`, which
+creates the empty `graph/extraction/` package and lists it in the pipeline's
+`code_paths`, so `biotope graph check` type-checks the schemas and a build's
+`run.json` records them with the rest of the graph code.
 
 - `biotope extract schema SCHEMA` prints, as JSON, the schema's `name`, record
   `key` and `revision` and the `json_schema` biotope derives from the class: what
@@ -34,7 +40,7 @@ biotope source generate .biotope/datasets/extracted/profile.jsonld --out graph/s
   the project in `$XDG_CACHE_HOME/biotope/tried/` (by default `~/.cache`), so the
   note holds in every checkout of the project on this machine and in no other.
 - `biotope extract run SCHEMA DATASET...` extracts every document of the given
-  registered datasets, stores the records in `extracted/<schema>.jsonl` (or
+  registered datasets, stores the records in `data/extracted/<schema>.jsonl` (or
   `--out PATH`) and registers that file as a dataset with status `processed`,
   derived from the input datasets. It keeps each document's records in
   `.biotope/progress/`, which Git ignores, as soon as that document is extracted,
@@ -191,9 +197,10 @@ class Extractor(Protocol):
 
 ## Stored output
 
-`extract run` writes one JSON Lines file, by default `extracted/<schema>.jsonl`
-(`FundingRound` becomes `funding_round.jsonl`), sorted by record ID. Commit it
-with the project. Each line is one record:
+`extract run` writes one JSON Lines file, by default
+`data/extracted/<schema>.jsonl` (`FundingRound` becomes `funding_round.jsonl`),
+sorted by record ID. Commit it with the project; the `.gitignore` that
+`biotope init` writes keeps `data/extracted/` in git. Each line is one record:
 
 ```json
 {
@@ -262,10 +269,11 @@ with the project. Each line is one record:
   records extracted again with `--redo`.
 
 **Registered dataset.** The records file is registered at
-`.biotope/datasets/extracted/<schema>.jsonld`, with status `processed`,
-`prov:wasDerivedFrom` the input datasets and a RecordSet keyed by `id`. It has no
-`creator` or `license`: biotope cannot know them, and the placeholders the baker
-would write describe nothing.
+`.biotope/datasets/data/extracted/<schema>.jsonld`, with status `processed`,
+`prov:wasDerivedFrom` the input datasets and a RecordSet keyed by `id`. Its table
+is `<schema>.jsonl#<schema>`, such as `funding_round.jsonl#funding_round`. It has
+no `creator` or `license` unless its annotation file gives them: biotope cannot
+know them.
 Croissant-baker describes the file. Biotope then writes the RecordSet's fields from
 the schema, because the baker infers fields from the values present: it would drop
 a field that is null in every record and describe lists as opaque arrays. Each
@@ -278,11 +286,16 @@ a loader turns those integers into floats. A setting that holds a list or an obj
 or values of different types after a settings change, stays in the records without
 a field, and an extractor with no described setting gets no `settings` field. Do not
 edit this manifest by hand: the next run that finds it no longer describes the
-records or the schema writes it again.
+records or the schema writes it again. Field descriptions come from the schema.
+Dataset fields, such as a description, a licence or a URL, go into the records
+file's annotation file, `data/extracted/<schema>.jsonl.biotope.yaml`, for example
+with `biotope annotate set data/extracted/funding_round.jsonl url=...`. `extract run`
+creates no annotation file, keeps one you wrote and never fails because of it.
 
-**Run state.** `.biotope/extraction/extracted/<schema>.json` records, per
+**Run state.** `.biotope/extraction/data/extracted/<schema>.json` records, per
 document, the digest, schema revision and extractor that produced its stored
-records, including documents that gave none. Commit it.
+records, including documents that gave none. Commit it. `biotope mv` moves it with
+the records file, so a run with `--out` naming the new path reuses every record.
 
 **Document texts.** Biotope's text of each document is cached in
 `.biotope/texts/<sha256>-<conversion>.txt`, which ignores itself in Git, because

@@ -24,7 +24,9 @@ Local data → Croissant metadata → Review → Source inventory
 
 `biotope add` reads local data and describes it with croissant-baker. Review those
 metadata before generating source classes: a successful scan does not establish
-that every field or file was described completely.
+that every field or file was described completely. What you know about a dataset
+goes into its annotation file next to the data, and every file and table keeps an
+ID from its path, so new data rebuilds with commands only.
 
 `biotope graph scaffold` creates a workspace, and `biotope source generate` gives
 every described input a source package with a schema to edit. Project Python code
@@ -39,10 +41,11 @@ scientific validity: review the graph against the sources themselves.
 ## Reference
 
 - [Commands](commands.md)
+- [Project layout](project.md)
 - [Architecture](architecture.md)
 - [Technical notes for typed graphs](mapping_sidenotes.md)
 - [Shared annotation policies](cluster-compliance.md)
-- [Migrating to 0.10](migration.md)
+- [Migration](migration.md)
 
 Biotope 0.10 supports Python 3.10–3.12. APIs may change while the project is under
 active development. Source code and issue reporting are on

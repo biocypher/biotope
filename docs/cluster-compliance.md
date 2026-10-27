@@ -83,24 +83,23 @@ biotope config clear-validation-cache
 biotope config show-validation
 ```
 
-## Review annotation status
+## What checks a dataset
 
-Describe selected local files with `biotope add <path>`, then edit the metadata
-with the `annotate` commands. Use `biotope status --detailed` to inspect annotation
-issues for tracked datasets. Status is a report, not a failing CI gate.
+Describe selected local files with `biotope add <path>`, then write what you know
+about each dataset into its [annotation file](project.md#the-annotation-file). The
+requirements above are stored and shown by the `config` commands; no command checks
+a dataset against them or refuses one that misses a field.
 
 The related commands check different things:
 
 | Command or example                          | What it checks                                                             |
 | ------------------------------------------- | -------------------------------------------------------------------------- |
-| `biotope status --detailed`                 | Annotation status under the effective field requirements                   |
 | `biotope annotate validate --jsonld <file>` | Croissant validation through the external `mlcroissant` CLI                |
-| `biotope commit`                            | JSON readability, with warnings for missing dataset type or name           |
 | `biotope queue`                             | Coarse curation state based on field descriptions and manual mapping state |
 | Bundled configuration checker               | Locally configured labels, required fields and remote URL presence         |
 
-Neither `annotate validate` nor `commit` enforces the shared annotation policy as
-a CI gate. Queue states also do not certify annotation completeness.
+None of them enforces the shared annotation policy as a CI gate. Queue states also
+do not certify annotation completeness.
 
 For a local server and configuration inventory example, see the
 [administration notes](cluster-compliance_sidenotes.md).

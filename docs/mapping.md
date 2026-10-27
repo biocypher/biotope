@@ -19,26 +19,29 @@ generated source inventory and a pipeline to complete; its README describes the
 layout. Scaffolding works independently of `init` and `add`; it refuses an existing
 `graph/` directory or symlink.
 
-Keep raw data, purpose files and managed metadata at the project level, and graph
-code under `graph/`. Use `PROJECT_ROOT` and `GRAPH_ROOT` from `graph/paths.py` and
-package-relative imports for portability.
+Keep raw data and managed metadata at the project level, and graph code under
+`graph/`; [project layout](project.md) lists every place biotope writes. Use
+`PROJECT_ROOT` and `GRAPH_ROOT` from `graph/paths.py` and package-relative imports
+for portability.
 
-| Artifact                                        | Ownership and purpose                                           |
-| ----------------------------------------------- | --------------------------------------------------------------- |
-| `.biotope/datasets/<manifest>.jsonld`           | Effective source description, reviewed by the project           |
-| `.biotope/contracts/`                           | Recorded contract revisions, written by `source generate`       |
-| `graph/standardization.py`                      | Shared terms that fields of several sources bind to             |
-| `graph/sources/<manifest>/__init__.py`          | Generated root collecting that manifest's packages              |
-| `graph/sources/<manifest>/<source>/schema.py`   | Record class and field bindings; scaffolded once, then authored |
-| `graph/sources/<manifest>/<source>/__init__.py` | `SOURCE` registration, created when absent                      |
-| `graph/sources/<manifest>/<source>/loader.py`   | Authored physical reader, created as a placeholder when absent  |
-| `graph/sources/inventory.py`                    | Generated `INVENTORY` of every source package                   |
-| `graph/sources/__init__.py`                     | Authored `SOURCES` selection and reasoned `EXCLUDED_SOURCES`    |
-| `graph/alignment/`                              | Cross-source identity resolution, run before mappings           |
-| `graph/topology/<concept>/`                     | Node and relation dataclasses, collected in `TOPOLOGY`          |
-| `graph/mappings/<concept>/`                     | Typed transformations, collected in `MAPPINGS`                  |
-| `graph/pipelines/`                              | `compose.py` stage sequence; `build_graph.py` `PIPELINE`        |
-| `graph/build/`, `graph/metagraph.html`          | The current build and topology viewer; derived output           |
+| Artifact                                         | Ownership and purpose                                              |
+| ------------------------------------------------ | ------------------------------------------------------------------ |
+| `<dataset>/.biotope.yaml`, `<file>.biotope.yaml` | What people write about a dataset; its annotation file             |
+| `.biotope/datasets/<manifest>.jsonld`            | Description: the data with its annotation file over it             |
+| `.biotope/contracts/`                            | Recorded contract revisions, written by `source generate`          |
+| `graph/standardization.py`                       | Shared terms that fields of several sources bind to                |
+| `graph/sources/<manifest>/__init__.py`           | Generated root collecting that manifest's packages                 |
+| `graph/sources/<manifest>/<source>/schema.py`    | Record class and field bindings; scaffolded once, then authored    |
+| `graph/sources/<manifest>/<source>/__init__.py`  | `SOURCE` registration, created when absent                         |
+| `graph/sources/<manifest>/<source>/loader.py`    | Authored physical reader, created as a placeholder when absent     |
+| `graph/sources/inventory.py`                     | Generated `INVENTORY` of every source package                      |
+| `graph/sources/__init__.py`                      | Authored `SOURCES` selection and reasoned `EXCLUDED_SOURCES`       |
+| `graph/alignment/`                               | Cross-source identity resolution, run before mappings              |
+| `graph/extraction/<kind>.py`                     | Extraction schemas, checked with the rest of the graph code        |
+| `graph/topology/<node>/node.py`                  | A node dataclass; its folder also holds one file per outgoing edge |
+| `graph/mappings/<concept>/`                      | Typed transformations, collected in `MAPPINGS`                     |
+| `graph/pipelines/`                               | `compose.py` stage sequence; `build_graph.py` `PIPELINE`           |
+| `graph/build/`, `graph/metagraph.html`           | The current build and topology viewer; derived output              |
 
 For earlier projects, see [migration](migration.md).
 
@@ -49,46 +52,32 @@ Use `biotope add <path>` to describe selected local data, then
 have different access requirements: baking reads source bytes; inspection reads
 metadata only.
 
-Write evidence-based corrections in a separate Croissant file under
-`.biotope/reviews/` and register the complete description:
+Write what you know about a dataset, such as its licence, table and column
+descriptions, keys and equivalent properties, into its
+[annotation file](project.md#the-annotation-file), by hand or with
+`biotope annotate set`. The description in `.biotope/datasets/` is the data with
+that file over it; never edit it by hand. Then generate the sources:
 
 ```bash
-biotope source register .biotope/reviews/study.jsonld --name study \
-  --reason "Reviewed source headers and field types"
-biotope source generate .biotope/datasets/study.jsonld --out graph/sources
+biotope annotate set data/study --table 'samples.csv#samples' --column raw_score description="Assay score as measured."
+biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 ```
 
-Use `--replace` when replacing an existing description. Registration reports
-removed keys and identifiers but does not merge documents or judge the review
-reason. Reconcile annotations and structural changes before replacement.
-
-Curated or annotated manifests are protected from `add --rebake` and `add --force`.
-To refresh one, bake separately and review the differences:
-
-```bash
-biotope add raw/study --bake-to .biotope/reviews/study-fresh.jsonld
-# Reconcile this file with the existing curated description before registering it.
-biotope source register .biotope/reviews/study-fresh.jsonld --name study \
-  --reason "Reconciled new data with reviewed metadata" --replace
-```
-
-Here `study` must be the name of the managed description being replaced.
-`--bake-to` takes one input and a new output outside that input and
-`.biotope/datasets/`. It does not update tracking. Source locations in the fresh
-description retain their original data root.
-
-Baker leaves files it cannot parse, such as papers and notes, unclaimed. Add a
-`FileObject` with a stable `@id`, its `contentUrl` and `sha256` for each such file
-the graph may read; it then becomes a source like any table.
+Files and tables keep IDs from their paths in the dataset, such as
+`samples.csv#samples`, so `biotope add --rebake` after new data changes no ID and
+keeps every annotation; see [file and table IDs](project.md#file-and-table-ids).
+Baker gives a file it cannot parse, such as a paper or notes, a file entry without
+tables; it still becomes a source. Extract a document's records with
+[extraction](extraction.md), which registers them as a dataset of their own.
 
 Generation gives every top-level record set, and every file that no record set
 reads, its own package. It creates missing files only and never rewrites an
-existing schema, registration or loader. The generated inventory collects every
-package; in `graph/sources/__init__.py`, select each source or list it in
-`EXCLUDED_SOURCES` with a reason. `biotope graph check` reports a source that is
-neither, a selected placeholder loader and a described input without a package.
-See [generation details](mapping_sidenotes.md#source-generation) for naming,
-ownership, conflicts and removed sources.
+existing schema, registration or loader; only `biotope mv` changes them. The
+generated inventory collects every package; in `graph/sources/__init__.py`, select
+each source or list it in `EXCLUDED_SOURCES` with a reason. `biotope graph check`
+reports a source that is neither, a selected placeholder loader and a described
+input without a package. See [generation details](mapping_sidenotes.md#source-generation)
+for naming, ownership, conflicts and removed sources.
 
 Each schema starts from the description: known scalar, nested and repeated types
 become Python declarations, fields are nullable unless curated metadata asserts
@@ -100,31 +89,42 @@ missing-value tokens and aliases, and bind fields to shared terms from
 ```python
 @dataclass(frozen=True, kw_only=True)
 class Samples:
-    __record_set__: ClassVar[str] = "samples"
+    __record_set__: ClassVar[str] = "samples.csv#samples"
     __source_digest__: ClassVar[str] = "232b7860…"
     __missing_values__: ClassVar[frozenset[str]] = frozenset({"", "na"})
 
-    sample_id: str                                  # binds samples/sample_id
+    sample_id: str                                  # binds samples.csv#samples/sample_id
     score: float = source_field("raw_score", term=SCORE)
     tissue: str | None = source_field(None, default=None)  # not supplied here
 ```
 
 ### Review source drift
 
-`__source_digest__` records the contract revision you reviewed. When the
-description changes, `biotope graph check` reports `source.drift` for each affected
-schema, with a field-level summary and every JSON-pointer difference against the
-recorded revision. Review the change against the schema and loader, update them,
-then set `__source_digest__` to the revision the finding names. Unaffected sources
-stay current. `biotope source generate` records each revision it sees; `--check`
-writes nothing.
+`__source_digest__` records the contract revision you reviewed. A revision covers
+structure only: fields, types, nullability, keys and file references, not
+descriptions or equivalent properties. When the structure changes,
+`biotope graph check` reports `source.drift` for each affected schema, with a
+field-level summary and every JSON-pointer difference against the recorded
+revision. Review the change against the schema and loader, update them, then set
+`__source_digest__` to the revision the finding names. Unaffected sources stay
+current. `biotope source generate` records each revision it sees; `--check` writes
+nothing.
 
 ## Define topology and identity
+
+Each node has a folder under `graph/topology/`, named after its class in
+snake_case: the node in `node.py`, and one file per edge whose source is that node,
+named after the edge class. `Sample` goes in `topology/sample/node.py`, and
+`FromPerson`, from a sample to a person, in `topology/sample/from_person.py`.
+`biotope graph check` fails with `topology.layout`, naming the class, when a node
+or edge sits elsewhere. Other modules there, such as helpers and shared types, are
+free. Register the classes in `topology/__init__.py`.
 
 Use frozen dataclasses with stable `schema_id` values. Give each node identifier
 its own `NewType` over `str`, and use those types for relation endpoints:
 
 ```python
+# graph/topology/person/node.py
 from dataclasses import dataclass, field
 from typing import ClassVar, NewType
 
@@ -147,7 +147,10 @@ edges against the declared endpoint types.
 Concept docstrings and property descriptions are exported in `schema_config.yaml`,
 and `graph check` warns about concepts and properties without one. Optional
 `display_name: ClassVar[str]` values provide short diagram labels without changing
-concept IDs. The `biotope:` namespace is reserved for system metadata.
+concept IDs. The `biotope:` namespace is reserved for system metadata, and the
+export reserves the property names `preferred_id` and `biotope_provenance_id`:
+`graph check` reports a property with either name as `topology.reserved` before any
+build.
 
 Graph properties support strings, booleans, integers, finite floats, nullable
 scalars and string lists. Lists cannot contain nulls. For the Neo4j import files,

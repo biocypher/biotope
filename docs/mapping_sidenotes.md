@@ -1,6 +1,6 @@
 # Typed graph technical notes
 
-These notes expand the [authoring guide](mapping.md). They describe Biotope 0.10's
+These notes expand the [authoring guide](mapping.md). They describe Biotope's
 source generation, typing, reporting and export contracts.
 
 ## Source generation
@@ -36,6 +36,9 @@ the name is a Python identifier. Generation reads that declaration as syntax,
 never importing the module. It creates missing files only: a new package is
 staged and renamed into place, a package missing its registration or loader is
 completed, and an existing schema, registration or loader is never rewritten.
+`biotope mv` is the one exception: it rewrites the moved file's IDs and, for a
+package that was current, `__source_digest__` in the schema, and a moved
+description's path in the registrations.
 
 Nothing is written when there is a conflict:
 
@@ -52,7 +55,8 @@ nothing, and fails when generation would create or change a file or finds a
 conflict.
 
 New package names follow record-set `@id`s, falling back to `name` and then a JSON
-pointer. Punctuation becomes underscores, keywords and numeric prefixes are
+pointer: `push/people.csv#people` becomes `push_people_csv_people`. Punctuation
+becomes underscores, keywords and numeric prefixes are
 protected, long names are truncated, and a collision among record sets suffixes
 every member with a digest of its identity, so reordering a manifest never renames
 a package. A file resource is named after its `name`, then its `contentUrl`
@@ -75,14 +79,24 @@ fields are the reviewed facts you transcribe. Descriptions, extraction rules,
 distributions and extensions stay in the Croissant file registered in
 `SOURCE.metadata`.
 
-A record set's revision is a digest of its description and the manifest's
-`@context`; a file resource's revision also covers its checksum. Dataset review
-notes and other resources do not change it. Generation snapshots every revision it
-sees into `.biotope/contracts/<digest>.json`, and `graph check` compares each
-schema's `__source_digest__` with the current revision. A difference is
-`source.drift`, explained field by field and as a complete JSON-pointer diff
-against the recorded revision, including changes to `@context` or to ordering.
-Without a recorded revision the drift is still reported, with the current contract.
+A revision is a digest of the structure a package's code depends on: the record
+set or file entry, the fields it reads, and the files they come from. It keeps only
+these keys: `@id`, `@type`, `key`, `field`, `subField`, `parentField`, `dataType`,
+`source`, `references`, `repeated`, `isArray`, `arrayShape` (also with the `cr:`
+prefix), `biotope:nullable`, `biotope:columnIndex`, `contentUrl`,
+`encodingFormat`, `includes`, `excludes` and `containedIn`. Names, descriptions,
+`equivalentProperty`, `examples`, `sameAs`, checksums, `contentSize`, `data` and the
+`@context` do not count, so annotations and a file's changed content never make a
+package stale. Generation snapshots every revision it sees into
+`.biotope/contracts/<digest>.json`, and `graph check` compares each schema's
+`__source_digest__` with the current revision. A difference is `source.drift`,
+explained field by field and as a complete JSON-pointer diff against the recorded
+revision, including changes to ordering. Without a recorded revision the drift is
+still reported, with the current contract.
+
+A file entry whose `sameAs` names another file of the same description, as Baker
+links `table.csv.gz` to `table.csv`, is an identical copy: it gets no package of its
+own.
 
 ## Mapping signatures
 
@@ -175,8 +189,12 @@ from another column of its table only in case.
 `run.json` (`schema_version` 2) records scope, policies, source metadata and
 available versions, code/topology revisions, settings, bindings, dependencies, the
 source inventory and exclusions, audits, completion and output locations.
-Dependency entries include installed versions and editable/VCS details when
-available. Biotope's Python source digest identifies local edits that a package
+`dependencies` holds the installed version of biotope, croissant-baker and pyright,
+of every distribution `graph/pyproject.toml` declares, of every distribution the
+graph code imports, and of BioCypher when it writes the export, with editable/VCS
+details when available.
+`graph/pyproject.toml` is the one place to declare them; `Pipeline` has no
+`dependencies` field. Biotope's Python source digest identifies local edits that a package
 version cannot. Unspecified variability is reported as unreviewed. `graph_digest`
 compares graph content across runs without timestamps or paths. Reproducibility
 still depends on the project's external state and code policies.

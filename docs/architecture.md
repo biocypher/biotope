@@ -16,7 +16,7 @@ Local data ── croissant-baker ── reviewed Croissant ── source invent
 
 | Component           | Responsibility                                                              |
 | ------------------- | --------------------------------------------------------------------------- |
-| `biotope.commands`  | CLI orchestration, project metadata and Git operations                      |
+| `biotope.commands`  | CLI orchestration and project metadata; no command writes to git            |
 | `biotope.croissant` | Croissant models and metadata inspection                                    |
 | croissant-baker     | Format-aware local source description and scan diagnostics                  |
 | `biotope.graph`     | Source generation, typed contracts, checks, execution and export            |
@@ -30,8 +30,12 @@ infer biological equivalence or decide which records answer a research question.
 ## Metadata and source records
 
 `biotope add` reads local files and stores Croissant descriptions under
-`.biotope/datasets/`. Curated descriptions and saved annotations are protected
-from rebaking. A fresh description can be written separately for reconciliation.
+`.biotope/datasets/`. What people know about a dataset lives in its annotation
+file next to the data, which commands write only when asked and never overwrite. A
+description is the data, as croissant-baker describes it, with the annotation file
+over it, so a rebake always succeeds and keeps every annotation. Files and tables
+take their IDs from their paths in the dataset, so new data of the same shape keeps
+every ID. See [project layout](project.md).
 
 `biotope source generate` reads a reviewed manifest and gives every top-level record
 set, and every file no record set reads, its own package. A package belongs to the
@@ -40,6 +44,9 @@ binds each Croissant field and describes the values a loader supplies, while the
 metadata document retains extraction rules and descriptions. Generation never
 rewrites an existing file, neither reads rows nor supplies a reader, and snapshots
 each contract revision in `.biotope/contracts/` so a later change can be explained.
+A revision covers structure only, so descriptions and a file's changed content
+never make a package stale. `biotope mv` moves a file together with every ID that
+names it, in the description and in its source package.
 
 A project loader returns `SourceRecord` values with source evidence. Mappings
 accept these typed records and return intermediate records or topology objects.
@@ -67,7 +74,8 @@ do not make the accumulated graph disk-backed.
 
 A build writes graph files, the export schema with every concept and property
 description, a shared provenance catalog and `run.json`. The run record identifies
-source metadata, code, dependencies, scope, policies, settings, exclusions and
+source metadata, code, the installed versions of what `graph/pyproject.toml`
+declares and the graph code imports, scope, policies, settings, exclusions and
 audits. Every exported object carries `biotope_provenance_id`, an index into
 `provenance.json`.
 

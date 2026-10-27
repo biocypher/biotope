@@ -33,8 +33,10 @@ in this environment. See [installation](docs/installation.md) for other setups.
 
 ## Build a graph
 
-1. Initialize a metadata project with `biotope init my-kg`, then enter `my-kg`.
-1. Describe selected local data with `biotope add <path>` and review the Croissant metadata.
+1. Initialize a project with `biotope init my-kg`, then enter `my-kg`, or run
+   `biotope init .` at the root of an existing repository. Biotope never writes to git.
+1. Describe selected local data with `biotope add <path>`, review the Croissant metadata,
+   and write what you know about each dataset into its annotation file.
 1. Run `biotope graph scaffold`, then give every described input a source package with
    `biotope source generate <manifest> --out graph/sources`.
 1. Select or exclude each source, then define the graph's schemas, loaders, topology,
@@ -47,7 +49,8 @@ The scaffold's README describes its layout. The [tutorial](docs/tutorial.md)
 provides a complete synthetic project you can run immediately.
 
 - [Typed graph guide](docs/mapping.md): source curation, authoring and review.
-- [Commands](docs/commands.md): metadata, graph and version-control workflows.
+- [Commands](docs/commands.md): metadata, extraction and graph workflows.
+- [Project layout](docs/project.md): where biotope writes, annotation files, IDs and refreshes.
 - [Architecture](docs/architecture.md): responsibilities and execution boundaries.
 - [Published documentation](https://biocypher.github.io/biotope/).
 
