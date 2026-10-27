@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 import croissant_baker.scan
+import h5py
+import numpy as np
 import openpyxl
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -123,6 +125,29 @@ def test_ids_are_paths_in_the_dataset_wherever_it_sits_and_however_files_are_lis
     [table] = single["recordSet"]
     assert [entry["@id"] for entry in single["distribution"]] == ["records.jsonl"]
     assert table["@id"] == "records.jsonl#records"
+
+
+def anndata(path: Path, *frames: str) -> None:
+    with h5py.File(path, "w") as stored:
+        stored.attrs["encoding-type"] = "anndata"
+        for frame in frames:
+            group = stored.create_group(frame)
+            group.attrs.update({"encoding-type": "dataframe", "_index": "_index", "column-order": ["label"]})
+            group.create_dataset("_index", data=np.array([b"a", b"b"]))
+            group.create_dataset("label", data=np.array([1, 2]))
+
+
+def test_a_table_inside_a_file_keeps_its_name_when_the_file_gains_a_second_table(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert invoke("init", ".", "--no-prompt").exit_code == 0
+    (tmp_path / "data/cells").mkdir(parents=True)
+    manifest = tmp_path / ".biotope/datasets/data/cells.jsonld"
+    tables = []
+    for frames in (("obs",), ("obs", "var")):
+        anndata(tmp_path / "data/cells/sample.h5ad", *frames)
+        assert invoke("add", "--rebake", "data/cells").exit_code == 0
+        tables.append({record["@id"] for record in json.loads(manifest.read_text())["recordSet"]})
+    assert tables == [{"sample.h5ad#obs"}, {"sample.h5ad#obs", "sample.h5ad#var"}]
 
 
 class CaseTwins(MetadataGenerator):

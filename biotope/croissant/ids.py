@@ -78,13 +78,21 @@ def read_files(record: dict[str, Any], key: str = "field") -> set[str]:
     return found
 
 
+def _base(url: str) -> str:
+    return re.escape(re.sub(r"[^A-Za-z0-9_.-]", "_", PurePosixPath(url).stem))
+
+
 def _inner_name(record: dict[str, Any], url: str) -> str:
     name = str(record.get("name") or record["@id"])
     if name != record["@id"]:
         return name
-    base = re.escape(re.sub(r"[^A-Za-z0-9_.-]", "_", PurePosixPath(url).stem))
-    matched = re.fullmatch(rf"(?:.+__)?{base}(?:__\d+)?_(.+?)(?:__\d+)?", name)
+    matched = re.fullmatch(rf"(?:.+__)?{_base(url)}(?:__\d+)?_(.+?)(?:__\d+)?", name)
     return matched.group(1) if matched else name
+
+
+def _named_inside(record: dict[str, Any], url: str) -> bool:
+    name = str(record.get("name") or record["@id"])
+    return not re.fullmatch(rf"(?:.+__)?{_base(url)}(?:__\d+)?", name) and _inner_name(record, url) != name
 
 
 def renamer(mapping: dict[str, str]) -> Callable[[str], str]:
@@ -139,7 +147,11 @@ def stable_ids(metadata: dict[str, Any]) -> None:
         url = resource.get("contentUrl")
         if not isinstance(url, str):
             table = str(record.get("name") or record["@id"])
-        elif readers[source] == 1 and WORKBOOKS.isdisjoint(_named(resource.get("encodingFormat"))):
+        elif (
+            readers[source] == 1
+            and not _named_inside(record, url)
+            and WORKBOOKS.isdisjoint(_named(resource.get("encodingFormat")))
+        ):
             table = stem(url)
         else:
             table = _inner_name(record, url)

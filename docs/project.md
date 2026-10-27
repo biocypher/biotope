@@ -227,8 +227,9 @@ the file's content or the machine. Content hashes are checksums, never IDs.
 - A table's ID is its file's ID, `#` and the table's name in the file: the file
   name without its extensions for a single-table file (`push/people.csv#people`,
   `push/events.csv.gz#events`), the sheet name for a workbook, and the name
-  croissant-baker gives each table of other multi-table files, such as an HDF5
-  dataset or a FHIR resource type.
+  croissant-baker gives each table inside other files, such as an HDF5 dataset
+  (`cells/sample.h5ad#obs`) or a FHIR resource type, even while the file holds
+  only one.
 - A file set's ID is its name, which croissant-baker gives it, such as
   `events partition files`, and the annotation file can change. Its table's ID is
   `<file set name>#<table>`: `events%20partition%20files#events`, or
