@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -19,7 +18,7 @@ from biotope.graph.moves import carry_description, package_files, planned_ids, p
 from biotope.graph.sources import description_text, write_module, write_text_atomic
 from biotope.graph.targets import Target
 from biotope.metadata import FILE_OBJECT_TYPE, dataset_id, ensure_no_legacy_file_objects, manifest_for
-from biotope.utils import calculate_file_checksum, find_biotope_root, is_file_tracked, warn_ignored
+from biotope.utils import find_biotope_root, is_file_tracked, warn_ignored
 
 
 @click.command()
@@ -161,7 +160,6 @@ def _plan(
         return None
     before = copy.deepcopy(metadata)
     mapping: dict[str, str] = {}
-    now = datetime.now(timezone.utc).isoformat()
     for distribution in metadata.get("distribution") or []:
         url = distribution.get("contentUrl")
         if distribution.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
@@ -181,9 +179,6 @@ def _plan(
         mapping |= ids
         distribution["contentUrl"] = moved_url
         distribution.pop(MOVED_FROM, None)
-        distribution["sha256"] = calculate_file_checksum(old)
-        distribution["dateModified"] = now
-        distribution["contentSize"] = old.stat().st_size
     if staying:
         _check_file_sets(manifest, metadata, base, moves, biotope_root)
         if not mapping:

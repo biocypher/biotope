@@ -21,6 +21,8 @@ def test_mv_keeps_the_graph_building_and_a_content_change_alone_is_reported_by_c
 
     ok("mv", "data/study/push/people.csv", "data/study/current/people.csv")
 
+    rows = ok("check-data").output.splitlines()
+    assert any("people.csv" in row and "CORRUPTED" in row for row in rows)
     assert built(project) == ({"data/study/current/people.csv", "data/study/docs/report.html"}, 3)
     manifest = json.loads((project / MANIFEST).read_text())
     assert "current/people.csv#people" in {record["@id"] for record in manifest["recordSet"]}
