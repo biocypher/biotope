@@ -113,8 +113,7 @@ def test_mv_file_not_tracked(runner, biotope_project):
     source = biotope_project / "test.csv"
     source.write_text("x")
     with runner.isolated_filesystem(temp_dir=biotope_project):
-        with mock.patch("biotope.commands.mv.is_file_tracked", return_value=False):
-            result = runner.invoke(mv, [str(source), "moved.csv"])
+        result = runner.invoke(mv, [str(source), "moved.csv"])
     assert result.exit_code != 0
     assert "is not tracked" in result.output
 
