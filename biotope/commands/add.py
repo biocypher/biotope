@@ -39,7 +39,9 @@ from biotope.utils import (
 @click.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option("--force", "-f", is_flag=True, help="Force add even if file already tracked")
-@click.option("--rebake", is_flag=True, help="Describe an already-tracked dataset again from its data and annotation file")
+@click.option(
+    "--rebake", is_flag=True, help="Describe an already-tracked dataset again from its data and annotation file"
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit a complete machine-readable scan report on stdout")
 @click.option("--name", help="Dataset name override")
 @click.option("--description", help="Dataset description override")

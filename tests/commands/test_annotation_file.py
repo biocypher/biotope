@@ -1,6 +1,9 @@
 import json
 import re
+import shutil
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 import yaml
 from graph_project import MANIFEST, findings, invoke, ok
@@ -150,6 +153,28 @@ def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
     assert retired.exit_code != 0 and "No such option" in retired.output
 
 
+def test_a_file_set_takes_its_name_from_the_annotation_file_until_the_name_is_removed(fresh):
+    events = fresh / "data/study/events"
+    events.mkdir()
+    for part in (0, 1):
+        pq.write_table(pa.table({"k": [part]}), events / f"part-{part}.parquet")
+    ok("add", "data/study")
+    annotation = fresh / "data/study/.biotope.yaml"
+    baked = described(fresh)
+    annotation.write_text(
+        "file_sets:\n  events partition files: events\ntables:\n  events#events:\n    description: Events.\n"
+    )
+    ok("map", "inspect", MANIFEST)
+    named = described(fresh)
+    assert "events" in {entry["@id"] for entry in named["distribution"]}
+    assert table(named, "events#events")["description"] == "Events."
+    assert column(table(named, "events#events"), "k")["source"]["fileSet"] == {"@id": "events"}
+
+    annotation.write_text("")
+    ok("map", "inspect", MANIFEST)
+    assert described(fresh) == baked
+
+
 def test_a_hand_edit_of_the_annotation_file_reaches_graph_check_and_build(project):
     annotation = project / "data/study/.biotope.yaml"
     annotation.write_text(
@@ -190,3 +215,7 @@ def test_mv_carries_the_annotations_of_the_moved_file(fresh):
         "description": "One row per sample."
     }
     assert described(fresh, ".biotope/datasets/data/raw/sheets.jsonld")["description"] == "One row per sample."
+
+    shutil.move(fresh / "data/study/current/people.csv", fresh / "data/study/push/people.csv")
+    rebaked = ok("add", "--rebake", "data/study")
+    assert f"table '{moved}'" in " ".join(rebaked.output.split())

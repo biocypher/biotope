@@ -91,7 +91,7 @@ class AddOutput:
         for result in self.sources:
             if result["input"] == self.path(source):
                 result["annotation"] = self.path(path)
-        self.row("Annotate", self.path(path))
+        self.row("Edit", self.path(path))
 
     def warning(self, source: Path, message: str) -> None:
         for result in self.sources:

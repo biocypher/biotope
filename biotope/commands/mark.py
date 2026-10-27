@@ -7,6 +7,7 @@ import json
 import click
 
 from biotope.commands.add import resolve_dataset_ref
+from biotope.graph.sources import read_metadata
 from biotope.metadata import (
     STATUS_VALUES,
     add_derived_from,
@@ -58,8 +59,7 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
         except ValueError as exc:
             raise click.BadParameter(str(exc)) from exc
 
-    with open(manifest_path) as handle:
-        metadata = json.load(handle)
+    metadata = read_metadata(manifest_path)
     set_status(metadata, status)
     for source in resolved_sources:
         add_derived_from(metadata, source)

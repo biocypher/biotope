@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from rich.panel import Panel
 
 from biotope.croissant.inspector import inspect_dataset, render_inspection
 from biotope.croissant.spec import CroissantDatasetModel, load_from_path, load_from_url
+from biotope.graph.sources import read_metadata
 from biotope.project_model import Project, find_project
 from biotope.utils import find_biotope_root
 
@@ -275,6 +277,8 @@ def _load_croissant(path: str) -> CroissantDatasetModel:
         )
         raise click.Abort
 
+    with contextlib.suppress(OSError, ValueError):
+        read_metadata(p)
     try:
         return load_from_path(path)
     except ValidationError as exc:
