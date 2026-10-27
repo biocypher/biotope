@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from biotope.croissant.ids import moved_from
+from biotope.croissant.ids import MOVED_FROM, moved_from
 from biotope.graph.discovery import (
     Package,
     discover_packages,
@@ -45,6 +45,7 @@ from biotope.graph.sources import (
     write_module,
 )
 from biotope.graph.targets import Target, declared_identities, manifest_targets, unidentified_files
+from biotope.metadata import dataset_id
 
 
 SOURCES_PACKAGE_NAMES = frozenset({"inventory", "INVENTORY", "SOURCES", "EXCLUDED_SOURCES"})
@@ -369,6 +370,19 @@ def _orphans(plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package]) 
     return found
 
 
+def _relocated(plan: SourcePlan, data: dict[str, Any], status: PackageStatus) -> PackageStatus:
+    origin = data.get(MOVED_FROM)
+    project = project_root(plan.metadata)
+    if not isinstance(origin, str) or project is None or status.state not in ("current", "drift"):
+        return status
+    now = dataset_id(plan.metadata.resolve(), project)
+    detail = (
+        f"{status.identity!r} keeps its ID, but its file moved outside biotope from {origin!r} to {now!r}. "
+        "Move the file back, rebake and use biotope mv"
+    )
+    return replace(status, state="orphaned", detail=detail)
+
+
 def _moved(plan: SourcePlan, data: dict[str, Any], identity: str, gone: str, owned: dict[str, Package]) -> str:
     moves = {
         old: entry["@id"]
@@ -422,6 +436,7 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
         existing = ownership.owned.get(target.identity)
         if existing is not None:
             status, missing = _reconcile_existing(plan, target, existing)
+            status = _relocated(plan, data, status)
             new_files.update(missing)
         elif ownership.unreadable:
             continue

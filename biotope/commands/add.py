@@ -15,7 +15,7 @@ import click
 
 from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
-from biotope.croissant.ids import note_moves, stable_ids
+from biotope.croissant.ids import MOVED_FROM, note_moves, stable_ids
 from biotope.extraction.run import state_path
 from biotope.graph.moves import carry_description, kept, package_files
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
@@ -233,12 +233,25 @@ def add_file(
     manifest = resolve_target(abs_file, biotope_root).metadata_path
     previous = manifest if manifest.exists() else _gone_copy(abs_file, biotope_root)
     if previous is not None:
-        note_moves(_read_description(previous), metadata)
+        described = _read_description(previous)
+        note_moves(described, metadata)
+        _note_relocation(described, metadata, dataset_id(previous, biotope_root), relative_path.as_posix())
     if previous in (None, manifest):
         _describe(abs_file, manifest, metadata, given, reporter)
     else:
         _take_over(previous, abs_file, manifest, metadata, given, biotope_root, reporter)
     return True
+
+
+def _note_relocation(previous: dict[str, Any], baked: dict[str, Any], old: str, new: str) -> None:
+    origin = previous.get(MOVED_FROM)
+    origin = origin if isinstance(origin, str) else old
+    if origin != new and _file_ids(previous) == _file_ids(baked):
+        baked[MOVED_FROM] = origin
+
+
+def _file_ids(described: dict[str, Any]) -> set[str]:
+    return {entry.get("@id") for entry in described.get("distribution") or [] if entry.get("@type") == FILE_OBJECT_TYPE}
 
 
 def _gone_copy(data: Path, biotope_root: Path) -> Path | None:
