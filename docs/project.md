@@ -366,6 +366,9 @@ graph/sources/study/current_people_csv_people, then declare the new ID in this p
 check names; or move the file back, rebake, use biotope mv and delete graph/sources/study/current_people_csv_people
 ```
 
+When the pipeline excludes the old package's source, this finding only warns, since
+an excluded source is not read.
+
 A dataset that is a single file has no folder to rebake, so its refresh runs
 `biotope add` on the file at its new path and `source generate` on the description
 that names it. When exactly one description names a file that is gone and has the
