@@ -162,7 +162,8 @@ def test_a_build_killed_outright_leaves_nothing_for_git_to_pick_up(project):
     git(project, "init", "-q")
     loader = project / "graph/sources/study/push_people_csv_people/loader.py"
     text = loader.read_text().replace("import csv\n", "import csv\nimport os\nimport signal\n")
-    loader.write_text(text.replace("    with path.open(", "    os.kill(os.getpid(), signal.SIGKILL)\n    with path.open("))
+    kill = "    os.kill(os.getpid(), signal.SIGKILL)\n"
+    loader.write_text(text.replace("    with path.open(", kill + "    with path.open("))
     before, untracked = snapshot(project), git(project, "ls-files", "--others", "--exclude-standard")
 
     killed = subprocess.run([sys.executable, "-m", "biotope.cli", "graph", "build"], cwd=project, capture_output=True)
