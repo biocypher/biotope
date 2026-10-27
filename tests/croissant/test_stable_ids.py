@@ -219,3 +219,19 @@ def test_paths_differing_only_in_case_and_a_file_set_name_used_twice_fail_naming
         described = json.loads((tmp_path / ".biotope/datasets/data/study.jsonld").read_text())
         sets = {entry["@id"] for entry in described["distribution"] if entry["@type"] == "cr:FileSet"}
         assert sets == {"a_sales", "sales%20partition%20files"}
+
+
+def test_package_and_class_names_come_from_the_decoded_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert invoke("init", ".", "--no-prompt").exit_code == 0
+    (tmp_path / "data/study").mkdir(parents=True)
+    (tmp_path / "data/study/Book.xlsx - SupTable5.csv").write_text("gene,score\nA,1\n")
+    assert invoke("add", "data/study").exit_code == 0
+    assert invoke("graph", "scaffold").exit_code == 0
+
+    generated = invoke("source", "generate", ".biotope/datasets/data/study.jsonld", "--out", "graph/sources")
+
+    assert generated.exit_code == 0, generated.output
+    packages = [path.parent for path in (tmp_path / "graph/sources/study").glob("*/schema.py")]
+    assert [package.name for package in packages] == ["Book_xlsx_SupTable5_csv_Book_xlsx_SupTable5"]
+    assert "class BookXlsxSupTable5CsvBookXlsxSupTable5:" in (packages[0] / "schema.py").read_text()

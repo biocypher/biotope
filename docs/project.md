@@ -250,9 +250,11 @@ Rename one of the files, or rename one file set in the annotation file by its
 include pattern, as in `file_sets: {a/*.parquet: a parts}`. No ID gets a suffix
 that depends on order or on other files.
 
-`biotope source generate` names packages and record classes after the IDs: the
-table `push/people.csv#people` gets the package `push_people_csv_people` and the
-class `PushPeopleCsvPeople`. A file no table reads is named after its file name:
+`biotope source generate` names packages and record classes after the IDs, with
+the percent-encoding undone: the table `push/people.csv#people` gets the package
+`push_people_csv_people` and the class `PushPeopleCsvPeople`, and
+`reports/Lab%20results.csv#Lab%20results` gets `reports_Lab_results_csv_Lab_results`.
+A file no table reads is named after its file name:
 `docs/report.html` gets the package `report_html`. Both are yours to rename.
 
 ## Source revisions cover structure

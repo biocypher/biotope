@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Literal, cast, get_type_hints
+from urllib.parse import unquote
 
 from biotope.croissant import annotation
 from biotope.graph.annotations import is_string, nested_records
@@ -254,7 +255,7 @@ def attribute_name(raw: object, used: set[str], *, class_name: bool = False) -> 
 
 def slug(raw: str) -> str:
     """Project any Croissant identity onto one importable path component."""
-    base = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9_]", "_", raw)).strip("_") or "unnamed"
+    base = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9_]", "_", unquote(raw))).strip("_") or "unnamed"
     if len(base) > SLUG_LIMIT:
         base = base[:SLUG_LIMIT].rstrip("_") or "unnamed"
     if base[0].isdigit():
