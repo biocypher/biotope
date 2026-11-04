@@ -27,7 +27,8 @@ Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of tru
 - `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `extraction/` the extraction stage (schemas, the extractor protocol, the LLM extractor, document text and stored records), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
 - `skills/`: the agent skills shipped in the Claude plugin (`.claude-plugin/`): `biotope-croissant` (project workflow and its ownership rules) and `biocypher`.
 - `tests/`: `unit/`, `commands/`, `croissant/`, `graph/`, `extraction/` (against a fake OpenAI-compatible endpoint) and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
-- `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync), `roadmap.md`, `specs/` (the spec rule and format in `specs/README.md`; a milestone's spec lives only on its branch) and `research/` (notes behind tool and model choices).
+- `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync). it gets rendered into public facing docs, so no working files in there.
+- `spec_files/` gitignored document for planning docs and specs.
 
 ### Commands
 
