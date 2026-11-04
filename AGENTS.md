@@ -24,9 +24,9 @@ Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of tru
 
 ### Layout
 
-- `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `extraction/` the extraction stage (schemas, the extractor protocol, the LLM extractor, document text and stored records), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
+- `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `extraction/` the extraction stage (schemas, the extractor interface, the runner and stored records), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
 - `skills/`: the agent skills shipped in the Claude plugin (`.claude-plugin/`): `biotope-croissant` (project workflow and its ownership rules) and `biocypher`.
-- `tests/`: `unit/`, `commands/`, `croissant/`, `graph/`, `extraction/` (against a fake OpenAI-compatible endpoint) and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
+- `tests/`: `unit/`, `commands/`, `croissant/`, `graph/`, `extraction/` (with small project-style extractors) and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
 - `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync). it gets rendered into public facing docs, so no working files in there.
 - `spec_files/` gitignored document for planning docs and specs.
 
@@ -36,14 +36,13 @@ Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of tru
 uv sync --locked --extra dev --extra graph   # install
 uv run pyright                               # type check
 uv run pytest                                # unit tier
-uv run pytest -m live                        # live tier, from B1: real endpoints, may cost money
 uv run pre-commit run --all-files            # format and lint
 uv run mkdocs build --strict                 # docs
 ```
 
 ### Tests, commits and releases
 
-- Unit tests run by default and in CI, on committed public fixtures and without network. B1 adds the `live` marker for tests that call a real model endpoint, and excludes it by default with `addopts`. `manual` criteria are judged by Vlad or a project's user and recorded in the PR.
+- Unit tests run by default and in CI, on committed public fixtures and without network. `manual` criteria are judged by Vlad or a project's user and recorded in the PR.
 - Tests and examples use only public material. Never commit copyrighted full text, such as the InTRAC papers; runs on such documents happen in the data projects that hold them.
 - Commit subjects and PR titles follow Conventional Commits (`feat:`, `fix:`, `docs:`, …; `!` marks a break). Release-please maintains the version, `CHANGELOG.md` and `uv.lock`'s package entry: never edit them by hand.
 

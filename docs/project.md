@@ -20,22 +20,22 @@ biotope writes only in these places, and in the files you name to `mv`, `rm` or
   `.biotope/datasets/data/study.v2.jsonld` for the folder `data/study.v2` and
   `.biotope/datasets/data/raw/people.csv.jsonld` for the file
   `data/raw/people.csv`; the contract revisions in `.biotope/contracts/`; and the
-  extraction state in `.biotope/extraction/`. Commit all of it. The document texts
-  in `.biotope/texts/` and an interrupted run's progress in `.biotope/progress/`
-  ignore themselves in git.
+  extraction state in `.biotope/extraction/`. Commit all of it. An interrupted
+  run's progress in `.biotope/progress/` ignores itself in git.
 - `graph/`: the graph workspace, the project's code and the graph it builds,
-  extraction schemas in `graph/extraction/<kind>.py` included. The
+  the extractions in `graph/extraction/` included. The
   `graph/.gitignore` that `biotope graph scaffold` writes ignores `graph/build/`,
   the `graph/.build-*/` folders a build stages in, and `graph/metagraph.html`.
-- `data/extracted/<schema>.jsonl`: the records `biotope extract run` writes by
-  default. Commit them. `--out` names another path.
+- `data/extracted/<name>.jsonl`: the records `biotope extract run` writes for
+  each extraction. Commit them.
 - Annotation files, next to each dataset you add: `<folder>/.biotope.yaml` or
   `<file>.biotope.yaml`. Commit them.
 - The root `.gitignore`, which `biotope init` writes only when the project has none.
 
 `data/` is a convention, not a rule: `biotope add` takes any folder, and the
 annotation file goes next to it. The `.gitignore` that `init` writes keeps data
-files under `data/` out of git and commits annotation files and extracted records:
+files under `data/` and `.env` files out of git and commits annotation files and
+extracted records:
 
 ```gitignore
 /data/**
@@ -45,6 +45,7 @@ files under `data/` out of git and commits annotation files and extracted record
 __pycache__/
 *.pyc
 .venv/
+.env
 ```
 
 `init` never changes an existing `.gitignore`. In a project that has one, replace
@@ -82,10 +83,10 @@ Three parts of it follow fixed rules:
   `preferred_id` and `biotope_provenance_id`, and `graph check` reports either as
   `topology.reserved` before any build.
 
-- **Extraction schemas** live in `graph/extraction/<kind>.py`. The scaffold lists
-  `extraction` in the pipeline's `code_paths`, so `graph check` type-checks them
-  and `run.json` records them with the rest of the graph code. Write them after
-  `graph scaffold`, which refuses an existing `graph/`.
+- **Extractions** are listed in `graph/extraction/__init__.py`, with their
+  schemas and extractors in modules beside it. The scaffold lists `extraction` in
+  the pipeline's `code_paths`, so `graph check` type-checks them and `run.json`
+  records them with the rest of the graph code.
 
 - **Dependencies.** `graph/pyproject.toml` declares the libraries the graph code
   uses. `graph check` warns about an undeclared import, and a build's `run.json`
@@ -218,7 +219,7 @@ the data no longer has, `add` warns and names it.
 
 The annotation file describes structure the data has; it cannot add any. A file
 croissant-baker cannot parse still gets a file entry, with an ID from its path, and
-its own source package. A document, such as a paper or a web page, goes through
+its own source package unless an extraction reads it. A document, such as a paper or a web page, goes through
 [extraction](extraction.md): the extracted records become a dataset with tables
 and fields of their own. Any other file is read by its own package's loader, which
 decodes it with an established library into the fields you declare in its
@@ -309,18 +310,15 @@ re-downloaded document or a same-named file in another folder, run:
 
 ```bash
 biotope add --rebake data/study
-biotope extract run graph/extraction/<kind>.py:<Class> <every dataset the schema reads>
+biotope extract run
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build
 ```
 
-Run `add --rebake` once per changed dataset, `extract run` once per extraction
-schema that reads documents of a changed dataset, and `source generate` once per
-description. Give `extract run` every dataset the schema reads, as in its first
-run, and the `--out` the project uses: a run keeps only the records of the
-datasets it is given and drops those of documents in any other dataset, and every
-check still passes. Skip `extract run` when no schema reads the dataset. Without
+Run `add --rebake` once per changed dataset, `extract run` when the project lists
+an extraction, and `source generate` once per description. `extract run` runs every
+listed extraction and reuses the records of every unchanged document. Without
 it, every check and the build pass on the records extracted from the previous
 documents, and the rebake records each document's new checksum, so `check-data`
 no longer reports the change. No file needs a hand edit:
@@ -355,25 +353,26 @@ EXCLUDED_SOURCES: dict[str, str] = {
 file and updates in one step everything that names it: its ID and its tables' IDs
 in the description, the annotation file's keys for those tables, the IDs in its
 source package's `schema.py` and, if the package was current, its
-`__source_digest__`, and a records file's extraction state. A single file's
+`__source_digest__`. A single file's
 annotation file moves with it. `biotope mv -r` does the same for every file in a
 folder and moves the descriptions of the datasets inside it; it changes nothing
 when it cannot update one of them. `graph check` then passes, and the source reads
 the file at its new path. `mv` refuses, changing nothing, to replace a file a
 description holds or an existing annotation file, even with `--force`; to give a
 file a path that differs only in case from another file of its dataset, an
-identical copy the description leaves out included; to move a dataset other than
-a records file into the folder of another dataset, whose bake would then describe
-it as well; and to move a file whose move outside biotope is unresolved, while a
+identical copy the description leaves out included; to move an extraction's
+records file, which always sits at `data/extracted/<name>.jsonl`; to move a dataset
+into the folder of another dataset, whose bake would then describe it as well; and to move a file whose move outside biotope is unresolved, while a
 package with a written loader still declares the ID the file had before it.
 Resolve that move first as `graph check` advises. It renames the data and never
 copies it, so it cannot move data to another filesystem or a folder onto a folder
 that holds files; there it also changes nothing.
 
-After `mv` of a document that an extraction schema reads, run `biotope extract run`
-again with every dataset the schema reads and the `--out` the project uses, as in
-the refresh. The records name each document by its path, and the run reuses the
-moved document's records without a request.
+After `mv` of a document that an extraction reads, run `biotope extract run`
+again, as in the refresh. The records name each document by its dataset and its
+path within it, and the run reuses the moved document's records without creating
+the extractor, as long as one of the extraction's patterns still matches the new
+path.
 
 A move made outside biotope, by a file manager, `git mv` or a download script,
 gives the file a new ID at the next refresh. `source generate` creates a package

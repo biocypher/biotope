@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from biotope.croissant.ids import MOVED_FROM, file_id, moved_from
+from biotope.extraction.run import extracted_files
 from biotope.graph.discovery import (
     Package,
     discover_packages,
@@ -46,7 +47,7 @@ from biotope.graph.sources import (
     write_module,
 )
 from biotope.graph.targets import Target, declared_identities, manifest_targets, unidentified_files
-from biotope.metadata import dataset_id
+from biotope.metadata import dataset_dir_for_manifest, dataset_id, resolve_content_url
 
 
 SOURCES_PACKAGE_NAMES = frozenset({"inventory", "INVENTORY", "SOURCES", "EXCLUDED_SOURCES"})
@@ -451,7 +452,8 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
     root = root_directory(metadata, output, package)
     data = refresh_description(metadata)
     packages = discover_packages(root)
-    plan = SourcePlan(metadata, output, root, ContractStore.for_manifest(metadata), manifest_targets(data), packages)
+    targets = _unextracted(metadata, manifest_targets(data))
+    plan = SourcePlan(metadata, output, root, ContractStore.for_manifest(metadata), targets, packages)
     contested_root = _root_conflicts(metadata, output, root)
     if contested_root:
         return replace(plan, statuses=tuple(contested_root))
@@ -493,6 +495,26 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
         new_files=new_files,
         generated_files=generated_files,
     )
+
+
+def _unextracted(metadata: Path, targets: tuple[Target, ...]) -> tuple[Target, ...]:
+    project = project_root(metadata)
+    if project is None:
+        return targets
+    project, manifest = project.resolve(), metadata.resolve()
+    extracted = extracted_files(project)
+    if not extracted or not manifest.is_relative_to(project / ".biotope/datasets"):
+        return targets
+    dataset_dir = dataset_dir_for_manifest(manifest, project)
+
+    def read_by_extraction(target: Target) -> bool:
+        url = target.entry.get("contentUrl")
+        located = resolve_content_url(url, dataset_dir, project) if isinstance(url, str) else None
+        if target.kind != "fileObject" or located is None or not located.resolve().is_relative_to(project):
+            return False
+        return located.resolve().relative_to(project).as_posix() in extracted
+
+    return tuple(target for target in targets if not read_by_extraction(target))
 
 
 def _create_package(directory: Path, files: dict[str, str]) -> list[Path]:

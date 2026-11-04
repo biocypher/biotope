@@ -13,7 +13,7 @@ from rich.panel import Panel
 from biotope.commands.add import directory_files
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, case_clashes, check_ids, moved_from, moved_ids, rename, renamer
-from biotope.extraction.run import STATES, state_path
+from biotope.extraction.run import records_files
 from biotope.graph.inventory import declared_files
 from biotope.graph.moves import (
     carry_description,
@@ -59,6 +59,15 @@ def mv(source: Path, destination: Path, force: bool, recursive: bool) -> None:
             f"❌ Directory '{source}' contains no tracked files."
             if source.is_dir()
             else f"❌ File '{source}' is not tracked. Use 'biotope add' first."
+        )
+        raise click.Abort
+    extracted = {path.resolve() for path in records_files(biotope_root)}
+    held = [path for path in files if path.resolve() in extracted]
+    if held:
+        click.echo(
+            f"❌ {held[0].relative_to(biotope_root)} holds an extraction's records, which biotope extract run always "
+            "writes to data/extracted/<name>.jsonl. To change the file, rename the extraction in "
+            "graph/extraction/__init__.py."
         )
         raise click.Abort
     destination = _validate_move_operation(source, destination, biotope_root, force)
@@ -166,8 +175,9 @@ def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_r
 
 def _check_into(manifests: list[Path], source: Path, destination: Path, biotope_root: Path) -> None:
     data = {manifest: biotope_root / dataset_id(manifest, biotope_root) for manifest in manifests}
+    extracted = {path.resolve() for path in records_files(biotope_root)}
     for manifest, path in data.items():
-        if state_path(biotope_root, path).is_file():
+        if path.resolve() in extracted:
             continue
         carried = _follows(path, source, destination)
         for other, base in data.items():
@@ -319,11 +329,6 @@ def _fileset_patterns(metadata: dict[str, Any]) -> list[str]:
 def _apply(
     source: Path, destination: Path, moves: dict[Path, Path], plans: list[_Plan], biotope_root: Path, console: Console
 ) -> None:
-    states = {
-        state_path(biotope_root, old): state_path(biotope_root, new)
-        for old, new in moves.items()
-        if state_path(biotope_root, old).is_file()
-    }
     annotations = (
         {annotation.annotation_path(source): annotation.annotation_path(destination)} if source.is_file() else {}
     )
@@ -331,7 +336,7 @@ def _apply(
         *(path for plan in plans for path in (plan.manifest, plan.target, plan.annotation) if path is not None),
         *(path for plan in plans for path in package_files(biotope_root / "graph/sources", plan.manifest)),
         *(path for plan in plans for path in contract_files(plan.manifest, plan.revised)),
-        *(path for pair in [*states.items(), *annotations.items()] for path in pair),
+        *(path for pair in annotations.items() for path in pair),
     }
     written: list[Path] = []
     folder = existing_folder(destination.parent)
@@ -345,7 +350,7 @@ def _apply(
                 written += [plan.target, *write_ids(plan.manifest, plan.schemas, plan.revised)]
                 if plan.target != plan.manifest:
                     written += carry_description(biotope_root, plan.manifest, plan.target)
-            for old, new in [*annotations.items(), *states.items()]:
+            for old, new in annotations.items():
                 if old.is_file():
                     new.parent.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(old), str(new))
@@ -356,6 +361,4 @@ def _apply(
         prune(destination.parent, folder)
         console.print(f"[bold red]❌ {exc}; nothing was moved.[/]")
         raise click.Abort from exc
-    for old in states:
-        prune(old.parent, biotope_root / STATES)
     warn_ignored(biotope_root, [path for path in written if path.exists()])

@@ -18,7 +18,7 @@ graph/
         schema.py        typed records and field bindings; yours to edit
         loader.py        decoding into the schema; starts as a placeholder
   alignment/             cross-source identity resolution, before mappings
-  extraction/            extraction schemas, one <kind>.py per kind of document
+  extraction/            EXTRACTIONS: each one's schema, extractor and files
   topology/
     __init__.py          TOPOLOGY: the registered nodes and edges
     <node>/              one folder per node, its class name in snake_case
@@ -53,8 +53,8 @@ this workspace with the project. `.gitignore` here keeps `build/`, the
 1. Describe each dataset with `biotope add data/study`, and write what you know
    about it, such as descriptions, keys and a licence, into its annotation file,
    `data/study/.biotope.yaml`. Every input the graph might use must be described,
-   documents included. Extract a document's records with `biotope extract run`
-   and a schema in `extraction/<kind>.py`.
+   documents included. List an extraction for each kind of document in
+   `extraction/__init__.py` and extract the records with `biotope extract run`.
 
 1. Scaffold its sources:
 
@@ -106,7 +106,7 @@ keep IDs from their paths, so no schema, loader or annotation changes:
 
 ```bash
 biotope add --rebake data/study
-biotope extract run graph/extraction/<kind>.py:<Class> <every dataset the schema reads>
+biotope extract run
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build

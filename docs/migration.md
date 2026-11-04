@@ -4,8 +4,8 @@
 
 The release after 0.10 makes biotope one part of a project. It writes only in its
 own places and never to git, keeps what people write about a dataset in one
-annotation file, names files and tables by their paths, and fixes where extraction
-schemas and topology classes live. [Project layout](project.md) describes the
+annotation file, names files and tables by their paths, and fixes where topology
+classes live. [Project layout](project.md) describes the
 result.
 
 | Removed or changed                                                      | Replacement                                                                           |
@@ -18,7 +18,6 @@ result.
 | `add --bake-to`, `source register --replace` and `--reason`             | `add --rebake`, which always succeeds and applies the annotation file again           |
 | IDs such as `file_0`, `file_<sha256>` and record sets named by basename | [IDs from paths](project.md#file-and-table-ids), such as `push/people.csv#people`     |
 | A description change reported as `source.drift`                         | Only structure counts; descriptions and checksums change no revision                  |
-| `extraction/<kind>.py` and `extracted/<schema>.jsonl` at the top level  | `graph/extraction/<kind>.py` and `data/extracted/<schema>.jsonl`                      |
 | Topology classes anywhere in `code_paths`                               | `graph/topology/<node>/node.py` and one file per edge, checked as `topology.layout`   |
 | `Pipeline(dependencies=)`                                               | `graph/pyproject.toml`; `run.json` records every declared and imported distribution   |
 | A property named `preferred_id` failing at export                       | `graph check` reports it as `topology.reserved`                                       |
@@ -29,9 +28,6 @@ To migrate a 0.10 project:
 1. Move a root `project.yaml` into `.biotope/`. In the root `.gitignore`, replace
    `/data/` with `/data/**` and add the exceptions in
    [project layout](project.md#biotopes-places).
-1. Move extraction schemas into `graph/extraction/`, and each records file with
-   `biotope mv extracted/<schema>.jsonl data/extracted/<schema>.jsonl`, which
-   moves its description and extraction state too.
 1. Replace each `.biotope.yaml` template with an annotation file. Move the values
    under `dataset:` to the top level and those under `record_sets:` to `tables:`,
    keyed by the new table IDs, and drop every empty string: an empty value now

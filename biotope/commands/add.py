@@ -16,7 +16,7 @@ import click
 from biotope.commands._add_output import AddOutput
 from biotope.croissant import annotation
 from biotope.croissant.ids import MOVED_FROM, case_clashes, file_id, note_moves, stable_ids
-from biotope.extraction.run import state_path
+from biotope.extraction.run import records_files
 from biotope.graph.inventory import declared_files
 from biotope.graph.moves import carry_description, kept, package_files
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
@@ -543,7 +543,8 @@ def _give_stable_ids(metadata: dict[str, Any], source: Path, data: Path) -> None
 
 def directory_files(directory: Path, biotope_root: Path) -> tuple[list[Path], list[Path]]:
     found = sorted(_iter_directory_files(directory))
-    records = [path for path in found if state_path(biotope_root, path).is_file()]
+    extracted = {path.resolve() for path in records_files(biotope_root)}
+    records = [path for path in found if path.resolve() in extracted]
     return [path for path in found if path not in records], records
 
 

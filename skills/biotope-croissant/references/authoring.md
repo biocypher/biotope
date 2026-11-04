@@ -28,7 +28,7 @@
 | `graph/sources/inventory.py`             | Generated `INVENTORY` of every root                                                                                         |
 | `graph/sources/__init__.py`              | Authored `SOURCES` and reasoned `EXCLUDED_SOURCES`                                                                          |
 | `graph/alignment/`                       | Cross-source identity resolution, run before mappings                                                                       |
-| `graph/extraction/<kind>.py`             | Extraction schemas, type-checked with the graph code                                                                        |
+| `graph/extraction/`                      | The extractions: each one's schema, extractor and the files it reads, type-checked with the graph code                      |
 | `graph/topology/<node>/node.py`          | Node dataclass and identifier type; folder named after the class                                                            |
 | `graph/topology/<node>/<edge>.py`        | One edge whose source is that node, named after the edge class                                                              |
 | `graph/mappings/<group>.py`              | Typed transformation functions, one module per group of mappings, such as `person.py`; `MAPPINGS` in `mappings/__init__.py` |

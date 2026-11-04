@@ -44,19 +44,17 @@ validator on a description.
 
 ## Extract records from documents
 
-| Command                                               | Purpose                                                                       |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `biotope extract try <module.py:Schema> <file>...`    | Show the records and evidence the configured extractor finds; change nothing. |
-| `biotope extract run <module.py:Schema> <dataset>...` | Extract registered documents, store the records and register them.            |
-| `biotope extract text <file>`                         | Print biotope's text of a document, which evidence offsets refer to.          |
-| `biotope extract schema <module.py:Schema>`           | Print the JSON Schema, key and revision biotope derives from a schema class.  |
+| Command                                | Purpose                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| `biotope extract try <name> <file>...` | Show the records and evidence an extraction finds in the files; change nothing. |
+| `biotope extract run [<name>...]`      | Run every listed extraction, or the ones named; store and register the records. |
 
-Extraction reads the extractor from `extraction` in `.biotope/config.yaml` and
-reuses stored records until a document, the schema or the extractor changes.
-Schemas live in `graph/extraction/<kind>.py`, and records go to
-`data/extracted/<schema>.jsonl` unless `--out` names another file. See
-[Extraction](extraction.md) for the configuration, schemas, extractors and the
-stored records.
+Extractions are listed in `graph/extraction/__init__.py`, each with its schema,
+its extractor, the files it reads and how many it takes at once. A run reuses
+stored records until a document, the schema or the extractor's version or settings
+change, and writes each extraction's records to `data/extracted/<name>.jsonl`.
+See [Extraction](extraction.md) for the list, schemas, extractors and the stored
+records.
 
 ## Generate sources
 
@@ -85,15 +83,14 @@ After new data arrives, refresh with commands only:
 
 ```bash
 biotope add --rebake data/study
-biotope extract run graph/extraction/<kind>.py:<Class> <every dataset the schema reads>
+biotope extract run
 biotope source generate .biotope/datasets/data/study.jsonld --out graph/sources
 biotope graph check
 biotope graph build
 ```
 
-Run `extract run` only when an extraction schema reads documents of the dataset,
-and give it every dataset the schema reads: a run drops the records of documents in
-datasets it is not given.
+Run `extract run` when the project lists an extraction; it reuses the records of
+every unchanged document.
 See [refresh after new data](project.md#refresh-after-new-data) for what changes and
 how a project keeps new inputs from breaking its build.
 

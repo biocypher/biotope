@@ -24,24 +24,24 @@ Keep raw data and managed metadata at the project level, and graph code under
 `PROJECT_ROOT` and `GRAPH_ROOT` from `graph/paths.py` and package-relative imports
 for portability.
 
-| Artifact                                         | Ownership and purpose                                                |
-| ------------------------------------------------ | -------------------------------------------------------------------- |
-| `<dataset>/.biotope.yaml`, `<file>.biotope.yaml` | What people write about a dataset; its annotation file               |
-| `.biotope/datasets/<manifest>.jsonld`            | Description: the data with its annotation file over it               |
-| `.biotope/contracts/`                            | Recorded contract revisions, written by `source generate`            |
-| `graph/standardization.py`                       | Shared terms that fields of several sources bind to                  |
-| `graph/sources/<manifest>/__init__.py`           | Generated root collecting that manifest's packages                   |
-| `graph/sources/<manifest>/<source>/schema.py`    | Record class and field bindings; scaffolded once, then authored      |
-| `graph/sources/<manifest>/<source>/__init__.py`  | `SOURCE` registration, created when absent                           |
-| `graph/sources/<manifest>/<source>/loader.py`    | Authored physical reader, created as a placeholder when absent       |
-| `graph/sources/inventory.py`                     | Generated `INVENTORY` of every source package                        |
-| `graph/sources/__init__.py`                      | Authored `SOURCES` selection and reasoned `EXCLUDED_SOURCES`         |
-| `graph/alignment/`                               | Cross-source identity resolution, run before mappings                |
-| `graph/extraction/<kind>.py`                     | Extraction schemas, checked with the rest of the graph code          |
-| `graph/topology/<node>/node.py`                  | A node dataclass; its folder also holds one file per outgoing edge   |
-| `graph/mappings/<group>.py`                      | Typed transformations, one module per group, collected in `MAPPINGS` |
-| `graph/pipelines/`                               | `compose.py` stage sequence; `build_graph.py` `PIPELINE`             |
-| `graph/build/`, `graph/metagraph.html`           | The current build and topology viewer; derived output                |
+| Artifact                                         | Ownership and purpose                                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `<dataset>/.biotope.yaml`, `<file>.biotope.yaml` | What people write about a dataset; its annotation file                                     |
+| `.biotope/datasets/<manifest>.jsonld`            | Description: the data with its annotation file over it                                     |
+| `.biotope/contracts/`                            | Recorded contract revisions, written by `source generate`                                  |
+| `graph/standardization.py`                       | Shared terms that fields of several sources bind to                                        |
+| `graph/sources/<manifest>/__init__.py`           | Generated root collecting that manifest's packages                                         |
+| `graph/sources/<manifest>/<source>/schema.py`    | Record class and field bindings; scaffolded once, then authored                            |
+| `graph/sources/<manifest>/<source>/__init__.py`  | `SOURCE` registration, created when absent                                                 |
+| `graph/sources/<manifest>/<source>/loader.py`    | Authored physical reader, created as a placeholder when absent                             |
+| `graph/sources/inventory.py`                     | Generated `INVENTORY` of every source package                                              |
+| `graph/sources/__init__.py`                      | Authored `SOURCES` selection and reasoned `EXCLUDED_SOURCES`                               |
+| `graph/alignment/`                               | Cross-source identity resolution, run before mappings                                      |
+| `graph/extraction/`                              | The extractions with their schemas and extractors, checked with the rest of the graph code |
+| `graph/topology/<node>/node.py`                  | A node dataclass; its folder also holds one file per outgoing edge                         |
+| `graph/mappings/<group>.py`                      | Typed transformations, one module per group, collected in `MAPPINGS`                       |
+| `graph/pipelines/`                               | `compose.py` stage sequence; `build_graph.py` `PIPELINE`                                   |
+| `graph/build/`, `graph/metagraph.html`           | The current build and topology viewer; derived output                                      |
 
 For earlier projects, see [migration](migration.md).
 
@@ -67,8 +67,9 @@ Files and tables keep IDs from their paths in the dataset, such as
 `samples.csv#samples`, so `biotope add --rebake` after new data changes no ID and
 keeps every annotation; see [file and table IDs](project.md#file-and-table-ids).
 Baker gives a file it cannot parse, such as a paper or notes, a file entry without
-tables; it still becomes a source. Extract a document's records with
-[extraction](extraction.md), which registers them as a dataset of their own.
+tables; it still becomes a source unless an extraction reads it. Extract a
+document's records with [extraction](extraction.md), which registers them as a
+dataset of their own.
 
 Generation gives every top-level record set, and every file that no record set
 reads, its own package. It creates missing files only and never rewrites an

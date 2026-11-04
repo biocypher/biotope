@@ -5,7 +5,6 @@ import shutil
 from pathlib import Path
 from unittest import mock
 
-import yaml
 from click.testing import CliRunner
 from graph_project import MANIFEST, built, invoke, ok, refresh, snapshot
 
@@ -164,29 +163,6 @@ def test_mv_refuses_what_it_cannot_carry_and_changes_nothing(tmp_path, monkeypat
         assert refused.exit_code != 0 and reason in refused.output, (args, refused.output)
 
     assert snapshot(root) == before
-
-
-def test_mv_moves_records_into_a_folder_dataset_whose_bake_leaves_them_out(project):
-    fixtures = Path(__file__).resolve().parents[1] / "fixtures/extraction"
-    shutil.copy(fixtures / "schemas.py", project / "graph/extraction/schemas.py")
-    (project / "src").mkdir()
-    shutil.copy(fixtures / "rules.py", project / "src/rules.py")
-    config = project / ".biotope/config.yaml"
-    settings = yaml.safe_load(config.read_text()) if config.is_file() else {}
-    settings["extraction"] = {"extractor": "src/rules.py:LineExtractor", "version": "1", "line": 1}
-    config.write_text(yaml.safe_dump(settings, sort_keys=False))
-    schema = "graph/extraction/schemas.py:Profile"
-    ok("extract", "run", schema, "data/study")
-
-    ok("mv", "data/extracted/profile.jsonl", "data/study/records/profile.jsonl")
-
-    refresh()
-    extracted = ok("extract", "run", schema, "data/study", "--out", "data/study/records/profile.jsonl", "--json")
-    assert {document["status"] for document in json.loads(extracted.stdout)["documents"]} == {"reused"}
-    assert built(project) == ({"data/study/push/people.csv", "data/study/docs/report.html"}, 2)
-    manifest = json.loads((project / MANIFEST).read_text())
-    identities = [entry["@id"] for entry in [*manifest["distribution"], *manifest["recordSet"]]]
-    assert [identity for identity in identities if "profile" in identity] == []
 
 
 def test_a_refused_move_into_another_dataset_advises_steps_that_keep_the_data(project):

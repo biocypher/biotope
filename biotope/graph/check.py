@@ -13,6 +13,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any, get_type_hints
 
+from biotope.extraction.run import placeholders
 from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
 from biotope.graph.dependencies import declared_distributions, imported_distributions
@@ -433,6 +434,16 @@ def check_pipeline(
             )
 
     stage("intent", intent)
+
+    def extractions() -> None:
+        assert workspace is not None
+        for extraction in workspace.extractions():
+            for path in placeholders(extraction):
+                message = "this listed extraction is still a placeholder; fill it in and delete its first line"
+                error("extraction.placeholder", extraction.name, message, path)
+
+    if workspace is not None:
+        stage("extraction", extractions)
 
     if static:
         summary = stage(

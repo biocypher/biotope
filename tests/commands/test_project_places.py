@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 from click.testing import CliRunner
 from graph_project import buildable
 
@@ -19,7 +18,6 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 GIT = shutil.which("git") or "git"
 USER, EMAIL = "Ada Host", "ada@host.example"
 HOST_IGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**\n__pycache__/\n"
-PROFILE = "graph/extraction/profile.py:Profile"
 NOT_GIVEN = (USER, EMAIL, "Dataset Creator", "creator@example.com", "creativecommons.org/licenses/by")
 
 
@@ -27,6 +25,7 @@ NOT_GIVEN = (USER, EMAIL, "Dataset Creator", "creator@example.com", "creativecom
 def _no_global_git_config(monkeypatch):
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("PROFILE_READER_KEY", "a key")
 
 
 def git(root, *args):
@@ -66,12 +65,13 @@ def host(root):
     (root / "README.md").write_text("# Host, unstaged\n")
 
 
-def configure(root):
-    path = root / ".biotope/config.yaml"
-    config = yaml.safe_load(path.read_text()) if path.is_file() else {}
-    rules = FIXTURES / "extraction/rules.py"
-    config["extraction"] = {"extractor": f"{rules}:LineExtractor", "version": "1", "line": 1}
-    path.write_text(yaml.safe_dump(config, sort_keys=False))
+def list_extraction(root, files):
+    shutil.copy(FIXTURES / "extraction/readers.py", root / "graph/extraction/readers.py")
+    (root / "graph/extraction/__init__.py").write_text(
+        "from biotope.extraction import Extraction\n\nfrom .readers import Profile, ProfileReader\n\n\n"
+        "EXTRACTIONS: tuple[Extraction, ...] = (\n"
+        f'    Extraction(name="profile", schema=Profile, extractor=ProfileReader, files=("{files}",)),\n)\n'
+    )
 
 
 def author_graph(root):
@@ -79,12 +79,11 @@ def author_graph(root):
     pipeline = root / "graph/pipelines/build_graph.py"
     text = pipeline.read_text().replace('name="",', 'name="host:people",')
     pipeline.write_text(text.replace('scope="",', 'scope="Synthetic people of the host.",'))
-    shutil.copy(FIXTURES / "extraction/schemas.py", root / "graph/extraction/profile.py")
+    list_extraction(root, "data/pages/*.html")
 
 
 def steps(root):
     yield ("init", ".", "--no-prompt"), ()
-    configure(root)
     yield ("add", "data/raw/study", "data/raw/samples.csv", "data/pages"), ()
     yield ("annotate", "set", "data/raw/study", "description=People who work at the host."), ()
     yield ("graph", "scaffold"), ()
@@ -93,7 +92,7 @@ def steps(root):
     yield ("graph", "check"), ()
     yield ("graph", "build"), ()
     yield ("graph", "metagraph"), ()
-    yield ("extract", "run", PROFILE, "data/pages"), ()
+    yield ("extract", "run", "profile"), ()
     moved = ("data/raw/study/push/people.csv", "data/raw/study/push/staff.csv")
     yield ("mv", *moved), moved
     yield ("rm", "-f", "data/raw/samples.csv"), ("data/raw/samples.csv",)
@@ -185,21 +184,21 @@ def test_init_creates_no_repository_and_keeps_project_yaml_in_biotope(tmp_path):
         assert refused.exit_code != 0 and "No such option" in refused.output
 
 
-def test_init_gitignore_keeps_annotations_and_records_and_ignores_data(tmp_path, monkeypatch):
+def test_init_gitignore_keeps_annotations_and_records_and_ignores_data_and_env_files(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     assert invoke("init", "fresh", "--dir", str(tmp_path), "--no-prompt").exit_code == 0
     root = tmp_path / "fresh"
     monkeypatch.chdir(root)
     git(root, "init", "-q")
     data(root)
-    configure(root)
     assert invoke("add", "data/raw/study", "data/raw/samples.csv", "data/pages").exit_code == 0
     (root / "data/raw/samples.csv.biotope.yaml").write_text("description: Samples.\n")
     assert invoke("graph", "scaffold").exit_code == 0
-    shutil.copy(FIXTURES / "extraction/schemas.py", root / "graph/extraction/profile.py")
-    extracted = invoke("extract", "run", PROFILE, "data/pages")
+    list_extraction(root, "data/pages/*.html")
+    extracted = invoke("extract", "run", "profile")
     assert extracted.exit_code == 0, extracted.output
-    for path in ("__pycache__/cache.cpython-312.pyc", "src/module.pyc", ".venv/bin/python"):
+    local = ("__pycache__/cache.cpython-312.pyc", "src/module.pyc", ".venv/bin/python", ".env", "graph/.env")
+    for path in local:
         (root / path).parent.mkdir(parents=True, exist_ok=True)
         (root / path).write_text("")
     kept = git(root, "ls-files", "--others", "--exclude-standard").splitlines()
@@ -210,7 +209,7 @@ def test_init_gitignore_keeps_annotations_and_records_and_ignores_data(tmp_path,
         "data/extracted/profile.jsonl",
     }
     ignored = ["data/raw/study/push/people.csv", "data/raw/samples.csv", "data/pages/lind.html"]
-    ignored += ["__pycache__/cache.cpython-312.pyc", "src/module.pyc", ".venv/bin/python"]
+    ignored += list(local)
     assert sorted(git(root, "check-ignore", *ignored).split()) == sorted(ignored)
 
 
@@ -261,9 +260,8 @@ def ignoring_project(root, repository):
     shutil.copytree(FIXTURES / "things", root / "data/things")
     (root / "data/pages").mkdir()
     shutil.copy(FIXTURES / "extraction/lind.html", root / "data/pages/lind.html")
-    (root / "graph/extraction").mkdir(parents=True)
-    shutil.copy(FIXTURES / "extraction/schemas.py", root / "graph/extraction/profile.py")
-    configure(root)
+    assert invoke("graph", "scaffold").exit_code == 0
+    list_extraction(root, "data/pages/*.html")
 
 
 def warnings_of():
@@ -275,7 +273,7 @@ def warnings_of():
     yield ("source", "generate", manifest, "--out", "graph/sources"), [contract]
     yield ("mark", "data/things", "mapped"), [manifest]
     records = ["data/extracted/profile.jsonl", ".biotope/datasets/data/extracted/profile.jsonl.jsonld"]
-    yield ("extract", "run", PROFILE, "data/pages"), [*records, ".biotope/extraction/data/extracted/profile.jsonl.json"]
+    yield ("extract", "run", "profile"), [*records, ".biotope/extraction/profile.json"]
     yield ("mv", "data/things/first.csv", "data/things/renamed.csv"), [manifest]
     yield ("rm", "-f", "data/things/second.csv"), [manifest]
 
@@ -290,7 +288,7 @@ def hand_edits(root):
         ("status",),
         ("map", "inspect", manifest),
         ("queue",),
-        ("extract", "run", PROFILE, "data/study"),
+        ("extract", "run", "profile"),
     ]
     for number, args in enumerate(readers):
         notes.write_text(f"description: Edited by hand, {number}.\n")
@@ -299,7 +297,7 @@ def hand_edits(root):
     notes.write_text("description: Edited by hand again.\n")
     yield ("annotate", "set", "data/study", "description=Set."), [manifest, "data/study/.biotope.yaml"], []
     (root / "data/extracted/profile.jsonl.biotope.yaml").write_text("url: https://example.org/profiles\n")
-    yield ("extract", "run", PROFILE, "data/study"), [".biotope/datasets/data/extracted/profile.jsonl.jsonld"], []
+    yield ("extract", "run", "profile"), [".biotope/datasets/data/extracted/profile.jsonl.jsonld"], []
 
 
 def check_warnings(root, repository, args, expected, unexpected=()):
@@ -336,7 +334,6 @@ def test_writers_warn_when_git_ignores_what_they_write(tmp_path, monkeypatch):
     edited = buildable(tmp_path / "repository-graph", monkeypatch)
     git(edited, "init", "-q")
     (edited / ".gitignore").write_text("/.biotope/\n/data/\n")
-    configure(edited)
-    shutil.copy(FIXTURES / "extraction/schemas.py", edited / "graph/extraction/profile.py")
+    list_extraction(edited, "data/study/**/*.html")
     for args, expected, unexpected in hand_edits(edited):
         check_warnings(edited, True, args, expected, unexpected)

@@ -19,7 +19,7 @@ PURPOSE_PROMPT = (
 
 console = Console()
 
-GITIGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**\n__pycache__/\n*.pyc\n.venv/\n"
+GITIGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**\n__pycache__/\n*.pyc\n.venv/\n.env\n"
 
 
 @click.command()

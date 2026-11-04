@@ -3,15 +3,13 @@ from __future__ import annotations
 import dataclasses
 import types
 from dataclasses import dataclass
-from typing import Any, Literal, Union, cast, get_args, get_origin, get_type_hints
+from typing import Literal, Union, cast, get_args, get_origin, get_type_hints
 
-from biotope.extraction.loading import load_object
 from biotope.graph.sources import digest
 
 
 JSON_TYPES: dict[object, str] = {str: "string", int: "integer", float: "number", bool: "boolean"}
 ALLOWED = "str, int, float, bool, a Literal of these, a list of one of them, or one of them | None"
-SINGLE = "The document's record, or null when the document states none."
 
 
 @dataclass(frozen=True)
@@ -23,18 +21,6 @@ class Field:
     nullable: bool = False
     many: bool = False
 
-    def value_schema(self) -> dict[str, Any]:
-        nullable = self.nullable and not self.many
-        schema: dict[str, Any] = {"type": [self.type, "null"] if nullable else self.type}
-        if self.choices is not None:
-            schema["enum"] = [*self.choices, None] if nullable else list(self.choices)
-        return schema
-
-    def json_schema(self) -> dict[str, Any]:
-        if self.many:
-            return {"type": "array", "description": self.description, "items": self.value_schema()}
-        return {**self.value_schema(), "description": self.description}
-
 
 @dataclass(frozen=True)
 class Schema:
@@ -45,10 +31,6 @@ class Schema:
     fields: tuple[Field, ...]
 
     @classmethod
-    def load(cls, reference: str, root: Any = None) -> Schema:
-        return cls.from_class(load_object(reference, root))
-
-    @classmethod
     def from_class(cls, schema: object) -> Schema:
         if not isinstance(schema, type) or not dataclasses.is_dataclass(schema):
             raise ValueError(f"{schema!r}: an extraction schema must be a dataclass")
@@ -57,6 +39,8 @@ class Schema:
             _field(schema.__name__, item.name, hints[item.name], item.metadata.get("description", ""))
             for item in dataclasses.fields(schema)
         )
+        if not fields:
+            raise ValueError(f"{schema.__name__} declares no fields")
         names = {item.name: item for item in fields}
         key = tuple(cast(tuple[str, ...], getattr(schema, "__record_key__", ())))
         for name in key:
@@ -68,32 +52,10 @@ class Schema:
         description = "" if doc.startswith(schema.__name__ + "(") else " ".join(doc.split())
         return cls(schema.__name__, schema, description, key, fields)
 
-    def json_schema(self) -> dict[str, Any]:
-        return self.wrap({item.name: item.json_schema() for item in self.fields})
-
-    def wrap(self, properties: dict[str, Any]) -> dict[str, Any]:
-        record = self.record(properties)
-        if not self.key:
-            return answer({"record": {"anyOf": [record, {"type": "null"}], "description": SINGLE}})
-        description = f"Every {self.name} record the document states, one per distinct {', '.join(self.key)}."
-        return answer({"records": {"type": "array", "description": description, "items": record}})
-
-    def record(self, properties: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "description": self.description,
-            "properties": properties,
-            "required": list(properties),
-            "additionalProperties": False,
-        }
-
     @property
     def revision(self) -> str:
-        return digest(self.json_schema())
-
-
-def answer(properties: dict[str, Any]) -> dict[str, Any]:
-    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+        fields = [dataclasses.asdict(item) for item in self.fields]
+        return digest({"name": self.name, "description": self.description, "key": self.key, "fields": fields})
 
 
 def _field(owner: str, name: str, annotation: object, description: object) -> Field:
