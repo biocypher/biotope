@@ -92,7 +92,7 @@ Biotope graph project:
 
 - In `graph/alignment/`, gather identity evidence from every participating source first, then resolve it. Identity comes before admission, an unambiguous resolution must not depend on the order sources were read, and each resolved identity keeps its contributing rows as evidence.
 
-- Write `graph/mappings/<concept>/` and the stage sequence in `graph/pipelines/compose.py`. Mappings select, join and construct. Send every record you do not emit through `context.exclude(...)`, against a policy declared in `Pipeline.policies`. Put aggregate losses into `context.record_audit(...)` counts.
+- Write each group of mappings in a module named after what it maps, such as `graph/mappings/person.py`; a group that grows large becomes a folder of named modules. Write the stage sequence in `graph/pipelines/compose.py`. Mappings select, join and construct. Send every record you do not emit through `context.exclude(...)`, against a policy declared in `Pipeline.policies`. Put aggregate losses into `context.record_audit(...)` counts.
 
 - Audit yourself: every hit below must sit beside an `exclude` call or increment a recorded count.
 

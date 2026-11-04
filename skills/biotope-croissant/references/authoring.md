@@ -15,28 +15,28 @@
 
 ## Every file has one owner
 
-| Location                                 | Responsibility                                                       |
-| ---------------------------------------- | -------------------------------------------------------------------- |
-| `<dataset>/.biotope.yaml`                | The dataset's annotation file; `<file>.biotope.yaml` for one file    |
-| `.biotope/datasets/`                     | Description made from the data and the annotation file; never edited |
-| `.biotope/contracts/`                    | Recorded contract revisions; written by `biotope source generate`    |
-| `graph/standardization.py`               | Shared `Term`s that fields of several sources bind to                |
-| `graph/sources/<m>/<source>/schema.py`   | Authored record dataclass and its field bindings; scaffolded once    |
-| `graph/sources/<m>/<source>/__init__.py` | `SOURCE` registration; created when absent                           |
-| `graph/sources/<m>/<source>/loader.py`   | Authored decoding; a placeholder until implemented                   |
-| `graph/sources/<m>/__init__.py`          | Generated root: collects the packages of one manifest                |
-| `graph/sources/inventory.py`             | Generated `INVENTORY` of every root                                  |
-| `graph/sources/__init__.py`              | Authored `SOURCES` and reasoned `EXCLUDED_SOURCES`                   |
-| `graph/alignment/`                       | Cross-source identity resolution, run before mappings                |
-| `graph/extraction/<kind>.py`             | Extraction schemas, type-checked with the graph code                 |
-| `graph/topology/<node>/node.py`          | Node dataclass and identifier type; folder named after the class     |
-| `graph/topology/<node>/<edge>.py`        | One edge whose source is that node, named after the edge class       |
-| `graph/mappings/<concept>/`              | Typed transformation functions; `MAPPINGS` in `mappings/__init__.py` |
-| `graph/pipelines/compose.py`             | The stage sequence: load, align, map                                 |
-| `graph/pipelines/build_graph.py`         | `PIPELINE`: registries, scope, policies and settings                 |
-| `graph/ASSUMPTIONS.md`                   | Open scientific questions and the interpretations they affect        |
-| `graph/pyproject.toml`                   | Graph dependencies, including project reader libraries               |
-| `graph/build/`                           | The current build: export files and run evidence; generated          |
+| Location                                 | Responsibility                                                                                                              |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `<dataset>/.biotope.yaml`                | The dataset's annotation file; `<file>.biotope.yaml` for one file                                                           |
+| `.biotope/datasets/`                     | Description made from the data and the annotation file; never edited                                                        |
+| `.biotope/contracts/`                    | Recorded contract revisions; written by `biotope source generate`                                                           |
+| `graph/standardization.py`               | Shared `Term`s that fields of several sources bind to                                                                       |
+| `graph/sources/<m>/<source>/schema.py`   | Authored record dataclass and its field bindings; scaffolded once                                                           |
+| `graph/sources/<m>/<source>/__init__.py` | `SOURCE` registration; created when absent                                                                                  |
+| `graph/sources/<m>/<source>/loader.py`   | Authored decoding; a placeholder until implemented                                                                          |
+| `graph/sources/<m>/__init__.py`          | Generated root: collects the packages of one manifest                                                                       |
+| `graph/sources/inventory.py`             | Generated `INVENTORY` of every root                                                                                         |
+| `graph/sources/__init__.py`              | Authored `SOURCES` and reasoned `EXCLUDED_SOURCES`                                                                          |
+| `graph/alignment/`                       | Cross-source identity resolution, run before mappings                                                                       |
+| `graph/extraction/<kind>.py`             | Extraction schemas, type-checked with the graph code                                                                        |
+| `graph/topology/<node>/node.py`          | Node dataclass and identifier type; folder named after the class                                                            |
+| `graph/topology/<node>/<edge>.py`        | One edge whose source is that node, named after the edge class                                                              |
+| `graph/mappings/<group>.py`              | Typed transformation functions, one module per group of mappings, such as `person.py`; `MAPPINGS` in `mappings/__init__.py` |
+| `graph/pipelines/compose.py`             | The stage sequence: load, align, map                                                                                        |
+| `graph/pipelines/build_graph.py`         | `PIPELINE`: registries, scope, policies and settings                                                                        |
+| `graph/ASSUMPTIONS.md`                   | Open scientific questions and the interpretations they affect                                                               |
+| `graph/pyproject.toml`                   | Graph dependencies, including project reader libraries                                                                      |
+| `graph/build/`                           | The current build: export files and run evidence; generated                                                                 |
 
 Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and manifests, and `GRAPH_ROOT` for graph artifacts. Use package-relative imports. Keep payload access inside loader and pipeline calls.
 

@@ -24,7 +24,8 @@ graph/
     <node>/              one folder per node, its class name in snake_case
       node.py            the node dataclass
       <edge>.py          one edge whose source is this node, named the same way
-  mappings/<concept>/    selection, joins and graph-object construction
+  mappings/<group>.py    selection, joins and graph-object construction, one
+                         module per group of mappings, such as person.py
   pipelines/
     compose.py           the stage sequence
     build_graph.py       registration, scope and scientific policies

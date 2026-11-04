@@ -22,7 +22,7 @@ def test_the_example_checks_builds_records_its_dependencies_and_reports_a_failed
     assert "dependencies" not in {member.name for member in fields(Pipeline)}
     root = prepare(tmp_path)
     shutil.rmtree(root / "raw")
-    mapping = root / "graph/mappings/sample/__init__.py"
+    mapping = root / "graph/mappings/sample.py"
     good = mapping.read_text()
     mapping.write_text(
         good.replace("row.score", "row.renamed_score")

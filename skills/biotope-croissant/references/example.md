@@ -316,7 +316,7 @@ Because both schemas name their fields after the shared terms, `row.gene_accessi
 ## Mappings
 
 ```python
-# graph/mappings/result/__init__.py
+# graph/mappings/result.py
 def make_gene(identity: SourceRecord[GeneIdentity]) -> Iterator[Gene]:
     gene = identity.value
     yield Gene(id=GeneId(gene.gene_id), symbols=list(gene.symbols), accession=gene.accession)

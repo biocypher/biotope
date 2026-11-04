@@ -61,7 +61,7 @@ Read these files to follow the transformation:
 | `graph/sources/study/samples/schema.py` | Declares the source fields, their types and the reviewed revision. |
 | `graph/sources/study/samples/loader.py` | Reads CSV and decodes the score as a float.                        |
 | `graph/sources/__init__.py`             | Selects every source of the inventory; excludes none.              |
-| `graph/mappings/sample/__init__.py`     | Doubles the score and constructs namespaced graph IDs.             |
+| `graph/mappings/sample.py`              | Doubles the score and constructs namespaced graph IDs.             |
 | `graph/pipelines/build_graph.py`        | Joins samples to people and records exclusions.                    |
 
 The `SOURCES`, `TOPOLOGY` and `MAPPINGS` registries select the definitions used by
