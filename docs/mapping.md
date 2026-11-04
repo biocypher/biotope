@@ -67,7 +67,7 @@ Files and tables keep IDs from their paths in the dataset, such as
 `samples.csv#samples`, so `biotope add --rebake` after new data changes no ID and
 keeps every annotation; see [file and table IDs](project.md#file-and-table-ids).
 Baker gives a file it cannot parse, such as a paper or notes, a file entry without
-tables; it still becomes a source unless an extraction reads it. Extract a
+tables; it still becomes a source unless an extraction has read it. Extract a
 document's records with [extraction](extraction.md), which registers them as a
 dataset of their own.
 

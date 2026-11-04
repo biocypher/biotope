@@ -220,7 +220,7 @@ the data no longer has, `add` warns and names it.
 
 The annotation file describes structure the data has; it cannot add any. A file
 croissant-baker cannot parse still gets a file entry, with an ID from its path, and
-its own source package unless an extraction reads it. A document, such as a paper or a web page, goes through
+its own source package unless an extraction has read it. A document, such as a paper or a web page, goes through
 [extraction](extraction.md): the extracted records become a dataset with tables
 and fields of their own. Any other file is read by its own package's loader, which
 decodes it with an established library into the fields you declare in its
