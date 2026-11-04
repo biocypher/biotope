@@ -16,9 +16,6 @@ nav:
       - Authoring: mapping.md
       - Technical notes: mapping_sidenotes.md
   - Architecture: architecture.md
-  - Annotation policies:
-      - Configuration: cluster-compliance.md
-      - Administration examples: cluster-compliance_sidenotes.md
   - Migration: migration.md
   - Development ideas: ideas.md
   - Roadmap: roadmap.md

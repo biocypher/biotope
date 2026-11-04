@@ -97,8 +97,7 @@ datasets it is not given.
 See [refresh after new data](project.md#refresh-after-new-data) for what changes and
 how a project keeps new inputs from breaking its build.
 
-`config` maintains annotation requirements and project metadata defaults; see
-[shared annotation policies](cluster-compliance.md).
+`config` maintains the project metadata defaults that `add` applies to every dataset.
 
 ## Author and build
 

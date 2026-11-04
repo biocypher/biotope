@@ -48,9 +48,6 @@ def test_init_default_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert not (root / "pyproject.toml").exists()
     config = yaml.safe_load((root / ".biotope" / "config.yaml").read_text())
     assert config["croissant_schema_version"] == "1.1"
-    assert config["annotation_validation"]["enabled"] is True
-    assert {"creator", "distribution"} <= set(config["annotation_validation"]["minimum_required_fields"])
-    assert config["annotation_validation"]["field_validation"]["description"]["min_length"] == 10
 
 
 def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:

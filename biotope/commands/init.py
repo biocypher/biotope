@@ -27,23 +27,6 @@ DEFAULT_BIOTOPE_CONFIG: dict = {
     "version": "0.1",
     "croissant_schema_version": "1.1",
     "data_storage": ".biotope/datasets",
-    "annotation_validation": {
-        "enabled": True,
-        "minimum_required_fields": [
-            "name",
-            "description",
-            "creator",
-            "dateCreated",
-            "distribution",
-        ],
-        "field_validation": {
-            "name": {"type": "string", "min_length": 1},
-            "description": {"type": "string", "min_length": 10},
-            "creator": {"type": "object", "required_keys": ["name"]},
-            "dateCreated": {"type": "string", "format": "date"},
-            "distribution": {"type": "array", "min_length": 1},
-        },
-    },
 }
 
 
