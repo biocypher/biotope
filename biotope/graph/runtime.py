@@ -77,7 +77,6 @@ class RunContext:
             MappingProxyType(self.schema),
             MappingProxyType(self.nodes),
             MappingProxyType(self.edges),
-            MappingProxyType(self.pipeline.requirements),
         )
 
     def content_digest(self) -> str:

@@ -152,7 +152,6 @@ MEASURED_PIPELINE = Pipeline(
     emit_measured,
     scope="four nodes and three edges",
     code_paths=(__file__,),
-    requirements={"entity:unused": "test:unused"},
 )
 
 

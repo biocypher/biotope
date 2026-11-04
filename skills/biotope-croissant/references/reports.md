@@ -8,7 +8,7 @@ Use this reference while resolving findings and reviewing a build's claims.
 | ----------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Manifest          | The structure the Croissant description declares                                                              | Does not establish completeness or loadability                                       |
 | Inventory         | Every described input has a package, is selected or excluded, and its structure matches its reviewed revision | Does not say whether an exclusion is scientifically right, or notice changed content |
-| Definition check  | Contracts, field coverage, terms, topology, requirement bindings, descriptions and Python types               | Does not execute loaders or inspect source values                                    |
+| Definition check  | Contracts, field coverage, terms, topology, descriptions and Python types                                     | Does not execute loaders or inspect source values                                    |
 | Runtime integrity | Loaded types, closed vocabularies, completed loaders, object consistency and resolved endpoints               | Does not decide which records should have been loaded                                |
 | Quality           | Counts, missing properties, connectivity, endpoint concentration and self-loops                               | Measures only emitted objects                                                        |
 

@@ -69,11 +69,6 @@ PIPELINE = Pipeline(
         )
     ),
     intent=PROJECT_ROOT / "project.yaml",
-    requirements={
-        "entity:sample": "example:sample",
-        "entity:person": "example:person",
-        "relation:from_person": "example:from-person",
-    },
     policies={
         "unmatched_sample": "Exclude samples without a person_id match; many samples to exactly one person.",
         "unused_person": "Exclude people without selected samples.",

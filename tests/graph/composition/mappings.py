@@ -45,7 +45,6 @@ NORMALISE_LEGACY = Mapping(
 BUILD_OBJECTS = Mapping(
     name="fixture:build-objects",
     function=build_objects,
-    requirements=("entity:sample", "entity:donor", "relation:taken_from"),
     evidence=("Synthetic fixture; sample and donor identities are source-local.",),
 )
 

@@ -55,7 +55,7 @@ Ordinary Python composes loaders, joins and transformations into a `Pipeline`.
 ## Checks and execution
 
 `biotope graph check` discovers the source packages statically, then imports
-declarations and checks the inventory, source drift, requirement bindings and
+declarations and checks the inventory, source drift and
 descriptions, and runs Pyright. It does not invoke loaders or mappings. Project
 modules must therefore avoid reading data or executing work during import.
 

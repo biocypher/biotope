@@ -174,7 +174,7 @@ they do not filter, impute or deduplicate. Include the source location in decodi
 errors.
 
 Mapping parameters are named `SourceRecord[...]` values, accessed through `.value`.
-The return annotation declares the output dataclasses. `Mapping(name=..., function=...)` registers the function, with optional requirements and evidence.
+The return annotation declares the output dataclasses. `Mapping(name=..., function=...)` registers the function, with optional evidence.
 The [tutorial](tutorial.md) project shows a complete implementation.
 
 A mapping can return topology objects directly. Introduce an intermediate
@@ -200,8 +200,7 @@ record: gather every source's identifiers first, so the result does not depend o
 read order, and keep each resolution's contributing rows as evidence. Write the
 stage sequence in `pipelines/compose.py`, then complete the `Pipeline` in
 `pipelines/build_graph.py` with scope, policies, settings and code paths; the
-scaffold already wires `SOURCES`, `INVENTORY`, `EXCLUDED_SOURCES` and `TERMS`. Bind purpose requirements with `entity:<exact intent text>` or
-`relation:<exact intent text>` keys, or record a reason in `deferrals`.
+scaffold already wires `SOURCES`, `INVENTORY`, `EXCLUDED_SOURCES` and `TERMS`.
 
 Imports must contain declarations only. Source access and execution belong inside
 explicitly called functions. Biotope imports project Python; this is an authoring

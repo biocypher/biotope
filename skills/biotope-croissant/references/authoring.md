@@ -12,7 +12,6 @@
 - Compose execution through `RunContext`
 - Preserve types while buffering
 - Joins and conflicts are project Python
-- Requirement keys repeat the intent text exactly
 
 ## Every file has one owner
 
@@ -116,7 +115,7 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 
 ## Compose execution through `RunContext`
 
-`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `requirements`, `deferrals`, `variability`, `terms`, `source_inventory` and `excluded_sources`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY` and `excluded_sources=EXCLUDED_SOURCES`. List `standardization.py`, `alignment`, `extraction`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Declare reader libraries in `graph/pyproject.toml`, not in the `Pipeline`: `run.json` records the installed version of everything declared there and everything the graph code imports. Its `run` receives a `RunContext`:
+`Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `variability`, `terms`, `source_inventory` and `excluded_sources`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY` and `excluded_sources=EXCLUDED_SOURCES`. List `standardization.py`, `alignment`, `extraction`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Declare reader libraries in `graph/pyproject.toml`, not in the `Pipeline`: `run.json` records the installed version of everything declared there and everything the graph code imports. Its `run` receives a `RunContext`:
 
 - `context.load(contract, loader, config)` invokes a registered loader and validates its records without coercion. A selected source's loader must run to completion during the build.
 - `context.apply(mapping, *records, **keywords)` checks the call against the mapping's signature and returns typed, evidence-bearing outputs.
@@ -131,7 +130,3 @@ A `list[SourceRecord[Measurement]]` keeps its element type, so the later `contex
 ## Joins and conflicts are project Python
 
 Declare keys, cardinality, unmatched behaviour and output grain. Exact duplicates combine evidence; conflicting values for one ID fail the build. Edges without an explicit ID use concept, source and target identity, so parallel edges need explicit IDs. The engine holds graph objects and evidence in memory and project joins may hold more; assess that against the agreed scope.
-
-## Requirement keys repeat the intent text exactly
-
-Keys are `entity:<exact intent text>` or `relation:<exact intent text>`; values are topology concept IDs. Deferrals use the same keys with a reason as the value. A missing binding or deferral fails the definition check. A deferral records a limitation; it does not resolve one.

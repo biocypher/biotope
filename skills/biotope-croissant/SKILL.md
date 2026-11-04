@@ -123,7 +123,7 @@ Biotope derives the export schema from the topology: write no project adapter or
 | `topology.undescribed`, `topology.undescribed_property`, `topology.examples` | A consumer would see only a label, or a placeholder concept is registered                                                                                                                | Step 6                  |
 | `topology.layout`                                                            | A node or edge class sits outside its file; the finding names the file it belongs in                                                                                                     | Step 6                  |
 | `topology.reserved`                                                          | A property uses a name the export reserves, such as `preferred_id`                                                                                                                       | Step 6                  |
-| `requirements.*`, `intent.*`                                                 | A purpose requirement is neither bound nor deferred, or the intent is missing                                                                                                            | Step 2                  |
+| `intent.*`                                                                   | The project has no `project.yaml`, or it states no purpose                                                                                                                               | Step 2                  |
 | `python.*`, `mapping.contract`                                               | Authored code is wrong                                                                                                                                                                   | Step 7                  |
 | `dependencies.undeclared`                                                    | Graph code imports a library that `graph/pyproject.toml` does not declare                                                                                                                | Step 5                  |
 
@@ -135,7 +135,6 @@ Checks establish structure, not scientific correctness: a dropped eligible recor
 Build: graph/build/   Sources: <n> selected / <n> excluded
 Excluded sources: <name> — <reason>; ...
 Excluded records: <policy> <count>; ...
-Deferred: <requirement key> — <reason>
 Independent reads: <claim> — <source of the expectation> — <agrees | differs: ...>
 Open questions: see graph/ASSUMPTIONS.md
 ```

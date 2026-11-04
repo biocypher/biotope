@@ -65,6 +65,5 @@ NORMALISE = Mapping(
 MAPPING = Mapping(
     name="example:sample-person",
     function=map_sample,
-    requirements=("entity:sample", "entity:person", "relation:from_person"),
     evidence=("Synthetic example; sample and person identities stay source-local.",),
 )

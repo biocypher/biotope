@@ -152,8 +152,6 @@ def check_pipeline(
             "sources": {},
             "mappings": {},
             "intent": None,
-            "requirements": pipeline.requirements,
-            "deferrals": pipeline.deferrals,
             "code_digests": {},
         }
     )
@@ -392,7 +390,6 @@ def check_pipeline(
                     "inputs": {p.name: [t.__name__ for t in p.accepts] for p in derived.parameters},
                     "outputs": [t.__name__ for t in derived.outputs],
                     "concepts": [getattr(t, "schema_id") for t in derived.outputs if t in graph],
-                    "requirements": entry.requirements,
                     "evidence": entry.evidence,
                 }
             except SignatureError as exc:
@@ -421,15 +418,11 @@ def check_pipeline(
 
     stage("declarations", declarations, blocked="Code paths are invalid" if files is None else "")
 
-    def intent() -> Any:
+    def intent() -> None:
         path = pipeline.intent or find_project()
         if path is None:
-            warning(
-                "intent.absent",
-                "intent",
-                "No intent found; research purpose and requirement coverage were not checked.",
-            )
-            return {}
+            warning("intent.absent", "intent", "No intent found; the research purpose was not checked.")
+            return
         value = Project.load(path)
         report.data["intent"] = value.model_dump()
         if not value.purpose.strip():
@@ -438,37 +431,8 @@ def check_pipeline(
                 "intent",
                 "No research purpose stated in the intent; scientific relevance is unresolved.",
             )
-        if not value.required_entities and not value.required_relations:
-            warning(
-                "intent.requirements",
-                "intent",
-                "No required entities or relations declared; requirement coverage is unspecified.",
-            )
-        return {
-            **{f"entity:{n}": "node" for n in value.required_entities},
-            **{f"relation:{n}": "edge" for n in value.required_relations},
-        }
 
-    required = stage("intent", intent)
-
-    def requirements() -> None:
-        assert schema is not None and required is not None
-        for key, reason in pipeline.deferrals.items():
-            if not reason.strip() or key in pipeline.requirements:
-                error("requirements.invalid", key, "A deferral needs a reason and cannot also be resolved")
-        for key, semantic in pipeline.requirements.items():
-            if semantic not in schema or (key in required and schema[semantic]["kind"] != required[key]):
-                error("requirements.invalid", key, f"Requirement points to missing/wrong topology concept {semantic}")
-        for key in sorted(set(required) - set(pipeline.requirements) - set(pipeline.deferrals)):
-            error("requirements.unresolved", key, "Bind this purpose requirement or explicitly defer with a reason")
-        for key in sorted((set(pipeline.requirements) | set(pipeline.deferrals)) - set(required)):
-            warning("requirements.unknown", key, f"{key}: reference is not in the current intent lists")
-
-    stage(
-        "requirements",
-        requirements,
-        blocked="Topology or intent is invalid" if schema is None or required is None else "",
-    )
+    stage("intent", intent)
 
     if static:
         summary = stage(

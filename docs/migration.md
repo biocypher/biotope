@@ -164,9 +164,8 @@ The earlier `discover`, `search`, `get`, `read`, `view`, `benchmark`,
 Use external tools for discovery or download and established format libraries
 inside your project loaders.
 
-`biotope map --purpose`, `--entity` and `--relation` retain research requirements.
-Bind those requirements to topology concepts or record explicit deferrals in the
-pipeline. They do not define an executable mapping by themselves.
+`biotope map --purpose` records the research purpose. It does not define an
+executable mapping by itself.
 
 See [commands](commands.md) for the current CLI and use `biotope --help` to check
 the commands available in your installed version.

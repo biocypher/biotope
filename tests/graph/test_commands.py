@@ -25,7 +25,6 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
         pipeline.read_text()
         .replace('name=""', 'name="review"')
         .replace('scope=""', 'scope="test"')
-        .replace("requirements={}", 'requirements={"entity:missing": "test:missing"}')
         .replace('"pipelines",', '"pipelines", "missing.py",')
         .replace(
             "from biotope.graph import Pipeline\n",
@@ -46,7 +45,7 @@ def test_workspace_selection_and_independent_definition_failures(tmp_path, monke
     report = json.loads(result.stdout)
     assert report["state"] == "failed"
     # The substituted sources are not in the scaffold's empty inventory.
-    assert {"code.paths", "requirements.invalid", "inventory.absent"} <= {f["code"] for f in report["findings"]}
+    assert {"code.paths", "inventory.absent"} <= {f["code"] for f in report["findings"]}
     assert any(s["name"] == "python" and s["state"] == "skipped" for s in report["checks"])
     assert {f["subject"] for f in report["findings"] if f["code"] == "source.contract"} == {
         "missing-a",

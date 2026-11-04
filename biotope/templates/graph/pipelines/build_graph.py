@@ -35,9 +35,6 @@ PIPELINE = Pipeline(
     terms=TERMS,
     source_inventory=INVENTORY,
     excluded_sources=EXCLUDED_SOURCES,
-    # Existing project intent is discovered when checking from the project root.
-    requirements={},
-    deferrals={},
     policies={},
     settings={},
 )

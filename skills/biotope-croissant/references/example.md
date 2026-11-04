@@ -346,11 +346,10 @@ def make_result(
     yield ResultReportsGene(source=result_id, target=GeneId(gene.value.gene_id))
 
 
-GENES = Mapping(name="af:gene", function=make_gene, requirements=("entity:gene",))
+GENES = Mapping(name="af:gene", function=make_gene)
 RESULTS = Mapping(
     name="af:result",
     function=make_result,
-    requirements=("entity:differential expression result", "relation:result reports gene"),
     evidence=("Group labels come from methods.txt; values are kept as each study reports them.",),
 )
 ```
@@ -398,11 +397,6 @@ In `graph/pipelines/build_graph.py`, only these scaffolded fields change:
         "Every tested gene in study_a and study_b, one Result per row; rows filtered before testing are "
         "excluded. Genes keep the identity their source supplied; symbols are not merged into accessions."
     ),
-    requirements={
-        "entity:gene": "af:gene",
-        "entity:differential expression result": "af:result",
-        "relation:result reports gene": "af:result_reports_gene",
-    },
     policies={"untested_gene": "A row without an adjusted p-value was filtered before testing (methods.txt)."},
 ```
 

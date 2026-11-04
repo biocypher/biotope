@@ -115,13 +115,13 @@ type, such as `dict` or `set`, as `mapping.contract` or `source.contract` before
 build starts. Graph properties are narrower: nullable scalars and string lists,
 as the [typed graph guide](mapping.md) describes.
 
-Registries hold `tuple[MappingEntry, ...]`, a read-only view of mapping identity,
-requirements and evidence. Import the concrete `Mapping` object when calling it.
+Registries hold `tuple[MappingEntry, ...]`, a read-only view of mapping identity
+and evidence. Import the concrete `Mapping` object when calling it.
 
 ## Definition checks and measurements
 
 Checking discovers source packages statically, imports project declarations,
-verifies source contracts, derives topology, checks requirement bindings, and runs
+verifies source contracts, derives topology, and runs
 Pyright in strict mode over `Pipeline.code_paths`. Include all sources, loaders,
 standardization, alignment, topology, mappings, shared helpers and pipeline
 modules. Directory enumeration ignores `.venv`, `venv`,

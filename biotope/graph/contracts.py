@@ -114,11 +114,6 @@ class MappingEntry(Protocol):
         ...
 
     @property
-    def requirements(self) -> tuple[str, ...]:
-        """Purpose requirement keys this mapping contributes to."""
-        ...
-
-    @property
     def evidence(self) -> tuple[str, ...]:
         """Authored rationale, kept beside the transformation it explains."""
         ...
@@ -135,7 +130,6 @@ class Mapping(Generic[P, E]):
 
     name: str
     function: Callable[P, Iterable[E]]
-    requirements: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
 
 
@@ -167,16 +161,13 @@ class GraphStores:
     concepts: collections.abc.Mapping[str, ConceptSchema]
     nodes: collections.abc.Mapping[str, GraphRecord]
     edges: collections.abc.Mapping[str, GraphRecord]
-    requirements: collections.abc.Mapping[str, str]
 
 
 @dataclass(frozen=True)
 class Pipeline:
     """Explicit project composition; imports must not load data or execute mappings.
 
-    Code paths enumerate the authored Python to check and fingerprint. Requirements
-    map ``entity:<intent text>`` / ``relation:<intent text>`` to concept IDs;
-    deferrals map the same keys to reasons. Neither changes project intent.
+    Code paths enumerate the authored Python to check and fingerprint.
     """
 
     name: str
@@ -187,8 +178,6 @@ class Pipeline:
     scope: str
     code_paths: tuple[str | Path, ...]
     settings: dict[str, object] = field(default_factory=dict[str, object])
-    requirements: dict[str, str] = field(default_factory=dict[str, str])
-    deferrals: dict[str, str] = field(default_factory=dict[str, str])
     policies: dict[str, str] = field(default_factory=dict[str, str])
     intent: Path | None = None
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."

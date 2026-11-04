@@ -15,11 +15,6 @@ Graph objects and provenance currently accumulate in memory. Disk-backed state
 could support larger builds while retaining conflict detection, deduplication and
 endpoint validation.
 
-## Stable requirement identifiers
-
-Pipeline bindings currently reference the exact text of purpose requirements.
-Stable identifiers could preserve those bindings when descriptions are edited.
-
 ## Richer source contracts
 
 Scaffolded source types cover scalar, nested and repeated records. Opaque arrays
