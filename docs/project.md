@@ -14,7 +14,8 @@ biotope writes only in these places, and in the files you name to `mv`, `rm` or
 
 - `.biotope/`: metadata and technical state. `config.yaml`, the project metadata
   that `biotope config set-project-metadata` sets; `project.yaml`, the
-  purpose that `biotope map` records; the Croissant descriptions in
+  one purpose text that `biotope map --purpose` records: who uses the graph, for
+  which tasks, and the typical questions; the Croissant descriptions in
   `.biotope/datasets/`, each named after its data's whole path, such as
   `.biotope/datasets/data/study.v2.jsonld` for the folder `data/study.v2` and
   `.biotope/datasets/data/raw/people.csv.jsonld` for the file

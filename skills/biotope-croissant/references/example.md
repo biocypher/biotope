@@ -38,8 +38,8 @@ data/methods.txt   four paragraphs: a heading, the comparison, study A's methods
 ```bash
 biotope init . --no-prompt
 biotope graph scaffold
-biotope map --purpose "Find genes whose expression changes in atrial fibrillation in both studies" \
-  --entity "gene" --entity "differential expression result" --relation "result reports gene"
+biotope map --purpose "Cardiology researchers compare two atrial fibrillation studies. Typical \
+  questions: which genes change expression in both studies, and in which direction?"
 biotope add data --json
 biotope source generate .biotope/datasets/data.jsonld --out graph/sources
 ```

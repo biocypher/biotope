@@ -47,7 +47,7 @@ Biotope graph project:
 **Step 2: Agree the purpose and requirements.**
 
 - A purpose and its example questions are evidence of intent, not a specification. Derive the adjacent questions: the neighbouring comparison, evidence that would contradict the expected answer, a second defensible reading of the same statistic, the context needed to interpret a result, and the case where a well-founded "no such record" is the answer. For each, name the evidence and distinctions it needs: that list decides what the sources must supply and what the mappings must admit.
-- Record the agreed purpose with `biotope map --purpose "..." --entity "..." --relation "..."`. Propose adjacent requirements once, with their cost; record declined ones as out of scope.
+- Record the agreed purpose with `biotope map --purpose "..."`. Propose adjacent requirements once, with their cost; record declined ones as out of scope.
 
 **Step 3: Describe and annotate every source.**
 

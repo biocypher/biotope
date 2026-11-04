@@ -101,15 +101,15 @@ how a project keeps new inputs from breaking its build.
 
 ## Author and build
 
-| Command                                                 | Behavior                                                                  |
-| ------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `biotope graph scaffold`                                | Create `graph/` with empty registries and a pipeline to implement.        |
-| `biotope map --purpose ... --entity ... --relation ...` | Record research requirements.                                             |
-| `biotope map --show`                                    | Show the current purpose and requirements.                                |
-| `biotope graph check`                                   | Check the source inventory, drift, declarations and Python types.         |
-| `biotope graph quality`                                 | Check and execute the pipeline, printing an assessment without export.    |
-| `biotope graph build`                                   | Check and execute, then replace `graph/build/` after a successful export. |
-| `biotope graph metagraph`                               | Write an offline topology viewer to `graph/metagraph.html`.               |
+| Command                     | Behavior                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `biotope graph scaffold`    | Create `graph/` with empty registries and a pipeline to implement.                  |
+| `biotope map --purpose ...` | Record the purpose: who uses the graph, for which tasks, and the typical questions. |
+| `biotope map --show`        | Show the current purpose.                                                           |
+| `biotope graph check`       | Check the source inventory, drift, declarations and Python types.                   |
+| `biotope graph quality`     | Check and execute the pipeline, printing an assessment without export.              |
+| `biotope graph build`       | Check and execute, then replace `graph/build/` after a successful export.           |
+| `biotope graph metagraph`   | Write an offline topology viewer to `graph/metagraph.html`.                         |
 
 Graph commands support `--json`; check, quality, build and metagraph also accept
 `--graph <folder>`. Scaffold always creates `graph/` in the current directory and

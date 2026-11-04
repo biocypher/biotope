@@ -3,27 +3,25 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 
 class Project(BaseModel):
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
-    name: str
     purpose: str = ""
-    required_entities: list[str] = Field(default_factory=list)
-    required_relations: list[str] = Field(default_factory=list)
-    data_sources: list[str] = Field(default_factory=list)
-    notes: str = ""
 
     @classmethod
     def load(cls, path: str | Path) -> Project:
         data = yaml.safe_load(Path(path).read_text()) or {}
-        return cls.model_validate(data)
+        try:
+            return cls.model_validate(data)
+        except ValidationError as exc:
+            keys = ", ".join(str(error["loc"][0]) for error in exc.errors() if error["loc"]) or "its content"
+            raise ValueError(f"{path} holds one key, purpose, a text; remove or fix {keys}") from None
 
     def dump(self, path: str | Path) -> None:
-        payload = self.model_dump(exclude_defaults=False)
-        Path(path).write_text(yaml.safe_dump(payload, sort_keys=False))
+        Path(path).write_text(yaml.safe_dump(self.model_dump(), sort_keys=False, allow_unicode=True))
 
 
 def resolve_project_path(start: Path | None = None) -> Path:

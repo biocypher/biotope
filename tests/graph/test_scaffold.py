@@ -186,9 +186,9 @@ def test_definition_check_reports_a_missing_purpose(tmp_path, monkeypatch):
     assert any(f["code"] == "intent.absent" for f in check_pipeline(pipeline, static=False)["findings"])
     intent = Path(".biotope/project.yaml")
     intent.parent.mkdir()
-    Project(name="review").dump(intent)
+    Project().dump(intent)
     warnings = [f["message"] for f in check_pipeline(pipeline, static=False)["findings"] if f["severity"] == "warning"]
     assert any("No research purpose" in item for item in warnings)
-    Project(name="review", purpose="Which records belong to each collection?").dump(intent)
+    Project(purpose="Which records belong to each collection?").dump(intent)
     warnings = [f["message"] for f in check_pipeline(pipeline, static=False)["findings"] if f["severity"] == "warning"]
     assert not any("No research purpose" in item or "No intent" in item for item in warnings)

@@ -1,4 +1,3 @@
-name: typed-graph-example
-purpose: Link synthetic samples to their known people and inspect transformed scores.
-required_entities: [sample, person]
-required_relations: [from_person]
+purpose: >-
+  A reviewer checks transformed sample scores against the people the samples come from.
+  Typical questions: which samples belong to a person, and what is each sample's transformed score?

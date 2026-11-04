@@ -88,7 +88,7 @@ def init(
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / ".biotope").mkdir(exist_ok=True)
 
-    project = Project(name=name, purpose=purpose)
+    project = Project(purpose=purpose)
     project_yaml_path = resolve_project_path(project_dir)
     project.dump(project_yaml_path)
 
