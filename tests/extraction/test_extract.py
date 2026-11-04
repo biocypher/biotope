@@ -264,9 +264,16 @@ def test_failed_empty_and_removed_documents(study):
     assert result.exit_code == 0 and statuses(report) == {LIND: "reused", OKAFOR: "empty"}
 
     (study.root / "data/pages/new.html").write_text("<h1>Ada Byron</h1>")
+    shutil.copy(study.root / LIND, study.root / "data/pages/copy.html")
     result, report = study.extract("run", "profile")
-    assert result.exit_code != 0 and "no dataset describes data/pages/new.html" in report["error"]
+    assert result.exit_code != 0
+    assert "no dataset describes data/pages/new.html; describe it with biotope add;" in report["error"]
+    assert (
+        "data/pages/copy.html is identical to data/pages/lind.html, and biotope add describes identical files "
+        "once, so delete the copy, or narrow the extraction's file patterns"
+    ) in report["error"]
     (study.root / "data/pages/new.html").unlink()
+    (study.root / "data/pages/copy.html").unlink()
     (study.root / LIND).unlink()
     assert study.run("add", "data/pages", "--rebake").exit_code == 0
     result, report = study.extract("run", "profile")
@@ -616,7 +623,7 @@ def test_extraction_code_is_graph_code_and_records_stay_out_of_a_folder_dataset(
     )
 
     (study.root / "data/extracted/profile.csv").write_text("name\nMara Lind\n")
-    assert study.run("add", "data").exit_code == 0
-    folder = json.loads((study.root / ".biotope/datasets/data.jsonld").read_text())
+    assert study.run("add", "data/extracted").exit_code == 0
+    folder = json.loads((study.root / ".biotope/datasets/data/extracted.jsonld").read_text())
     identities = {entry["@id"] for entry in folder["distribution"]}
-    assert {"pages/lind.html", "extracted/profile.csv"} <= identities and "extracted/profile.jsonl" not in identities
+    assert "profile.csv" in identities and "profile.jsonl" not in identities

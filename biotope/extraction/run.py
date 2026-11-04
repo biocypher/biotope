@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import filecmp
 import hashlib
 import inspect
 import json
@@ -137,10 +138,17 @@ def sources(root: Path, extraction: Extraction, described: dict[str, Source]) ->
     paths = matched_files(root, extraction)
     undescribed = [path for path in paths if path not in described]
     if undescribed:
-        raise ValueError(
-            f"{extraction.name}: no dataset describes {', '.join(undescribed)}; describe it with biotope add, "
-            "which leaves out a copy identical to another file of its dataset, or narrow the extraction's file patterns"
-        )
+        originals = {path: _original(root, path, described) for path in undescribed}
+        others = [path for path, original in originals.items() if original is None]
+        problems = [
+            f"{path} is identical to {original}, and biotope add describes identical files once, so delete the copy"
+            for path, original in originals.items()
+            if original is not None
+        ]
+        if others:
+            them = "it" if len(others) == 1 else "them"
+            problems.insert(0, f"no dataset describes {', '.join(others)}; describe {them} with biotope add")
+        raise ValueError(f"{extraction.name}: {'; '.join(problems)}, or narrow the extraction's file patterns")
     found = [described[path] for path in paths]
     sharing: dict[str, list[str]] = defaultdict(list)
     for source in found:
@@ -154,6 +162,17 @@ def sources(root: Path, extraction: Extraction, described: dict[str, Source]) ->
             "folder or file, so give the datasets different names"
         )
     return found
+
+
+def _original(root: Path, path: str, described: dict[str, Source]) -> str | None:
+    return next(
+        (
+            other
+            for other in sorted(described)
+            if (root / other).is_file() and filecmp.cmp(root / path, root / other, shallow=False)
+        ),
+        None,
+    )
 
 
 def extract_all(

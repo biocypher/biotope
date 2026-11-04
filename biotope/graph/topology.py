@@ -44,7 +44,10 @@ IDENTIFIER = re.compile(r"[^\s:]+:[^\s]+")
 def identifier(value: object) -> str:
     """Require an explicit namespace, without claiming biological equivalence."""
     if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
-        raise ValueError(f"Invalid identifier {value!r}; mint an explicit namespace:local-id in project code")
+        raise ValueError(
+            f"Invalid identifier {value!r}; mint an explicit namespace:local-id in project code, "
+            "with no colon in the namespace and no whitespace"
+        )
     return value
 
 

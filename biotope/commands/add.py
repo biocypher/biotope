@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import shlex
 import shutil
@@ -153,6 +154,12 @@ def add(
 
         datasets_dir = biotope_root / ".biotope" / "datasets"
         datasets_dir.mkdir(parents=True, exist_ok=True)
+        overlaps = _overlaps(paths, biotope_root)
+        if overlaps:
+            raise click.ClickException(
+                f"{'; '.join(overlaps)}. A file belongs to one dataset: rebake the one that describes it, "
+                "or remove the others first with biotope rm --keep-data"
+            )
 
         added_entries: list[Path] = []
         for path in paths:
@@ -176,6 +183,60 @@ def add(
             reporter.row("Next", f"biotope map inspect {shlex.quote(str(manifest.relative_to(biotope_root)))}")
         if any(source["status"] == "failed" for source in reporter.sources):
             raise click.ClickException("One or more inputs could not be baked.")
+
+
+def _overlaps(paths: tuple[Path, ...], biotope_root: Path) -> list[str]:
+    root = biotope_root.resolve()
+    records = {path.resolve().relative_to(root).as_posix() for path in records_files(root)}
+    given = [path.resolve().relative_to(root).as_posix() for path in paths if path.resolve().is_relative_to(root)]
+    datasets = {dataset_id(manifest, root) for manifest in (root / ".biotope/datasets").rglob("*.jsonld")}
+    found: list[str] = []
+    for new in given:
+        others = sorted(
+            other
+            for other in (datasets | set(given)) - records - {new}
+            if PurePosixPath(other).is_relative_to(new) or PurePosixPath(new).is_relative_to(other)
+        )
+        if others and new not in records:
+            found.append(f"{new} overlaps the dataset{'s' if len(others) > 1 else ''} {', '.join(others)}")
+    return found
+
+
+def _warn_repeated_columns(source: Path, files: list[Path], reporter: AddOutput) -> None:
+    for path in files:
+        delimiter = {".csv": ",", ".tsv": "\t"}.get(path.suffix.lower())
+        if delimiter is None:
+            continue
+        with path.open(encoding="utf-8-sig", errors="replace", newline="") as handle:
+            try:
+                header = next(csv.reader(handle, delimiter=delimiter), [])
+            except csv.Error:
+                continue
+        repeated = sorted({name for name in header if name and header.count(name) > 1})
+        if repeated:
+            reporter.warning(
+                source,
+                f"{reporter.path(path)} repeats the columns {', '.join(repeated)}; the description keeps the first "
+                "column of each name, so read the others in the file's source package",
+            )
+
+
+def _warn_stray_annotations(directory: Path, biotope_root: Path, reporter: AddOutput) -> None:
+    own = annotation.annotation_path(directory)
+    for path in sorted(directory.rglob(f"*{annotation.SUFFIX}")):
+        if path == own or any(part.startswith(".") for part in path.relative_to(directory).parts[:-1]):
+            continue
+        data = (
+            path.parent
+            if path.name == annotation.FOLDER_FILE
+            else path.with_name(path.name.removesuffix(annotation.SUFFIX))
+        )
+        if not manifest_for(data, biotope_root).is_file():
+            reporter.warning(
+                directory,
+                f"{reporter.path(path)} belongs to no dataset, so biotope ignores it; "
+                f"this dataset's annotation file is {reporter.path(own)}",
+            )
 
 
 def add_file(
@@ -242,6 +303,7 @@ def add_file(
         _describe(abs_file, manifest, metadata, given, reporter)
     else:
         _take_over(previous, abs_file, manifest, metadata, given, biotope_root, reporter)
+    _warn_repeated_columns(abs_file, [abs_file], reporter)
     return True
 
 
@@ -457,6 +519,8 @@ def _bake_directory(
         note_moves(refresh_description(target.metadata_path), metadata_dict)
     _apply_pipeline_state(metadata_dict, {})
     _describe(abs_dir, target.metadata_path, metadata_dict, given, reporter)
+    _warn_repeated_columns(abs_dir, [path for path in files if path not in copies], reporter)
+    _warn_stray_annotations(abs_dir, biotope_root, reporter)
     return metadata_dict, len(files)
 
 

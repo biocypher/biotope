@@ -48,7 +48,7 @@ Descriptions and equivalent properties change no revision. A key is structure: d
 
 A file Baker cannot parse can still answer a semantic question. Cohort descriptions, methods sections and supplementary notes routinely carry the reference group, the inclusion criteria or the units that the tables leave implicit.
 
-`biotope add <dir>` reports such files as `unclaimed` and still gives each a file entry whose ID is its path in the dataset:
+`biotope add <dir>` reports such files as not described, with the reason `no_handler`, and still gives each a file entry whose ID is its path in the dataset:
 
 ```json
 {
@@ -74,7 +74,7 @@ Whether a file can be ingested and whether it should be read are separate questi
 
 ## Structured files Baker cannot parse
 
-Baker has no handler for some structured formats, such as tab-separated `.txt`, RDF (N-Triples, N-Quads, Turtle) and shapefiles, so `biotope add` reports them `unclaimed`. A RecordSet written by hand has no home: the annotation file describes only structure the data has, and the next rebake would drop it. The file's own package reads it instead:
+Baker has no handler for some structured formats, such as tab-separated `.txt`, RDF (N-Triples, N-Quads, Turtle) and shapefiles, so `biotope add` reports them as not described, with the reason `no_handler`. A file Baker claims but cannot read, such as a CSV with another delimiter, is reported `failed` and keeps its file entry the same way. A CSV whose header repeats a column name gets a warning: the description keeps the first column of each name, and the package reads the others. A RecordSet written by hand has no home: the annotation file describes only structure the data has, and the next rebake would drop it. The file's own package reads it instead:
 
 - In its `schema.py`, declare one field per value the loader decodes under the generated `Facts` class: each column of a table; the subject, predicate, object and graph of a statement; the attributes and geometry of a feature. Rename the class if `Facts` misleads.
 - The loader parses the file at `SOURCE.path()` with an established library and yields one record per row, statement or feature, citing its line or feature number as the location.

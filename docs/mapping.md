@@ -141,10 +141,11 @@ class Person:
     name: str = field(metadata={"description": "Name as recorded by the source."})
 ```
 
-Mint namespaced IDs such as `study-a:person-17` explicitly. Static ID types prevent
-accidental endpoint swaps; they do not establish uniqueness or shared biological
-identity. Runtime checks reject conflicting objects with the same ID and resolve
-edges against the declared endpoint types.
+Mint namespaced IDs such as `study-a:person-17` explicitly. The namespace has no colon
+and neither part has whitespace. Static ID types prevent accidental endpoint swaps;
+they do not establish uniqueness or shared biological identity. Runtime checks reject
+conflicting objects with the same ID and resolve edges against the declared endpoint
+types.
 
 Concept docstrings and property descriptions are exported in `schema_config.yaml`,
 and `graph check` warns about concepts and properties without one. Optional

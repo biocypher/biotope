@@ -48,7 +48,7 @@ Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and m
 - `Term(standard_name, description, values=None)` and `source_field(...)` bind source fields to shared meanings.
 - `Topology(nodes=(...), edges=(...))` registers dataclasses. Each declares `schema_id: ClassVar[str]`. Nodes have distinct `NewType(..., str)` identifiers; edges use those types for `source` and `target`.
 
-Use keyword arguments in graph constructors so a property change fails clearly. Mint namespaced identifiers explicitly, with source-specific namespaces wherever cross-source identity is unresolved. Reuse one concept for same-type relation endpoints rather than inventing a second.
+Use keyword arguments in graph constructors so a property change fails clearly. Mint namespaced identifiers explicitly, with source-specific namespaces wherever cross-source identity is unresolved. An identifier is `namespace:local-id`: the namespace has no colon and neither part has whitespace, so derive a local ID from a label as a slug. Reuse one concept for same-type relation endpoints rather than inventing a second.
 
 ## Describe a property where you declare it
 
@@ -118,8 +118,8 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 `Pipeline(name, topology, sources, mappings, run, scope, code_paths, ...)` declares composition. Optional fields include `settings`, `policies`, `intent`, `variability`, `terms`, `source_inventory` and `excluded_sources`; the scaffold wires `terms=TERMS`, `source_inventory=INVENTORY` and `excluded_sources=EXCLUDED_SOURCES`. List `standardization.py`, `alignment`, `extraction`, `sources`, `topology`, `mappings` and `pipelines` in `code_paths`. Declare reader libraries in `graph/pyproject.toml`, not in the `Pipeline`: `run.json` records the installed version of everything declared there and everything the graph code imports. Its `run` receives a `RunContext`:
 
 - `context.load(contract, loader, config)` invokes a registered loader and validates its records without coercion. A selected source's loader must run to completion during the build.
-- `context.apply(mapping, *records, **keywords)` checks the call against the mapping's signature and returns typed, evidence-bearing outputs.
-- `context.map(mapping, *records, **keywords)` makes the same checks and collects graph objects. It accepts only mappings whose outputs declare a `schema_id`.
+- `context.apply(mapping, *arguments, **keywords)` calls the mapping once with these arguments, checks the call against its signature and returns typed, evidence-bearing outputs.
+- `context.map(mapping, *arguments, **keywords)` makes the same call and checks and collects graph objects. It accepts only mappings whose outputs declare a `schema_id`. To map each record of a source, call it once per record in a loop.
 - `context.exclude(policy_key, evidence, count=1)` records an excluded record against a declared pipeline policy.
 - `context.record_audit(stage, inputs=..., outputs=..., selection=..., counts=...)` records one stage's grains, its admission rule and named non-negative counts. Stage names are unique and counts are project-defined, so name them by the source and population they measure.
 

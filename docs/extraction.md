@@ -221,8 +221,10 @@ rename the extraction instead.
 
 A document is extracted again only when its digest, the schema revision, or the
 extractor's name, version or settings change. Otherwise its stored records are
-reused, also after `biotope mv` moved it. A document that fails keeps its stored
-records. The report lists, per extraction, each document as `extracted`, `empty`
+reused, also after `biotope mv` moved it. A moved document's records keep their IDs
+when its dataset's name and its path within the dataset stay the same, as when a whole
+dataset folder moves; otherwise they take IDs from the new path, so check any mapping
+that joins on them. A document that fails keeps its stored records. The report lists, per extraction, each document as `extracted`, `empty`
 (no record), `reused` or `failed` with its reason; the record IDs that disappeared
 and appeared; each moved ID with its new one; and the output files git ignores. The
 run exits nonzero when a document failed.

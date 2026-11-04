@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
+from biotope.cli import cli
 from biotope.commands._add_output import AddOutput
 from biotope.commands.add import _bake_directory, add
 from biotope.graph.inventory import generate_source_packages
@@ -85,6 +87,66 @@ def test_byte_identical_files_are_registered_once_and_never_parsed(tmp_path, cap
     assert "OK b/" not in text
     assert "4 scanned · 3 described · 1 not described · 3 identical" in text
     assert text.index("Identical to a/table.csv") < text.index("4 scanned")
+
+
+def _project(tmp_path, monkeypatch):
+    created = CliRunner().invoke(cli, ["init", "study", "--dir", str(tmp_path), "--no-prompt"])
+    assert created.exit_code == 0, created.output
+    root = tmp_path / "study"
+    monkeypatch.chdir(root)
+    return root
+
+
+def _add(*args):
+    result = CliRunner(mix_stderr=False).invoke(cli, ["add", *args, "--json"])
+    return result, json.loads(result.stdout)
+
+
+def test_add_refuses_a_dataset_that_overlaps_another(tmp_path, monkeypatch):
+    root = _project(tmp_path, monkeypatch)
+    (root / "data/pages").mkdir(parents=True)
+    (root / "data/pages/a.html").write_text("<h1>A</h1>")
+    (root / "data/people.csv").write_text("id\n1\n")
+    (root / "data/new").mkdir()
+    (root / "data/new/b.csv").write_text("id\n2\n")
+    assert _add("data/pages", "data/people.csv")[0].exit_code == 0
+    described = {path: path.read_bytes() for path in (root / ".biotope/datasets").rglob("*.jsonld")}
+
+    around, around_report = _add("--rebake", "data")
+    inside, inside_report = _add("data/pages/a.html")
+    together, together_report = _add("data/new", "data/new/b.csv")
+
+    assert around.exit_code != 0 and inside.exit_code != 0 and together.exit_code != 0
+    assert around_report["error"].startswith("data overlaps the datasets data/pages, data/people.csv. ")
+    assert "A file belongs to one dataset" in around_report["error"]
+    assert inside_report["error"].startswith("data/pages/a.html overlaps the dataset data/pages. ")
+    assert together_report["error"].startswith(
+        "data/new overlaps the dataset data/new/b.csv; data/new/b.csv overlaps the dataset data/new. "
+    )
+    assert {path: path.read_bytes() for path in (root / ".biotope/datasets").rglob("*.jsonld")} == described
+    assert _add("--rebake", "data/pages")[0].exit_code == 0
+
+
+def test_add_names_the_columns_and_annotation_files_it_leaves_out(tmp_path, monkeypatch):
+    root = _project(tmp_path, monkeypatch)
+    (root / "data/papers").mkdir(parents=True)
+    (root / "data/signature.csv").write_text("gene,L2FC,FDR,L2FC,FDR,note\nA,1,0.1,2,0.2,x\n")
+    (root / "data/papers/.biotope.yaml").write_text("dataset: {}\n")
+    (root / "data/signature.csv.biotope.yaml").write_text("description: old\n")
+
+    result, report = _add("data")
+
+    assert result.exit_code == 0, result.output
+    [source] = report["sources"]
+    messages = [diagnostic["message"] for diagnostic in source["diagnostics"]]
+    assert messages == [
+        "data/signature.csv repeats the columns FDR, L2FC; the description keeps the first column of each name, "
+        "so read the others in the file's source package",
+        "data/papers/.biotope.yaml belongs to no dataset, so biotope ignores it; "
+        "this dataset's annotation file is data/.biotope.yaml",
+        "data/signature.csv.biotope.yaml belongs to no dataset, so biotope ignores it; "
+        "this dataset's annotation file is data/.biotope.yaml",
+    ]
 
 
 def test_add_command_rejects_name_for_multiple_paths(runner, tmp_path):
