@@ -15,7 +15,7 @@ writes and what the project commits.
 | `biotope add <path> --json`      | Emit per-file scan outcomes and diagnostics as JSON.                          |
 | `biotope map inspect <manifest>` | Inspect record sets and declared field types without reading payloads.        |
 
-`init` writes `.biotope/config.yaml` and `.biotope/project.yaml`, and a root
+`init` writes `.biotope/project.yaml`, and a root
 `.gitignore` only when the project has none. It runs no git command and creates
 no graph workspace. Baking and checksum verification read source bytes; metadata
 inspection does not.

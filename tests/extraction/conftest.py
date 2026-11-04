@@ -146,7 +146,7 @@ class Study:
 
     def configure(self, **settings):
         path = self.root / ".biotope/config.yaml"
-        config = yaml.safe_load(path.read_text())
+        config = yaml.safe_load(path.read_text()) if path.is_file() else {}
         config["extraction"] = {key: value for key, value in settings.items() if value is not None}
         path.write_text(yaml.safe_dump(config, sort_keys=False))
 

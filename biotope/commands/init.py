@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import click
-import yaml
 from rich.console import Console
 
 from biotope.project_model import Project, resolve_project_path
@@ -21,13 +20,6 @@ PURPOSE_PROMPT = (
 console = Console()
 
 GITIGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**\n__pycache__/\n*.pyc\n.venv/\n"
-
-
-DEFAULT_BIOTOPE_CONFIG: dict = {
-    "version": "0.1",
-    "croissant_schema_version": "1.1",
-    "data_storage": ".biotope/datasets",
-}
 
 
 @click.command()
@@ -95,9 +87,6 @@ def init(
 
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / ".biotope").mkdir(exist_ok=True)
-
-    config_path = project_dir / ".biotope" / "config.yaml"
-    config_path.write_text(yaml.safe_dump(DEFAULT_BIOTOPE_CONFIG, sort_keys=False))
 
     project = Project(name=name, purpose=purpose)
     project_yaml_path = resolve_project_path(project_dir)

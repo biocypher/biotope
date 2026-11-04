@@ -172,7 +172,7 @@ def test_mv_moves_records_into_a_folder_dataset_whose_bake_leaves_them_out(proje
     (project / "src").mkdir()
     shutil.copy(fixtures / "rules.py", project / "src/rules.py")
     config = project / ".biotope/config.yaml"
-    settings = yaml.safe_load(config.read_text())
+    settings = yaml.safe_load(config.read_text()) if config.is_file() else {}
     settings["extraction"] = {"extractor": "src/rules.py:LineExtractor", "version": "1", "line": 1}
     config.write_text(yaml.safe_dump(settings, sort_keys=False))
     schema = "graph/extraction/schemas.py:Profile"

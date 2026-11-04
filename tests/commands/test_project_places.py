@@ -68,7 +68,7 @@ def host(root):
 
 def configure(root):
     path = root / ".biotope/config.yaml"
-    config = yaml.safe_load(path.read_text())
+    config = yaml.safe_load(path.read_text()) if path.is_file() else {}
     rules = FIXTURES / "extraction/rules.py"
     config["extraction"] = {"extractor": f"{rules}:LineExtractor", "version": "1", "line": 1}
     path.write_text(yaml.safe_dump(config, sort_keys=False))

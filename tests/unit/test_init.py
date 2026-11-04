@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from biotope.cli import cli
@@ -42,12 +41,10 @@ def test_init_default_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert json.loads(queue.output)["sections"] == {"raw": [], "processed": [], "mapped": []}
     for directory in ("data", "mappings", "graph", ".biotope/datasets", ".biotope/workflows"):
         assert not (root / directory).exists()
-    assert (root / ".biotope" / "config.yaml").is_file()
+    assert not (root / ".biotope" / "config.yaml").exists()
     assert (root / ".biotope" / "project.yaml").is_file()
     assert (root / ".gitignore").is_file()
     assert not (root / "pyproject.toml").exists()
-    config = yaml.safe_load((root / ".biotope" / "config.yaml").read_text())
-    assert config["croissant_schema_version"] == "1.1"
 
 
 def test_init_purpose_flag_is_recorded(tmp_path: Path) -> None:

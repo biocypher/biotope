@@ -12,7 +12,8 @@ own code: `.biotope/` and `graph/` next to `src/`, for example. Inside the proje
 biotope writes only in these places, and in the files you name to `mv`, `rm` or
 `--out`:
 
-- `.biotope/`: metadata and technical state. `config.yaml`; `project.yaml`, the
+- `.biotope/`: metadata and technical state. `config.yaml`, the project metadata
+  that `biotope config set-project-metadata` sets; `project.yaml`, the
   purpose that `biotope map` records; the Croissant descriptions in
   `.biotope/datasets/`, each named after its data's whole path, such as
   `.biotope/datasets/data/study.v2.jsonld` for the folder `data/study.v2` and
