@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
@@ -52,6 +53,10 @@ class Extraction:
                 raise ValueError(f"{name}: {extractor.__name__}.{attribute} must be a non-empty string")
         if not isinstance(cast(object, extractor.settings), Mapping):
             raise ValueError(f"{name}: {extractor.__name__}.settings must be a mapping")
+        try:
+            json.dumps(dict(extractor.settings))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name}: {extractor.__name__}.settings must hold only JSON values: {exc}") from None
         patterns: list[object] = list(cast(tuple[object, ...], files)) if isinstance(files, tuple) else []
         if not patterns or not all(isinstance(pattern, str) for pattern in patterns):
             raise ValueError(f"{name}: files must be a tuple of path patterns, such as ('data/papers/*.pdf',)")

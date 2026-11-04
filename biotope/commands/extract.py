@@ -98,7 +98,10 @@ def try_command(name: str, files: tuple[Path, ...], as_json: bool) -> None:
         named = identity(extraction.extractor)
         output.report.update(extraction=extraction.name, schema=_schema_report(schema), extractor=named, documents=[])
         _header(output, "Try", extraction.name, schema, named)
-        described = described_files(root)
+        try:
+            described = described_files(root)
+        except ValueError as exc:
+            output.fail(str(exc))
         work = [(number, described.get(path, Source(path, path, ""))) for number, path in enumerate(paths, 1)]
         done = {
             work[index][1].path: extracted
@@ -148,8 +151,8 @@ def run_command(names: tuple[str, ...], redo: tuple[Path, ...], as_json: bool) -
     failed = False
     with select_workspace(_graph(output, root)) as workspace:
         chosen = _chosen(output, root, _listed(output, workspace), names)
-        described = described_files(root)
         try:
+            described = described_files(root)
             plans = [
                 (extraction, _schema(output, extraction), sources(root, extraction, described)) for extraction in chosen
             ]

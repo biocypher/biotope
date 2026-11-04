@@ -62,8 +62,10 @@ EXTRACTIONS: tuple[Extraction, ...] = (
   extraction reads, so files of one kind can be routed by folder or name rather than
   by suffix. Hidden files and annotation files are never matched. Every matched file
   must be described by a dataset: `biotope add` it first, or the run fails and names
-  it. The records always mirror the files the patterns match now, so a new file
-  joins on the next run and a removed one loses its records.
+  it. `add` leaves out a file identical to another file of its dataset, so narrow
+  the patterns to skip such copies. A pattern that matches no file fails the run.
+  The records always mirror the files the patterns match now, so a new file joins
+  on the next run and a removed one loses its records.
 - `parallel`: how many documents the runner hands to the extractor at once, from
   separate threads; 1 by default.
 
@@ -181,12 +183,12 @@ git.
 }
 ```
 
-- **ID.** The document's dataset folder and its path within it, as file IDs are,
-  then `#` and each key field as `name=<JSON value>`, joined by `;`. A value is
+- **ID.** The name of the document's dataset folder and the document's path within
+  it, such as `pages/lind.html`, or the file name for a single-file dataset, then
+  `#` and each key field as `name=<JSON value>`, joined by `;`. A value is
   written as the schema types it, so `1` and `1.0` of a `float` field are one key.
   Moving a dataset to another folder keeps its records' IDs. Documents of two
-  datasets with the same folder name and path would share an ID, so the run refuses
-  them.
+  datasets with the same name and path would share an ID, so the run refuses them.
 - **Document.** The document's path from the project root.
 - **Evidence.** The extractor's `quote` and `locator`, or `null` when it gave
   neither.
@@ -199,7 +201,13 @@ typed, nested record classes. It has no `creator` or `license` unless its annota
 file, `data/extracted/<name>.jsonl.biotope.yaml`, gives them. A folder dataset that
 holds the records file, as `biotope add data` holds `data/extracted/`, leaves the
 file out. `biotope source generate` writes no source package for a document that an
-extraction read, since its records are mapped instead.
+extraction has read, since its records are mapped instead, and reports a package
+generated for it before the run as orphaned: delete that package.
+
+To remove an extraction, delete it from the list and run
+`biotope rm data/extracted/<name>.jsonl`, which also removes its run state, so
+generation gives its documents packages again. To rename an extraction, rename it,
+run it and remove the old records file the same way.
 
 **Run state.** `.biotope/extraction/<name>.json` records the files the extraction
 matched and, per document, the digest, schema revision and extractor that produced

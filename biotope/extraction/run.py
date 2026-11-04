@@ -50,6 +50,12 @@ def extracted_files(root: Path) -> set[str]:
     return found
 
 
+def forget(root: Path, records_file: Path) -> None:
+    if records_file.resolve() in {path.resolve() for path in records_files(root)}:
+        state_path(root, records_file.stem).unlink(missing_ok=True)
+        progress_path(root, records_file.stem).unlink(missing_ok=True)
+
+
 def placeholders(extraction: Extraction) -> list[Path]:
     files = {Path(inspect.getfile(item)) for item in (extraction.schema, extraction.extractor)}
     return sorted(path for path in files if is_placeholder(path))
@@ -76,7 +82,6 @@ class Outcome:
 class Result:
     documents: list[Outcome]
     records: list[dict[str, Any]]
-    changed: bool
     appeared: list[str] = field(default_factory=lambda: [])
     disappeared: list[str] = field(default_factory=lambda: [])
     moved: list[dict[str, str]] = field(default_factory=lambda: [])
@@ -115,13 +120,16 @@ def described_files(root: Path) -> dict[str, Source]:
 def matched_files(root: Path, extraction: Extraction) -> list[str]:
     found: set[str] = set()
     for pattern in extraction.files:
-        for path in root.glob(pattern):
-            relative = path.relative_to(root)
-            if not path.is_file() or any(part.startswith(".") for part in relative.parts):
-                continue
-            if path.name.endswith(annotation.SUFFIX):
-                continue
-            found.add(relative.as_posix())
+        matched = {path.relative_to(root) for path in root.glob(pattern) if path.is_file()}
+        documents = {
+            relative.as_posix()
+            for relative in matched
+            if not any(part.startswith(".") for part in relative.parts)
+            and not relative.name.endswith(annotation.SUFFIX)
+        }
+        if not documents:
+            raise ValueError(f"{extraction.name}: {pattern} matches no file")
+        found |= documents
     return sorted(found)
 
 
@@ -130,15 +138,20 @@ def sources(root: Path, extraction: Extraction, described: dict[str, Source]) ->
     undescribed = [path for path in paths if path not in described]
     if undescribed:
         raise ValueError(
-            f"{extraction.name}: no dataset describes {', '.join(undescribed)}; describe it with biotope add "
-            "or narrow the extraction's file patterns"
+            f"{extraction.name}: no dataset describes {', '.join(undescribed)}; describe it with biotope add, "
+            "which leaves out a copy identical to another file of its dataset, or narrow the extraction's file patterns"
         )
     found = [described[path] for path in paths]
-    shared = sorted(name for name, count in Counter(source.record_path for source in found).items() if count > 1)
+    sharing: dict[str, list[str]] = defaultdict(list)
+    for source in found:
+        sharing[source.record_path].append(source.path)
+    shared = [
+        f"{', '.join(files)} would share the record path {path}" for path, files in sharing.items() if len(files) > 1
+    ]
     if shared:
         raise ValueError(
-            f"{extraction.name}: documents of different datasets share the record path {', '.join(shared)}; "
-            "give the datasets different folder names"
+            f"{extraction.name}: {'; '.join(shared)}. A record path starts with the name of the document's dataset "
+            "folder or file, so give the datasets different names"
         )
     return found
 
@@ -365,12 +378,11 @@ def run(
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}
-    changed = _store(output, state_file, extraction, schema, records, state, sorted(registered))
+    _store(output, state_file, extraction, schema, records, state, sorted(registered))
     progress.unlink(missing_ok=True)
     return Result(
         outcomes,
         records,
-        changed,
         sorted(new - old - {pair["to"] for pair in moved}),
         sorted(old - new - {pair["from"] for pair in moved}),
         moved,
@@ -435,8 +447,8 @@ def _store(
     records: list[dict[str, Any]],
     state: dict[str, Any],
     files: list[str],
-) -> bool:
-    changed = _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
+) -> None:
+    _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
     stored = {
         "extraction": extraction.name,
         "schema": schema.name,
@@ -444,11 +456,8 @@ def _store(
         "documents": dict(sorted(state.items())),
     }
     _write(state_file, json.dumps(stored, indent=2) + "\n")
-    return changed
 
 
-def _write(path: Path, text: str) -> bool:
-    if path.is_file() and path.read_text(encoding="utf-8") == text:
-        return False
-    write_text_atomic(path, text)
-    return True
+def _write(path: Path, text: str) -> None:
+    if not path.is_file() or path.read_text(encoding="utf-8") != text:
+        write_text_atomic(path, text)

@@ -350,7 +350,7 @@ def _scaffold(plan: SourcePlan, target: Target, directory: Path) -> tuple[Packag
 
 
 def _orphans(
-    plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package], owners: dict[str, Path]
+    plan: SourcePlan, data: dict[str, Any], owned: dict[str, Package], owners: dict[str, Path], extracted: set[str]
 ) -> list[PackageStatus]:
     live = {target.identity for target in plan.targets}
     found: list[PackageStatus] = []
@@ -358,9 +358,12 @@ def _orphans(
         if identity in live:
             continue
         gone = f"{identity!r} is no longer described by {plan.metadata.name}"
-        detail = (
-            _moved(plan, data, package.path, identity, gone, owners) or f"{gone}; delete the directory to remove it"
-        )
+        if identity in extracted:
+            detail = f"{identity!r} is read by an extraction, whose records are mapped instead; delete the directory"
+        else:
+            detail = (
+                _moved(plan, data, package.path, identity, gone, owners) or f"{gone}; delete the directory to remove it"
+            )
         declaration = package.declaration
         found.append(
             PackageStatus(
@@ -452,7 +455,9 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
     root = root_directory(metadata, output, package)
     data = refresh_description(metadata)
     packages = discover_packages(root)
-    targets = _unextracted(metadata, manifest_targets(data))
+    every = manifest_targets(data)
+    targets = _unextracted(metadata, every)
+    extracted = {target.identity for target in every} - {target.identity for target in targets}
     plan = SourcePlan(metadata, output, root, ContractStore.for_manifest(metadata), targets, packages)
     contested_root = _root_conflicts(metadata, output, root)
     if contested_root:
@@ -487,7 +492,7 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
         for status in statuses
         if status.state in ("created", "completed") and status.identity is not None
     }
-    statuses += _orphans(plan, data, ownership.owned, owners)
+    statuses += _orphans(plan, data, ownership.owned, owners, extracted)
     return replace(
         plan,
         statuses=tuple(statuses),

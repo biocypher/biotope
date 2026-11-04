@@ -275,6 +275,31 @@ def test_failed_empty_and_removed_documents(study):
     assert study.records("profile") == []
 
 
+def test_an_unreadable_document_fails_and_keeps_its_records(study):
+    assert study.extract("run", "profile")[0].exit_code == 0
+    kept = study.records("profile")
+    (study.root / LIND).chmod(0)
+    try:
+        result, report = study.extract("run", "profile")
+    finally:
+        (study.root / LIND).chmod(0o644)
+    assert result.exit_code != 0 and statuses(report) == {LIND: "failed", OKAFOR: "reused"}
+    assert extraction(report)["documents"][0]["reason"].startswith("PermissionError")
+    assert study.records("profile") == kept
+
+
+def test_documents_of_datasets_with_one_name_are_refused(study):
+    for year in ("y2024", "y2025"):
+        (study.root / "data" / year).mkdir()
+        shutil.copy(study.root / CALL, study.root / "data" / year / "call.md")
+        assert study.run("add", f"data/{year}/call.md").exit_code == 0
+    study.edit(LISTED, 'files=("data/calls/*.md",)', 'files=("data/*/call.md",)')
+    result, report = study.extract("run", "funding_round")
+    assert result.exit_code != 0
+    assert "data/y2024/call.md, data/y2025/call.md would share the record path call.md" in report["error"]
+    assert "give the datasets different names" in report["error"]
+
+
 def test_an_interrupted_run_keeps_the_records_and_a_rerun_completes_it(study, monkeypatch):
     assert study.extract("run", "profile")[0].exit_code == 0
     stored = (study.root / "data/extracted/profile.jsonl").read_bytes()
@@ -351,6 +376,30 @@ def decoded(cls, value):
     return cls(**kwargs)
 
 
+def test_generation_follows_the_documents_an_extraction_has_read(study):
+    def generated():
+        result = study.run("source", "generate", ".biotope/datasets/data/pages.jsonld", "--out", "graph/sources")
+        assert result.exit_code == 0, result.output
+        folder = study.root / "graph/sources/pages"
+        names = sorted(path.name for path in folder.iterdir() if path.is_dir()) if folder.is_dir() else []
+        return names, " ".join(result.output.split())
+
+    assert generated()[0] == ["lind_html", "okafor_html"]
+    assert study.extract("run")[0].exit_code == 0
+    packages, shown = generated()
+    assert "'lind.html' is read by an extraction, whose records are mapped instead" in shown
+    for package in packages:
+        shutil.rmtree(study.root / "graph/sources/pages" / package)
+    assert generated()[0] == []
+
+    listed = (study.root / LISTED).read_text().splitlines(keepends=True)
+    (study.root / LISTED).write_text("".join(line for line in listed if 'name="profile"' not in line))
+    removed = study.run("rm", "-f", "data/extracted/profile.jsonl")
+    assert removed.exit_code == 0, removed.output
+    assert not (study.root / ".biotope/extraction/profile.json").exists()
+    assert generated()[0] == ["lind_html", "okafor_html"]
+
+
 def test_try_shows_records_and_changes_nothing(study):
     (study.root / "data/draft.html").write_text("<h1>Dr. Ada Byron</h1>")
     before = study.snapshot()
@@ -409,6 +458,13 @@ def test_the_extraction_list_is_checked_when_it_loads(study):
         (LISTED, 'files=("data/calls/*.md",)', 'files=("../calls/*.md",)', "relative to the project root"),
         (LISTED, 'name="funding_round"', 'name="Funding round"', "lowercase letters"),
         (LISTED, "parallel=2", "parallel=0", "parallel"),
+        (
+            LISTED,
+            'files=("data/calls/*.md",)',
+            'files=("data/call/*.md",)',
+            "funding_round: data/call/*.md matches no file",
+        ),
+        (READERS, '"heading": "h1"', '"heading": {"h1"}', "ProfileReader.settings must hold only JSON values"),
         (LISTED, 'name="profile"', 'name="funding_round"', "more than once"),
     ):
         study.edit(path, old, new)
@@ -417,6 +473,11 @@ def test_the_extraction_list_is_checked_when_it_loads(study):
         study.edit(path, new, old)
     result, report = study.extract("run", "missing")
     assert result.exit_code != 0 and "lists no extraction missing; it lists profile, funding_round" in report["error"]
+    broken = study.root / ".biotope/datasets/broken.jsonld"
+    broken.write_text("{")
+    result, report = study.extract("run")
+    assert result.exit_code != 0 and "broken.jsonld" in report["error"]
+    broken.unlink()
     assert study.snapshot() == before
     result, report = study.extract("run", "funding_round")
     assert result.exit_code == 0 and [item["name"] for item in report["extractions"]] == ["funding_round"]

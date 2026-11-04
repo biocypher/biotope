@@ -29,6 +29,7 @@ from rich.prompt import Confirm
 
 from biotope.commands.add import resolve_dataset_ref
 from biotope.croissant.ids import read_files
+from biotope.extraction.run import forget
 from biotope.graph.sources import write_description
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
@@ -203,6 +204,7 @@ def _remove_single_file(
         write_description(manifest_path, metadata)
         warn_ignored(biotope_root, [manifest_path])
 
+    forget(biotope_root, file_path)
     if not keep_data and file_path.is_file():
         file_path.unlink()
 

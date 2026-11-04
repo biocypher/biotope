@@ -67,7 +67,7 @@ def mv(source: Path, destination: Path, force: bool, recursive: bool) -> None:
         click.echo(
             f"❌ {held[0].relative_to(biotope_root)} holds an extraction's records, which biotope extract run always "
             "writes to data/extracted/<name>.jsonl. To change the file, rename the extraction in "
-            "graph/extraction/__init__.py."
+            "graph/extraction/__init__.py, run it and remove the old file with biotope rm."
         )
         raise click.Abort
     destination = _validate_move_operation(source, destination, biotope_root, force)
