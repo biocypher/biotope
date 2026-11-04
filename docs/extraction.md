@@ -74,6 +74,13 @@ type-checks it and `run.json` records it. Loading checks every entry: a schema
 biotope cannot use, an extractor without a `name` or `version`, a pattern outside
 the project or a repeated name fails before any document is read.
 
+`biotope graph scaffold` writes the empty list and `graph/extraction/template.py`,
+a bare schema and extractor whose first line, `# biotope:placeholder`, marks them
+unfilled. Copy it for each kind of document. `graph check`, `extract try` and
+`extract run` refuse a listed extraction whose schema or extractor file still has
+that line, `graph check` as `extraction.placeholder`; an unlisted template is
+ignored.
+
 ## Schemas
 
 A schema is a dataclass. Its docstring says what kind of record a document states;

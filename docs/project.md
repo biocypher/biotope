@@ -84,7 +84,8 @@ Three parts of it follow fixed rules:
   `topology.reserved` before any build.
 
 - **Extractions** are listed in `graph/extraction/__init__.py`, with their
-  schemas and extractors in modules beside it. The scaffold lists `extraction` in
+  schemas and extractors in modules beside it, each copied from the scaffold's
+  `template.py`. The scaffold lists `extraction` in
   the pipeline's `code_paths`, so `graph check` type-checks them and `run.json`
   records them with the rest of the graph code.
 

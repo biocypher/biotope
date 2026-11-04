@@ -422,6 +422,34 @@ def test_the_extraction_list_is_checked_when_it_loads(study):
     assert result.exit_code == 0 and [item["name"] for item in report["extractions"]] == ["funding_round"]
 
 
+def test_a_listed_placeholder_is_refused_and_an_unlisted_one_is_ignored(study):
+    template = "graph/extraction/template.py"
+    assert (study.root / template).read_text().startswith("# biotope:placeholder\n")
+    pipeline = study.root / "graph/pipelines/build_graph.py"
+    pipeline.write_text(pipeline.read_text().replace('name="",', 'name="pages",').replace('scope="",', 'scope="none",'))
+
+    def placeholders():
+        checked = study.run("graph", "check", "--json")
+        findings = json.loads(checked.output)["findings"]
+        assert not [finding for finding in findings if finding["code"].startswith("python.")], findings
+        return [finding["location"]["path"] for finding in findings if finding["code"] == "extraction.placeholder"]
+
+    assert placeholders() == []
+    assert study.extract("run")[0].exit_code == 0
+
+    study.edit(LISTED, "from .readers import", "from .template import Record, RecordExtractor\nfrom .readers import")
+    listed = 'Extraction(name="record", schema=Record, extractor=RecordExtractor, files=("data/calls/*.md",)),\n'
+    study.edit(
+        LISTED, "EXTRACTIONS: tuple[Extraction, ...] = (\n", f"EXTRACTIONS: tuple[Extraction, ...] = (\n    {listed}"
+    )
+    before = study.snapshot()
+    for command in (("run",), ("run", "record"), ("try", "record", CALL)):
+        result, report = study.extract(*command)
+        assert result.exit_code != 0 and f"record: {template} is still a placeholder" in report["error"], command
+    assert study.snapshot() == before
+    assert [path.endswith(template) for path in placeholders()] == [True]
+
+
 def test_parallel_extraction_changes_neither_output_nor_report(study):
     outcomes = []
     for old, new in (("parallel=2", "parallel=1"), ("parallel=1", "parallel=3")):

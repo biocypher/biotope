@@ -18,7 +18,9 @@ graph/
         schema.py        typed records and field bindings; yours to edit
         loader.py        decoding into the schema; starts as a placeholder
   alignment/             cross-source identity resolution, before mappings
-  extraction/            EXTRACTIONS: each one's schema, extractor and files
+  extraction/
+    __init__.py          EXTRACTIONS: each one's schema, extractor and files
+    template.py          a schema and extractor to copy per kind of document
   topology/
     __init__.py          TOPOLOGY: the registered nodes and edges
     <node>/              one folder per node, its class name in snake_case
