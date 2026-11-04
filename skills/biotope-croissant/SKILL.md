@@ -26,7 +26,7 @@ Copy this checklist and track progress.
 ```
 Biotope graph project:
 - [ ] Step 1: Read the inputs and the existing project
-- [ ] Step 2: Agree the purpose and requirements
+- [ ] Step 2: Agree the purpose and its questions
 - [ ] Step 3: Describe and annotate every source
 - [ ] Step 4: Generate the inventory and decide exclusions
 - [ ] Step 5: Author schemas and terms, then loaders
@@ -44,10 +44,12 @@ Biotope graph project:
 - Biotope writes only in `.biotope/`, `graph/`, `data/extracted/`, annotation files and a root `.gitignore` the project lacks, and never to git. Leave committing to the user. When a command warns that git ignores a file, tell the user: it must be committed, so `.gitignore` needs an exception.
 - Write no project code yet.
 
-**Step 2: Agree the purpose and requirements.**
+**Step 2: Agree the purpose and its questions.** Do this before any modelling.
 
-- A purpose and its example questions are evidence of intent, not a specification. Derive the adjacent questions: the neighbouring comparison, evidence that would contradict the expected answer, a second defensible reading of the same statistic, the context needed to interpret a result, and the case where a well-founded "no such record" is the answer. For each, name the evidence and distinctions it needs: that list decides what the sources must supply and what the mappings must admit.
-- Record the agreed purpose with `biotope map --purpose "..."`. Propose adjacent requirements once, with their cost; record declined ones as out of scope.
+- From the user's purpose and a first look at the data, draft who uses the graph, for which tasks, and the typical questions they will ask. Show the draft to the user and let them correct it.
+- Find the choices that change answers, such as whether a preprint and its journal version count as one publication, or whether one topic name on two pages is one topic. Put each to the user as a decision, with what each option does to the answers; technical details are yours. Record each decision in `graph/ASSUMPTIONS.md`.
+- Record the agreed text, with its questions, with `biotope map --purpose "..."`. The entities and relations follow from the questions; they are not recorded separately.
+- With no user present, as in a benchmark build, your draft stands: record it, and the decisions it took, the same way.
 
 **Step 3: Describe and annotate every source.**
 
@@ -57,7 +59,7 @@ Biotope graph project:
 - Biotope adds no creator or licence that nobody gave. The creator is whoever produced the data, which the person running the tools usually is not. Write a creator or licence only where the data's documentation or the user explicitly states it for this data; otherwise leave it out and record the question. Never fill it with an identity from the environment, such as the git user or the account you work for.
 - When the user confirms a value for every dataset of the project, such as one licence or citation, record it once with `biotope config set-project-metadata`, for example `--license <url>`; `biotope add` applies it to each dataset, and a dataset's annotation file overrides it. Never store a template or placeholder there.
 - Files Baker cannot parse are reported `unclaimed`, and `biotope add` still gives each a file entry whose ID is its path. Keep these. A document, such as a paper, a web page or notes, goes through extraction (next bullet). Any other file the graph reads records from, such as tab-separated `.txt`, RDF or a shapefile, is read by its own package's loader, as [curation.md](./references/curation.md) describes. Describe every input with `biotope add`; never add a FileObject or RecordSet by hand, since the next rebake drops it.
-- **Documents go through extraction.** Propose an extraction schema for each kind of document from the agreed purpose's competence questions or user stories and sample documents: write each as a query, propose the fields users would search or filter on without being asked, and name the query each field serves. Ask only for records the purpose needs and the document reports. Check the `biotope extract try` output on those samples against the quotes and the document text, weak evidence and wrong or missing records included, and sharpen the descriptions; then show the user the schema with that output, and run `biotope extract run` only after the user approves the schema. Every later change to the schema needs a new `try` and a new approval before `run`. Re-extract every document whose records you judge wrong with `--redo`, and check it again. The schema's fields and descriptions are scientific decisions: you propose, the user decides. Only public documents go to an external model; ask before extracting any other document, and transcribe its facts by hand if the user agrees. Follow [extraction.md](./references/extraction.md).
+- **Documents go through extraction.** Propose an extraction schema for each kind of document from the questions agreed in Step 2 and sample documents: write each as a query, propose the fields users would search or filter on without being asked, and name the query each field serves. Ask only for records the purpose needs and the document reports. Check the `biotope extract try` output on those samples against the quotes and the document text, weak evidence and wrong or missing records included, and sharpen the descriptions; then show the user the schema with that output, and run `biotope extract run` only after the user approves the schema. Every later change to the schema needs a new `try` and a new approval before `run`. Re-extract every document whose records you judge wrong with `--redo`, and check it again. The schema's fields and descriptions are scientific decisions: you propose, the user decides. Only public documents go to an external model; ask before extracting any other document, and transcribe its facts by hand if the user agrees. Follow [extraction.md](./references/extraction.md).
 - Inspect fields and exact IDs with `biotope map inspect <manifest> --json`, which reads metadata only.
 - To correct or complete a description, write into the dataset's annotation file, by hand or with `biotope annotate set`, and put the evidence in a comment beside the value. The next command that reads the description applies it; `biotope add --rebake` keeps it. A key is structure: declaring one changes the source's revision once, as "When the data changes" describes.
 - A metadata-only request ends here.
