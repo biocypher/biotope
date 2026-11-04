@@ -118,10 +118,19 @@ def test_annotate_set_takes_a_table_by_its_readable_id(fresh):
 
 
 def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
-    config = fresh / ".biotope/config.yaml"
-    settings = yaml.safe_load(config.read_text())
-    settings["project_metadata"] = {"creator": "Project Lead", "license": "https://example.org/licence"}
-    config.write_text(yaml.safe_dump(settings))
+    ok(
+        "config",
+        "set-project-metadata",
+        "--creator",
+        "Project Lead",
+        "--license",
+        "https://example.org/licence",
+        "--citation",
+        "Cite the study.",
+    )
+    ok("config", "set-project-metadata", "--citation", "")
+    shown = ok("config", "show-project-metadata").output
+    assert "Project Lead" in shown and "Cite the study." not in shown
     annotation = fresh / "data/study/.biotope.yaml"
     annotation.write_text(
         "# Written before the first add.\n"
@@ -157,6 +166,7 @@ def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):
     shows_every_annotation(described(fresh))
     samples = described(fresh, ".biotope/datasets/data/raw/samples.csv.jsonld")
     assert (samples["creator"]["name"], samples["license"]) == ("Project Lead", "https://example.org/licence")
+    assert "citation" not in samples
 
     (fresh / "data/study/push/people.csv").write_text("person_id,name\np1,Ada\np2,Grace\np3,Lin\n")
     (fresh / "data/study/push/projects.csv").write_text("project_id,title\nx1,Atlas\n")

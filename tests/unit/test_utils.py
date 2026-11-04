@@ -22,7 +22,7 @@ def test_load_project_metadata(tmp_path):
             "url": "https://example.com",
             "creator": "test@example.com",
             "license": "https://creativecommons.org/licenses/by/4.0/",
-            "citation": "Please cite this dataset as: {name} ({year})",
+            "citation": "Cite the study by Smith et al. (2026).",
             "project_name": "test_project",
             "access_restrictions": "Public",
             "legal_obligations": "None",
@@ -42,7 +42,7 @@ def test_load_project_metadata(tmp_path):
     assert result["creator"]["name"] == "test@example.com"
     assert result["creator"]["@type"] == "Person"
     assert result["license"] == "https://creativecommons.org/licenses/by/4.0/"
-    assert result["citation"] == "Please cite this dataset as: {name} ({year})"
+    assert result["citation"] == "Cite the study by Smith et al. (2026)."
     assert result["cr:projectName"] == "test_project"
     assert result["cr:accessRestrictions"] == "Public"
     assert result["cr:legalObligations"] == "None"
