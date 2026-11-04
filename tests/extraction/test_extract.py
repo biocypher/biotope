@@ -450,6 +450,47 @@ def test_a_listed_placeholder_is_refused_and_an_unlisted_one_is_ignored(study):
     assert [path.endswith(template) for path in placeholders()] == [True]
 
 
+ROW_READER = """
+
+class RowReader(Extractor):
+    name = "row-reader"
+    version = "1"
+
+    def extract(self, document: Document, schema: Schema) -> list[dict[str, Any]]:
+        with document.path.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        return [
+            {key: {"value": value, "locator": f"row {n}"} for key, value in row.items()}
+            for n, row in enumerate(rows, 1)
+        ]
+"""
+
+
+def test_an_extraction_reads_the_rows_of_a_file_described_as_a_table(study):
+    (study.root / "data/calls/rounds.csv").write_text("round,deadline,budget\nRenewal,1 March 2029,750 000 EUR\n")
+    assert study.run("add", "data/calls", "--rebake").exit_code == 0
+    study.edit(READERS, "import os\n", "import csv\nimport os\n")
+    (study.root / READERS).write_text((study.root / READERS).read_text() + ROW_READER)
+    study.edit(LISTED, "RoundReader\n", "RoundReader, RowReader\n")
+    listed = 'Extraction(name="table_round", schema=FundingRound, extractor=RowReader, files=("data/calls/*.csv",)),\n'
+    study.edit(
+        LISTED, "EXTRACTIONS: tuple[Extraction, ...] = (\n", f"EXTRACTIONS: tuple[Extraction, ...] = (\n    {listed}"
+    )
+
+    result, report = study.extract("run")
+    assert result.exit_code == 0, result.output
+    assert statuses(report, "table_round") == {"data/calls/rounds.csv": "extracted"}
+    [record] = study.records("table_round")
+    assert record["id"] == 'calls/rounds.csv#round="Renewal"'
+    assert record["values"]["budget"] == {"value": "750 000 EUR", "evidence": {"quote": None, "locator": "row 1"}}
+    generated = study.run("source", "generate", ".biotope/datasets/data/calls.jsonld", "--out", "graph/sources")
+    assert generated.exit_code == 0, generated.output
+    packages = [path.name for path in (study.root / "graph/sources/calls").iterdir() if path.is_dir()]
+    assert [name for name in packages if name.startswith("rounds")] and not [
+        n for n in packages if n.startswith("call_")
+    ]
+
+
 def test_parallel_extraction_changes_neither_output_nor_report(study):
     outcomes = []
     for old, new in (("parallel=2", "parallel=1"), ("parallel=1", "parallel=3")):
