@@ -63,7 +63,7 @@ tables:
         description: Benjamini-Hochberg adjusted p-value; empty when the gene was filtered before testing.
 ```
 
-The next command that reads the manifest applies it. Descriptions change no revision, so no schema needs a new `__source_digest__`. The data names no creator or licence, so the file sets none.
+The next command that reads the manifest applies it. Descriptions change no revision, so no schema needs a new `__source_digest__`. The data names no creator or license, so the file sets none.
 
 ## Shared terms
 

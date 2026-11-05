@@ -35,18 +35,18 @@
 | `graph/pipelines/compose.py`             | The stage sequence: load, align, map                                                                                        |
 | `graph/pipelines/build_graph.py`         | `PIPELINE`: registries, scope, policies and settings                                                                        |
 | `graph/ASSUMPTIONS.md`                   | Open scientific questions and the interpretations they affect                                                               |
-| `graph/pyproject.toml`                   | Graph dependencies, including project reader libraries                                                                      |
+| `graph/pyproject.toml`, `graph/uv.lock`  | The project's uv environment: Biotope and the reader libraries, pinned by the lock                                          |
 | `graph/build/`                           | The current build: export files and run evidence; generated                                                                 |
 
-Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and manifests, and `GRAPH_ROOT` for graph artifacts. Use package-relative imports. Keep payload access inside loader and pipeline calls.
+Use `PROJECT_ROOT` from the workspace's `paths` module for existing inputs and manifests, and `GRAPH_ROOT` for graph artifacts. Use package-relative imports. A module holds only declarations at import: reading a source or running a stage belongs in functions the pipeline calls. Biotope imports the graph code for every check and build and does not sandbox it, so this is an authoring contract that only you enforce.
 
 ## Import the contracts from `biotope.graph`
 
 - `SourceContract(name, metadata, schema, records)` links a manifest, the source's schema module and its record classes. Generation writes it; keep the registration as generated, apart from its import when you rename the record class. `SOURCE.path()` returns the one file the source reads, as the manifest names it now, so a loader keeps working after `biotope mv`. A table read from a file set has no single file: there `SOURCE.path()` raises, so the generated loader passes no path and finds the set's files itself.
-- `Evidence(artifact, version, record_set, location)` identifies a contributor. `SourceRecord(value, evidence)` carries a typed value and its references.
-- `Loader[Config, Row]` takes one argument and yields source records; the generated loader's `_read(path)` takes the file path that `load` passes from `SOURCE.path()`. Implement it beside the schema with an established parsing library; Biotope ships no source-format readers.
+- `Evidence(artifact, version, record_set, location)` identifies a contributor. `SourceRecord(value, evidence)` carries a typed value and its references. Make `version` a checksum, such as `sha256:` and the digest of the bytes read, or a known release version. Name any other fingerprint, such as a modification time, for what it is, so no reader takes it for a verified version.
+- `Loader[Config, Row]` takes one argument and yields source records; the generated loader's `_read(path)` takes the file path that `load` passes from `SOURCE.path()`. Implement it beside the schema with an established parsing library; Biotope ships no source-format readers. A decoding error names the file and the row or page it failed on.
 - `Term(standard_name, description, values=None)` and `source_field(...)` bind source fields to shared meanings.
-- `Topology(nodes=(...), edges=(...))` registers dataclasses. Each declares `schema_id: ClassVar[str]`. Nodes have distinct `NewType(..., str)` identifiers; edges use those types for `source` and `target`.
+- `Topology(nodes=(...), edges=(...))` registers dataclasses. Each declares `schema_id: ClassVar[str]`; the `biotope:` namespace is reserved for export metadata and refused. An optional `display_name: ClassVar[str]` gives a short label in `graph/metagraph.html` and changes no concept ID. Nodes have distinct `NewType(..., str)` identifiers; edges use those types for `source` and `target`.
 
 Use keyword arguments in graph constructors so a property change fails clearly. Mint namespaced identifiers explicitly, with source-specific namespaces wherever cross-source identity is unresolved. An identifier is `namespace:local-id`: the namespace has no colon and neither part has whitespace, so derive a local ID from a label as a slug. Reuse one concept for same-type relation endpoints rather than inventing a second.
 
@@ -90,7 +90,7 @@ class Row:
 - `source_field("<suffix>")` names the field `<record set @id>/<suffix>`; a bare attribute binds its own name; a full `@id` works when the suffix is empty or itself scoped; `source_field(None)` declares an attribute the source does not supply.
 - Aliases (`aliases={"low": "low_expression"}`), missing tokens and species context belong to the source that uses them. `source_field(aliases=...)`, `__value_aliases__` and `__missing_values__` are declarations only: the check validates them and `run.json` reports them, but `context.load` applies none of them, so the loader maps each alias and turns each missing token into `None` itself. A `Term` holds only the meaning, and optionally the closed vocabulary, several sources share. A field bound to a term is an attribute named after the term's `standard_name`. Bind every field the graph reads as that meaning; matching column names establish no equivalence, and a field kept as its source reported it needs no term.
 - Authored types are not compared with Croissant `dataType`. `__source_digest__` records the revision you reviewed. A revision covers structure only: when fields, types, nullability, keys or file references change, `graph check` reports `source.drift` with the changes, and you acknowledge them by updating it. Descriptions never do. New rows can, when a field that was null or an empty list in every record first gets a value.
-Export supports nullable scalars and string lists without nulls. Strings are one line, and list items contain no `;` or line break; a build stops at the first graph object that breaks this and names its mapping, concept and property. Any other property shape needs an explicit project representation.
+Export supports nullable scalars, with finite floats, and string lists without nulls. Strings are one line, and list items contain no `;` or line break; a build stops at the first graph object that breaks this and names its mapping, concept and property. Any other property shape needs an explicit project representation.
 
 ## Mapping signatures
 
@@ -109,6 +109,7 @@ NORMALISE = Mapping(name="p:normalise-sample", function=normalise_sample, eviden
 - Every parameter is an explicitly named `SourceRecord[...]`, read through `.value`, so contributors travel with the value. No `*args`, `**kwargs`, defaults or missing annotations.
 - Input and output types are concrete dataclasses or finite unions of them. Returns are parameterized `Iterable`, `Iterator`, `Generator`, list or tuple, including a fixed tuple of several output types.
 - `Any`, `object`, bare containers and unresolved annotations are rejected at the mapping boundary. Keep the scientific rationale in `evidence`.
+- A mapping can return topology objects directly. Add an intermediate dataclass, without a `schema_id`, only when sources need one normalized shape, a stage buffers records, or several mappings reuse a transformation.
 - Every value is validated against its declaration when the mapping runs, so a field of an intermediate or source record is `str`, `int`, `float`, `bool`, `None`, a `NewType`, `list[...]`, `tuple[...]` or a dataclass. The check rejects other field types, such as `dict` or `set`, before a build starts.
 
 ## Compose execution through `RunContext`
@@ -127,4 +128,4 @@ A `list[SourceRecord[Measurement]]` keeps its element type, so the later `contex
 
 ## Joins and conflicts are project Python
 
-Declare keys, cardinality, unmatched behaviour and output grain. Exact duplicates combine evidence; conflicting values for one ID fail the build. Edges without an explicit ID use concept, source and target identity, so parallel edges need explicit IDs. The engine holds graph objects and evidence in memory and project joins may hold more; assess that against the agreed scope.
+Declare keys, cardinality, unmatched behavior and output grain. Exact duplicates combine evidence; conflicting values for one ID fail the build. Edges without an explicit ID use concept, source and target identity, so parallel edges need explicit IDs. The engine holds graph objects and evidence in memory and project joins may hold more; assess that against the agreed scope.

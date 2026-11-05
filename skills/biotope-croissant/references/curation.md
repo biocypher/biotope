@@ -9,7 +9,7 @@ The file is sparse. A value there wins over the data's, a missing value comes fr
 ```yaml
 # What people write about this dataset. A value here wins over the data's; an empty value clears it.
 description: Differential expression in atrial fibrillation from two studies, with their methods note.
-license:  # the README states no licence; asked the user on 2026-10-27
+license:  # the README states no license; asked the user on 2026-10-27
 tables:
   study_a.csv#study_a:
     description: One row per gene in study A.
