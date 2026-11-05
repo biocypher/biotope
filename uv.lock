@@ -230,7 +230,7 @@ graph = [
 requires-dist = [
     { name = "biocypher", marker = "extra == 'graph'", specifier = ">=0.17,<0.18" },
     { name = "click", specifier = ">=8.1.8" },
-    { name = "croissant-baker", specifier = ">=0.5,<1" },
+    { name = "croissant-baker", specifier = ">=0.8.1,<0.9" },
     { name = "importlib-metadata", marker = "python_full_version < '3.12'", specifier = ">=6.3" },
     { name = "mike", marker = "extra == 'dev'", specifier = ">=2.1.3" },
     { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.6.20" },
@@ -479,7 +479,7 @@ wheels = [
 
 [[package]]
 name = "croissant-baker"
-version = "0.6.0"
+version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -499,7 +499,7 @@ dependencies = [
     { name = "xlrd" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/63/445f8c67ddae89bd3bc7459c97e13d647c168a56e52773eb24a744f247bd/croissant_baker-0.6.0-py3-none-any.whl", hash = "sha256:7a5a0b5da6d6b441b83e3fa9f968e79a35446f9a1c596838c8d034323bda4553", size = 153254, upload-time = "2026-09-15T06:45:52.551Z" },
+    { url = "https://files.pythonhosted.org/packages/49/8b/aec747ab05ccc0f937387e7b863cffe1b8401dd0a2886c4f4cd1fc1141fe/croissant_baker-0.8.1-py3-none-any.whl", hash = "sha256:08c6f647ccda884b382d78cb40a56d94b0b6768a2fea40cf01346921ff7927cd", size = 209532, upload-time = "2026-10-30T15:28:08.846Z" },
 ]
 
 [[package]]
