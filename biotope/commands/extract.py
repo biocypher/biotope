@@ -75,7 +75,7 @@ class Output:
             sys.exit(1)
 
 
-@click.group(name="extract", help="Extract records from documents with the extractions listed in graph/extraction/__init__.py.")
+@click.group(name="extract", help="Extract records from documents with the extractions listed in graph/extraction.")
 def extract_group() -> None:
     pass
 

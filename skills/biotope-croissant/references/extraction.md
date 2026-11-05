@@ -73,7 +73,7 @@ EXTRACTIONS: tuple[Extraction, ...] = (
 
 - `name` starts with a lowercase letter and holds only lowercase letters, digits and underscores. It names the records file, `data/extracted/<name>.jsonl`, and the run state, `.biotope/extraction/<name>.json`.
 - `files` are path patterns relative to the project root, as `pathlib` globs them. They route documents by folder or name, such as `data/pages/*.html` or `data/inbox/contract_*.pdf`. Hidden files and annotation files never match. A pattern that matches no file fails the run, and so does a matched file that no dataset describes, such as a copy `biotope add` skipped as identical to another file. Narrow the patterns to leave such copies out.
-- `parallel`, 1 by default, is how many documents the extractor gets at once, each in its own thread. Above 1, guard a library that is not thread-safe, such as `pypdfium2`, with a lock, or keep it at 1.
+- `parallel`, 1 by default, is how many documents the extractor gets at once, each in its own thread. Above 1, guard any library that is not thread-safe with a lock, or keep it at 1.
 
 Biotope imports the list through the graph workspace, so extraction code can import other project modules, and checks every entry before it reads a document. `graph check`, `extract try` and `extract run` refuse a listed extraction whose schema or extractor file still starts with `# biotope:placeholder`; an unlisted template is ignored.
 

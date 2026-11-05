@@ -1,22 +1,20 @@
 # Use the result
 
-Each build writes the graph and the files that explain it to `graph/build/`. Keep these files with the graph wherever it goes: the meaning of each value is in `schema_config.yaml`, and its source is in `provenance.json`.
+Each build writes the graph and the files that explain it to `graph/build/`. Share these files with the graph: the meaning of each value is in `schema_config.yaml`, and its source is in `provenance.json`.
 
 ## What a build writes
 
-| File | What it is for |
-| --- | --- |
-| `biocypher/` | The graph as Neo4j import files: a header and a data file per node and edge type, and `neo4j-admin-import-call.sh` |
-| `graph.sqlite` | The graph as one SQLite file, instead of `biocypher/`, when the build ran with `--format sqlite` |
-| `schema_config.yaml` | Every node and edge type with its properties and their descriptions |
-| `provenance.json` | The source rows behind every node and edge |
-| `run.json` | The run record: the purpose, the selected and excluded sources, the excluded records per rule, the counts, and the versions of the code, data and libraries |
+- `biocypher/`: the graph as Neo4j import files, a header and a data file per node and edge type, and the import script `neo4j-admin-import-call.sh`.
+- `graph.sqlite`: the graph as one SQLite file, instead of `biocypher/`, when the build ran with `--format sqlite`.
+- `schema_config.yaml`: every node and edge type with its properties and their descriptions.
+- `provenance.json`: the source rows behind every node and edge.
+- `run.json`: the run record, with the purpose, the selected and excluded sources, the excluded records per rule, the counts, and the versions of the code, data and libraries.
 
 A build replaces `graph/build/` only when it succeeds. A failed build keeps the previous graph and writes `graph/build/last_failure.json`.
 
 ## Load the graph into Neo4j
 
-Stop the Neo4j database, then run the import script from the Neo4j installation folder:
+Stop a running Neo4j database (if present), then run the import script from the Neo4j installation folder:
 
 ```bash
 cd /path/to/neo4j

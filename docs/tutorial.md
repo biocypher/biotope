@@ -39,13 +39,11 @@ The source packages already exist, so generation only records the source revisio
 
 These files hold the decisions an agent records in code:
 
-| File | What it does |
-| --- | --- |
-| `graph/sources/study/samples/schema.py` | Declares the fields of `samples.csv`, their types and the reviewed source revision |
-| `graph/sources/study/samples/loader.py` | Reads the CSV file and decodes the score as a number |
-| `graph/sources/__init__.py` | Selects both sources and excludes none |
-| `graph/mappings/sample.py` | Doubles the score and builds the node IDs |
-| `graph/pipelines/build_graph.py` | Joins samples to people and declares the rules that exclude records |
+- `graph/sources/study/samples/schema.py` declares the fields of `samples.csv`, their types and the reviewed source revision.
+- `graph/sources/study/samples/loader.py` reads the CSV file and decodes the score as a number.
+- `graph/sources/__init__.py` selects both sources and excludes none.
+- `graph/mappings/sample.py` doubles the score and builds the node IDs.
+- `graph/pipelines/build_graph.py` joins samples to people and declares the rules that exclude records.
 
 ## Check and build
 
@@ -54,7 +52,7 @@ uv run --project graph biotope graph check
 uv run --project graph biotope graph build
 ```
 
-The check warns that the node and edge types use the illustrative `example:` namespace. The build also prints BioCypher's log lines and, on the first run, warnings from the rdflib library; neither affects the result. The build writes three nodes and two edges to `graph/build/`: Ada, samples s1 and s2, and the two edges between them. The doubled scores are 3.0 and 5.0. Sample s3 has no matching person and Bea has no sample, so `graph/build/run.json` lists one excluded record under each rule. [Use the result](result.md) explains each file the build writes.
+The check warns that the node and edge types use the illustrative `example:` namespace. The build also prints BioCypher's log lines and, on the first run, warnings from the rdflib library. You can ignore both. The build writes three nodes and two edges to `graph/build/`: Ada, samples s1 and s2, and the two edges between them. The doubled scores are 3.0 and 5.0. Sample s3 has no matching person and Bea has no sample, so `graph/build/run.json` lists one excluded record under each rule. [Use the result](result.md) explains each file the build writes.
 
 ## View the topology
 
