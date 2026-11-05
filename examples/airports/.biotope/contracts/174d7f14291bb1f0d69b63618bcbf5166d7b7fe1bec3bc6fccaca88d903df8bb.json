@@ -1,0 +1,69 @@
+{
+  "definition": {
+    "recordSet": [
+      {
+        "@id": "airports/airports.csv#airports",
+        "@type": "cr:RecordSet",
+        "field": [
+          {
+            "@id": "airports/airports.csv#airports/iata",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "iata"
+              },
+              "fileObject": {
+                "@id": "airports/airports.csv"
+              }
+            }
+          },
+          {
+            "@id": "airports/airports.csv#airports/name",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "name"
+              },
+              "fileObject": {
+                "@id": "airports/airports.csv"
+              }
+            }
+          },
+          {
+            "@id": "airports/airports.csv#airports/city",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "city"
+              },
+              "fileObject": {
+                "@id": "airports/airports.csv"
+              }
+            }
+          },
+          {
+            "@id": "airports/airports.csv#airports/country",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "country"
+              },
+              "fileObject": {
+                "@id": "airports/airports.csv"
+              }
+            }
+          }
+        ],
+        "key": {
+          "@id": "airports/airports.csv#airports/iata"
+        }
+      }
+    ]
+  },
+  "digest": "174d7f14291bb1f0d69b63618bcbf5166d7b7fe1bec3bc6fccaca88d903df8bb",
+  "kind": "recordSet"
+}

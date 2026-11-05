@@ -30,7 +30,7 @@ Biotope graph project:
 - [ ] Step 1: Read the inputs and the existing project
 - [ ] Step 2: Agree the purpose and its questions
 - [ ] Step 3: Describe and annotate every source
-- [ ] Step 4: Turn unstructured documents into structured records, if any
+- [ ] Step 4: Turn unstructured documents into structured records (if any unstructured docs exist)
 - [ ] Step 5: Generate the inventory and decide exclusions
 - [ ] Step 6: Author schemas and terms, then loaders
 - [ ] Step 7: Declare the topology by concept

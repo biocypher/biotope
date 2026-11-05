@@ -1,6 +1,6 @@
 # Tutorial: explore a finished project
 
-This tutorial builds a small finished project: synthetic samples joined to the people they come from. You see what an agent leaves in a project, then check and build it yourself. You write no code. You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and git.
+This tutorial explores a small finished project: six airports, five airlines, and the notes an operations desk keeps on them. The graph shows which airline uses which airport as a hub or a focus city. You see what an agent leaves in a project, then check and build it yourself. You write no code. You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and git.
 
 ## Set up
 
@@ -13,37 +13,38 @@ git clone --depth 1 --branch biotope-v1.0.0 https://github.com/biocypher/biotope
 <!-- x-release-please-end -->
 
 ```bash
-cp -R biotope/examples/typed_graph my-example
-cd my-example
+cp -R biotope/examples/airports my-airports
+cd my-airports
 uv sync --project graph
 ```
 
-Create the project with the example's purpose:
+## The data
 
-```bash
-uv run --project graph biotope init . --no-prompt --purpose "A reviewer checks transformed sample scores against the people the samples come from. Typical questions: which samples belong to a person, and what is each sample's transformed score?"
-```
+The project has two kinds of data:
 
-## Register the data
+- `data/airports/` holds three CSV tables: the airports, the airlines, and which airline has a hub at which airport.
+- `data/notes/airport-notes.md` holds the desk's notes, one section per airport. Each section states its roles in sentences such as "Hub for Delta Air Lines." and "Focus city for Alaska Airlines."
 
-The example ships a description of its two CSV files in `metadata/study.jsonld`, written by hand so that the result is the same on every machine. Register it, and generate the source packages from it:
-
-```bash
-uv run --project graph biotope source register metadata/study.jsonld --name study
-uv run --project graph biotope source generate .biotope/datasets/study.jsonld --out graph/sources
-```
-
-The source packages already exist, so generation only records the source revisions in `.biotope/contracts/`. In your own project, the agent describes the data with `biotope add`, and generation writes a package for each table.
+The two sources disagree once. `hubs.csv` lists Alaska Airlines as a hub at SFO, and the notes call SFO a focus city for Alaska Airlines.
 
 ## Read the project
 
-These files hold the decisions an agent records in code:
+The agent agreed the purpose with the desk, described the data, wrote an extractor for the notes and asked how to resolve the disagreement. These files hold the result:
 
-- `graph/sources/study/samples/schema.py` declares the fields of `samples.csv`, their types and the reviewed source revision.
-- `graph/sources/study/samples/loader.py` reads the CSV file and decodes the score as a number.
-- `graph/sources/__init__.py` selects both sources and excludes none.
-- `graph/mappings/sample.py` doubles the score and builds the node IDs.
-- `graph/pipelines/build_graph.py` joins samples to people and declares the rules that exclude records.
+- `.biotope/project.yaml` holds the purpose and its typical questions.
+- `data/.biotope.yaml` describes each table and column.
+- `graph/extraction/airport_notes.py` declares the record the notes yield and reads them with regular expressions. The notes are internal, so no model reads them.
+- `graph/ASSUMPTIONS.md` lists the questions the agent asked and the desk's answers.
+- `graph/alignment/airlines.py` matches the airline names in the notes to the codes in `airlines.csv`.
+- `graph/mappings/role.py` takes each role from the notes and leaves out the row of `hubs.csv` they contradict.
+
+## Extract from the notes
+
+```bash
+uv run --project graph biotope extract try airport_role_claims data/notes/airport-notes.md
+```
+
+The output lists 12 records, each with the sentence and the line it comes from. Nothing in the project changes. The agent stored the same records with `biotope extract run` in `data/extracted/airport_role_claims.jsonl`, and the graph reads them from there.
 
 ## Check and build
 
@@ -52,7 +53,7 @@ uv run --project graph biotope graph check
 uv run --project graph biotope graph build
 ```
 
-The check warns that the node and edge types use the illustrative `example:` namespace. The build also prints BioCypher's log lines and, on the first run, warnings from the rdflib library. You can ignore both. The build writes three nodes and two edges to `graph/build/`: Ada, samples s1 and s2, and the two edges between them. The doubled scores are 3.0 and 5.0. Sample s3 has no matching person and Bea has no sample, so `graph/build/run.json` lists one excluded record under each rule. [Use the result](result.md) explains each file the build writes.
+The build also prints BioCypher's log lines and, on the first run, warnings from the rdflib library. You can ignore both. The build writes 11 nodes and 12 edges to `graph/build/`: the six airports, the five airlines, and one edge for each role an airline has at an airport. `graph/build/run.json` lists one excluded record under the rule `hub_row_superseded_by_notes`: line 13 of `hubs.csv`, where Alaska Airlines is a hub at SFO. [Use the result](result.md) explains each file the build writes.
 
 ## View the topology
 
@@ -64,8 +65,15 @@ Open `graph/metagraph.html` in a browser to see the node and edge types with the
 
 ## Build it with the agent
 
-To see how an agent arrives at such a project, give it the raw data in a new folder. Copy `raw/` from the example into an empty folder, start Claude Code there and use the example's purpose:
+To see how an agent arrives at such a project, give it the raw data in a new folder:
 
-> Use biotope to build a knowledge graph from the files in `raw/`. Purpose: a reviewer checks transformed sample scores against the people the samples come from. Typical questions: which samples belong to a person, and what is each sample's transformed score?
+```bash
+mkdir -p ../my-own/data
+cp -R data/airports data/notes ../my-own/data/
+```
 
-The purpose leaves open what "transformed" means and what to do with a sample that has no person, so expect the agent to ask. Compare its node and edge types and its exclusions with this example.
+Start Claude Code in `my-own` and use the example's purpose:
+
+> Use biotope to build a knowledge graph from the files in `data/`. Purpose: our operations team looks up which airlines use which airports as hubs or focus cities. Typical questions: which airlines have a hub at JFK? Where does United have hubs? Which airports are a focus city, and for which airline? The notes are internal, so extract from them with code, not with a model.
+
+The sources leave open which of them is right about SFO and how a name in the notes matches an airline code, so expect the agent to ask. Compare its node and edge types and its exclusions with this example.

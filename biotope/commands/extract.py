@@ -180,8 +180,8 @@ def _run_one(
     result = run(root, extraction, schema, found, redo, output.progress)
     dataset_ids = sorted({source.dataset for source in found})
     manifest = manifest_for(target, root)
-    if not _registered(root, target, manifest, schema, dataset_ids, result.records):
-        _register(root, target, manifest, schema, dataset_ids, result.records)
+    if not _registered(root, target, manifest, schema, dataset_ids):
+        _register(root, target, manifest, schema, dataset_ids)
     ignored = ignored_by_git(root, [target, manifest, state_path(root, extraction.name)])
     report = {
         "name": extraction.name,
@@ -263,7 +263,7 @@ def _count(records: int) -> str:
 
 
 def _register(
-    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
+    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str]
 ) -> None:
     overrides = {
         "name": target.relative_to(root).as_posix(),
@@ -278,12 +278,12 @@ def _register(
     file_object = _file_object(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")
-    describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
+    describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)))
     write_description(manifest, metadata)
 
 
 def _registered(
-    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
+    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str]
 ) -> bool:
     if not manifest.is_file():
         return False
@@ -292,7 +292,7 @@ def _registered(
     if file_object is None or file_object.get("sha256") != sha256(target) or get_derived_from(metadata) != dataset_ids:
         return False
     described = copy.deepcopy(metadata)
-    describe(described, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
+    describe(described, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)))
     return described == metadata
 
 

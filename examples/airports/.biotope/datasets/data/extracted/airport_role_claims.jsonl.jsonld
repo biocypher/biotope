@@ -1,0 +1,176 @@
+{
+  "@context": {
+    "@language": "en",
+    "@vocab": "https://schema.org/",
+    "citeAs": "cr:citeAs",
+    "column": "cr:column",
+    "conformsTo": "dct:conformsTo",
+    "cr": "http://mlcommons.org/croissant/",
+    "rai": "http://mlcommons.org/croissant/RAI/",
+    "data": {
+      "@id": "cr:data",
+      "@type": "@json"
+    },
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "dct": "http://purl.org/dc/terms/",
+    "equivalentProperty": "cr:equivalentProperty",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
+    "extract": "cr:extract",
+    "field": "cr:field",
+    "fileProperty": "cr:fileProperty",
+    "fileObject": "cr:fileObject",
+    "fileSet": "cr:fileSet",
+    "format": "cr:format",
+    "includes": "cr:includes",
+    "isLiveDataset": "cr:isLiveDataset",
+    "jsonPath": "cr:jsonPath",
+    "key": "cr:key",
+    "md5": "cr:md5",
+    "parentField": "cr:parentField",
+    "path": "cr:path",
+    "recordSet": "cr:recordSet",
+    "references": "cr:references",
+    "regex": "cr:regex",
+    "repeated": "cr:repeated",
+    "replace": "cr:replace",
+    "samplingRate": "cr:samplingRate",
+    "sc": "https://schema.org/",
+    "separator": "cr:separator",
+    "source": "cr:source",
+    "subField": "cr:subField",
+    "transform": "cr:transform"
+  },
+  "@type": "sc:Dataset",
+  "name": "data/extracted/airport_role_claims.jsonl",
+  "description": "AirportRoleClaim records extracted from data. One airline the notes name as using one airport in one role. Records to extract: one per airline named in each \"Hub for ...\" or \"Focus city for ...\" statement under an airport's `##` heading. Leave out everything else a section says: the desk's prose about an airport's size, location or connectivity names no airline role, and a section that names no hub or focus city yields no record.",
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "airport_role_claims.jsonl",
+      "name": "airport_role_claims.jsonl",
+      "contentSize": "10208",
+      "contentUrl": "data/extracted/airport_role_claims.jsonl",
+      "encodingFormat": "application/jsonl",
+      "sha256": "af0f7fff97a27d85ebd182a520196180d6b78bb95002dca7bdff287b86d2dabe"
+    }
+  ],
+  "dateCreated": "2026-11-05T15:34:10.170857+00:00",
+  "conformsTo": "http://mlcommons.org/croissant/1.1",
+  "creator": {
+    "@type": "Person",
+    "name": "Operations desk"
+  },
+  "version": "1.0.0",
+  "recordSet": [
+    {
+      "@type": "cr:RecordSet",
+      "@id": "airport_role_claims.jsonl#airport_role_claims",
+      "name": "airport_role_claims.jsonl",
+      "description": "AirportRoleClaim records extracted from documents. One airline the notes name as using one airport in one role. Records to extract: one per airline named in each \"Hub for ...\" or \"Focus city for ...\" statement under an airport's `##` heading. Leave out everything else a section says: the desk's prose about an airport's size, location or connectivity names no airline role, and a section that names no hub or focus city yields no record.",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "airport_role_claims.jsonl#airport_role_claims/id",
+          "name": "id",
+          "description": "The record ID: the document's dataset folder and its path within it, then the record key's values.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airport_role_claims.jsonl"
+            },
+            "extract": {
+              "column": "id"
+            }
+          },
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airport_role_claims.jsonl#airport_role_claims/document",
+          "name": "document",
+          "description": "The document's path in the project.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airport_role_claims.jsonl"
+            },
+            "extract": {
+              "column": "document"
+            }
+          },
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airport_role_claims.jsonl#airport_role_claims/airport_iata",
+          "name": "airport_iata",
+          "description": "IATA three-letter code of the airport section the statement sits under, exactly as the heading writes it, for example JFK. The key for 'which airlines have a hub at JFK'.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airport_role_claims.jsonl"
+            },
+            "extract": {
+              "column": "values/airport_iata/value"
+            }
+          },
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airport_role_claims.jsonl#airport_role_claims/airline_name",
+          "name": "airline_name",
+          "description": "The airline as the note names it: a marketing name, never a code, for example 'Delta Air Lines'. The key for 'where does United have hubs'. It is not resolved to an airline code here, so it must be joined to an airline by name.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airport_role_claims.jsonl"
+            },
+            "extract": {
+              "column": "values/airline_name/value"
+            }
+          },
+          "biotope:nullable": false
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airport_role_claims.jsonl#airport_role_claims/role",
+          "name": "role",
+          "description": "The role the note states for this airline at this airport: 'hub' for a 'Hub for <airline>' statement and 'focus_city' for a 'Focus city for <airline>' statement. The filter for 'which airports are a focus city, and for which airline'.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airport_role_claims.jsonl"
+            },
+            "extract": {
+              "column": "values/role/value"
+            }
+          },
+          "biotope:nullable": false
+        }
+      ],
+      "biotope:namedAfterFile": true,
+      "key": {
+        "@id": "airport_role_claims.jsonl#airport_role_claims/id"
+      }
+    }
+  ],
+  "biotope:status": "processed",
+  "prov:wasDerivedFrom": [
+    {
+      "@id": "data"
+    }
+  ],
+  "biotope:fromData": {
+    "creator": {
+      "@type": "Person",
+      "name": "Operations desk"
+    }
+  }
+}

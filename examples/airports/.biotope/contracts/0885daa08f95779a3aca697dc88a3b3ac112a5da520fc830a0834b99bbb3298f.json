@@ -1,0 +1,43 @@
+{
+  "definition": {
+    "recordSet": [
+      {
+        "@id": "airports/airlines.csv#airlines",
+        "@type": "cr:RecordSet",
+        "field": [
+          {
+            "@id": "airports/airlines.csv#airlines/code",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "code"
+              },
+              "fileObject": {
+                "@id": "airports/airlines.csv"
+              }
+            }
+          },
+          {
+            "@id": "airports/airlines.csv#airlines/name",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "name"
+              },
+              "fileObject": {
+                "@id": "airports/airlines.csv"
+              }
+            }
+          }
+        ],
+        "key": {
+          "@id": "airports/airlines.csv#airlines/code"
+        }
+      }
+    ]
+  },
+  "digest": "0885daa08f95779a3aca697dc88a3b3ac112a5da520fc830a0834b99bbb3298f",
+  "kind": "recordSet"
+}

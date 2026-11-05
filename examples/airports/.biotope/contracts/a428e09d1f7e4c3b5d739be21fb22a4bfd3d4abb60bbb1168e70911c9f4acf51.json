@@ -1,0 +1,87 @@
+{
+  "definition": {
+    "recordSet": [
+      {
+        "@id": "airport_role_claims.jsonl#airport_role_claims",
+        "@type": "cr:RecordSet",
+        "field": [
+          {
+            "@id": "airport_role_claims.jsonl#airport_role_claims/id",
+            "@type": "cr:Field",
+            "biotope:nullable": false,
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "id"
+              },
+              "fileObject": {
+                "@id": "airport_role_claims.jsonl"
+              }
+            }
+          },
+          {
+            "@id": "airport_role_claims.jsonl#airport_role_claims/document",
+            "@type": "cr:Field",
+            "biotope:nullable": false,
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "document"
+              },
+              "fileObject": {
+                "@id": "airport_role_claims.jsonl"
+              }
+            }
+          },
+          {
+            "@id": "airport_role_claims.jsonl#airport_role_claims/airport_iata",
+            "@type": "cr:Field",
+            "biotope:nullable": false,
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "values/airport_iata/value"
+              },
+              "fileObject": {
+                "@id": "airport_role_claims.jsonl"
+              }
+            }
+          },
+          {
+            "@id": "airport_role_claims.jsonl#airport_role_claims/airline_name",
+            "@type": "cr:Field",
+            "biotope:nullable": false,
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "values/airline_name/value"
+              },
+              "fileObject": {
+                "@id": "airport_role_claims.jsonl"
+              }
+            }
+          },
+          {
+            "@id": "airport_role_claims.jsonl#airport_role_claims/role",
+            "@type": "cr:Field",
+            "biotope:nullable": false,
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "values/role/value"
+              },
+              "fileObject": {
+                "@id": "airport_role_claims.jsonl"
+              }
+            }
+          }
+        ],
+        "key": {
+          "@id": "airport_role_claims.jsonl#airport_role_claims/id"
+        }
+      }
+    ]
+  },
+  "digest": "a428e09d1f7e4c3b5d739be21fb22a4bfd3d4abb60bbb1168e70911c9f4acf51",
+  "kind": "recordSet"
+}

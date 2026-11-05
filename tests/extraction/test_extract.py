@@ -5,9 +5,6 @@ import os
 import shutil
 import subprocess
 import sys
-import types
-from dataclasses import fields, is_dataclass
-from typing import Union, get_args, get_origin, get_type_hints
 
 from conftest import FIXTURES
 
@@ -33,15 +30,7 @@ def statuses(report, name="profile"):
 
 
 def described_fields(manifest):
-    found = {}
-
-    def collect(items):
-        for item in items:
-            found[item["@id"]] = item.get("description")
-            collect(item.get("subField", []))
-
-    collect(manifest["recordSet"][0]["field"])
-    return found
+    return {item["@id"]: item.get("description") for item in manifest["recordSet"][0]["field"]}
 
 
 def manifest(study, name="profile"):
@@ -86,10 +75,7 @@ def test_run_stores_every_listed_extraction_with_its_evidence_and_registers_it(s
     assert registered["biotope:status"] == "processed"
     assert "creator" not in registered and "license" not in registered
     assert registered["prov:wasDerivedFrom"] == [{"@id": "data/pages"}]
-    descriptions = described_fields(registered)
-    prefix = "profile.jsonl#profile/values/name/evidence/"
-    assert {key.removeprefix(prefix) for key in descriptions if key.startswith(prefix)} == {"quote", "locator"}
-    assert descriptions["profile.jsonl#profile/values/name/value"] == (
+    assert described_fields(registered)["profile.jsonl#profile/name"] == (
         "The researcher's full name, without academic titles."
     )
     assert json.loads((study.root / ".biotope/extraction/profile.json").read_text())["files"] == [LIND, OKAFOR]
@@ -172,7 +158,7 @@ def test_an_annotated_extracted_dataset_keeps_its_annotation_and_its_schema_desc
     assert annotated.exit_code == 0, annotated.output
     annotation = study.root / "data/extracted/profile.jsonl.biotope.yaml"
     written = annotation.read_bytes()
-    name = "profile.jsonl#profile/values/name/value"
+    name = "profile.jsonl#profile/name"
 
     def described():
         data = manifest(study)
@@ -368,19 +354,12 @@ def test_generated_sources_load_extracted_records_and_skip_extracted_documents(s
             del sys.modules[name]
 
 
-def decoded(cls, value):
-    if isinstance(value, list):
-        return [decoded(cls, item) for item in value]
-    if not is_dataclass(cls) or not isinstance(value, dict):
-        return value
-    hints = get_type_hints(cls)
-    kwargs = {}
-    for item in fields(cls):
-        annotation = hints[item.name]
-        while get_origin(annotation) in (Union, types.UnionType, list):
-            annotation = next(arg for arg in get_args(annotation) if arg is not type(None))
-        kwargs[item.name] = decoded(annotation, value.get(item.name))
-    return cls(**kwargs)
+def decoded(cls, line):
+    values = {
+        name: [item["value"] for item in entry] if isinstance(entry, list) else entry["value"]
+        for name, entry in line["values"].items()
+    }
+    return cls(id=line["id"], document=line["document"], **values)
 
 
 def test_generation_follows_the_documents_an_extraction_has_read(study):

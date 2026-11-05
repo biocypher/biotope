@@ -1,0 +1,39 @@
+# What people write about this dataset. A value here wins over the data's; an empty value clears it.
+description: >-
+  Airport reference data used by the operations desk: the airports, the airlines, one row per
+  airline-airport hub pairing, and the desk's own notes on each airport.
+# license: none. The data is internal to the operations desk and carries no license; the desk
+#   confirmed 2026-11-05 that none is to be stated. Left empty rather than invented.
+# creator: the operations desk, confirmed 2026-11-05. Recorded as the project default in
+#   .biotope/config.yaml, which is what fills the manifests; not taken from the environment.
+tables:
+  airports/airports.csv#airports:
+    description: One row per airport the operations desk works with; the airport's IATA code identifies it.
+    key: iata
+    columns:
+      iata:
+        description: IATA three-letter airport code, as the airport table writes it (for example JFK).
+      name:
+        description: The airport's full name, as this table writes it. The notes spell some names differently.
+      city:
+        description: The city the airport serves, as this table names it.
+      country:
+        description: ISO 3166-1 alpha-2 country code of the airport, for example US.
+  airports/airlines.csv#airlines:
+    description: One row per airline the desk tracks; the airline's two-character code identifies it.
+    key: code
+    columns:
+      code:
+        description: IATA two-character airline code, as the airline table writes it (for example DL).
+      name:
+        description: The airline's full marketing name, as this table writes it. The notes use the same names.
+  airports/hubs.csv#hubs:
+    description: One row per airline-airport pair this table treats as a hub; it records no focus cities.
+    key:
+      - airport_iata
+      - airline_code
+    columns:
+      airport_iata:
+        description: IATA code of the airport, referring to airports.csv#airports/iata.
+      airline_code:
+        description: IATA code of the airline, referring to airlines.csv#airlines/code.

@@ -25,13 +25,13 @@ The script replaces the database `neo4j` with the graph. Start Neo4j again and q
 
 ## Query the SQLite file
 
-Ask the agent to build with `--format sqlite`, or run `uv run --project graph biotope graph build --format sqlite`. Each node and edge type is a table, and each edge table has `source` and `target` columns that reference node tables. In the [tutorial](tutorial.md) graph, this lists each sample with its person:
+Ask the agent to build with `--format sqlite`, or run `uv run --project graph biotope graph build --format sqlite`. Each node and edge type is a table, and each edge table has `source` and `target` columns that reference node tables. In the [tutorial](tutorial.md) graph, this lists each airline at SFO with its role:
 
 ```sql
-SELECT Sample.id, Sample.doubled_score, Person.name
-FROM FromPerson
-JOIN Sample ON Sample.id = FromPerson.source
-JOIN Person ON Person.id = FromPerson.target;
+SELECT Airline.name, AirlineRoleAtAirport.role
+FROM AirlineRoleAtAirport
+JOIN Airline ON Airline.id = AirlineRoleAtAirport.source
+WHERE AirlineRoleAtAirport.target = 'airport:SFO';
 ```
 
 ## View the topology

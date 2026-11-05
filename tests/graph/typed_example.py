@@ -1,5 +1,3 @@
-import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -7,19 +5,13 @@ from pathlib import Path
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
-EXAMPLE = REPOSITORY / "examples/typed_graph"
-TUTORIAL = REPOSITORY / "docs/tutorial.md"
-PREFIX = "uv run --project graph biotope "
-
-
-def tutorial_commands():
-    blocks = re.findall(r"```bash\n(.*?)```", TUTORIAL.read_text(), re.S)
-    return [
-        shlex.split(line.removeprefix(PREFIX))
-        for block in blocks
-        for line in block.splitlines()
-        if line.startswith(PREFIX)
-    ]
+EXAMPLE = REPOSITORY / "tests/fixtures/typed_graph"
+PURPOSE = "A reviewer checks transformed sample scores against the people the samples come from."
+SETUP = (
+    ("init", ".", "--no-prompt", "--purpose", PURPOSE),
+    ("source", "register", "metadata/study.jsonld", "--name", "study"),
+    ("source", "generate", ".biotope/datasets/study.jsonld", "--out", "graph/sources"),
+)
 
 
 def biotope(root, *args):
@@ -30,10 +22,9 @@ def prepare(tmp_path):
     root = tmp_path / "project"
     shutil.copytree(EXAMPLE, root, ignore=shutil.ignore_patterns("__pycache__", ".biotope", "build"))
     sources = {path: path.read_bytes() for path in (root / "graph/sources").rglob("*.py")}
-    for command in tutorial_commands():
-        if command[0] != "graph":
-            result = biotope(root, *command)
-            assert result.returncode == 0, result.stdout + result.stderr
+    for command in SETUP:
+        result = biotope(root, *command)
+        assert result.returncode == 0, result.stdout + result.stderr
     assert {path: path.read_bytes() for path in (root / "graph/sources").rglob("*.py")} == sources
     assert len(list((root / ".biotope/contracts").iterdir())) == 2
     return root

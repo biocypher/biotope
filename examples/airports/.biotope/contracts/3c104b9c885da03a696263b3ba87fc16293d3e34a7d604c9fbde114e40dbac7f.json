@@ -1,0 +1,48 @@
+{
+  "definition": {
+    "recordSet": [
+      {
+        "@id": "airports/hubs.csv#hubs",
+        "@type": "cr:RecordSet",
+        "field": [
+          {
+            "@id": "airports/hubs.csv#hubs/airport_iata",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "airport_iata"
+              },
+              "fileObject": {
+                "@id": "airports/hubs.csv"
+              }
+            }
+          },
+          {
+            "@id": "airports/hubs.csv#hubs/airline_code",
+            "@type": "cr:Field",
+            "dataType": "sc:Text",
+            "source": {
+              "extract": {
+                "column": "airline_code"
+              },
+              "fileObject": {
+                "@id": "airports/hubs.csv"
+              }
+            }
+          }
+        ],
+        "key": [
+          {
+            "@id": "airports/hubs.csv#hubs/airport_iata"
+          },
+          {
+            "@id": "airports/hubs.csv#hubs/airline_code"
+          }
+        ]
+      }
+    ]
+  },
+  "digest": "3c104b9c885da03a696263b3ba87fc16293d3e34a7d604c9fbde114e40dbac7f",
+  "kind": "recordSet"
+}

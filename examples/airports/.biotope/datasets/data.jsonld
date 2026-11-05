@@ -1,0 +1,301 @@
+{
+  "@context": {
+    "@language": "en",
+    "@vocab": "https://schema.org/",
+    "citeAs": "cr:citeAs",
+    "column": "cr:column",
+    "conformsTo": "dct:conformsTo",
+    "cr": "http://mlcommons.org/croissant/",
+    "rai": "http://mlcommons.org/croissant/RAI/",
+    "data": {
+      "@id": "cr:data",
+      "@type": "@json"
+    },
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "dct": "http://purl.org/dc/terms/",
+    "equivalentProperty": "cr:equivalentProperty",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
+    "extract": "cr:extract",
+    "field": "cr:field",
+    "fileProperty": "cr:fileProperty",
+    "fileObject": "cr:fileObject",
+    "fileSet": "cr:fileSet",
+    "format": "cr:format",
+    "includes": "cr:includes",
+    "isLiveDataset": "cr:isLiveDataset",
+    "jsonPath": "cr:jsonPath",
+    "key": "cr:key",
+    "md5": "cr:md5",
+    "parentField": "cr:parentField",
+    "path": "cr:path",
+    "recordSet": "cr:recordSet",
+    "references": "cr:references",
+    "regex": "cr:regex",
+    "repeated": "cr:repeated",
+    "replace": "cr:replace",
+    "samplingRate": "cr:samplingRate",
+    "sc": "https://schema.org/",
+    "separator": "cr:separator",
+    "source": "cr:source",
+    "subField": "cr:subField",
+    "transform": "cr:transform"
+  },
+  "@type": "sc:Dataset",
+  "name": "data",
+  "description": "Airport reference data used by the operations desk: the airports, the airlines, one row per airline-airport hub pairing, and the desk's own notes on each airport.",
+  "conformsTo": "http://mlcommons.org/croissant/1.1",
+  "citeAs": "Unknown. (2026). data [Data set].",
+  "creator": {
+    "@type": "Person",
+    "name": "Operations desk"
+  },
+  "dateCreated": "2026-11-05T14:12:03.497466Z",
+  "version": "1.0.0",
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "airports/airlines.csv",
+      "name": "airlines.csv",
+      "contentSize": "99",
+      "contentUrl": "airports/airlines.csv",
+      "encodingFormat": "text/csv",
+      "sha256": "103ec48152d6d41c00690127cdf73eda48a1be369102ead3848231582a476942"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "airports/airports.csv",
+      "name": "airports.csv",
+      "contentSize": "309",
+      "contentUrl": "airports/airports.csv",
+      "encodingFormat": "text/csv",
+      "sha256": "3d70a377b9112afa804a74e84dac25461716dcde4941c14fbee355be22699722"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "airports/hubs.csv",
+      "name": "hubs.csv",
+      "contentSize": "110",
+      "contentUrl": "airports/hubs.csv",
+      "encodingFormat": "text/csv",
+      "sha256": "822d6e09d5c125282f6da840e5622193514ed22230cdb64ab0c9b28cee0dec5f"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "notes/airport-notes.md",
+      "name": "airport-notes.md",
+      "contentUrl": "notes/airport-notes.md",
+      "encodingFormat": "text/markdown",
+      "sha256": "ba573ff50eea8676271ee9705a31b8fd6c1409504cc69647e9e975605676257e",
+      "contentSize": "898"
+    }
+  ],
+  "recordSet": [
+    {
+      "@type": "cr:RecordSet",
+      "@id": "airports/airlines.csv#airlines",
+      "name": "airlines",
+      "description": "One row per airline the desk tracks; the airline's two-character code identifies it.",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "airports/airlines.csv#airlines/code",
+          "name": "code",
+          "description": "IATA two-character airline code, as the airline table writes it (for example DL).",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/airlines.csv"
+            },
+            "extract": {
+              "column": "code"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'code' from airlines.csv"
+          }
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airports/airlines.csv#airlines/name",
+          "name": "name",
+          "description": "The airline's full marketing name, as this table writes it. The notes use the same names.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/airlines.csv"
+            },
+            "extract": {
+              "column": "name"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'name' from airlines.csv"
+          }
+        }
+      ],
+      "biotope:namedAfterFile": true,
+      "biotope:fromData": {
+        "description": "Records from airlines.csv",
+        "key": null
+      },
+      "key": {
+        "@id": "airports/airlines.csv#airlines/code"
+      }
+    },
+    {
+      "@type": "cr:RecordSet",
+      "@id": "airports/airports.csv#airports",
+      "name": "airports",
+      "description": "One row per airport the operations desk works with; the airport's IATA code identifies it.",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "airports/airports.csv#airports/iata",
+          "name": "iata",
+          "description": "IATA three-letter airport code, as the airport table writes it (for example JFK).",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/airports.csv"
+            },
+            "extract": {
+              "column": "iata"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'iata' from airports.csv"
+          }
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airports/airports.csv#airports/name",
+          "name": "name",
+          "description": "The airport's full name, as this table writes it. The notes spell some names differently.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/airports.csv"
+            },
+            "extract": {
+              "column": "name"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'name' from airports.csv"
+          }
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airports/airports.csv#airports/city",
+          "name": "city",
+          "description": "The city the airport serves, as this table names it.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/airports.csv"
+            },
+            "extract": {
+              "column": "city"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'city' from airports.csv"
+          }
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airports/airports.csv#airports/country",
+          "name": "country",
+          "description": "ISO 3166-1 alpha-2 country code of the airport, for example US.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/airports.csv"
+            },
+            "extract": {
+              "column": "country"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'country' from airports.csv"
+          }
+        }
+      ],
+      "biotope:namedAfterFile": true,
+      "biotope:fromData": {
+        "description": "Records from airports.csv",
+        "key": null
+      },
+      "key": {
+        "@id": "airports/airports.csv#airports/iata"
+      }
+    },
+    {
+      "@type": "cr:RecordSet",
+      "@id": "airports/hubs.csv#hubs",
+      "name": "hubs",
+      "description": "One row per airline-airport pair this table treats as a hub; it records no focus cities.",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "airports/hubs.csv#hubs/airport_iata",
+          "name": "airport_iata",
+          "description": "IATA code of the airport, referring to airports.csv#airports/iata.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/hubs.csv"
+            },
+            "extract": {
+              "column": "airport_iata"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'airport_iata' from hubs.csv"
+          }
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "airports/hubs.csv#hubs/airline_code",
+          "name": "airline_code",
+          "description": "IATA code of the airline, referring to airlines.csv#airlines/code.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "airports/hubs.csv"
+            },
+            "extract": {
+              "column": "airline_code"
+            }
+          },
+          "biotope:fromData": {
+            "description": "Column 'airline_code' from hubs.csv"
+          }
+        }
+      ],
+      "biotope:namedAfterFile": true,
+      "biotope:fromData": {
+        "description": "Records from hubs.csv",
+        "key": null
+      },
+      "key": [
+        {
+          "@id": "airports/hubs.csv#hubs/airport_iata"
+        },
+        {
+          "@id": "airports/hubs.csv#hubs/airline_code"
+        }
+      ]
+    }
+  ],
+  "biotope:status": "processed",
+  "biotope:fromData": {
+    "description": "Dataset containing 3 files (text/csv) with automatically inferred types and structure"
+  }
+}
