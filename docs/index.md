@@ -43,7 +43,6 @@ scientific validity: review the graph against the sources themselves.
 - [Commands](commands.md)
 - [Project layout](project.md)
 - [Architecture](architecture.md)
-- [Technical notes for typed graphs](mapping_sidenotes.md)
 - [Migration](migration.md)
 
 Biotope 0.10 supports Python 3.10–3.12. APIs may change while the project is under

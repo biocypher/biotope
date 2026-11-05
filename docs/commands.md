@@ -125,8 +125,7 @@ topology independently; `--out <html>` selects a different viewer path and
 
 Quality and build each execute the declared scope once. Running both executes
 twice. Warnings require interpretation; definition, execution and integrity
-failures can fail an operation. See [typed projects](mapping.md)
-for authoring and [report formats](commands_sidenotes.md) for JSON details.
+failures can fail an operation. See [typed projects](mapping.md).
 
 ## Track and review
 

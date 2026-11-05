@@ -89,6 +89,4 @@ expectations read independently from the sources.
 viewer. An existing quality or build report can add observations without rerunning
 the pipeline. Database import and querying are separate steps.
 
-See [typed graph projects](mapping.md) for authoring,
-[technical notes](mapping_sidenotes.md) for detailed contracts, and
-[development ideas](ideas.md) for possible future work.
+See [typed graph projects](mapping.md) for authoring.
