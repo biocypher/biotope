@@ -1,34 +1,13 @@
 # AGENTS.md
 
-<!-- fleet:global -->
-
-## Global rules
-
-These rules apply in every project. Projects inherit them from `~/Projects/fleet/AGENTS.md`; change them there.
-
-- **Lean.** Use the simplest mechanism that works. Add no layers, options or files the task does not need; harden later when a real problem shows up.
-- **Zero comments.** Code explains itself through names and structure: no comments, no docstrings. The one exception is a comment without which a competent maintainer would likely change the code into a bug, when no name can carry the reason, such as a workaround for a third-party bug with its issue link. The bar is very high: when in doubt, delete it. Reasons go in commit messages.
-- **Tests first.** Write tests for the desired behaviour before the code, with mocks at the boundaries, and see them fail. Test through public interfaces. No phantom, trivial, redundant or over-granular tests.
-- **Prose.** Plain and compact: short sentences, concrete statements, no rhetorical emphasis or repeated conclusions.
-- **Talking to Vlad.** Messages to Vlad follow `communication.md` in the `orchestrate` skill: the point first, in plain full sentences, every ID explained.
-- **Repo, not memory.** Project facts, principles and decisions live in the repo, never only in an agent's memory.
-- **Tags.** All agents post on GitHub through Vlad's account. Start every comment with `🤖 <family>-<role>:`, for example `🤖 claude-agent:` or `🤖 codex-review-agent:`. An untagged comment is Vlad's.
-
-<!-- /fleet:global -->
+- **Lean implementation, maintainable architecture.** Use the simplest mechanism that works and use software architecture best practices to ensure long-term maintabability and extensibility.
+- **Zero comments.** Code explains itself through names and structure: no comments, no docstrings. The one exception is a comment without which a competent maintainer would likely change the code into a bug, when no name can carry the reason, such as a workaround for a third-party bug with its issue link. The bar is very high: when in doubt, delete it.
+- **Tests first.** Write tests for the desired behaviour before the code, with mocks at the boundaries, and see them fail. No phantom, trivial, redundant or over-granular tests.
+- **Prose.** Plain and compact: short sentences, concrete statements, no rhetorical emphasis or repeated conclusions. Use the .agents/skills/document-tone skill.
+- **Talking to the user.** Messages to user follow the .agents/skills/reporting skill.
 
 ## This project
-
-Biotope curates Croissant descriptions of local data and builds typed, provenance-tracked BioCypher graphs from them. The current iteration makes it a framework for data representation: it turns a project's local sources, structured files and documents alike, into a graph of typed records that answers the project's questions. REACH ([slolab/reach](https://github.com/slolab/reach)) is the first real problem it is built and tested on, the ELIXIR Atlas follows later, and InTRAC's graph must keep building; a feature belongs in biotope only if it makes sense beyond REACH, and no spec here describes behaviour specific to one project.
-
-Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of truth for new work: when a roadmap, spec, PR or comment disagrees with it, #53 wins. Read #53 and [`docs/roadmap.md`](docs/roadmap.md), which is written from it, before starting any task. Live status is in #53.
-
-### Layout
-
-- `biotope/`: the package. `commands/` holds one module per CLI command, `graph/` the typed graph engine (sources, checks, build, export), `extraction/` the extraction stage (schemas, the extractor interface, the runner and stored records), `croissant/` the Croissant models, `metadata.py` the manifest helpers (status, `prov:wasDerivedFrom`), `templates/` what `graph scaffold` and `source generate` write.
-- `skills/`: the agent skills shipped in the Claude plugin (`.claude-plugin/`): `biotope-croissant` (project workflow and its ownership rules) and `biocypher`.
-- `tests/`: `unit/`, `commands/`, `croissant/`, `graph/`, `extraction/` (with small project-style extractors) and `integration/`, on fixtures in `tests/fixtures/`. `examples/` holds a typed graph example.
-- `docs/`: the MkDocs site (nav in both `mkdocs.yml` and `mkdocs.nav.yml`, kept in sync). it gets rendered into public facing docs, so no working files in there.
-- `spec_files/` gitignored document for planning docs and specs.
+Biotope is a framework for data representation: it turns a project's local sources, structured files and documents alike, into a graph of typed records that answers the project's questions. Some of the projects that use biotope are building the "who-does-what" knowledge graph at and institute or an ELIXIR organization, as well as agentic building of purpose-built graphs similar to opentargets (biomedical) or yago2geo (geogrpahic).
 
 ### Commands
 
@@ -36,29 +15,5 @@ Issue [#53](https://github.com/biocypher/biotope/issues/53) is the source of tru
 uv sync --locked --extra dev --extra graph   # install
 uv run pyright                               # type check
 uv run pytest                                # unit tier
-uv run pre-commit run --all-files            # format and lint
 uv run mkdocs build --strict                 # docs
 ```
-
-### Tests, commits and releases
-
-- Unit tests run by default and in CI, on committed public fixtures and without network. `manual` criteria are judged by Vlad or a project's user and recorded in the PR.
-- Tests and examples use only public material. Never commit copyrighted full text, such as the InTRAC papers; runs on such documents happen in the data projects that hold them.
-- Commit subjects and PR titles follow Conventional Commits (`feat:`, `fix:`, `docs:`, …; `!` marks a break). Release-please maintains the version, `CHANGELOG.md` and `uv.lock`'s package entry: never edit them by hand.
-
-### Secrets
-
-- Model endpoints read keys from environment variables, such as `OPENROUTER_API_KEY`. Never read, print, log, commit or paste a `.env` file or a key, and never record one in a manifest, provenance or report.
-- Work in a worktree under `/home/vladsam42/Projects/biotope_project/.worktrees/`; the main checkout is `/home/vladsam42/Projects/biotope_project/biotope`.
-
-## Workflow
-
-Work is planned in milestones, one spec and one PR each. The orchestrator runs it with fleet's `orchestrate` skill. Every agent follows these rules:
-
-- Never commit to `main`. Only Vlad merges.
-- Newer specs supersede older ones. The current spec is the first commit of its milestone's draft PR, and a final commit deletes it before merge; there is no separate spec PR. The lifecycle is in `docs/specs/README.md`.
-- Once Vlad approves a spec, it is frozen until merge. Never weaken, drop or reinterpret an acceptance criterion. If one is wrong or impossible, comment `BLOCKED on AC-n` with your evidence and options, and stop work on it.
-- Never make a test pass by weakening it: no new skip or xfail, no removed assertions, no loosened tolerances, no mocking of the code under test.
-- Generated files, such as run records and lock files, are marked `linguist-generated=true` in `.gitattributes`. Upstream code is pinned to a release or commit, never copied in.
-- Out-of-scope findings become GitHub issues, not extra scope.
-- End each working session on a PR with a handoff comment: done, next, blockers, open questions.

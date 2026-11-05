@@ -1,10 +1,7 @@
 # Biotope
 
-Biotope builds knowledge graphs from local data. It uses [croissant-baker](https://pypi.org/project/croissant-baker/)
-to describe sources, gives every described input a typed Python source package from
-the reviewed Croissant metadata, and checks project-owned loaders, mappings and graph
-pipelines. Builds export [BioCypher](https://biocypher.org/) files with provenance and
-a record of the run.
+Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations.
+Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a massive organization. You can give raw data and **the purpose statemet** to the biotope agent and it will iteratively build the graph topology, mapping, entity and conflict resolution, following the industry best practices.
 
 [![PyPI](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/)
 [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/)
@@ -13,7 +10,17 @@ a record of the run.
 
 Biotope is under active development. The 0.10 release generates a complete source
 inventory, reports source drift, and retires validation checks and the query
-context; see the [migration guide](docs/migration.md).
+context;
+
+## How it works
+
+Biotope builds knowledge representations from local data. It uses [croissant-baker](https://pypi.org/project/croissant-baker/)
+to describe sources, gives every described input a typed Python source package from
+the reviewed Croissant metadata, and checks project-owned loaders, mappings and graph
+pipelines. Builds export [BioCypher](https://biocypher.org/) files with provenance and
+a record of the run.
+
+(add info about maintabilty structure, support for structured and unstructured data and versioning)
 
 ## Install
 
@@ -32,6 +39,8 @@ checking also needs Node.js on `PATH`; alternatively, install `pyright[nodejs]`
 in this environment. See [installation](docs/installation.md) for other setups.
 
 ## Build a graph
+
+(using with the agent is an intended use. manual use is not recommended.)
 
 1. Initialize a project with `biotope init my-kg`, then enter `my-kg`, or run
    `biotope init .` at the root of an existing repository. Biotope never writes to git.

@@ -52,7 +52,6 @@ graph = [
     "pyright>=1.1.400,<2",
 ]
 dev = [
-    "pre-commit>=4.1.0",
     "pytest>=8.3.5,<9.0.0",
     "mkdocs-material>=9.6.20",
     "mike>=2.1.3",
@@ -106,7 +105,7 @@ force-exclude = true
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "D107",  # 'Missing docstring in __init__' ignored because pydoclint wants us to document the class instead.
+    "D107",  # 'Missing docstring in __init__' ignored because the class docstring covers initialization.
     "D203",  # '1 blank line required before class docstring' ignored because we want no blank line.
     "D212",  # 'Multi-line docstring summary should start at the first line' ignored because we want the summary to start on the second line.
     "D407",  # 'Missing dashed underline after section' ignored because Google style docstrings don't underline.
@@ -135,13 +134,3 @@ exclude = [
 case-sensitive = true
 known-first-party = ["biotope"]
 lines-after-imports = 2
-
-[tool.pydoclint]
-style = "google"  # TODO: Other styles are possible here, like 'numpy'
-arg-type-hints-in-docstring = false
-check-return-types = false
-check-yield-types = false
-# CLI command bodies routinely raise to surface errors to click; documenting
-# every Raises clause is noise. Args injected by click decorators are likewise
-# not interesting to repeat in docstrings.
-skip-checking-raises = true
