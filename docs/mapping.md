@@ -144,6 +144,13 @@ they do not establish uniqueness or shared biological identity. Runtime checks r
 conflicting objects with the same ID and resolve edges against the declared endpoint
 types.
 
+Every build is a full rebuild, so an ID stays stable only when it comes from the
+sources. When nothing outside the graph stores the IDs, build each one from a source
+key, such as an Ensembl gene ID. When they are stored outside, for example in a table
+people edit, read them back from that table's export as a source: an entity that
+matches an exported row keeps the row's ID, and only a new entity gets a new one. Keep
+a committed key map from each alias to its ID only when the IDs cannot be read back.
+
 Concept docstrings and property descriptions are exported in `schema_config.yaml`,
 and `graph check` warns about concepts and properties without one. Optional
 `display_name: ClassVar[str]` values provide short diagram labels without changing
