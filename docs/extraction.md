@@ -28,7 +28,7 @@ biotope source generate .biotope/datasets/data/extracted/papers.jsonl.jsonld --o
   file as a dataset with status `processed`, derived from the datasets its
   documents belong to.
 - `--redo FILE`, repeatable, extracts that document again although its inputs are
-  unchanged. Its new records carry `"redone": true` in their provenance.
+  unchanged.
 - Both take `--json` and then write one versioned JSON report to stdout. Both print
   `Extracting <n>/<total> <path>` to stderr, in document order, for each document
   they hand to an extractor.
@@ -150,9 +150,9 @@ class PaperReader(Extractor):
   project needs: biotope converts no document.
 - It returns the document's records. Each maps every schema field to
   `{"value": ..., "quote": "..."}` or `{"value": ..., "locator": "..."}`, and a list
-  field to a list of such objects. A quote is text copied from the document; a
-  locator is the extractor's own notation, such as `page 3` or `row 14`. A value
-  without either has no evidence.
+  field to a list of such objects. A quote is the document's text as a reader sees
+  it, not its markup; a locator is the extractor's own notation, such as `page 3` or
+  `row 14`. A value without either has no evidence.
 - It raises `ExtractionError` with a reason when a document cannot be extracted.
 - With `parallel` above 1, `extract` runs in several threads at once. Guard a
   library that is not thread-safe, such as `pypdfium2`, with a lock.
@@ -224,7 +224,10 @@ extractor's name, version or settings change. Otherwise its stored records are
 reused, also after `biotope mv` moved it. A moved document's records keep their IDs
 when its dataset's name and its path within the dataset stay the same, as when a whole
 dataset folder moves; otherwise they take IDs from the new path, so check any mapping
-that joins on them. A document that fails keeps its stored records. The report lists, per extraction, each document as `extracted`, `empty`
-(no record), `reused` or `failed` with its reason; the record IDs that disappeared
-and appeared; each moved ID with its new one; and the output files git ignores. The
-run exits nonzero when a document failed.
+that joins on them. A document that fails keeps its stored records.
+
+The report lists, per extraction, each document as `extracted`, `empty` (no
+record), `reused` or `failed` with its reason; the record IDs that disappeared and
+appeared; each moved ID with its new one; and the output files git ignores. The run
+exits nonzero when a document failed. A record that keeps its ID while its values
+change is in no list: `git diff data/extracted/` shows it.

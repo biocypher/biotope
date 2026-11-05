@@ -181,7 +181,6 @@ def extract_all(
     root: Path,
     work: list[tuple[int, Source]],
     total: int,
-    redo: frozenset[str],
     announce: Callable[[int, int, str], None],
 ) -> Iterator[tuple[int, list[dict[str, Any]] | BaseException]]:
     if not work:
@@ -199,7 +198,7 @@ def extract_all(
                 yield from _finished(running)
             announce(number, total, source.path)
             try:
-                document, provenance = _prepare(extraction, schema, root, source, source.path in redo)
+                document, provenance = _prepare(extraction, schema, root, source)
             except Exception as exc:
                 yield position, exc
                 continue
@@ -224,9 +223,7 @@ def document_status(records: list[dict[str, Any]]) -> str:
     return "extracted" if records else "empty"
 
 
-def _prepare(
-    extraction: Extraction, schema: Schema, root: Path, source: Source, redone: bool
-) -> tuple[Document, dict[str, Any]]:
+def _prepare(extraction: Extraction, schema: Schema, root: Path, source: Source) -> tuple[Document, dict[str, Any]]:
     file = root / source.path
     digest = sha256(file)
     provenance: dict[str, Any] = {
@@ -235,8 +232,6 @@ def _prepare(
         "schema_revision": schema.revision,
         "extractor": identity(extraction.extractor),
     }
-    if redone:
-        provenance["redone"] = True
     return Document(file.resolve(), digest), provenance
 
 
@@ -384,7 +379,7 @@ def run(
         work.append((number, source))
         waiting.append((len(outcomes), digest))
         outcomes.append(Outcome(source.path, "extracted", sha256=digest))
-    for index, extracted in extract_all(extraction, schema, root, work, len(found), redo, announce):
+    for index, extracted in extract_all(extraction, schema, root, work, len(found), announce):
         position, digest = waiting[index]
         path = outcomes[position].path
         if isinstance(extracted, BaseException):

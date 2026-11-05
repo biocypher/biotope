@@ -58,7 +58,7 @@ def test_mark_sets_status_and_lineage_and_refuses_an_unknown_dataset(project: Pa
 
     missing = runner.invoke(mark, ["ghost/dataset", "processed"])
     assert missing.exit_code != 0
-    assert "no manifest found" in missing.output.lower()
+    assert "ghost/dataset is not a dataset or a path in the project" in " ".join(missing.output.split())
 
 
 def test_queue_lists_datasets_by_status_oldest_raw_first_and_flags_dangling_lineage(project: Path) -> None:

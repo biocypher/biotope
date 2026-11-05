@@ -98,11 +98,6 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, 
             nullable=False,
         ),
         column("provenance/extractor", "The extractor that produced the record.", nullable=False, children=extractor),
-        column(
-            "provenance/redone",
-            "True when the document was extracted again on request although its inputs were unchanged.",
-            "sc:Boolean",
-        ),
     ]
     fields = [
         column(

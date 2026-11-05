@@ -42,10 +42,6 @@ def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
         raise click.BadParameter(str(exc)) from exc
 
     manifest_path = biotope_root / ".biotope" / "datasets" / f"{target_id}.jsonld"
-    if not manifest_path.is_file():
-        click.echo(f"❌ No manifest at {manifest_path.relative_to(biotope_root)}.")
-        raise click.Abort
-
     resolved_sources: list[str] = []
     for ref in derived_from:
         try:

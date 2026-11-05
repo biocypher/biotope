@@ -1,6 +1,7 @@
 """Typed topology and runtime integrity at the graph boundary."""
 
 import math
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from itertools import islice
@@ -130,8 +131,12 @@ def test_topology_semantics_and_value_integrity():
     run.map(PEOPLE, person("1", "Ada", artifact="other.csv", version="v2"))
     assert len(run.nodes) == 1
     assert len(next(iter(run.nodes.values())).evidence) == 2
-    with pytest.raises(ValueError, match="Conflicting"):
-        run.map(PEOPLE, person("1", "Changed"))
+    conflict = (
+        "Conflicting values for study:person study:person:1 in name: one from mapping people at other.csv row:1, "
+        "the other from mapping people at late.csv row:1; resolve the conflict explicitly in the project pipeline"
+    )
+    with pytest.raises(ValueError, match=re.escape(conflict)):
+        run.map(PEOPLE, person("1", "Changed", artifact="late.csv"))
     with pytest.raises(ValueError, match="name"):
         run.map(MISTYPED_PROPERTY, person("2", "Ada"))
     with pytest.raises(ValueError, match="identifier"):

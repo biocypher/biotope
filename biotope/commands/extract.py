@@ -106,7 +106,7 @@ def try_command(name: str, files: tuple[Path, ...], as_json: bool) -> None:
         done = {
             work[index][1].path: extracted
             for index, extracted in extract_all(
-                extraction, schema, root, work, len(paths), frozenset(), output.progress
+                extraction, schema, root, work, len(paths), output.progress
             )
         }
     failed = False

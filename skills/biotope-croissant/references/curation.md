@@ -23,7 +23,7 @@ tables:
 ```
 
 - Top-level keys are dataset fields, written into the manifest as Croissant keys: `name`, `description`, `license`, `creator`, `citeAs`, `keywords`, `url`, `version` and the like. A `creator` given as a name or a mapping becomes a `Person`.
-- `tables` is keyed by table ID, as `biotope map inspect <manifest> --json` prints it. A table takes a `description`, a `key` (a column name or a list of them) and other Croissant keys; `columns` is keyed by each column's name in the data and takes a `description`, an `equivalentProperty` and other Croissant keys.
+- `tables` is keyed by table ID, percent-encoded as `biotope map inspect <manifest> --json` prints it. A table takes a `description`, a `key` (a column name or a list of them) and other Croissant keys; `columns` is keyed by each column's name in the data and takes a `description`, an `equivalentProperty` and other Croissant keys.
 - `file_sets` renames a file set, keyed by its include pattern, which also renames its ID: `file_sets: {events/*.parquet: events}`.
 - Column types and nullability belong in each source's `schema.py`, not here.
 
@@ -34,7 +34,7 @@ biotope annotate set data description="Differential expression in atrial fibrill
 biotope annotate set data --table 'study_a.csv#study_a' --column padj description="Adjusted p-value; empty when untested."
 ```
 
-Without `--table`, `annotate set` writes dataset fields; with `--table` a table's, named by its ID with or without percent-encoding, such as `'x - y.csv#x - y'`; with `--column` a column's. A repeated key makes a list, and an empty value clears. It refuses a table or column the manifest does not have. On the first `biotope add`, or with `--rebake`, flags such as `--description`, `--license`, `--creator` and `--citation` write dataset fields into the same file.
+Without `--table`, `annotate set` writes dataset fields; with `--table` a table's, named by its percent-encoded ID as `biotope map inspect` prints it, such as `x%20-%20y.csv#x%20-%20y`; with `--column` a column's. A repeated key makes a list, and an empty value clears. It refuses a table or column the manifest does not have. On the first `biotope add`, or with `--rebake`, flags such as `--description`, `--license`, `--creator` and `--citation` write dataset fields into the same file.
 
 Name the evidence for each value, and any unresolved gap, in a YAML comment beside it, so a later reviewer can assess it. Comments survive every command.
 
@@ -74,7 +74,7 @@ Whether a file can be ingested and whether it should be read are separate questi
 
 ## Structured files Baker cannot parse
 
-Baker has no handler for some structured formats, such as tab-separated `.txt`, RDF (N-Triples, N-Quads, Turtle) and shapefiles, so `biotope add` reports them as not described, with the reason `no_handler`. A file Baker claims but cannot read, such as a CSV with another delimiter, is reported `failed` and keeps its file entry the same way. A CSV whose header repeats a column name gets a warning: the description keeps the first column of each name, and the package reads the others. A RecordSet written by hand has no home: the annotation file describes only structure the data has, and the next rebake would drop it. The file's own package reads it instead:
+Baker has no handler for some structured formats, such as tab-separated `.txt`, RDF (N-Triples, N-Quads, Turtle) and shapefiles, so `biotope add` reports them as not described, with the reason `no_handler`. A file Baker claims but cannot read is reported `failed` and keeps its file entry the same way. Baker reads every `.csv` as comma-separated: a semicolon-separated file is described as one column named after the whole header, or reported `failed` when a value holds a comma; its own package reads it with the right delimiter. A CSV whose header repeats a column name gets a warning: the description keeps the first column of each name, and the package reads the others. A RecordSet written by hand has no home: the annotation file describes only structure the data has, and the next rebake would drop it. The file's own package reads it instead:
 
 - In its `schema.py`, declare one field per value the loader decodes under the generated `Facts` class: each column of a table; the subject, predicate, object and graph of a statement; the attributes and geometry of a feature. Rename the class if `Facts` misleads.
 - The loader parses the file at `SOURCE.path()` with an established library and yields one record per row, statement or feature, citing its line or feature number as the location.

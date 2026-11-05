@@ -189,17 +189,39 @@ def _overlaps(paths: tuple[Path, ...], biotope_root: Path) -> list[str]:
     root = biotope_root.resolve()
     records = {path.resolve().relative_to(root).as_posix() for path in records_files(root)}
     given = [path.resolve().relative_to(root).as_posix() for path in paths if path.resolve().is_relative_to(root)]
-    datasets = {dataset_id(manifest, root) for manifest in (root / ".biotope/datasets").rglob("*.jsonld")}
     found: list[str] = []
     for new in given:
-        others = sorted(
-            other
-            for other in (datasets | set(given)) - records - {new}
-            if PurePosixPath(other).is_relative_to(new) or PurePosixPath(new).is_relative_to(other)
-        )
+        others = _overlapping(new, (_datasets(root) | set(given)) - records)
         if others and new not in records:
-            found.append(f"{new} overlaps the dataset{'s' if len(others) > 1 else ''} {', '.join(others)}")
+            found.append(f"{new} {_overlapping_text(others)}")
     return found
+
+
+def not_a_dataset(path: Path, biotope_root: Path) -> str:
+    root = biotope_root.resolve()
+    relative = path.resolve().relative_to(root).as_posix()
+    others = _overlapping(relative, _datasets(root))
+    if others:
+        return f"{relative} is not a dataset; it {_overlapping_text(others)}"
+    if path.exists():
+        return f"{relative} is not a dataset; describe it with biotope add {relative}"
+    return f"{relative} is not a dataset or a path in the project"
+
+
+def _datasets(root: Path) -> set[str]:
+    return {dataset_id(manifest, root) for manifest in (root / ".biotope/datasets").rglob("*.jsonld")}
+
+
+def _overlapping(path: str, datasets: set[str]) -> list[str]:
+    return sorted(
+        other
+        for other in datasets - {path}
+        if PurePosixPath(other).is_relative_to(path) or PurePosixPath(path).is_relative_to(other)
+    )
+
+
+def _overlapping_text(others: list[str]) -> str:
+    return f"overlaps the dataset{'s' if len(others) > 1 else ''} {', '.join(others)}"
 
 
 def _warn_repeated_columns(source: Path, files: list[Path], reporter: AddOutput) -> None:
@@ -655,14 +677,8 @@ def resolve_dataset_ref(ref: str, biotope_root: Path) -> str:
     p = (biotope_root / ref).resolve()
     if p.is_relative_to(datasets_dir) and p.suffix == ".jsonld" and p.is_file():
         return dataset_id(p, biotope_root)
-    if not p.is_relative_to(biotope_root):
-        raise ValueError(f"--derived-from {ref!r}: path is outside the biotope project")
+    if not p.is_relative_to(biotope_root.resolve()):
+        raise ValueError(f"{ref} is outside the biotope project")
     if manifest_for(p, biotope_root).is_file():
-        return p.relative_to(biotope_root).as_posix()
-
-    msg = (
-        f"--derived-from {ref!r}: no manifest found under .biotope/datasets/. "
-        "Pass a dataset name (e.g. 'data/kidney_pdf'), a data path, or a "
-        ".jsonld path of an existing dataset."
-    )
-    raise ValueError(msg)
+        return p.relative_to(biotope_root.resolve()).as_posix()
+    raise ValueError(not_a_dataset(p, biotope_root))

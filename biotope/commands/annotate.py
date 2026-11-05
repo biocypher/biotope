@@ -8,6 +8,7 @@ from urllib.parse import unquote
 
 import click
 
+from biotope.commands.add import not_a_dataset
 from biotope.croissant import annotation
 from biotope.graph.sources import refresh_description, write_description, write_text_atomic
 from biotope.metadata import resolve_target
@@ -26,7 +27,7 @@ def annotate(ctx: click.Context) -> None:
 @annotate.command(name="set")
 @click.argument("data", type=click.Path(exists=True, path_type=Path))
 @click.argument("values", nargs=-1, required=True)
-@click.option("--table", help="A table's ID, such as push/people.csv#people, percent-encoded or not.")
+@click.option("--table", help="A table's ID as biotope map inspect prints it, such as push/people.csv#people.")
 @click.option("--column", help="A column of --table, by its name in the data.")
 def set_values(data: Path, values: tuple[str, ...], table: str | None, column: str | None) -> None:
     """Write KEY=VALUE pairs into the annotation file of DATA, a dataset biotope add described.
@@ -45,7 +46,7 @@ def set_values(data: Path, values: tuple[str, ...], table: str | None, column: s
         raise click.BadParameter("name a column with --column")
     target = resolve_target(data, root)
     if not target.metadata_path.is_file():
-        raise click.ClickException(f"{data} is not a dataset; describe it with biotope add {data}")
+        raise click.ClickException(not_a_dataset(data, root))
     try:
         description = refresh_description(target.metadata_path)
     except ValueError as exc:
@@ -83,12 +84,13 @@ def _pairs(values: tuple[str, ...], *, reserved: set[str]) -> dict[str, Any]:
 
 def _table_id(description: dict[str, Any], table: str, columns: list[str]) -> str:
     records = [item for item in description.get("recordSet") or [] if isinstance(item.get("@id"), str)]
-    readable = unicodedata.normalize("NFC", table)
-    record = next((item for item in records if item["@id"] == table), None) or next(
-        (item for item in records if unquote(item["@id"]) == readable), None
-    )
+    record = next((item for item in records if item["@id"] == table), None)
     if record is None:
-        raise click.ClickException(f"The description has no table {table!r}")
+        readable = unicodedata.normalize("NFC", table)
+        encoded = next((item["@id"] for item in records if unquote(item["@id"]) == readable), None)
+        raise click.ClickException(
+            f"The description has no table {table!r}" + (f"; use its ID, {encoded}" if encoded else "")
+        )
     missing = [name for name in columns if name not in annotation.columns(record)]
     if missing:
         raise click.ClickException(f"The table {table!r} has no column {', '.join(map(repr, missing))}")

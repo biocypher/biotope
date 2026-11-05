@@ -103,18 +103,43 @@ def test_add_and_annotate_write_only_the_values_given_and_keep_comments(fresh):
         assert annotation.read_text().startswith(written[annotation])
 
 
-def test_annotate_set_takes_a_table_by_its_readable_id(fresh):
+def test_annotate_set_takes_a_table_by_its_id_and_names_the_id_of_a_readable_form(fresh):
     (fresh / "data/study/Café - SupTable5.csv").write_text("gene,padj\nA,0.1\n")
     ok("add", "data/study")
     identity = "Café%20-%20SupTable5.csv#Café%20-%20SupTable5"
     readable = unicodedata.normalize("NFD", "Café - SupTable5.csv#Café - SupTable5")
+    annotation = fresh / "data/study/.biotope.yaml"
+    before = annotation.read_bytes()
 
-    ok("annotate", "set", "data/study", "--table", readable, "--column", "padj", "description=Adjusted p-value.")
+    refused = invoke("annotate", "set", "data/study", "--table", readable, "description=Genes.")
 
+    assert refused.exit_code != 0
+    assert f"use its ID, {identity}" in " ".join(refused.output.split())
+    assert annotation.read_bytes() == before
+    ok("annotate", "set", "data/study", "--table", identity, "--column", "padj", "description=Adjusted p-value.")
     assert yaml.safe_load((fresh / "data/study/.biotope.yaml").read_text()) == {
         "tables": {identity: {"columns": {"padj": {"description": "Adjusted p-value."}}}}
     }
     assert column(table(described(fresh), identity), "padj")["description"] == "Adjusted p-value."
+
+
+def test_a_path_that_is_not_a_dataset_is_answered_with_the_datasets_it_overlaps(fresh):
+    ok("add", "data/study", "data/raw/samples.csv")
+    (fresh / "data/other").mkdir()
+
+    answers = {
+        "inside": invoke("annotate", "set", "data/study/push", "description=People."),
+        "around": invoke("annotate", "set", "data", "description=Everything."),
+        "marked": invoke("mark", "data/study/push", "processed"),
+        "alone": invoke("annotate", "set", "data/other", "description=Other."),
+    }
+
+    assert all(answer.exit_code != 0 for answer in answers.values())
+    text = {name: " ".join(answer.output.split()) for name, answer in answers.items()}
+    assert "data/study/push is not a dataset; it overlaps the dataset data/study" in text["inside"]
+    assert "data is not a dataset; it overlaps the datasets data/raw/samples.csv, data/study" in text["around"]
+    assert "data/study/push is not a dataset; it overlaps the dataset data/study" in text["marked"]
+    assert "data/other is not a dataset; describe it with biotope add data/other" in text["alone"]
 
 
 def test_the_description_is_the_data_with_the_annotation_file_over_it(fresh):

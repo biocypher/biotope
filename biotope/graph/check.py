@@ -330,7 +330,6 @@ def check_pipeline(
                     "metadata": str(source.metadata),
                     "digest": digest(metadata),
                     "contract_digest": digest(sorted(revisions)),
-                    "distribution": metadata.get("distribution", []),
                     "records": [getattr(r, "__record_set__") for r in source.records],
                 }
             except Exception as exc:

@@ -580,7 +580,7 @@ def test_redo_extracts_chosen_documents_again(study):
     assert statuses(report) == {LIND: "extracted", OKAFOR: "reused"}
     assert statuses(report, "funding_round") == {CALL: "reused"}
     lind, okafor = study.records("profile")
-    assert lind["provenance"]["redone"] is True and "redone" not in okafor["provenance"]
+    assert lind["provenance"].keys() == okafor["provenance"].keys()
 
     before = study.snapshot()
     result, report = study.extract("run", "profile")

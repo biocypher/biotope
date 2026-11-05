@@ -172,10 +172,10 @@ tables:
 - `file_sets` renames a file set: the key is its include pattern, such as
   `events/*.parquet`, the value the name you give it. The new name becomes the file
   set's ID.
-- `tables` is keyed by table ID. A table takes a `description`, a `key` (a column
-  name or a list of them) and other Croissant keys. `columns` is keyed by each
-  column's name in the data and takes a `description`, an `equivalentProperty` and
-  other Croissant keys.
+- `tables` is keyed by table ID, percent-encoded as `map inspect` prints it. A
+  table takes a `description`, a `key` (a column name or a list of them) and other
+  Croissant keys. `columns` is keyed by each column's name in the data and takes a
+  `description`, an `equivalentProperty` and other Croissant keys.
 - Column types and nullability belong in each source's `schema.py`, which the
   loader decodes into; do not write them here.
 
@@ -201,8 +201,8 @@ biotope annotate set data/study --table 'push/people.csv#people' --column person
 - `biotope annotate set DATA KEY=VALUE...` writes into the annotation file of
   `DATA`, the path you added. Without `--table` the values describe the dataset,
   with `--table <ID>` that table, and with `--column <name>` that column. The ID
-  may be written without its percent-encoding, such as `'x - y.csv#x - y'`. A
-  repeated key makes a list, and an empty value clears. It refuses a table or
+  is percent-encoded, as `map inspect` prints it. A repeated key makes a list, and
+  an empty value clears. It refuses a table or
   column the description does not have.
 
 The Croissant description in `.biotope/datasets/` is the data, as croissant-baker
