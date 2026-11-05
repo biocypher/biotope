@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from biotope.graph.reports import READABLE_REPORT_VERSIONS
+from biotope.graph.reports import REPORT_SCHEMA_VERSION
 from biotope.graph.sources import write_text_atomic
 
 
@@ -53,7 +53,7 @@ def check_report_destination(path: Path, kind: str) -> None:
             recognized = (
                 isinstance(data, dict)
                 and cast(dict[str, Any], data).get("report_kind") == kind
-                and cast(dict[str, Any], data).get("schema_version") in READABLE_REPORT_VERSIONS
+                and cast(dict[str, Any], data).get("schema_version") == REPORT_SCHEMA_VERSION
             )
     except (ValueError, OSError):
         recognized = False

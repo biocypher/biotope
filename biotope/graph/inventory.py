@@ -127,7 +127,7 @@ def _assign_names(
 ) -> dict[str, str]:
     """Name every target without a package in ``packages``, deterministically given what exists.
 
-    RecordSets keep their 0.9 names, whose collisions count RecordSets only; file resources then
+    RecordSets are named first, and their collisions count RecordSets only; file resources then
     avoid every taken name. A schema-less directory in ``reusable`` is completed by the target it
     would be named for.
     """

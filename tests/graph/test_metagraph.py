@@ -23,7 +23,7 @@ def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     emit_measured(context)
     quality = analyze_quality(context.stores()).to_json()
     source = {
-        "schema_version": 1,
+        "schema_version": 2,
         "report_kind": "biotope.quality",
         "operation": "quality",
         "state": "complete",
@@ -68,8 +68,8 @@ def test_metagraph_declarations_overlays_and_safe_embedding(monkeypatch):
     incomplete = describe_metagraph(TOPOLOGY, {**source, "state": "failed", "quality": {"state": "not_run"}})
     assert incomplete["nodes"][0]["count"] is None
     assert incomplete["report"]["state"] == "failed"
-    legacy = describe_metagraph(TOPOLOGY, {k: v for k, v in source.items() if k != "quality"})
-    assert legacy["nodes"][0]["count"] is None and legacy["report"]["quality_state"] == "unmeasured"
+    unmeasured = describe_metagraph(TOPOLOGY, {k: v for k, v in source.items() if k != "quality"})
+    assert unmeasured["nodes"][0]["count"] is None and unmeasured["report"]["quality_state"] == "unmeasured"
 
 
 def test_metagraph_does_not_import_pipeline_and_preserves_authored_files(tmp_path, monkeypatch):

@@ -11,8 +11,7 @@ from biotope.metadata import (
 )
 
 
-def test_legacy_manifest_defaults_to_raw():
-    """A manifest with no `biotope:status` field is treated as raw."""
+def test_a_manifest_without_status_is_raw():
     assert get_status({}) == STATUS_RAW
     assert get_status({"name": "x"}) == STATUS_RAW
 

@@ -185,7 +185,7 @@ def _unscoped_findings(plan: SourcePlan, registrations: _Registrations) -> Itera
     }
     for target in plan.targets:
         package = owners.get(target.identity)
-        if package is None or package.declaration.field_refs or not registrations.selects(package.path):
+        if package is None or not registrations.selects(package.path):
             continue
         for reference in unscoped_fields(target):
             yield _finding(
@@ -193,7 +193,7 @@ def _unscoped_findings(plan: SourcePlan, registrations: _Registrations) -> Itera
                 "error",
                 f"{plan.root.name}/{package.name}",
                 f"field @id {reference!r} is not scoped under {target.identity + '/'!r}; "
-                "rescope it in the manifest (or bind it with __field_refs__)",
+                "rescope it in the manifest",
                 package.schema,
             )
 

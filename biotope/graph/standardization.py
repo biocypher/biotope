@@ -32,17 +32,10 @@ def source_field(
 
 
 def field_bindings(record: type, scope: str = "") -> dict[str, str]:
-    """Map attributes to source field identities, from field metadata or the legacy ``__field_refs__``.
+    """Map attributes to source field identities from field metadata.
 
     Fields bind under the record's ``__record_set__``, or under ``scope`` when it declares none.
     """
-    legacy = getattr(record, "__field_refs__", None)
-    if legacy is not None:
-        if any("source" in member.metadata for member in fields(record)):
-            raise ValueError(f"{record.__name__}: use field metadata or __field_refs__, not both")
-        if not isinstance(legacy, dict):
-            raise ValueError(f"{record.__name__}: invalid __field_refs__")
-        return cast(dict[str, str], legacy)
     identity = getattr(record, "__record_set__", "") or scope
     bindings: dict[str, str] = {}
     for member in fields(record):

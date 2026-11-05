@@ -30,7 +30,6 @@ from biotope.graph.targets import Target
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_id,
-    ensure_no_legacy_file_objects,
     find_owning_manifest,
     manifest_for,
 )
@@ -200,9 +199,7 @@ def _refuse(message: str) -> NoReturn:
 
 
 def _load_metadata_file(metadata_file: Path) -> dict[str, Any]:
-    metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-    ensure_no_legacy_file_objects(metadata)
-    return metadata
+    return json.loads(metadata_file.read_text(encoding="utf-8"))
 
 
 def _plan(

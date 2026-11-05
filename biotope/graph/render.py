@@ -168,7 +168,7 @@ class _RecordClasses:
         self.opaque = False
 
     def add(self, nodes: list[FieldNode], scope: str, name: str, *, nested: bool = False) -> str:
-        used = {"__record_set__", "__source_digest__", "__missing_values__", "__field_refs__", *SCHEMA_NAMES}
+        used = {"__record_set__", "__source_digest__", "__missing_values__", *SCHEMA_NAMES}
         lines = [line for node in nodes for line in self._field(node, name, used)]
         header = [
             "@dataclass(frozen=True, kw_only=True)",
