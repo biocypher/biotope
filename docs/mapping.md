@@ -77,10 +77,7 @@ existing schema, registration or loader; only `biotope mv` changes them. The
 generated inventory collects every package; in `graph/sources/__init__.py`, select
 each source or list it in `EXCLUDED_SOURCES` with a reason. `biotope graph check`
 reports a source that is neither, a selected placeholder loader and a described
-input without a package. See
-[generation details](mapping_sidenotes.md#source-generation) for naming,
-ownership, conflicts and removed sources.
-
+input without a package.
 Each schema starts from the description: known scalar, nested and repeated types
 become Python declarations, fields are nullable unless curated metadata asserts
 otherwise, and unknown types and arrays stay opaque. The schema is then yours to
@@ -146,6 +143,13 @@ and neither part has whitespace. Static ID types prevent accidental endpoint swa
 they do not establish uniqueness or shared biological identity. Runtime checks reject
 conflicting objects with the same ID and resolve edges against the declared endpoint
 types.
+
+Every build is a full rebuild, so an ID stays stable only when it comes from the
+sources. When nothing outside the graph stores the IDs, build each one from a source
+key, such as an Ensembl gene ID. When they are stored outside, for example in a table
+people edit, read them back from that table's export as a source: an entity that
+matches an exported row keeps the row's ID, and only a new entity gets a new one. Keep
+a committed key map from each alias to its ID only when the IDs cannot be read back.
 
 Concept docstrings and property descriptions are exported in `schema_config.yaml`,
 and `graph check` warns about concepts and properties without one. Optional
@@ -257,5 +261,4 @@ widened only when two concepts collide. Every exported object carries
 `biotope_provenance_id`, an index into `provenance.json`.
 
 Use `biotope graph metagraph --report graph/build/run.json` to add build
-observations to the viewer. See [technical notes](mapping_sidenotes.md) for report
-limits, source attribution, reproducibility and export formats.
+observations to the viewer.

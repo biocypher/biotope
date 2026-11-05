@@ -7,15 +7,10 @@ nav:
   - Installation: installation.md
   - Tutorial: tutorial.md
   - Agent setup: plugin.md
-  - Commands:
-      - Overview: commands.md
-      - Report formats: commands_sidenotes.md
+  - Commands: commands.md
   - Project layout: project.md
   - Extraction: extraction.md
-  - Typed graph projects:
-      - Authoring: mapping.md
-      - Technical notes: mapping_sidenotes.md
+  - Typed graph projects: mapping.md
   - Architecture: architecture.md
   - Migration: migration.md
-  - Development ideas: ideas.md
   - Roadmap: roadmap.md
