@@ -4,7 +4,7 @@ from biotope.graph import Pipeline, RunContext, SourceRecord
 
 from ..mappings import MAPPINGS
 from ..mappings.sample import IDENTITY_SCOPE, MAPPING, NORMALISE, SCORE_MULTIPLIER
-from ..paths import GRAPH_ROOT, PROJECT_ROOT
+from ..paths import GRAPH_ROOT
 from ..sources import EXCLUDED_SOURCES, INVENTORY, PEOPLE, SAMPLES, SOURCES
 from ..sources.study.people.loader import load as load_people
 from ..sources.study.people.schema import People
@@ -68,7 +68,6 @@ PIPELINE = Pipeline(
             "pipelines",
         )
     ),
-    intent=PROJECT_ROOT / "project.yaml",
     policies={
         "unmatched_sample": "Exclude samples without a person_id match; many samples to exactly one person.",
         "unused_person": "Exclude people without selected samples.",

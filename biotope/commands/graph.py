@@ -128,7 +128,7 @@ def check(graph_path: Path, as_json: bool) -> None:
 @click.option(
     "--out",
     type=click.Path(path_type=Path),
-    help="Build directory; defaults to <graph>/build and replaces a generated build.",
+    help="Build directory; defaults to build/ in the graph workspace, which a build replaces.",
 )
 @click.option(
     "--format",
@@ -188,9 +188,9 @@ def quality(graph_path: Path, as_json: bool) -> None:
 @click.option(
     "--report", "report_path", type=click.Path(path_type=Path), help="Optional run.json observations to overlay."
 )
-@click.option("--out", type=click.Path(path_type=Path), help="HTML destination; defaults to <graph>/metagraph.html.")
+@click.option("--out", type=click.Path(path_type=Path), help="HTML destination; defaults to metagraph.html in the graph workspace.")
 def metagraph(graph_path: Path, as_json: bool, report_path: Path | None, out: Path | None) -> None:
-    """Inspect declared topology; optionally overlay a matching saved assessment."""
+    """Write an offline viewer of the topology; --report adds the counts of a build."""
     from biotope.graph.metagraph import describe_metagraph, render_metagraph
 
     if as_json and out is not None:

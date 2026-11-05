@@ -22,18 +22,10 @@ from biotope.utils import find_biotope_root
     "--file",
     "-f",
     type=click.Path(exists=True, path_type=Path),
-    help="Check specific file only",
+    help="Check only this file.",
 )
 def check_data(file: Optional[Path]) -> None:
-    """
-    Check data integrity against recorded checksums.
-
-    Verifies that data files match their recorded SHA256 checksums.
-    Reports any files that have been modified or corrupted.
-
-    Args:
-        file: Check specific file only
-    """
+    """Compare the data files with the SHA-256 checksums their descriptions record, and report each changed file."""
     console = Console()
 
     # Find biotope project root

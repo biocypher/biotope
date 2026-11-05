@@ -75,7 +75,7 @@ class Output:
             sys.exit(1)
 
 
-@click.group(help="Extract records from documents with the extractions listed in graph/extraction/__init__.py.")
+@click.group(name="extract", help="Extract records from documents with the extractions listed in graph/extraction/__init__.py.")
 def extract_group() -> None:
     pass
 
@@ -131,7 +131,7 @@ def try_command(name: str, files: tuple[Path, ...], as_json: bool) -> None:
 @extract_group.command(
     "run",
     help="Run the extractions NAMES, or every listed extraction, store their records in "
-    "data/extracted/<name>.jsonl and register each as a processed dataset. Records mirror the files the "
+    "data/extracted/NAME.jsonl and register each as a processed dataset. Records mirror the files the "
     "extraction's patterns match now; unchanged documents reuse their stored records.",
 )
 @click.argument("names", nargs=-1)

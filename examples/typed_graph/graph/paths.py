@@ -1,5 +1,3 @@
-"""Paths anchored to this workspace, independent of the shell's directory."""
-
 from pathlib import Path
 
 

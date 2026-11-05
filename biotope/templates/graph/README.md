@@ -37,23 +37,25 @@ graph/
 
 ## Environment
 
-Install the published `biotope[graph]>=0.10,<0.11` package in the project
-environment. Pyright needs Node.js on `PATH` or `pyright[nodejs]`. Record reader
-libraries that loaders import, such as pandas, in `graph/pyproject.toml`;
-`biotope graph check` warns about an undeclared import, and `run.json` records the
-installed version of each. See
-[installation](https://biocypher.github.io/biotope/installation/).
+This workspace is the project's environment. `pyproject.toml` declares Biotope
+and the libraries that loaders read data with, such as pandas, and `uv.lock`
+pins their versions; commit both. Add a library with
+`uv add --project graph pandas`. `biotope graph check` warns about an import
+that `pyproject.toml` does not declare, and `run.json` records the installed
+version of each.
 
-Run Biotope commands from the parent project directory, where the data, its
-annotation files and `.biotope/` live. `paths.py` supplies `PROJECT_ROOT` and
-`GRAPH_ROOT`; use package-relative imports. Biotope never writes to git: commit
-this workspace with the project. `.gitignore` here keeps `build/`, the
-`.build-*/` folders a build stages in, and `metagraph.html` out.
+Run every command from the parent project directory, where the data, its
+annotation files and `.biotope/` live, as `uv run --project graph biotope …`.
+The commands below show the part after `uv run --project graph`. `paths.py`
+supplies `PROJECT_ROOT` and `GRAPH_ROOT`; use package-relative imports. Biotope
+never writes to git: commit this workspace with the project. `.gitignore` here
+keeps `build/`, the `.build-*/` folders a build stages in, and `metagraph.html`
+out.
 
 ## Workflow
 
 1. Describe each dataset with `biotope add data/study`, and write what you know
-   about it, such as descriptions, keys and a licence, into its annotation file,
+   about it, such as descriptions, keys and a license, into its annotation file,
    `data/study/.biotope.yaml`. Every input the graph might use must be described,
    documents included. List an extraction for each kind of document in
    `extraction/__init__.py` and extract the records with `biotope extract run`.
@@ -75,8 +77,14 @@ this workspace with the project. `.gitignore` here keeps `build/`, the
    `EXCLUDED_SOURCES` with a reason; every inventoried source is one or the other.
    As scaffolded, it selects every source, so a new table in later data fails the
    check until its loader is written. To rebuild after new data without a hand
-   edit, select sources by name and exclude the rest with one rule; see
-   [project layout](https://biocypher.github.io/biotope/project/).
+   edit, select sources by name and exclude the rest with one rule:
+
+   ```python
+   SOURCES: tuple[SourceContract, ...] = (PEOPLE, REPORT)
+   EXCLUDED_SOURCES: dict[str, str] = {
+       source.name: "New data; select it once its loader is written" for source in INVENTORY if source not in SOURCES
+   }
+   ```
 
 1. Edit each selected schema: names, types, missing-value tokens and bindings to
    terms in `standardization.py`. Implement its loader, which reads the file at
@@ -139,6 +147,7 @@ Every exported node and edge carries `biotope_provenance_id`, an index into
 structure, not scientific correctness: review selected records against the
 sources themselves before relying on the graph.
 
-Further reference: [typed graph guide](https://biocypher.github.io/biotope/mapping/),
-[technical notes](https://biocypher.github.io/biotope/mapping_sidenotes/) and
-[tutorial](https://biocypher.github.io/biotope/tutorial/).
+Further reference: [your project](https://biocypher.github.io/biotope/latest/project/),
+[use the result](https://biocypher.github.io/biotope/latest/result/) and the
+[skill's references](https://github.com/biocypher/biotope/tree/main/skills/biotope-croissant/references),
+which document the contracts this code is written against.

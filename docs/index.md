@@ -1,50 +1,21 @@
 # Biotope
 
-Biotope turns reviewed descriptions of local data into typed Python graph projects.
-You define the research purpose, source readers, identities and transformations;
-Biotope checks the definitions and exports the graph with provenance, as CSV or
-Parquet files for Neo4j import or as one SQLite database.
+--8<-- "README.md:headline"
+
+--8<-- "README.md:handles"
 
 ## Start here
 
-- [Install Biotope](installation.md) from PyPI, including its published croissant-baker dependency.
-- [Run the tutorial](tutorial.md) to build a small graph from synthetic CSV data.
-- [Author a graph](mapping.md) from your own curated source descriptions.
-- [Set up a coding agent](plugin.md) to use the same workflow with repository skills.
+- [Get started](get-started.md): install the plugin and start a project.
+- [Working with the agent](agent.md): the purpose statement, your decisions and the review.
+- [Use the result](result.md): load the graph into Neo4j, query it in SQLite and trace its values.
 
-## Workflow
+## Limits
 
-```text
-Local data → Croissant metadata → Review → Source inventory
-                                                ↓
-                  Python schemas, loaders, topology and mappings
-                                                ↓
-                              Check → Build → Review graph output
-```
+- Biotope never decides by itself which records are the same thing. You or the agent decide, and the decision is recorded.
+- The checks test the structure, not whether the content is right. Review the content against the sources.
+- The whole graph is held in memory while it is built, so choose a scope that fits the machine.
 
-`biotope add` reads local data and describes it with croissant-baker. Review those
-metadata before generating source classes: a successful scan does not establish
-that every field or file was described completely. What you know about a dataset
-goes into its annotation file next to the data, and every file and table keeps an
-ID from its path, so new data rebuilds with commands only.
+## Versions
 
-`biotope graph scaffold` creates a workspace, and `biotope source generate` gives
-every described input a source package with a schema to edit. Project Python code
-then loads selected data, transforms typed records and constructs the graph. `biotope graph check` checks declarations and types; `biotope graph build`
-executes the pipeline, validates its objects and writes the export.
-
-A build records source references, exclusions and the concept and property
-descriptions that interpret the graph. Use these to assess whether the graph
-supports its intended questions. Structural checks alone cannot establish
-scientific validity: review the graph against the sources themselves.
-
-## Reference
-
-- [Commands](commands.md)
-- [Project layout](project.md)
-- [Architecture](architecture.md)
-- [Migration](migration.md)
-
-Biotope 0.10 supports Python 3.10–3.12. APIs may change while the project is under
-active development. Source code and issue reporting are on
-[GitHub](https://github.com/biocypher/biotope).
+Biotope follows [semantic versioning](https://semver.org/): a change that breaks your project comes only in a new major version. The [changelog](changelog.md) lists the changes in each release. Biotope grows from real projects: an institute's register of who works on what, and biomedical graphs.

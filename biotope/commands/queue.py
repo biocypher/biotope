@@ -51,7 +51,7 @@ class _QueueEntry:
     default=None,
     help="Show only one section.",
 )
-@click.option("--json", "as_json", is_flag=True, help="Machine-readable output for agents.")
+@click.option("--json", "as_json", is_flag=True, help="Write one JSON report to stdout.")
 @click.option(
     "--sort",
     type=click.Choice(["time", "name"]),
@@ -60,10 +60,9 @@ class _QueueEntry:
     help="Order within each section. 'time' picks the oldest raw first.",
 )
 def queue(status_filter: str | None, as_json: bool, sort: str) -> None:
-    """Show every dataset grouped by pipeline state.
+    """Show every dataset grouped by its status: raw, processed or mapped.
 
-    The agentic queue: raw / processed / mapped, plus anomalies for any
-    dangling ``prov:wasDerivedFrom`` pointers.
+    Also lists each prov:wasDerivedFrom entry that names no dataset.
     """
     biotope_root = find_biotope_root()
     if biotope_root is None:

@@ -22,7 +22,7 @@ def config() -> None:
 @click.option("--description", help="What the project is about.")
 @click.option("--url", help="The project's web page.")
 @click.option("--creator", help="The contact person for every dataset, when the user names one for the project.")
-@click.option("--license", "license_", help="The licence URL of every dataset.")
+@click.option("--license", "license_", help="The license URL of every dataset.")
 @click.option("--citation", help="How to cite every dataset.")
 @click.option("--access-restrictions", help="Access restrictions of every dataset.")
 @click.option("--legal-obligations", help="Legal obligations of every dataset.")

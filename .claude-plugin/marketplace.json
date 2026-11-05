@@ -4,7 +4,7 @@
     "plugins": [{
         "name": "biotope",
         "source": ".",
-        "description": "Source curation and typed Python graph construction with Biotope and BioCypher."
+        "description": "Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations."
       }
     ]
 }
