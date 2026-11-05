@@ -1,7 +1,7 @@
 # Biotope
 
 Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations.
-Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a massive organization. You can give raw data and **the purpose statemet** to the biotope agent and it will iteratively build the graph topology, mapping, entity and conflict resolution, following the industry best practices.
+Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a massive organization. You can give raw data and **the purpose statement** to the biotope agent and it will iteratively build the graph topology, mapping, entity and conflict resolution, following the industry best practices.
 
 [![PyPI](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/)
 [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/)

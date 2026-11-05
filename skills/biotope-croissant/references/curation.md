@@ -44,9 +44,9 @@ Every command that reads a manifest applies the annotation file's current conten
 
 Descriptions and equivalent properties change no revision. A key is structure: declaring, changing or removing one changes the source's revision once, and `graph check` reports `source.drift` until the schema's `__source_digest__` is updated ("When the data changes" in SKILL.md).
 
-## Documents are sources too
+## Unstructured documents are sources too
 
-A file Baker cannot parse can still answer a semantic question. Cohort descriptions, methods sections and supplementary notes routinely carry the reference group, the inclusion criteria or the units that the tables leave implicit.
+An unstructured document, such as a paper PDF, a scraped web page or a methods note, can still answer a semantic question. Cohort descriptions, methods sections and supplementary notes routinely carry the reference group, the inclusion criteria or the units that the tables leave implicit.
 
 `biotope add <dir>` reports such files as not described, with the reason `no_handler`, and still gives each a file entry whose ID is its path in the dataset:
 
