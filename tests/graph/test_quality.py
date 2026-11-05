@@ -34,16 +34,17 @@ def test_quality_counts_evidence_and_empty_denominators():
     loop = next(f for f in report["findings"] if f["code"] == "quality.self_loop")
     assert loop["examples"][0]["id"] == "e:2"
     assert loop["examples"][0]["evidence"][0]["location"] == "2"
-    assert {"quality.empty_required", "quality.missing_property", "quality.self_loop"} <= {
+    assert {"quality.empty_concept", "quality.missing_property", "quality.self_loop"} <= {
         f["code"] for f in report["findings"]
     }
+    assert [f["subject"] for f in report["findings"] if f["code"] == "quality.empty_concept"] == ["test:unused"]
 
     context.map(NODES, node(4, None, ["v" * 200] * 8))
-    bounded = analyze_quality(GraphStores(context.schema, context.nodes, context.edges, {})).to_json()
+    bounded = analyze_quality(GraphStores(context.schema, context.nodes, context.edges)).to_json()
     values = bounded["measurements"]["properties"]["test:node"]["tags"]["examples"]
     assert values[-1] == {"value": ["v" * 160] * 5, "truncated": True}
 
-    empty = analyze_quality(GraphStores(context.schema, {}, {}, {})).to_json()["measurements"]
+    empty = analyze_quality(GraphStores(context.schema, {}, {})).to_json()["measurements"]
     assert empty["connectivity"]["largest_share"] is None
     assert empty["self_loops"]["test:link"]["rate"] is None
 

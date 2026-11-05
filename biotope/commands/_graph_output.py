@@ -138,8 +138,6 @@ class GraphOutput:
         for finding in findings:
             if finding.get("severity") != "error":
                 self.finding(finding)
-        for key, reason in definitions.get("deferrals", {}).items():
-            self.row("Defer", key, reason)
         for audit in report.get("audits", []):
             counts = " · ".join(f"{k}: {v}" for k, v in sorted(audit["counts"].items()))
             self.row(

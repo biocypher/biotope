@@ -1,4 +1,4 @@
-"""Register node and relation dataclasses, organized by concept: topology/<concept>/."""
+"""Register each node from topology/<node>/node.py and each edge from topology/<source node>/<edge>.py."""
 
 from biotope.graph import Topology
 

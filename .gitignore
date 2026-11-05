@@ -256,3 +256,4 @@ _version.py
 !biotope/_version.py
 
 .agents/
+spec_files/

@@ -13,6 +13,7 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any, get_type_hints
 
+from biotope.extraction.run import placeholders
 from biotope.graph.annotations import contains
 from biotope.graph.contracts import Pipeline
 from biotope.graph.dependencies import declared_distributions, imported_distributions
@@ -27,10 +28,10 @@ from biotope.graph.reports import (
     PythonCheckFailed,
 )
 from biotope.graph.signatures import MappingContract, SignatureError, contract
-from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, read_metadata
+from biotope.graph.sources import StaleBinding, UnknownValue, check_source_record, digest, refresh_description
 from biotope.graph.standardization import describe_standardization
 from biotope.graph.survey import inventory_findings, sources_of, survey_sources
-from biotope.graph.topology import CHECKABLE_TYPES, unchecked_fields
+from biotope.graph.topology import CHECKABLE_TYPES, RESERVED_PROPERTIES, unchecked_fields
 from biotope.graph.workspace import Workspace, WorkspaceLoadFailed
 from biotope.project_model import Project, find_project
 
@@ -66,8 +67,8 @@ def check_types(pipeline: Pipeline, *, on_finding: FindingSink | None = None) ->
         "reportMissingTypeStubs": "none",
     }
     files = code_files(pipeline)
-    with tempfile.TemporaryDirectory(prefix="biotope-pyright-", dir=Path.cwd()) as temporary:
-        path = Path(temporary) / "pyrightconfig.json"
+    with tempfile.TemporaryDirectory(prefix="biotope-pyright-") as temporary:
+        path = Path(temporary).resolve() / "pyrightconfig.json"
         config["include"] = [os.path.relpath(item, path.parent) for item in files]
         path.write_text(json.dumps(config), encoding="utf-8")
         result = subprocess.run(
@@ -152,8 +153,6 @@ def check_pipeline(
             "sources": {},
             "mappings": {},
             "intent": None,
-            "requirements": pipeline.requirements,
-            "deferrals": pipeline.deferrals,
             "code_digests": {},
         }
     )
@@ -225,6 +224,26 @@ def check_pipeline(
                 + ", ".join(missing[:20])
                 + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""),
             )
+        for concept, item in described.items():
+            for name in sorted(RESERVED_PROPERTIES.intersection(item["properties"])):
+                error(
+                    "topology.reserved",
+                    f"{concept}.{name}",
+                    f"{concept}.{name}: the export reserves {name}; rename the property",
+                )
+        if workspace is not None:
+            for cls, place in pipeline.topology.layout().items():
+                found = Path(inspect.getfile(cls)).resolve()
+                if found != (workspace.root / "topology" / place).resolve():
+                    where = f"{workspace.root.name}/topology/{place}"
+                    error(
+                        "topology.layout",
+                        cls.__name__,
+                        f"{cls.__name__}: an edge class belongs in {where}, its source node's folder"
+                        if cls in pipeline.topology.edges
+                        else f"{cls.__name__}: a node class belongs in {where}",
+                        found,
+                    )
         return described
 
     schema = stage("topology", topology)
@@ -246,6 +265,7 @@ def check_pipeline(
         if workspace is not None:
             pyproject = Path(workspace.root.name) / "pyproject.toml"
             declared = declared_distributions(workspace.root / "pyproject.toml")
+            report.data["declared"] = sorted(declared)
             for module, providers in imported.items():
                 if not declared.intersection(providers):
                     warning(
@@ -279,7 +299,7 @@ def check_pipeline(
                 seen.add(source.name)
                 if files is not None and source.schema.resolve() not in declared:
                     raise ValueError(f"{source.schema}: include source schemas in code_paths")
-                metadata = read_metadata(source.metadata)
+                metadata = refresh_description(source.metadata)
                 if not source.records or len(set(source.records)) != len(source.records):
                     raise ValueError(f"{source.name}: declare at least one source record type without duplicates")
                 revisions: list[str] = []
@@ -310,7 +330,6 @@ def check_pipeline(
                     "metadata": str(source.metadata),
                     "digest": digest(metadata),
                     "contract_digest": digest(sorted(revisions)),
-                    "distribution": metadata.get("distribution", []),
                     "records": [getattr(r, "__record_set__") for r in source.records],
                 }
             except Exception as exc:
@@ -371,7 +390,6 @@ def check_pipeline(
                     "inputs": {p.name: [t.__name__ for t in p.accepts] for p in derived.parameters},
                     "outputs": [t.__name__ for t in derived.outputs],
                     "concepts": [getattr(t, "schema_id") for t in derived.outputs if t in graph],
-                    "requirements": entry.requirements,
                     "evidence": entry.evidence,
                 }
             except SignatureError as exc:
@@ -400,15 +418,11 @@ def check_pipeline(
 
     stage("declarations", declarations, blocked="Code paths are invalid" if files is None else "")
 
-    def intent() -> Any:
+    def intent() -> None:
         path = pipeline.intent or find_project()
         if path is None:
-            warning(
-                "intent.absent",
-                "intent",
-                "No intent found; research purpose and requirement coverage were not checked.",
-            )
-            return {}
+            warning("intent.absent", "intent", "No intent found; the research purpose was not checked.")
+            return
         value = Project.load(path)
         report.data["intent"] = value.model_dump()
         if not value.purpose.strip():
@@ -417,37 +431,18 @@ def check_pipeline(
                 "intent",
                 "No research purpose stated in the intent; scientific relevance is unresolved.",
             )
-        if not value.required_entities and not value.required_relations:
-            warning(
-                "intent.requirements",
-                "intent",
-                "No required entities or relations declared; requirement coverage is unspecified.",
-            )
-        return {
-            **{f"entity:{n}": "node" for n in value.required_entities},
-            **{f"relation:{n}": "edge" for n in value.required_relations},
-        }
 
-    required = stage("intent", intent)
+    stage("intent", intent)
 
-    def requirements() -> None:
-        assert schema is not None and required is not None
-        for key, reason in pipeline.deferrals.items():
-            if not reason.strip() or key in pipeline.requirements:
-                error("requirements.invalid", key, "A deferral needs a reason and cannot also be resolved")
-        for key, semantic in pipeline.requirements.items():
-            if semantic not in schema or (key in required and schema[semantic]["kind"] != required[key]):
-                error("requirements.invalid", key, f"Requirement points to missing/wrong topology concept {semantic}")
-        for key in sorted(set(required) - set(pipeline.requirements) - set(pipeline.deferrals)):
-            error("requirements.unresolved", key, "Bind this purpose requirement or explicitly defer with a reason")
-        for key in sorted((set(pipeline.requirements) | set(pipeline.deferrals)) - set(required)):
-            warning("requirements.unknown", key, f"{key}: reference is not in the current intent lists")
+    def extractions() -> None:
+        assert workspace is not None
+        for extraction in workspace.extractions():
+            for path in placeholders(extraction):
+                message = "this listed extraction is still a placeholder; fill it in and delete its first line"
+                error("extraction.placeholder", extraction.name, message, path)
 
-    stage(
-        "requirements",
-        requirements,
-        blocked="Topology or intent is invalid" if schema is None or required is None else "",
-    )
+    if workspace is not None:
+        stage("extraction", extractions)
 
     if static:
         summary = stage(

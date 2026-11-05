@@ -51,10 +51,10 @@ def population(view: GraphStores, report: QualityReport) -> None:
     for _, row in _records(view):
         counts[concept_id(type(row.value))] += 1
     report.measurements["population"] = counts
-    for concept in sorted(set(view.requirements.values())):
-        if concept in counts and counts[concept] == 0:
+    for concept, count in sorted(counts.items()):
+        if count == 0:
             report.findings.append(
-                Finding("quality.empty_required", "warning", concept, "No emitted records for this required concept")
+                Finding("quality.empty_concept", "warning", concept, "No emitted records for this concept")
             )
 
 

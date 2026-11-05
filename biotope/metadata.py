@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from biotope.croissant.ids import file_id
 from biotope.utils import calculate_file_checksum
 
 
@@ -15,14 +16,13 @@ FILE_OBJECT_TYPE = "cr:FileObject"
 LEGACY_FILE_OBJECT_TYPE = "sc:FileObject"
 
 
-SCAFFOLD_FILENAME = ".biotope.yaml"
-
-
 # biotope:status values — see docs/agent flow.
 STATUS_RAW = "raw"
 STATUS_PROCESSED = "processed"
 STATUS_MAPPED = "mapped"
 STATUS_VALUES = (STATUS_RAW, STATUS_PROCESSED, STATUS_MAPPED)
+STATUS = "biotope:status"
+DERIVED_FROM = "prov:wasDerivedFrom"
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,6 @@ class DatasetTarget:
     input_path: Path
     metadata_path: Path
     dataset_dir: Path
-    scaffold_path: Path
 
 
 def get_standard_context() -> dict[str, str]:
@@ -146,7 +145,7 @@ def get_status(metadata: dict[str, Any]) -> str:
     Legacy manifests (no ``biotope:status`` field) are treated as ``raw`` —
     the conservative default since nothing has explicitly declared otherwise.
     """
-    value = metadata.get("biotope:status")
+    value = metadata.get(STATUS)
     if value in STATUS_VALUES:
         return value
     return STATUS_RAW
@@ -157,7 +156,7 @@ def set_status(metadata: dict[str, Any], status: str) -> None:
     if status not in STATUS_VALUES:
         msg = f"invalid status {status!r}; expected one of {STATUS_VALUES}"
         raise ValueError(msg)
-    metadata["biotope:status"] = status
+    metadata[STATUS] = status
 
 
 def classify_status_from_baker(metadata: dict[str, Any]) -> str:
@@ -181,7 +180,7 @@ def get_derived_from(metadata: dict[str, Any]) -> list[str]:
     Accepts both the single-value form (``"X"`` or ``{"@id": "X"}``) and the
     list form. Returns ``[]`` when absent.
     """
-    raw = metadata.get("prov:wasDerivedFrom")
+    raw = metadata.get(DERIVED_FROM)
     if raw is None:
         return []
     items = raw if isinstance(raw, list) else [raw]
@@ -202,30 +201,7 @@ def add_derived_from(metadata: dict[str, Any], source_id: str) -> None:
     if source_id in existing:
         return
     refs = existing + [source_id]
-    metadata["prov:wasDerivedFrom"] = [{"@id": ref} for ref in refs]
-
-
-def update_manifest_status(manifest_path: Path, status: str) -> bool:
-    """Read ``manifest_path``, set ``biotope:status``, write back. Idempotent.
-
-    Returns ``True`` if the manifest was modified, ``False`` if the status was
-    already correct or the file could not be read.
-    """
-    import json
-
-    if not manifest_path.is_file():
-        return False
-    try:
-        with open(manifest_path) as handle:
-            metadata = json.load(handle)
-    except (OSError, ValueError):
-        return False
-    if get_status(metadata) == status:
-        return False
-    set_status(metadata, status)
-    with open(manifest_path, "w") as handle:
-        json.dump(metadata, handle, indent=2)
-    return True
+    metadata[DERIVED_FROM] = [{"@id": ref} for ref in refs]
 
 
 def resolve_content_url(content_url: str, dataset_dir: Path, biotope_root: Path) -> Path | None:
@@ -241,15 +217,23 @@ def resolve_content_url(content_url: str, dataset_dir: Path, biotope_root: Path)
     return None
 
 
-def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
-    """The data directory mirrored by a manifest under the project root.
+def names_file(distribution: dict[str, Any], dataset_dir: Path, file_path: Path, biotope_root: Path) -> bool:
+    url = distribution.get("contentUrl")
+    located = resolve_content_url(url, dataset_dir, biotope_root) if isinstance(url, str) else None
+    return located is not None and located.resolve() == file_path.resolve()
 
-    Manifests live at ``.biotope/datasets/<rel>.jsonld``; the data they cover
-    lives at ``<biotope_root>/<rel>/``.
-    """
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-    rel = manifest_path.relative_to(datasets_dir).with_suffix("")
-    return biotope_root / rel
+
+def manifest_for(data: Path, biotope_root: Path) -> Path:
+    return biotope_root / ".biotope" / "datasets" / f"{data.relative_to(biotope_root).as_posix()}.jsonld"
+
+
+def dataset_id(manifest_path: Path, biotope_root: Path) -> str:
+    return manifest_path.relative_to(biotope_root / ".biotope" / "datasets").as_posix().removesuffix(".jsonld")
+
+
+def dataset_dir_for_manifest(manifest_path: Path, biotope_root: Path) -> Path:
+    data = biotope_root / dataset_id(manifest_path, biotope_root)
+    return data.parent if data.is_file() else data
 
 
 def file_coverage_in_manifest(
@@ -271,16 +255,14 @@ def file_coverage_in_manifest(
     dataset directory, mirroring how ``biotope add`` resolves them at bake
     time.
     """
-    try:
-        file_rel = str(file_path.relative_to(biotope_root))
-    except ValueError:
+    if not file_path.resolve().is_relative_to(biotope_root.resolve()):
         return None
 
     fileset_hit = False
     for distribution in metadata.get("distribution", []) or []:
         entry_type = distribution.get("@type")
         if entry_type == FILE_OBJECT_TYPE:
-            if distribution.get("contentUrl") == file_rel:
+            if names_file(distribution, manifest_dataset_dir, file_path, biotope_root):
                 return "file_object"
             continue
         if entry_type == "cr:FileSet" and not fileset_hit:
@@ -336,105 +318,28 @@ def find_owning_manifest(file_path: Path, biotope_root: Path) -> Path | None:
 def resolve_target(path: Path, biotope_root: Path) -> DatasetTarget:
     """Resolve a file, dir, csv, or jsonld path to one dataset metadata target."""
     resolved = path.resolve()
-    datasets_dir = biotope_root / ".biotope" / "datasets"
-
     if resolved.suffix == ".jsonld":
-        metadata_path = resolved
-        try:
-            rel_metadata = metadata_path.relative_to(datasets_dir)
-        except ValueError as exc:
-            raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets") from exc
-        dataset_dir = biotope_root / rel_metadata.with_suffix("")
-        return DatasetTarget(
-            input_path=resolved,
-            metadata_path=metadata_path,
-            dataset_dir=dataset_dir,
-            scaffold_path=dataset_dir / SCAFFOLD_FILENAME,
-        )
-
-    if resolved.is_dir():
-        rel_dir = resolved.relative_to(biotope_root)
-        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
-        return DatasetTarget(
-            input_path=resolved,
-            metadata_path=metadata_path,
-            dataset_dir=resolved,
-            scaffold_path=resolved / SCAFFOLD_FILENAME,
-        )
-
-    if resolved.name == SCAFFOLD_FILENAME:
-        dataset_dir = resolved.parent
-        rel_dir = dataset_dir.relative_to(biotope_root)
-        metadata_path = (datasets_dir / rel_dir).with_suffix(".jsonld")
-        return DatasetTarget(
-            input_path=resolved,
-            metadata_path=metadata_path,
-            dataset_dir=dataset_dir,
-            scaffold_path=resolved,
-        )
-
-    rel_file = resolved.relative_to(biotope_root)
-    metadata_path = (datasets_dir / rel_file).with_suffix(".jsonld")
-    return DatasetTarget(
-        input_path=resolved,
-        metadata_path=metadata_path,
-        dataset_dir=resolved.parent,
-        scaffold_path=resolved.parent / SCAFFOLD_FILENAME,
-    )
+        if not resolved.is_relative_to(biotope_root / ".biotope" / "datasets"):
+            raise ValueError(f"JSON-LD target '{path}' is outside .biotope/datasets")
+        return DatasetTarget(resolved, resolved, dataset_dir_for_manifest(resolved, biotope_root))
+    dataset_dir = resolved if resolved.is_dir() else resolved.parent
+    return DatasetTarget(resolved, manifest_for(resolved, biotope_root), dataset_dir)
 
 
-def make_file_object(
-    file_path: Path,
-    biotope_root: Path,
-    *,
-    object_id: str | None = None,
-) -> dict[str, Any]:
-    """Build a normalized Croissant FileObject for one physical file."""
-    relative_path = file_path.relative_to(biotope_root)
+def make_file_object(file_path: Path, base: Path) -> dict[str, Any]:
+    relative_path = file_path.relative_to(base).as_posix()
     sha256_hash = calculate_file_checksum(file_path)
     encoding_format = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
 
     return {
         "@type": FILE_OBJECT_TYPE,
-        "@id": object_id or f"file_{sha256_hash[:8]}",
+        "@id": file_id(relative_path),
         "name": file_path.name,
-        "contentUrl": str(relative_path),
+        "contentUrl": relative_path,
         "encodingFormat": encoding_format,
         "sha256": sha256_hash,
         "contentSize": str(file_path.stat().st_size),
     }
-
-
-@dataclass(frozen=True)
-class DatasetStats:
-    """Structural counts derived from one Croissant Dataset JSON-LD."""
-
-    record_sets: int
-    file_sets: int
-    file_objects: int
-    record_set_details: tuple[tuple[str, int], ...]  # (name, field_count) per RecordSet
-
-
-def summarize_metadata(metadata: dict[str, Any]) -> DatasetStats:
-    """Count RecordSets, FileSets, FileObjects, and per-RecordSet field counts."""
-    record_sets = metadata.get("recordSet", []) or []
-    distributions = metadata.get("distribution", []) or []
-
-    file_set_count = sum(1 for d in distributions if d.get("@type") == "cr:FileSet")
-    file_object_count = sum(1 for d in distributions if d.get("@type") == FILE_OBJECT_TYPE)
-
-    details: list[tuple[str, int]] = []
-    for record_set in record_sets:
-        name = record_set.get("name") or record_set.get("@id") or "?"
-        fields = record_set.get("field", []) or []
-        details.append((str(name), len(fields)))
-
-    return DatasetStats(
-        record_sets=len(record_sets),
-        file_sets=file_set_count,
-        file_objects=file_object_count,
-        record_set_details=tuple(details),
-    )
 
 
 def parse_key_value_pairs(pairs: tuple[str, ...], option_name: str) -> dict[str, str]:

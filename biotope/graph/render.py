@@ -6,9 +6,7 @@ import json
 import os
 from pathlib import Path
 from string import Template
-from typing import Any, cast
 
-from biotope.extraction.text import MEDIA_TYPES, media_type
 from biotope.graph.sources import (
     KINDS,
     FieldNode,
@@ -22,6 +20,10 @@ from biotope.graph.targets import Target
 
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "templates/source"
+FILE_HINT = (
+    "Describe this file with a RecordSet in the manifest, author reviewed facts here with page or section "
+    "locations, or exclude it in graph/sources/__init__.py."
+)
 
 # get_type_hints evaluates annotations in the class namespace, where an attribute with one of these names
 # would shadow the name the annotation means.
@@ -102,7 +104,7 @@ def _signature(name: str, parameter: str, returns: str) -> str:
     return line if len(line) <= LINE_LENGTH else f"def {name}(\n    {parameter},\n) -> {returns}:"
 
 
-def render_loader(kind: Kind, class_name: str) -> str:
+def render_loader(kind: Kind, class_name: str, *, one_file: bool) -> str:
     if kind == "recordSet":
         summary = "Yield one record per source row, preserving every described field."
         detail = (
@@ -121,33 +123,18 @@ def render_loader(kind: Kind, class_name: str) -> str:
     returns = f"Iterator[SourceRecord[{class_ref}]]"
     return _template("loader.py.tmpl").substitute(
         class_import=class_import,
-        read_signature=_signature("_read", "config: None", returns),
+        path_import="from pathlib import Path\n" if one_file else "",
+        read_signature=_signature("_read", "path: Path" if one_file else "config: None", returns),
         load_signature=_signature("load", "context: RunContext", returns),
+        config="SOURCE.path()" if one_file else "None",
         read_summary=summary,
         read_detail="\n    ".join(detail.splitlines()),
     )
 
 
-def _document_hint(resource: dict[str, Any]) -> str:
-    content = resource.get("contentUrl")
-    if isinstance(content, str) and media_type(content) is not None:
-        return (
-            "Extract this document's records with biotope extract run and map that dataset, or transcribe "
-            "reviewed facts as fields that loader.py returns with page or section locations."
-        )
-    encoding: object = resource.get("encodingFormat")
-    formats: list[object] = cast(list[object], encoding) if isinstance(encoding, list) else [encoding]
-    if set(MEDIA_TYPES.values()).intersection(formats):
-        return "Author reviewed facts as fields; loader.py returns them with page or section locations."
-    return (
-        "Describe this file with a RecordSet in the manifest, author reviewed facts here, "
-        "or exclude it in graph/sources/__init__.py."
-    )
-
-
 def _render_file(target: Target, class_name: str) -> str:
     return _template("file.py.tmpl").substitute(
-        hint=_document_hint(target.entry),
+        hint=FILE_HINT,
         class_name=class_name,
         attribute=KINDS[target.kind].attribute,
         identity=_quoted(target.identity),

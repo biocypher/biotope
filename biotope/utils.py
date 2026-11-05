@@ -1,7 +1,9 @@
 """Shared utility functions for biotope commands."""
 
 import hashlib
+import shutil
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Optional
 
@@ -27,31 +29,6 @@ def find_biotope_root(start: Path | None = None) -> Optional[Path]:
             return current
         current = current.parent
     return None
-
-
-def is_git_repo(directory: Path) -> bool:
-    """
-    Check if directory owns a Git repository, rather than inheriting a parent's.
-
-    Args:
-        directory: Path to the directory to check
-
-    Returns:
-        True if the directory is a Git repository, False otherwise
-    """
-    if not (directory / ".git").exists():
-        return False
-    try:
-        subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=directory,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
 
 
 def load_project_metadata(biotope_root: Path) -> dict:
@@ -131,11 +108,28 @@ def is_file_tracked(file_path: Path, biotope_root: Path) -> bool:
     return find_owning_manifest(file_path, biotope_root) is not None
 
 
-def stage_git_changes(biotope_root: Path) -> None:
-    """Stage .biotope/ changes only in a project-owned Git repository."""
-    if not is_git_repo(biotope_root):
-        return
-    try:
-        subprocess.run(["git", "add", ".biotope/"], cwd=biotope_root, check=True)
-    except subprocess.CalledProcessError as e:
-        click.echo(f"⚠️  Warning: Could not stage changes in Git: {e}")
+def ignored_by_git(root: Path, paths: Iterable[Path]) -> list[str]:
+    base = root.resolve()
+    resolved = [(root / path).resolve() for path in paths]
+    relative = sorted({path.relative_to(base).as_posix() for path in resolved if path.is_relative_to(base)})
+    if not relative or shutil.which("git") is None:
+        return []
+    checked = subprocess.run(
+        ["git", "check-ignore", "--stdin", "-z"], cwd=root, input="\0".join(relative), capture_output=True, text=True
+    )
+    return sorted(path for path in checked.stdout.split("\0") if path) if checked.returncode == 0 else []
+
+
+def unreported(root: Path, ignored: Iterable[str]) -> list[str]:
+    context = click.get_current_context(silent=True)
+    reported: set[Path] = set() if context is None else context.meta.setdefault("biotope.reported_ignored", set())
+    fresh = [path for path in ignored if root.resolve() / path not in reported]
+    reported.update(root.resolve() / path for path in fresh)
+    return fresh
+
+
+def warn_ignored(root: Path, paths: Iterable[Path]) -> None:
+    for path in unreported(root, ignored_by_git(root, paths)):
+        click.echo(
+            f"Warning: git ignores {path}. Commit it with the project: add an exception to .gitignore.", err=True
+        )

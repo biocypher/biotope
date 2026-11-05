@@ -181,22 +181,18 @@ def test_report_keeps_signature_derived_inputs_outputs_and_concepts():
         "check:derived",
         TOPOLOGY,
         (),
-        (Mapping(name="check:make", function=as_union, requirements=("entity:thing",), evidence=("Why.",)),),
+        (Mapping(name="check:make", function=as_union, evidence=("Why.",)),),
         lambda context: None,
         scope="derived report metadata",
         code_paths=(__file__,),
-        requirements={"entity:thing": "check:thing"},
     )
     report = check_pipeline(pipeline, static=False)
     assert report["mappings"]["check:make"] == {
         "inputs": {"row": ["Row"]},
         "outputs": ["Value", "Thing"],
         "concepts": ["check:thing"],
-        "requirements": ("entity:thing",),
         "evidence": ("Why.",),
     }
     stray: tuple[MappingEntry, ...] = (Mapping(name="check:stray", function=unregistered_output),)
     with pytest.raises(CheckFailed, match="register these graph outputs"):
-        check_pipeline(
-            replace(pipeline, mappings=stray, requirements={}, deferrals={"entity:thing": "later"}), static=False
-        )
+        check_pipeline(replace(pipeline, mappings=stray), static=False)

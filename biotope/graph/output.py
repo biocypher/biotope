@@ -19,7 +19,7 @@ from biotope.graph.contracts import GraphRecord
 from biotope.graph.provenance import PROVENANCE_CATALOG, PROVENANCE_PROPERTY, PROVENANCE_REFERENCE, ProvenanceCatalog
 from biotope.graph.runtime import RunContext
 from biotope.graph.sources import digest, write_text_atomic
-from biotope.graph.topology import ConceptSchema, concept_id
+from biotope.graph.topology import RESERVED_PROPERTIES, ConceptSchema, concept_id
 
 
 # The lowest tested BioCypher release, and the first release above the tested range. BioCypher is pre-1.0
@@ -38,8 +38,6 @@ EXPORT_FORMATS = {
 ARRAY_DELIMITER = ";"
 
 NEO4J_DEFAULT_READ_BUFFER = 4 * 2**20
-
-RESERVED_PROPERTIES = ("preferred_id", PROVENANCE_PROPERTY)
 
 SQLITE_DATABASE = "graph.sqlite"
 SQLITE_TYPES = {"str": "TEXT", "int": "INTEGER", "float": "REAL", "bool": "INTEGER", "str[]": "TEXT"}

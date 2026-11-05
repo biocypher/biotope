@@ -87,11 +87,11 @@ class AddOutput:
         self.sources[-1].update(status="added", manifest=self.path(manifest), record_sets=count)
         self.row("Saved", f"{self.path(manifest)} ({count} record {'set' if count == 1 else 'sets'})")
 
-    def template(self, source: Path, path: Path) -> None:
+    def annotation(self, source: Path, path: Path) -> None:
         for result in self.sources:
             if result["input"] == self.path(source):
-                result["annotation_template"] = self.path(path)
-        self.row("Review", self.path(path))
+                result["annotation"] = self.path(path)
+        self.row("Edit", self.path(path))
 
     def warning(self, source: Path, message: str) -> None:
         for result in self.sources:

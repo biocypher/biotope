@@ -10,7 +10,8 @@ useful for scripts and for reviewing scan coverage without terminal formatting.
   `biotope add raw --json > scan.json` (keep the report outside the scanned directory).
   The report contains `schema_version`, `project_root`, overall `status`, and `sources`.
   Each scanned source includes `input`, `root`, the full Baker `scan` report with
-  per-file outcomes/reasons/details, captured log `diagnostics`, and written artifact paths.
+  per-file outcomes/reasons/details, captured log `diagnostics`, and written artifact paths:
+  `manifest` and `annotation`, the dataset's annotation file.
   Paths are relative to `project_root`; paths inside `scan.files` are relative to the source's `root`.
   JSON keeps every file even when human output groups partitions. Partial-parse warnings
   remain diagnostics; a `described` outcome does not certify completeness.

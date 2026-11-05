@@ -1,11 +1,7 @@
-"""The `biotope source generate` command: what it reports, warns about, stages in Git, and refuses."""
-
 import json
 import re
 import shutil
-import subprocess
 
-import pytest
 from synthetic import record_set
 
 from biotope.graph.inventory import plan_sources
@@ -49,17 +45,6 @@ def test_generate_check_only_warns_about_drift_orphans_and_missing_history(proje
     loose.write_text(json.dumps({"recordSet": [record_set("r", "x")], "distribution": []}))
     unmanaged = project.run("source", "generate", str(loose), "--out", str(tmp_path / "sources"))
     assert unmanaged.exit_code == 0 and "no contract history is kept" in unmanaged.output
-
-
-@pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
-def test_generate_stages_the_revisions_it_records(project):
-    subprocess.run(["git", "init", "-q"], cwd=project.root, check=True)
-    result = generate(project, project.study(record_set("rows", "x")))
-    assert result.exit_code == 0, result.output
-    staged = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"], cwd=project.root, text=True, capture_output=True, check=True
-    )
-    assert {f".biotope/contracts/{name}" for name in project.store} <= set(staged.stdout.split())
 
 
 def test_generate_reports_nothing_as_created_when_writing_fails(project, monkeypatch):

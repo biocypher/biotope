@@ -8,6 +8,7 @@ from functools import cached_property
 from pathlib import PurePosixPath
 from typing import Any, cast
 
+from biotope.croissant.ids import read_files
 from biotope.graph.sources import (
     KINDS,
     Kind,
@@ -56,14 +57,7 @@ def _identities(value: object) -> set[str]:
 
 def _read_files(records: tuple[RecordSetTarget, ...]) -> set[str]:
     """The file resources some RecordSet field reads."""
-    found: set[str] = set()
-    for record in records:
-        for node in walk_fields(record.record, record.identity):
-            source: object = node.item.get("source")
-            if isinstance(source, dict):
-                typed = cast(dict[str, object], source)
-                found |= _identities(typed.get("fileObject")) | _identities(typed.get("fileSet"))
-    return found
+    return {name for record in records for name in read_files(record.record)}
 
 
 def _preferred_name(resource: dict[str, Any], identity: str) -> str:
@@ -75,13 +69,12 @@ def _preferred_name(resource: dict[str, Any], identity: str) -> str:
 
 
 def manifest_targets(data: dict[str, Any]) -> tuple[Target, ...]:
-    """Every top-level RecordSet, then every file resource no RecordSet field reads and nothing is ``containedIn``."""
     records = record_set_targets(data)
     targets = [
-        Target(item.identity, "recordSet", item.package, item.record, record_set_definition(data, item))
-        for item in records
+        Target(item.identity, "recordSet", item.package, item.record, record_set_definition(item)) for item in records
     ]
     distribution = objects(data.get("distribution", []), "/distribution")
+    described = _identities(distribution)
     covered = _read_files(records) | {
         container for resource in distribution for container in _identities(resource.get("containedIn"))
     }
@@ -89,8 +82,10 @@ def manifest_targets(data: dict[str, Any]) -> tuple[Target, ...]:
         identity, kind = resource.get("@id"), resource_kind(resource)
         if kind is None or not isinstance(identity, str) or not identity or identity in covered:
             continue
+        if _identities(resource.get("sameAs")) & described:
+            continue
         name = slug(_preferred_name(resource, identity))
-        targets.append(Target(identity, kind, name, resource, file_definition(data, resource)))
+        targets.append(Target(identity, kind, name, resource, file_definition(resource)))
     return tuple(targets)
 
 

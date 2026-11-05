@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import filecmp
 import hashlib
+import inspect
 import json
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator
@@ -11,28 +13,60 @@ from typing import Any, cast, get_type_hints
 
 from pydantic import TypeAdapter, ValidationError
 
-from biotope.extraction import text as conversion
-from biotope.extraction.contract import Document, ExtractionError, Extractor
-from biotope.extraction.describe import EVIDENCE
-from biotope.extraction.llm import LLMExtractor
-from biotope.extraction.loading import load_object
+from biotope.croissant import annotation
+from biotope.extraction.contract import Document, Extraction, ExtractionError, Extractor
 from biotope.extraction.schema import Schema
-from biotope.extraction.text import Searchable, convert, page, running_heads, squeeze
-from biotope.graph.sources import write_text_atomic
+from biotope.graph.discovery import is_placeholder
+from biotope.graph.sources import refresh_description, write_text_atomic
+from biotope.metadata import FILE_OBJECT_TYPE, dataset_dir_for_manifest, dataset_id, resolve_content_url
 
 
-TEXTS = Path(".biotope/texts")
 STATES = Path(".biotope/extraction")
 PROGRESS = Path(".biotope/progress")
-PARALLEL = 4
-SHORT = 10
-DISTINCTIVE = 30
+RECORDS = Path("data/extracted")
+
+
+def state_path(root: Path, name: str) -> Path:
+    return root / STATES / f"{name}.json"
+
+
+def records_path(root: Path, name: str) -> Path:
+    return root / RECORDS / f"{name}.jsonl"
+
+
+def progress_path(root: Path, name: str) -> Path:
+    return root / PROGRESS / f"{name}.jsonl"
+
+
+def records_files(root: Path) -> set[Path]:
+    return {records_path(root, state.stem) for state in (root / STATES).glob("*.json")}
+
+
+def extracted_files(root: Path) -> set[str]:
+    found: set[str] = set()
+    for state in (root / STATES).glob("*.json"):
+        files = _read_json(state).get("files")
+        if isinstance(files, list):
+            found.update(str(path) for path in cast(list[object], files))
+    return found
+
+
+def forget(root: Path, records_file: Path) -> None:
+    if records_file.resolve() in {path.resolve() for path in records_files(root)}:
+        state_path(root, records_file.stem).unlink(missing_ok=True)
+        progress_path(root, records_file.stem).unlink(missing_ok=True)
+
+
+def placeholders(extraction: Extraction) -> list[Path]:
+    files = {Path(inspect.getfile(item)) for item in (extraction.schema, extraction.extractor)}
+    return sorted(path for path in files if is_placeholder(path))
 
 
 @dataclass(frozen=True)
 class Source:
     path: str
-    media_type: str
+    record_path: str
+    dataset: str
 
 
 @dataclass
@@ -49,35 +83,12 @@ class Outcome:
 class Result:
     documents: list[Outcome]
     records: list[dict[str, Any]]
-    changed: bool
     appeared: list[str] = field(default_factory=lambda: [])
     disappeared: list[str] = field(default_factory=lambda: [])
     moved: list[dict[str, str]] = field(default_factory=lambda: [])
 
 
-def load_extractor(root: Path, config: dict[str, Any]) -> Extractor:
-    options = cast(dict[str, Any], config.get("extraction") or {})
-    reference = options.get("extractor")
-    if not reference:
-        raise ValueError("Set extraction.extractor in .biotope/config.yaml to llm or to path/to/module.py:Class")
-    settings = {key: value for key, value in options.items() if key not in {"extractor", "parallel"}}
-    if reference == "llm":
-        return LLMExtractor(settings)
-    factory = load_object(str(reference), root)
-    if not callable(factory):
-        raise ValueError(f"{reference!r} is not a class")
-    return cast(Extractor, factory(settings))
-
-
-def parallelism(config: dict[str, Any]) -> int:
-    options = cast(dict[str, Any], config.get("extraction") or {})
-    parallel = options.get("parallel", PARALLEL)
-    if not isinstance(parallel, int) or isinstance(parallel, bool) or parallel < 1:
-        raise ValueError("Set extraction.parallel in .biotope/config.yaml to a whole number of at least 1")
-    return parallel
-
-
-def identity(extractor: Extractor) -> dict[str, Any]:
+def identity(extractor: type[Extractor]) -> dict[str, Any]:
     named = {"name": str(extractor.name), "version": str(extractor.version), "settings": dict(extractor.settings)}
     return cast(dict[str, Any], json.loads(json.dumps(named)))
 
@@ -86,47 +97,112 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def document_text(path: Path, kind: str, digest: str, cache: Path | None) -> str:
-    cached = cache / f"{digest}-{conversion.CONVERSION}.txt" if cache is not None else None
-    if cached is not None and cached.is_file():
-        return cached.read_text(encoding="utf-8")
-    text = convert(path, kind)
-    if cache is not None and cached is not None:
-        _ignored_directory(cache)
-        write_text_atomic(cached, text)
-    return text
+def described_files(root: Path) -> dict[str, Source]:
+    found: dict[str, Source] = {}
+    for manifest in sorted((root / ".biotope/datasets").rglob("*.jsonld")):
+        dataset = dataset_id(manifest, root)
+        data = (root / dataset).resolve()
+        dataset_dir = dataset_dir_for_manifest(manifest, root)
+        for entry in cast(list[dict[str, Any]], refresh_description(manifest).get("distribution") or []):
+            url = entry.get("contentUrl")
+            if entry.get("@type") != FILE_OBJECT_TYPE or not isinstance(url, str):
+                continue
+            located = resolve_content_url(url, dataset_dir, root)
+            if located is None:
+                continue
+            located = located.resolve()
+            within = located.relative_to(data).as_posix() if data.is_dir() else ""
+            record_path = f"{data.name}/{within}" if within else data.name
+            path = located.relative_to(root.resolve()).as_posix()
+            found.setdefault(path, Source(path, record_path, dataset))
+    return found
 
 
-def _ignored_directory(directory: Path) -> None:
-    directory.mkdir(parents=True, exist_ok=True)
-    ignore = directory / ".gitignore"
-    if not ignore.is_file():
-        ignore.write_text("*\n", encoding="utf-8")
+def matched_files(root: Path, extraction: Extraction) -> list[str]:
+    found: set[str] = set()
+    for pattern in extraction.files:
+        matched = {path.relative_to(root) for path in root.glob(pattern) if path.is_file()}
+        documents = {
+            relative.as_posix()
+            for relative in matched
+            if not any(part.startswith(".") for part in relative.parts)
+            and not relative.name.endswith(annotation.SUFFIX)
+        }
+        if not documents:
+            raise ValueError(f"{extraction.name}: {pattern} matches no file")
+        found |= documents
+    return sorted(found)
+
+
+def sources(root: Path, extraction: Extraction, described: dict[str, Source]) -> list[Source]:
+    paths = matched_files(root, extraction)
+    undescribed = [path for path in paths if path not in described]
+    if undescribed:
+        originals = {path: _original(root, path, described) for path in undescribed}
+        others = [path for path, original in originals.items() if original is None]
+        problems = [
+            f"{path} is identical to {original}, and biotope add describes identical files once, so delete the copy"
+            for path, original in originals.items()
+            if original is not None
+        ]
+        if others:
+            them = "it" if len(others) == 1 else "them"
+            problems.insert(0, f"no dataset describes {', '.join(others)}; describe {them} with biotope add")
+        raise ValueError(f"{extraction.name}: {'; '.join(problems)}, or narrow the extraction's file patterns")
+    found = [described[path] for path in paths]
+    sharing: dict[str, list[str]] = defaultdict(list)
+    for source in found:
+        sharing[source.record_path].append(source.path)
+    shared = [
+        f"{', '.join(files)} would share the record path {path}" for path, files in sharing.items() if len(files) > 1
+    ]
+    if shared:
+        raise ValueError(
+            f"{extraction.name}: {'; '.join(shared)}. A record path starts with the name of the document's dataset "
+            "folder or file, so give the datasets different names"
+        )
+    return found
+
+
+def _original(root: Path, path: str, described: dict[str, Source]) -> str | None:
+    return next(
+        (
+            other
+            for other in sorted(described)
+            if (root / other).is_file() and filecmp.cmp(root / path, root / other, shallow=False)
+        ),
+        None,
+    )
 
 
 def extract_all(
-    extractor: Extractor,
+    extraction: Extraction,
     schema: Schema,
     root: Path,
     work: list[tuple[int, Source]],
     total: int,
-    cache: Path | None,
-    redo: frozenset[str],
-    parallel: int,
     announce: Callable[[int, int, str], None],
 ) -> Iterator[tuple[int, list[dict[str, Any]] | BaseException]]:
+    if not work:
+        return
+    try:
+        extractor = extraction.extractor()
+    except Exception as exc:
+        for position in range(len(work)):
+            yield position, exc
+        return
     running: dict[Future[list[dict[str, Any]]], int] = {}
-    with ThreadPoolExecutor(parallel) as pool:
+    with ThreadPoolExecutor(extraction.parallel) as pool:
         for position, (number, source) in enumerate(work):
-            if len(running) == parallel:
+            if len(running) == extraction.parallel:
                 yield from _finished(running)
             announce(number, total, source.path)
             try:
-                document, provenance = _prepare(extractor, schema, root, source, cache, source.path in redo)
+                document, provenance = _prepare(extraction, schema, root, source)
             except Exception as exc:
                 yield position, exc
                 continue
-            running[pool.submit(_extract_document, extractor, schema, document, provenance)] = position
+            running[pool.submit(_extract_document, extractor, schema, document, source, provenance)] = position
         while running:
             yield from _finished(running)
 
@@ -143,47 +219,33 @@ def failure(exc: BaseException) -> str:
     return str(exc) if isinstance(exc, ExtractionError) else f"{type(exc).__name__}: {exc}"
 
 
-def document_status(records: list[dict[str, Any]]) -> tuple[str, str]:
-    count = sum(not record["supported"] for record in records)
-    if count:
-        return "unsupported", (
-            f"{count} of {len(records)} records unsupported: most of their values have no aligned evidence or are "
-            "found only in running heads, so the extractor may have answered from memory or from page furniture"
-        )
-    return ("extracted" if records else "empty"), ""
+def document_status(records: list[dict[str, Any]]) -> str:
+    return "extracted" if records else "empty"
 
 
-def _prepare(
-    extractor: Extractor, schema: Schema, root: Path, source: Source, cache: Path | None, redone: bool
-) -> tuple[Document, dict[str, Any]]:
+def _prepare(extraction: Extraction, schema: Schema, root: Path, source: Source) -> tuple[Document, dict[str, Any]]:
     file = root / source.path
     digest = sha256(file)
     provenance: dict[str, Any] = {
         "document_sha256": digest,
-        "media_type": source.media_type,
-        "conversion": conversion.CONVERSION,
         "schema": schema.name,
         "schema_revision": schema.revision,
-        "extractor": identity(extractor),
+        "extractor": identity(extraction.extractor),
     }
-    if redone:
-        provenance["redone"] = True
-    text = document_text(file, source.media_type, digest, cache)
-    return Document(source.path, digest, source.media_type, text), provenance
+    return Document(file.resolve(), digest), provenance
 
 
 def _extract_document(
-    extractor: Extractor, schema: Schema, document: Document, provenance: dict[str, Any]
+    extractor: Extractor, schema: Schema, document: Document, source: Source, provenance: dict[str, Any]
 ) -> list[dict[str, Any]]:
     raw = cast(object, extractor.extract(document, schema))
     if not isinstance(raw, list):
         raise ExtractionError("the extractor returned no list of records")
     hints = get_type_hints(schema.cls)
     adapters = {entry.name: TypeAdapter[object](hints[entry.name]) for entry in schema.fields}
-    searchable = _searchable(document.text, document.media_type)
     records: list[dict[str, Any]] = []
     for index, item in enumerate(cast(list[object], raw), 1):
-        values, plain = _values(schema, document, searchable, item, index)
+        values, plain = _values(schema, item, index)
         for name, value in plain.items():
             try:
                 validated = adapters[name].validate_python(value, strict=True)
@@ -194,7 +256,7 @@ def _extract_document(
             normals = cast(list[object], validated if isinstance(given, list) else [validated])
             for part, normal in zip(parts, normals):
                 part["value"] = normal
-        records.append(finish(schema, document.path, values, provenance))
+        records.append(finish(schema, source, values, provenance))
     for record_id, count in Counter(record["id"] for record in records).items():
         if count > 1:
             key = ", ".join(schema.key) or "none"
@@ -204,13 +266,7 @@ def _extract_document(
     return records
 
 
-def _searchable(text: str, kind: str) -> Searchable:
-    return Searchable(text, running_heads(text, kind))
-
-
-def _values(
-    schema: Schema, document: Document, searchable: Searchable, item: object, index: int
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def _values(schema: Schema, item: object, index: int) -> tuple[dict[str, Any], dict[str, Any]]:
     names = [entry.name for entry in schema.fields]
     if not isinstance(item, dict) or set(cast(dict[str, Any], item)) != set(names):
         raise ExtractionError(f"record {index} does not have exactly the fields {', '.join(names)}")
@@ -221,163 +277,67 @@ def _values(
         if entry.many:
             if not isinstance(given[entry.name], list):
                 raise ExtractionError(f"record {index}, {entry.name}: expected a list")
-            items = [
-                _evidenced(document.media_type, searchable, entry.name, part, index)
-                for part in cast(list[object], given[entry.name])
-            ]
+            items = [_evidenced(entry.name, part, index) for part in cast(list[object], given[entry.name])]
             values[entry.name] = items
             plain[entry.name] = [part["value"] for part in items]
         else:
-            values[entry.name] = _evidenced(document.media_type, searchable, entry.name, given[entry.name], index)
+            values[entry.name] = _evidenced(entry.name, given[entry.name], index)
             plain[entry.name] = values[entry.name]["value"]
     return values, plain
 
 
-def _evidenced(kind: str, searchable: Searchable, name: str, given: object, index: int) -> dict[str, Any]:
+def _evidenced(name: str, given: object, index: int) -> dict[str, Any]:
     if not isinstance(given, dict) or "value" not in given:
         raise ExtractionError(f"record {index}, {name}: expected an object with a value and its quote or locator")
     entry = cast(dict[str, Any], given)
-    value, quote, locator = entry["value"], entry.get("quote"), entry.get("locator")
-    evidence: dict[str, Any] | None = None
-    if locator is not None:
-        evidence = dict.fromkeys(key for key, *_ in EVIDENCE)
-        evidence["locator"] = str(locator)
-    elif isinstance(quote, str) and quote.strip():
-        evidence = _aligned(kind, searchable, quote)
-    return {"value": value, "evidence": evidence}
+    unknown = sorted(set(entry) - {"value", "quote", "locator"})
+    if unknown:
+        raise ExtractionError(f"record {index}, {name}: unknown keys {', '.join(unknown)}")
+    evidence = {key: entry.get(key) for key in ("quote", "locator")}
+    for key, text in evidence.items():
+        if text is not None and not isinstance(text, str):
+            raise ExtractionError(f"record {index}, {name}: the {key} must be a string")
+    kept = {key: text if isinstance(text, str) and text.strip() else None for key, text in evidence.items()}
+    return {"value": entry["value"], "evidence": kept if any(kept.values()) else None}
 
 
-def _aligned(kind: str, searchable: Searchable, quote: str) -> dict[str, Any]:
-    span = searchable.align(quote)
-    occurrences = searchable.count(quote)
-    return {
-        "quote": quote,
-        "locator": None,
-        "aligned": span is not None,
-        "start": span[0] if span else None,
-        "end": span[1] if span else None,
-        "page": page(searchable.text, kind, span[0]) if span else None,
-        "occurrences": occurrences,
-        "weak": _weaknesses(quote, occurrences, searchable.only_in_running_heads(quote)) if span else None,
-    }
-
-
-def _weaknesses(quote: str, occurrences: int, running_head: bool) -> list[str]:
-    length = len(squeeze(quote))
-    found = (
-        ("short", length < SHORT),
-        ("repeated", occurrences > 1 and length < DISTINCTIVE),
-        ("running head", running_head),
-    )
-    return [reason for reason, weak in found if weak]
-
-
-def _realigned(record: dict[str, Any], kind: str, searchable: Searchable) -> dict[str, Any]:
-    values: dict[str, Any] = {}
-    for name, given in cast(dict[str, Any], record["values"]).items():
-        items = [
-            {**item, "evidence": _aligned(kind, searchable, evidence["quote"])}
-            if (evidence := item["evidence"]) and evidence["locator"] is None
-            else item
-            for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given])
-        ]
-        values[name] = items if isinstance(given, list) else items[0]
-    return {**record, "values": values, "provenance": {**record["provenance"], "conversion": conversion.CONVERSION}}
-
-
-def record_id(schema: Schema, path: str, values: dict[str, Any]) -> str:
+def record_id(schema: Schema, record_path: str, values: dict[str, Any]) -> str:
     if not schema.key:
-        return path
+        return record_path
     parts = (f"{name}={json.dumps(values[name]['value'], ensure_ascii=False)}" for name in schema.key)
-    return f"{path}#{';'.join(parts)}"
+    return f"{record_path}#{';'.join(parts)}"
 
 
-def finish(schema: Schema, path: str, values: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
-    total, unaligned, heads = support(values)
+def finish(schema: Schema, source: Source, values: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": record_id(schema, path, values),
-        "document": path,
-        "supported": (unaligned + heads) * 2 <= total,
+        "id": record_id(schema, source.record_path, values),
+        "document": source.path,
         "values": values,
         "provenance": provenance,
     }
 
 
-def evidenced_values(values: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    return [
-        (name, item)
-        for name, given in values.items()
-        for item in cast(list[dict[str, Any]], given if isinstance(given, list) else [given])
-        if item["value"] is not None
-    ]
-
-
-def unaligned(item: dict[str, Any]) -> bool:
-    return item["evidence"] is None or item["evidence"]["aligned"] is False
-
-
-def in_running_head(item: dict[str, Any]) -> bool:
-    return bool(item["evidence"]) and "running head" in (item["evidence"]["weak"] or [])
-
-
-def support(values: dict[str, Any]) -> tuple[int, int, int]:
-    found = evidenced_values(values)
-    return len(found), sum(unaligned(item) for _, item in found), sum(in_running_head(item) for _, item in found)
-
-
-@dataclass
-class Review:
-    unaligned: list[dict[str, Any]] = field(default_factory=lambda: [])
-    weak: list[dict[str, Any]] = field(default_factory=lambda: [])
-    unsupported: list[dict[str, Any]] = field(default_factory=lambda: [])
-    counts: Counter[str] = field(default_factory=lambda: Counter(values=0, aligned=0, unaligned=0, weak=0))
-
-
-def review(records: list[dict[str, Any]]) -> Review:
-    found = Review()
-    for record in records:
-        if not record["supported"]:
-            total, missing, heads = support(record["values"])
-            found.unsupported.append(
-                {"record": record["id"], "values": total, "unaligned": missing, "running_head": heads}
-            )
-        for name, item in evidenced_values(record["values"]):
-            evidence = item["evidence"]
-            found.counts["values"] += 1
-            where = {"record": record["id"], "field": name, "quote": evidence and evidence["quote"]}
-            if unaligned(item):
-                found.unaligned.append(where)
-                found.counts["unaligned"] += 1
-                continue
-            found.counts["aligned"] += bool(evidence["aligned"])
-            if evidence["weak"]:
-                found.weak.append({**where, "reasons": evidence["weak"]})
-                found.counts["weak"] += 1
-    return found
-
-
 def run(
     root: Path,
+    extraction: Extraction,
     schema: Schema,
-    extractor: Extractor,
-    sources: list[Source],
-    output: Path,
-    state_path: Path,
-    progress: Path,
+    found: list[Source],
     redo: frozenset[str] = frozenset(),
     announce: Callable[[int, int, str], None] = lambda index, total, path: None,
-    parallel: int = 1,
 ) -> Result:
+    output = records_path(root, extraction.name)
+    state_file = state_path(root, extraction.name)
+    progress = progress_path(root, extraction.name)
     previous = _read_records(output)
-    previous_state = cast(dict[str, Any], _read_json(state_path).get("documents", {})) if output.is_file() else {}
+    previous_state = cast(dict[str, Any], _read_json(state_file).get("documents", {})) if output.is_file() else {}
     by_document: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in previous:
         by_document[record["document"]].append(record)
     for finished in _finished_documents(progress):
         by_document[finished["document"]] = finished["records"]
         previous_state[finished["document"]] = finished["state"]
-    stamp = {"schema_revision": schema.revision, "extractor": identity(extractor)}
-    registered = {source.path for source in sources}
+    stamp = {"schema_revision": schema.revision, "extractor": identity(extraction.extractor)}
+    registered = {source.path for source in found}
     state: dict[str, Any] = {}
     records: list[dict[str, Any]] = []
     outcomes: list[Outcome] = []
@@ -393,24 +353,21 @@ def run(
         records.extend(kept)
         return len(kept)
 
-    for number, source in enumerate(sources, 1):
-        file = root / source.path
-        if not file.is_file():
-            outcomes.append(Outcome(source.path, "missing", "the file does not exist", records=keep(source.path)))
-            continue
+    for number, source in enumerate(found, 1):
         try:
-            digest = sha256(file)
-            wanted = {"sha256": digest, **stamp}
-            origin = None if source.path in redo else _origin(source.path, wanted, previous_state, registered | claimed)
-            reused = None if origin is None else _reuse(root, schema, source, digest, by_document[origin])
+            digest = sha256(root / source.path)
         except Exception as exc:
             outcomes.append(Outcome(source.path, "failed", failure(exc), records=keep(source.path)))
             continue
-        if origin is not None and reused is not None:
+        wanted = {"sha256": digest, **stamp}
+        origin = None if source.path in redo else _origin(source.path, wanted, previous_state, registered | claimed)
+        if origin is not None:
+            reused = [finish(schema, source, record["values"], record["provenance"]) for record in by_document[origin]]
             relocated = origin != source.path and origin not in registered | claimed
             claimed.add(origin)
             if relocated:
-                moved += [{"from": old["id"], "to": new["id"]} for old, new in zip(by_document[origin], reused)]
+                pairs = zip(by_document[origin], reused)
+                moved += [{"from": old["id"], "to": new["id"]} for old, new in pairs if old["id"] != new["id"]]
             state[source.path] = wanted
             records += reused
             outcomes.append(
@@ -422,9 +379,7 @@ def run(
         work.append((number, source))
         waiting.append((len(outcomes), digest))
         outcomes.append(Outcome(source.path, "extracted", sha256=digest))
-    for index, extracted in extract_all(
-        extractor, schema, root, work, len(sources), root / TEXTS, redo, parallel, announce
-    ):
+    for index, extracted in extract_all(extraction, schema, root, work, len(found), announce):
         position, digest = waiting[index]
         path = outcomes[position].path
         if isinstance(extracted, BaseException):
@@ -433,37 +388,30 @@ def run(
         state[path] = {"sha256": digest, **stamp}
         _remember(root, progress, path, state[path], extracted)
         records += extracted
-        status, reason = document_status(extracted)
-        outcomes[position] = Outcome(path, status, reason, digest, len(extracted))
+        outcomes[position] = Outcome(path, document_status(extracted), "", digest, len(extracted))
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}
-    changed = _store(output, state_path, schema, records, state)
+    _store(output, state_file, extraction, schema, records, state, sorted(registered))
     progress.unlink(missing_ok=True)
     return Result(
         outcomes,
         records,
-        changed,
         sorted(new - old - {pair["to"] for pair in moved}),
         sorted(old - new - {pair["from"] for pair in moved}),
         moved,
     )
 
 
-def _reuse(
-    root: Path, schema: Schema, source: Source, digest: str, stored: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    if any(record["provenance"].get("conversion") != conversion.CONVERSION for record in stored):
-        searchable = _searchable(
-            document_text(root / source.path, source.media_type, digest, root / TEXTS), source.media_type
-        )
-        stored = [_realigned(record, source.media_type, searchable) for record in stored]
-    return [finish(schema, source.path, record["values"], record["provenance"]) for record in stored]
+def _ignored_directory(directory: Path) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    ignore = directory / ".gitignore"
+    if not ignore.is_file():
+        ignore.write_text("*\n", encoding="utf-8")
 
 
 def _remember(root: Path, progress: Path, path: str, state: dict[str, Any], records: list[dict[str, Any]]) -> None:
     _ignored_directory(root / PROGRESS)
-    progress.parent.mkdir(parents=True, exist_ok=True)
     with progress.open("a", encoding="utf-8") as file:
         file.write(json.dumps({"document": path, "state": state, "records": records}, ensure_ascii=False) + "\n")
 
@@ -506,16 +454,24 @@ def _read_records(path: Path) -> list[dict[str, Any]]:
 
 
 def _store(
-    output: Path, state_path: Path, schema: Schema, records: list[dict[str, Any]], state: dict[str, Any]
-) -> bool:
-    ordered = sorted(records, key=lambda record: record["id"])
-    changed = _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in ordered))
-    _write(state_path, json.dumps({"schema": schema.name, "documents": dict(sorted(state.items()))}, indent=2) + "\n")
-    return changed
+    output: Path,
+    state_file: Path,
+    extraction: Extraction,
+    schema: Schema,
+    records: list[dict[str, Any]],
+    state: dict[str, Any],
+    files: list[str],
+) -> None:
+    _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
+    stored = {
+        "extraction": extraction.name,
+        "schema": schema.name,
+        "files": files,
+        "documents": dict(sorted(state.items())),
+    }
+    _write(state_file, json.dumps(stored, indent=2) + "\n")
 
 
-def _write(path: Path, text: str) -> bool:
-    if path.is_file() and path.read_text(encoding="utf-8") == text:
-        return False
-    write_text_atomic(path, text)
-    return True
+def _write(path: Path, text: str) -> None:
+    if not path.is_file() or path.read_text(encoding="utf-8") != text:
+        write_text_atomic(path, text)

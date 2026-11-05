@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, astuple, dataclass, field
 from types import MappingProxyType
 from typing import ParamSpec, TypeVar, cast
 
@@ -77,7 +77,6 @@ class RunContext:
             MappingProxyType(self.schema),
             MappingProxyType(self.nodes),
             MappingProxyType(self.edges),
-            MappingProxyType(self.pipeline.requirements),
         )
 
     def content_digest(self) -> str:
@@ -198,17 +197,15 @@ class RunContext:
                 if hasattr(value, "id")
                 else "edge:" + digest([semantic, source, target])
             )
+            label = identity if hasattr(value, "id") else f"{source} -> {target}"
             store = self.edges
         else:
-            identity = identifier(getattr(value, "id"))
+            identity = label = identifier(getattr(value, "id"))
             store = self.nodes
         existing = store.get(identity)
         if existing is not None:
             if existing.value != value:
-                raise ValueError(
-                    f"Conflicting values for {semantic} {identity}; "
-                    "resolve the conflict explicitly in the project pipeline"
-                )
+                raise ValueError(_conflict(f"{semantic} {label}", existing, value, evidence, mapping))
             existing.evidence.update(evidence)
             existing.mappings.add(mapping)
         else:
@@ -302,3 +299,20 @@ class RunContext:
                 node = self.nodes.get(node_id)
                 if node is None or concept_id(type(node.value)) != schema[endpoint]:
                     raise ValueError(f"{identity}: unresolved {endpoint} {node_id!r}; expected {schema[endpoint]}")
+
+
+def _conflict(
+    subject: str, existing: GraphRecord, value: GraphObject, evidence: tuple[Evidence, ...], mapping: str
+) -> str:
+    differing = [name for name in field_names(type(value)) if getattr(existing.value, name) != getattr(value, name)]
+    return (
+        f"Conflicting values for {subject} in {', '.join(differing)}: "
+        f"one from mapping {min(existing.mappings)} at {_cited(existing.evidence)}, "
+        f"the other from mapping {mapping} at {_cited(evidence)}; "
+        "resolve the conflict explicitly in the project pipeline"
+    )
+
+
+def _cited(evidence: Iterable[Evidence]) -> str:
+    first = min(evidence, key=astuple)
+    return f"{first.artifact} {first.location}"

@@ -1,99 +1,36 @@
-"""Schema for ``.biotope/project.yaml`` — the competence-questions document.
-
-This document captures what the user wants the knowledge graph to answer,
-*not* technical configuration. It is the canonical agent surface: an agent
-populates it via ``biotope map`` intent flags, and the mapping commands consult it.
-
-Hierarchical config precedence (lower wins, higher overrides):
-
-1. ``~/.config/biotope/config.yaml`` — user-level defaults
-2. ``.biotope/config.yaml`` — project technical config (biotope-managed)
-3. ``.biotope/project.yaml`` — project content intent (this document)
-4. CLI flags — final say
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 
 class Project(BaseModel):
-    """Competence-questions document for a biotope project."""
+    model_config = ConfigDict(extra="forbid")
 
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
-
-    name: str
     purpose: str = ""
-    """Free-text competence question(s). The single most important field."""
-
-    required_entities: list[str] = Field(default_factory=list)
-    """Entity types the graph must contain to answer ``purpose``.
-
-    Free text. Typically nouns (``drug``, ``gene``, ``customer``). No
-    snake_case enforcement; downstream commands treat these as natural-
-    language hints when matching against schemas.
-    """
-
-    required_relations: list[str] = Field(default_factory=list)
-    """Relations between entities.
-
-    Free text. Either short labels (``drug_targets_gene``) or natural-
-    language statements (``which drugs target which proteins``) are accepted;
-    downstream matching is intentionally fuzzy.
-    """
-
-    data_sources: list[str] = Field(default_factory=list)
-    """Croissant files or metadata URLs the user has on hand."""
-
-    notes: str = ""
 
     @classmethod
     def load(cls, path: str | Path) -> Project:
-        """Load and validate a project YAML."""
         data = yaml.safe_load(Path(path).read_text()) or {}
-        return cls.model_validate(data)
+        try:
+            return cls.model_validate(data)
+        except ValidationError as exc:
+            keys = ", ".join(str(error["loc"][0]) for error in exc.errors() if error["loc"]) or "its content"
+            raise ValueError(f"{path} holds one key, purpose, a text; remove or fix {keys}") from None
 
     def dump(self, path: str | Path) -> None:
-        """Serialise to YAML at ``path``."""
-        payload = self.model_dump(exclude_defaults=False)
-        Path(path).write_text(yaml.safe_dump(payload, sort_keys=False))
+        Path(path).write_text(yaml.safe_dump(self.model_dump(), sort_keys=False, allow_unicode=True))
 
 
-def resolve_project_path(start: Path | None = None, *, visible: bool = False) -> Path:
-    """Return the path where ``project.yaml`` lives for the project at ``start``.
-
-    If ``visible``, the file lives at the project root (``project.yaml``);
-    otherwise under ``.biotope/project.yaml``.
-    """
-    base = start if start is not None else Path.cwd()
-    return (base / "project.yaml") if visible else (base / ".biotope" / "project.yaml")
+def resolve_project_path(start: Path | None = None) -> Path:
+    return (start if start is not None else Path.cwd()) / ".biotope" / "project.yaml"
 
 
 def find_project(start: Path | None = None) -> Path | None:
-    """Walk upward from ``start`` to find the nearest ``project.yaml``.
-
-    Checks both the visible (``project.yaml``) and hidden
-    (``.biotope/project.yaml``) locations.
-    """
     cur = (start if start is not None else Path.cwd()).resolve()
     for parent in [cur, *cur.parents]:
-        for candidate in (parent / ".biotope" / "project.yaml", parent / "project.yaml"):
-            if candidate.is_file():
-                return candidate
+        if (candidate := resolve_project_path(parent)).is_file():
+            return candidate
     return None
-
-
-def merge_overrides(project: Project, **overrides: Any) -> Project:
-    """Return a new Project with non-``None`` overrides merged in."""
-    data = project.model_dump()
-    for key, value in overrides.items():
-        if value is None:
-            continue
-        if isinstance(value, (list, tuple)) and not value:
-            continue
-        data[key] = value
-    return Project.model_validate(data)

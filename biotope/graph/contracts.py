@@ -8,8 +8,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, ParamSpec, Protocol, TypeVar
 
+from biotope.croissant.ids import read_files
+from biotope.graph.sources import objects, refresh_description
 from biotope.graph.standardization import Term
 from biotope.graph.topology import ConceptSchema, Topology
+from biotope.metadata import dataset_dir_for_manifest, resolve_content_url
+from biotope.utils import find_biotope_root
 
 
 if TYPE_CHECKING:
@@ -56,6 +60,34 @@ class SourceContract:
     schema: Path
     records: tuple[type, ...]
 
+    def path(self) -> Path:
+        manifest = self.metadata.resolve()
+        data = refresh_description(manifest)
+        record = self.records[0]
+        identity = getattr(record, "__file_object__", None) or getattr(record, "__file_set__", None)
+        if identity is None:
+            table = getattr(record, "__record_set__", None)
+            read = {
+                name
+                for item in objects(data.get("recordSet", []), "/recordSet")
+                if item.get("@id") == table
+                for name in read_files(item)
+            }
+            if len(read) != 1:
+                raise ValueError(f"{self.name}: {table!r} reads {len(read)} files, so it has no one path")
+            [identity] = read
+        entries = [
+            item for item in objects(data.get("distribution", []), "/distribution") if item.get("@id") == identity
+        ]
+        url = entries[0].get("contentUrl") if len(entries) == 1 else None
+        project = find_biotope_root(manifest.parent)
+        if not isinstance(url, str) or project is None:
+            raise ValueError(f"{self.name}: {manifest} names no single file {identity!r} in a biotope project")
+        found = resolve_content_url(url, dataset_dir_for_manifest(manifest, project), project)
+        if found is None:
+            raise FileNotFoundError(f"{self.name}: {url} ({identity!r} in {manifest}) does not exist")
+        return found
+
 
 class GraphObject(Protocol):
     """A topology declaration, recognized by the semantic identity it declares.
@@ -82,11 +114,6 @@ class MappingEntry(Protocol):
         ...
 
     @property
-    def requirements(self) -> tuple[str, ...]:
-        """Purpose requirement keys this mapping contributes to."""
-        ...
-
-    @property
     def evidence(self) -> tuple[str, ...]:
         """Authored rationale, kept beside the transformation it explains."""
         ...
@@ -103,7 +130,6 @@ class Mapping(Generic[P, E]):
 
     name: str
     function: Callable[P, Iterable[E]]
-    requirements: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
 
 
@@ -135,16 +161,13 @@ class GraphStores:
     concepts: collections.abc.Mapping[str, ConceptSchema]
     nodes: collections.abc.Mapping[str, GraphRecord]
     edges: collections.abc.Mapping[str, GraphRecord]
-    requirements: collections.abc.Mapping[str, str]
 
 
 @dataclass(frozen=True)
 class Pipeline:
     """Explicit project composition; imports must not load data or execute mappings.
 
-    Code paths enumerate the authored Python to check and fingerprint. Requirements
-    map ``entity:<intent text>`` / ``relation:<intent text>`` to concept IDs;
-    deferrals map the same keys to reasons. Neither changes project intent.
+    Code paths enumerate the authored Python to check and fingerprint.
     """
 
     name: str
@@ -155,11 +178,8 @@ class Pipeline:
     scope: str
     code_paths: tuple[str | Path, ...]
     settings: dict[str, object] = field(default_factory=dict[str, object])
-    requirements: dict[str, str] = field(default_factory=dict[str, str])
-    deferrals: dict[str, str] = field(default_factory=dict[str, str])
     policies: dict[str, str] = field(default_factory=dict[str, str])
     intent: Path | None = None
-    dependencies: tuple[str, ...] = ()
     variability: str = "Unspecified; external state and nondeterminism have not been reviewed."
     terms: tuple[Term, ...] = ()
     source_inventory: tuple[SourceContract, ...] = ()

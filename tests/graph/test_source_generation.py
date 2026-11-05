@@ -14,7 +14,7 @@ from biotope.graph.discovery import read_declaration
 from biotope.graph.inventory import apply_plan, generate_source_packages, plan_sources
 from biotope.graph.render import render_inventory
 from biotope.graph.reports import PythonCheckFailed
-from biotope.graph.sources import LEGACY_HEADER, check_source_record, read_metadata, record_set_targets
+from biotope.graph.sources import LEGACY_HEADER, check_source_record, record_set_targets, refresh_description
 from biotope.graph.standardization import field_bindings
 from biotope.graph.targets import manifest_targets
 from biotope.graph.workspace import select_workspace
@@ -133,7 +133,7 @@ def test_a_generated_schema_binds_and_types_every_field_shape_and_imports_withou
         assert annotations["details"].startswith("list[")
         assert "UnknownValue" in annotations["matrix"] and "UnknownValue" in annotations["custom"]
         assert record.__missing_values__ == frozenset({""})
-        assert check_source_record(read_metadata(manifest), record) == record.__source_digest__
+        assert check_source_record(refresh_description(manifest), record) == record.__source_digest__
     project.mark_implemented("study/t")
     assert project.codes("error") == {}
     assert project.codes("warning")["source.opaque"] == ["study/t.T.matrix", "study/t.T.custom"]
@@ -214,21 +214,6 @@ def test_a_renamed_package_directory_and_class_stay_owned_by_their_identity(proj
     assert not project.codes("error")
 
 
-def test_a_renamed_file_resource_leaves_an_orphan_with_a_rebind_hint(project):
-    manifest = project.manifest("study", [], [pdf("doc-1", "raw/paper.pdf")])
-    project.generate(manifest)
-    project.mark_implemented("study/paper_pdf")
-    project.edit(manifest, lambda data: data["distribution"][0].update({"@id": "doc-2"}))
-    plan = project.generate(manifest)
-    [orphan] = [status for status in plan.statuses if status.state == "orphaned"]
-    [created] = [status for status in plan.statuses if status.state == "created"]
-    assert orphan.package == "paper_pdf" and created.identity == "doc-2"
-    hint = "'doc-2' now describes the same file (raw/paper.pdf)"
-    assert hint in orphan.detail and f"delete {created.package}/" in orphan.detail
-    [message] = project.messages("inventory.orphan")
-    assert hint in message
-
-
 LEGACY_SCHEMA = """{header}# biotope:record-set {{"id":"rows"}}
 from __future__ import annotations
 
@@ -287,7 +272,7 @@ SOURCE = SourceContract(
 
 def test_a_09_package_is_adopted_and_its_root_rewritten(project):
     manifest = project.study(record_set("rows", "value"))
-    [target] = manifest_targets(read_metadata(manifest))
+    [target] = manifest_targets(refresh_description(manifest))
     package = project.sources / "study/rows"
     package.mkdir(parents=True)
     (package / "schema.py").write_text(LEGACY_SCHEMA.format(header=LEGACY_HEADER, revision=target.revision))
@@ -597,3 +582,16 @@ def test_a_package_that_cannot_serve_its_target_is_a_conflict(project, change, d
     change(project, manifest)
     conflicts = plan_sources(manifest, project.sources).conflicts
     assert [(status.package, status.detail) for status in conflicts] == [("rows", detail)]
+
+
+def test_a_table_read_from_a_file_set_gets_a_loader_that_reads_no_single_path(project):
+    table = record_set("parts#events", "a", file="parts")
+    for field in table["field"]:
+        field["source"]["fileSet"] = field["source"].pop("fileObject")
+    parts = {"@id": "parts", "@type": "cr:FileSet", "encodingFormat": "text/csv", "includes": "parts/*.csv"}
+    single = record_set("one.csv#one", "a", file="one.csv")
+    manifest = project.manifest("study", [table, single], [parts, file_object("one.csv", "one.csv")])
+    project.generate(manifest)
+    loaders = {path.parent.name: path.read_text() for path in project.sources.glob("study/*/loader.py")}
+    assert "SOURCE.path()" not in loaders["parts_events"]
+    assert "SOURCE.path()" in loaders["one_csv_one"]

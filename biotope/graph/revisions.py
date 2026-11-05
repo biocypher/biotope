@@ -1,7 +1,7 @@
 """Contract history: a content-addressed store of reviewed source revisions, and the drift between them.
 
 Each ``.biotope/contracts/<digest>.json`` holds the exact digest preimage and is trusted only while it
-hashes to its name, so drift can itemize any change to what was reviewed, ``@context`` and ordering included.
+hashes to its name, so drift can itemize any change to what was reviewed, ordering included.
 """
 
 from __future__ import annotations
@@ -211,10 +211,7 @@ def explain_drift(store: ContractStore | None, declared: str | None, current: di
             reason = f"the acknowledged revision {short_revision(declared)} is not recorded in {STORE}"
         return Drift((f"{reason}; the change cannot be itemized",), (), False)
     changes = tuple(pointer_diff(previous, current))
-    summary = field_summary(previous, current)
-    if changes and all(change.pointer.startswith("/@context") for change in changes):
-        summary.insert(0, "only @context changed; every contract of this manifest drifts with it")
-    return Drift(tuple(summary), changes, True)
+    return Drift(tuple(field_summary(previous, current)), changes, True)
 
 
 def describe_contract(definition: dict[str, Any]) -> list[str]:
@@ -228,5 +225,5 @@ def describe_contract(definition: dict[str, Any]) -> list[str]:
     resource = definition.get("distribution")
     if isinstance(resource, dict):
         typed = cast(dict[str, Any], resource)
-        return [f"{key}: {_value(typed[key])}" for key in ("contentUrl", "encodingFormat", "sha256") if key in typed]
+        return [f"{key}: {_value(typed[key])}" for key in ("contentUrl", "includes", "encodingFormat") if key in typed]
     return []

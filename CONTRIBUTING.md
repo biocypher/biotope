@@ -29,12 +29,9 @@ Run the checks relevant to your change:
 ```bash
 uv run pyright
 uv run pytest
-uv run pre-commit run --all-files
 ```
 
-Pre-commit manages formatting, linting and configuration checks in its own
-environments. Its first run downloads those tools. The GitHub test matrix covers
-Python 3.10 and 3.12 on Linux and macOS.
+The GitHub test matrix covers Python 3.10 and 3.12 on Linux and macOS.
 
 Add focused tests for changed behavior. For documentation-only changes, verify the
 commands and examples you alter and build the documentation.
@@ -128,5 +125,3 @@ the resulting release PR before publishing.
 Do not hand-edit version numbers or add a changelog entry for ordinary PRs.
 Release-please maintains `CHANGELOG.md`, the package version and configured extra
 files, including the root package entry in `uv.lock`.
-
-Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in project discussions and reviews.

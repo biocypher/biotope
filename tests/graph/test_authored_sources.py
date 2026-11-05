@@ -11,7 +11,7 @@ import pytest
 from biotope.graph import Pipeline, SourceContract, Topology
 from biotope.graph.check import check_pipeline
 from biotope.graph.reports import CheckFailed
-from biotope.graph.sources import check_source_record, digest
+from biotope.graph.sources import check_source_record
 from biotope.graph.targets import manifest_targets
 
 
@@ -48,7 +48,7 @@ class Row:
 class Facts:
     __file_object__: ClassVar[str] = "paper"
     __record_set__: ClassVar[str] = "paper/facts"
-    __source_digest__: ClassVar[str] = {digest({"@context": None, "distribution": data["distribution"][0]})!r}
+    __source_digest__: ClassVar[str] = {manifest_targets(data)[1].revision!r}
     sample_count: int
 """)
     spec = importlib.util.spec_from_file_location("authored_source_test", schema)
@@ -122,11 +122,11 @@ def retype_the_first_column(data):
     data["recordSet"][0]["field"][0]["dataType"] = "sc:Integer"
 
 
-def replace_the_document(data):
-    data["distribution"][0]["sha256"] = "different-document"
+def move_the_document(data):
+    data["distribution"][0]["contentUrl"] = "papers/paper.pdf"
 
 
-@pytest.mark.parametrize(("change", "record"), [(retype_the_first_column, "Row"), (replace_the_document, "Facts")])
+@pytest.mark.parametrize(("change", "record"), [(retype_the_first_column, "Row"), (move_the_document, "Facts")])
 def test_changed_source_declaration_requires_review(authored, change, record):
     data, module, _ = authored
     change(data)

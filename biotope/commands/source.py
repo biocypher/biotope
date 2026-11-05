@@ -8,37 +8,28 @@ import click
 from biotope.graph.inventory import PackageStatus, SourcePlan, apply_plan, plan_sources, record_revisions, unrecorded
 from biotope.graph.revisions import DRIFT_LINE_LIMIT, STORE, short_revision
 from biotope.graph.sources import KINDS, register_metadata
-from biotope.utils import find_biotope_root, stage_git_changes
+from biotope.utils import find_biotope_root, warn_ignored
 
 
 @click.group(name="source")
 def source_group() -> None:
-    """Register curated metadata and scaffold project-owned source packages."""
+    """Register authored descriptions and scaffold project-owned source packages."""
 
 
 @source_group.command(name="register")
 @click.argument("metadata", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--name", required=True, help="Managed dataset name/path, without .jsonld.")
-@click.option("--reason", required=True, help="Review evidence and known gaps.")
-@click.option("--replace", is_flag=True, help="Replace this managed description after reviewing corrections.")
-def register(metadata: Path, name: str, reason: str, replace: bool) -> None:
-    """Register authored Croissant, protecting it from subsequent rebakes."""
+def register(metadata: Path, name: str) -> None:
+    """Register an authored Croissant description of data no bake describes."""
     root = find_biotope_root()
     if root is None:
         raise click.ClickException("Run biotope init first")
     try:
-        target = register_metadata(
-            root,
-            metadata,
-            name,
-            reason=reason,
-            replace=replace,
-            on_warning=lambda message: click.echo(f"Warning: {message}", err=True),
-        )
+        target = register_metadata(root, metadata, name)
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
-    stage_git_changes(root)
-    click.echo(f"Registered curated metadata: {target}\nReview source contracts and regenerate before building.")
+    warn_ignored(root, [target])
+    click.echo(f"Registered {target}\nGenerate its source packages before building.")
 
 
 def _shown(path: Path) -> str:
@@ -90,7 +81,11 @@ def _report(plan: SourcePlan, *, written: bool) -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Sources package, e.g. graph/sources.",
 )
-@click.option("--package", default=None, help="Root package for this manifest; defaults to the manifest filename.")
+@click.option(
+    "--package",
+    default=None,
+    help="Root package for this manifest; defaults to the root that holds it, else the manifest filename.",
+)
 @click.option("--check", is_flag=True, help="Report what generation would change, without writing.")
 def generate(metadata: Path, out: Path, package: str | None, check: bool) -> None:
     """Reconcile one manifest with its source packages; create only what is missing.
@@ -129,15 +124,14 @@ def generate(metadata: Path, out: Path, package: str | None, check: bool) -> Non
         _row("Done", "current")
         return
     try:
-        apply_plan(plan)
+        written = apply_plan(plan)
         recorded = record_revisions(plan)
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     _report(plan, written=True)
     if plan.store is not None:
         _row("Recorded", f"{len(recorded)} new of {len(plan.targets)} revisions in {_shown(plan.store.directory)}")
-        if recorded:
-            stage_git_changes(plan.store.project)
+        warn_ignored(plan.store.project, [*written, *recorded])
     if any(status.state in ("created", "completed") for status in plan.statuses):
         click.echo(
             "Next: implement each placeholder loader, then select sources from INVENTORY or exclude them "

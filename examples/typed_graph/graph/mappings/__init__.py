@@ -1,4 +1,4 @@
-"""Mappings selected for the example pipeline, organized by concept: mappings/<concept>/."""
+"""Mappings selected for the example pipeline, one module per group of mappings."""
 
 from biotope.graph import MappingEntry
 

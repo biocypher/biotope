@@ -6,12 +6,15 @@ import importlib
 import importlib.util
 import os
 import sys
+from collections import Counter
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
+from typing import cast
 
+from biotope.extraction import Extraction
 from biotope.graph.contracts import Pipeline
 from biotope.graph.reports import Finding
 from biotope.graph.revisions import project_root
@@ -51,6 +54,21 @@ class Workspace:
             )
             raise WorkspaceLoadFailed(str(exc), findings) from exc
         return value
+
+    def extractions(self) -> tuple[Extraction, ...]:
+        if not (self.root / "extraction" / "__init__.py").is_file():
+            return ()
+        value: object = getattr(importlib.import_module(f"{self.package}.extraction"), "EXTRACTIONS", None)
+        listed = cast(tuple[object, ...], value) if isinstance(value, tuple) else None
+        if listed is None or not all(isinstance(item, Extraction) for item in listed):
+            raise ValueError(
+                "extraction/__init__.py must declare EXTRACTIONS as a tuple of biotope.extraction.Extraction"
+            )
+        extractions = cast(tuple[Extraction, ...], listed)
+        twice = sorted(name for name, count in Counter(item.name for item in extractions).items() if count > 1)
+        if twice:
+            raise ValueError(f"extraction/__init__.py lists the extraction {', '.join(twice)} more than once")
+        return extractions
 
     def topology(self) -> Topology:
         value = getattr(importlib.import_module(f"{self.package}.topology"), "TOPOLOGY")

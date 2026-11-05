@@ -22,8 +22,8 @@ from biotope.graph.workspace import select_workspace
 CONTEXT = {"cr": "http://mlcommons.org/croissant/", "sc": "https://schema.org/"}
 
 
-def file_object(identity, content, *, name=None, fmt="text/csv", sha="0" * 64, contained=None):
-    item = {"@id": identity, "@type": "cr:FileObject", "contentUrl": content, "encodingFormat": fmt, "sha256": sha}
+def file_object(identity, content, *, name=None, fmt="text/csv", contained=None):
+    item = {"@id": identity, "@type": "cr:FileObject", "contentUrl": content, "encodingFormat": fmt, "sha256": "0" * 64}
     if name is not None:
         item["name"] = name
     if contained is not None:
@@ -77,10 +77,10 @@ class Project:
         directory = self.root / ".biotope/contracts"
         return {path.name for path in directory.iterdir()} if directory.is_dir() else set()
 
-    def manifest(self, name, record_sets=(), distribution=(), context=None) -> Path:
+    def manifest(self, name, record_sets=(), distribution=()) -> Path:
         path = self.root / ".biotope/datasets" / f"{name}.jsonld"
         data = {
-            "@context": CONTEXT if context is None else context,
+            "@context": CONTEXT,
             "name": name,
             "distribution": list(distribution),
             "recordSet": list(record_sets),

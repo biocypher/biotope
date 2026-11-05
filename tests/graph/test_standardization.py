@@ -127,8 +127,7 @@ def test_terms_and_vocabularies_are_checked_inside_nested_records():
         validate_terms(Outer(Nested("male"), [Nested("male"), Nested("invalid")]))
 
 
-@pytest.mark.parametrize("attribute", ["__file_object__", "__file_set__"])
-def test_document_facts_bind_shared_terms_like_table_records(attribute):
+def test_document_facts_bind_shared_terms_like_table_records():
     @dataclass(frozen=True)
     class Finding:
         sex: str = source_field(term=SEX)
@@ -136,10 +135,10 @@ def test_document_facts_bind_shared_terms_like_table_records(attribute):
     @dataclass(frozen=True, kw_only=True)
     class Facts:
         __record_set__: ClassVar[str] = "doc/facts"
+        __file_object__: ClassVar[str] = "doc"
         sex: str = source_field(term=SEX)
         finding: Finding
 
-    setattr(Facts, attribute, "doc")
     bindings = describe_standardization((SEX,), (Facts,))["terms"]["sex"]["bindings"]
     assert [(binding["record_set"], binding["source_field"]) for binding in bindings] == [
         ("doc/facts", "doc/facts/sex"),
