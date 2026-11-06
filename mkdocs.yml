@@ -10,9 +10,6 @@ markdown_extensions:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.superfences
-  - pymdownx.snippets:
-      check_paths: true
-  - mkdocs-click
 
 theme:
   features:
@@ -47,7 +44,6 @@ nav:
   - Tutorial: tutorial.md
   - Reference:
       - CLI: cli.md
-      - Changelog: changelog.md
 
 validation:
   links:
@@ -69,8 +65,3 @@ copyright: Copyright &copy; 2025–2026 BioCypher Team
 repo_url: https://github.com/biocypher/biotope
 repo_name: biocypher/biotope
 edit_uri: edit/main/docs
-
-watch:
-  - biotope
-  - README.md
-  - CHANGELOG.md

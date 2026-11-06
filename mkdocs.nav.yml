@@ -12,4 +12,3 @@ nav:
   - Tutorial: tutorial.md
   - Reference:
       - CLI: cli.md
-      - Changelog: changelog.md
