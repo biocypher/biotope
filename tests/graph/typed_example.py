@@ -1,30 +1,36 @@
-"""The shipped typed_graph example, copied into a fresh Biotope project."""
-
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from biotope.graph.inventory import generate_source_packages
-from biotope.graph.sources import register_metadata
+
+REPOSITORY = Path(__file__).resolve().parents[2]
+EXAMPLE = REPOSITORY / "tests/fixtures/typed_graph"
+PURPOSE = "A reviewer checks transformed sample scores against the people the samples come from."
+SETUP = (
+    ("init", ".", "--no-prompt", "--purpose", PURPOSE),
+    ("source", "register", "metadata/study.jsonld", "--name", "study"),
+    ("source", "generate", ".biotope/datasets/study.jsonld", "--out", "graph/sources"),
+)
 
 
-EXAMPLE = Path(__file__).resolve().parents[2] / "examples/typed_graph"
+def biotope(root, *args):
+    return subprocess.run([sys.executable, "-m", "biotope.cli", *args], cwd=root, text=True, capture_output=True)
 
 
 def prepare(tmp_path):
     root = tmp_path / "project"
     shutil.copytree(EXAMPLE, root, ignore=shutil.ignore_patterns("__pycache__", ".biotope", "build"))
-    (root / ".biotope").mkdir(exist_ok=True)
-    manifest = register_metadata(root, root / "metadata/study.jsonld", "study")
-    plan = generate_source_packages(manifest, root / "graph/sources")
-    assert {status.state for status in plan.statuses} == {"current"} and not plan.changes
-    assert len(list((root / ".biotope/contracts").iterdir())) == 2
+    sources = {path: path.read_bytes() for path in (root / "graph/sources").rglob("*.py")}
+    for command in SETUP:
+        result = biotope(root, *command)
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert {path: path.read_bytes() for path in (root / "graph/sources").rglob("*.py")} == sources
     return root
 
 
 def run(root, action="check", output=None):
-    command = [sys.executable, "-m", "biotope.cli", "graph", action]
+    command = ["graph", action]
     if output:
         command += ["--out", "graph/build/" + output]
-    return subprocess.run(command, cwd=root, text=True, capture_output=True)
+    return biotope(root, *command)

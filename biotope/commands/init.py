@@ -29,7 +29,7 @@ GITIGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**
     "-d",
     type=click.Path(file_okay=False, path_type=Path),
     default=".",
-    help="Parent directory to initialise the project in. The project goes in NAME/ within this dir.",
+    help="The folder that holds NAME; the current folder by default.",
 )
 @click.option(
     "--purpose",
@@ -37,21 +37,21 @@ GITIGNORE = "/data/**\n!/data/**/\n!/data/**/*.biotope.yaml\n!/data/extracted/**
     type=str,
     default=None,
     help=(
-        "Seed the project's purpose directly. "
-        "If omitted and stdin is a TTY, init will prompt; pass --no-prompt to skip."
+        "The project's purpose: who uses the graph, for which tasks, and the typical questions. "
+        "Without it, init asks in a terminal."
     ),
 )
 @click.option(
     "--no-prompt",
     is_flag=True,
     default=False,
-    help="Never prompt interactively. Combined with no --purpose, leaves it empty.",
+    help="Never ask; without --purpose, the purpose stays empty.",
 )
 @click.option(
     "--interactive",
     is_flag=True,
     default=False,
-    help="Open $EDITOR on project.yaml so you can fill in purpose before exiting init.",
+    help="Open project.yaml in $EDITOR to write the purpose.",
 )
 def init(
     name: str | None,
@@ -60,11 +60,9 @@ def init(
     no_prompt: bool,
     interactive: bool,
 ) -> None:
-    """Scaffold a new biotope project.
+    """Create a Biotope project in the folder NAME, or in the current folder with NAME ".".
 
-    Default invocation: ``biotope init my-project``. Creates ``my-project/`` with
-    configuration in ``.biotope/`` and starter project files. Data, mapping and
-    metadata directories are created only when needed.
+    Writes the project's purpose to .biotope/project.yaml, and a root .gitignore when the project has none.
     """
     if name is None:
         name = click.prompt("Project name", type=str)

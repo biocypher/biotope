@@ -4,13 +4,12 @@ site_name: Biotope
 
 nav:
   - Home: index.md
-  - Installation: installation.md
+  - Get started: get-started.md
+  - Working with the agent: agent.md
+  - Use the result: result.md
+  - Your project: project.md
+  - Documents: extraction.md
   - Tutorial: tutorial.md
-  - Agent setup: plugin.md
-  - Commands: commands.md
-  - Project layout: project.md
-  - Extraction: extraction.md
-  - Typed graph projects: mapping.md
-  - Architecture: architecture.md
-  - Migration: migration.md
-  - Roadmap: roadmap.md
+  - Reference:
+      - CLI: cli.md
+      - Changelog: changelog.md

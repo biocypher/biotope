@@ -12,7 +12,6 @@ from rich.table import Table
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_dir_for_manifest,
-    ensure_no_legacy_file_objects,
     resolve_content_url,
 )
 from biotope.utils import find_biotope_root
@@ -23,18 +22,10 @@ from biotope.utils import find_biotope_root
     "--file",
     "-f",
     type=click.Path(exists=True, path_type=Path),
-    help="Check specific file only",
+    help="Check only this file.",
 )
 def check_data(file: Optional[Path]) -> None:
-    """
-    Check data integrity against recorded checksums.
-
-    Verifies that data files match their recorded SHA256 checksums.
-    Reports any files that have been modified or corrupted.
-
-    Args:
-        file: Check specific file only
-    """
+    """Compare the data files with the SHA-256 checksums their descriptions record, and report each changed file."""
     console = Console()
 
     # Find biotope project root
@@ -94,7 +85,6 @@ def check_all_files(biotope_root: Path) -> List[Dict]:
             try:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
-                    ensure_no_legacy_file_objects(metadata)
                     dataset_dir = dataset_dir_for_manifest(dataset_file, biotope_root)
                     for distribution in metadata.get("distribution", []):
                         if distribution.get("@type") == FILE_OBJECT_TYPE:
@@ -126,7 +116,6 @@ def _get_recorded_checksum(file_path: Path, biotope_root: Path) -> Optional[str]
             try:
                 with open(dataset_file) as f:
                     metadata = json.load(f)
-                    ensure_no_legacy_file_objects(metadata)
                     dataset_dir = dataset_dir_for_manifest(dataset_file, biotope_root)
                     for distribution in metadata.get("distribution", []):
                         if distribution.get("@type") == FILE_OBJECT_TYPE:

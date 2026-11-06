@@ -5,8 +5,8 @@ from pathlib import Path
 
 import click
 
-from biotope.graph.inventory import PackageStatus, SourcePlan, apply_plan, plan_sources, record_revisions, unrecorded
-from biotope.graph.revisions import DRIFT_LINE_LIMIT, STORE, short_revision
+from biotope.graph.inventory import PackageStatus, SourcePlan, apply_plan, plan_sources
+from biotope.graph.revisions import project_root, short_revision
 from biotope.graph.sources import KINDS, register_metadata
 from biotope.utils import find_biotope_root, warn_ignored
 
@@ -52,9 +52,8 @@ def _describe(status: PackageStatus) -> str:
         lines.append(f"{KINDS[status.kind].label} {status.identity!r}")
     if status.detail:
         lines.append(status.detail)
-    if status.drift is not None:
+    if status.drifted:
         lines.append(f"acknowledged {short_revision(status.acknowledged)}, manifest {short_revision(status.revision)}")
-        lines.extend(status.drift.lines(DRIFT_LINE_LIMIT))
     return "\n".join(lines)
 
 
@@ -100,23 +99,8 @@ def generate(metadata: Path, out: Path, package: str | None, check: bool) -> Non
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     _row("Generate" if not check else "Check", f"{_shown(metadata)} -> {_shown(plan.root)}")
-    if plan.store is None:
-        _row(
-            "Warning",
-            _shown(metadata),
-            "not inside a Biotope project, so no contract history is kept and drift cannot be itemized",
-            err=True,
-        )
     if check or plan.conflicts:
         _report(plan, written=False)
-        for status in unrecorded(plan) if check else ():
-            _row(
-                "Warning",
-                _shown(status.path),
-                f"revision {short_revision(status.revision)} is acknowledged but not recorded in {STORE}; "
-                "run biotope source generate without --check",
-                err=True,
-            )
         if plan.conflicts:
             raise click.ClickException(f"{len(plan.conflicts)} conflict(s); nothing was written")
         if plan.changes:
@@ -125,13 +109,12 @@ def generate(metadata: Path, out: Path, package: str | None, check: bool) -> Non
         return
     try:
         written = apply_plan(plan)
-        recorded = record_revisions(plan)
     except (ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
     _report(plan, written=True)
-    if plan.store is not None:
-        _row("Recorded", f"{len(recorded)} new of {len(plan.targets)} revisions in {_shown(plan.store.directory)}")
-        warn_ignored(plan.store.project, [*written, *recorded])
+    project = project_root(metadata)
+    if project is not None:
+        warn_ignored(project, written)
     if any(status.state in ("created", "completed") for status in plan.statuses):
         click.echo(
             "Next: implement each placeholder loader, then select sources from INVENTORY or exclude them "

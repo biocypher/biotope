@@ -13,7 +13,6 @@ from biotope.utils import calculate_file_checksum
 
 
 FILE_OBJECT_TYPE = "cr:FileObject"
-LEGACY_FILE_OBJECT_TYPE = "sc:FileObject"
 
 
 # biotope:status values — see docs/agent flow.
@@ -111,7 +110,7 @@ def _coerce_list_fields(obj: Any, keys: tuple[str, ...] = ("field", "subField"))
 
 
 def normalize_metadata_shape(metadata: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy with uniform Croissant keys; reject legacy sc:FileObject."""
+    """Return a copy with uniform Croissant keys."""
     normalized = copy.deepcopy(metadata)
 
     if "cr:recordSet" in normalized:
@@ -126,25 +125,11 @@ def normalize_metadata_shape(metadata: dict[str, Any]) -> dict[str, Any]:
             record_set["field"].extend(fields)
 
     _coerce_list_fields(normalized)
-    ensure_no_legacy_file_objects(normalized)
     return normalized
 
 
-def ensure_no_legacy_file_objects(metadata: dict[str, Any]) -> None:
-    """Raise when legacy file object types are present."""
-    for distribution in metadata.get("distribution", []) or []:
-        if distribution.get("@type") == LEGACY_FILE_OBJECT_TYPE:
-            raise ValueError(
-                "Legacy sc:FileObject is no longer supported. " "Please regenerate the metadata with `biotope add`."
-            )
-
-
 def get_status(metadata: dict[str, Any]) -> str:
-    """Return the biotope pipeline state of a manifest.
-
-    Legacy manifests (no ``biotope:status`` field) are treated as ``raw`` —
-    the conservative default since nothing has explicitly declared otherwise.
-    """
+    """Return the biotope pipeline state of a manifest; ``raw`` when it declares none."""
     value = metadata.get(STATUS)
     if value in STATUS_VALUES:
         return value

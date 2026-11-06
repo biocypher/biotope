@@ -18,18 +18,12 @@ from biotope.utils import find_biotope_root, warn_ignored
     "--derived-from",
     "derived_from",
     multiple=True,
-    help="Add `prov:wasDerivedFrom` pointer (repeatable). Same ref forms as `biotope add --derived-from`.",
+    help="A dataset this one was derived from, written to prov:wasDerivedFrom; repeatable.",
 )
 def mark(dataset: str, status: str, derived_from: tuple[str, ...]) -> None:
-    """Set DATASET's biotope:status to STATUS (raw | processed | mapped).
+    """Set the biotope:status of DATASET to STATUS.
 
-    DATASET accepts a dataset canonical id (rel path), a data path, or a
-    manifest path — same resolution as `biotope add --derived-from`.
-
-    Examples::
-
-        biotope mark data/kidney_pdf processed --derived-from data/kidney_extracted
-        biotope mark data/ot/target mapped
+    DATASET is a data path, a manifest path or a dataset name, as for biotope add --derived-from.
     """
     biotope_root = find_biotope_root()
     if biotope_root is None:

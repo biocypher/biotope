@@ -19,10 +19,8 @@ from biotope.graph.contracts import SourceContract
 from biotope.graph.sources import (
     GENERATED_HEADER,
     KINDS,
-    LEGACY_HEADER,
     MANIFEST_MARKER,
     PLACEHOLDER_MARKER,
-    RECORD_SET_MARKER,
     Kind,
     marker,
 )
@@ -60,8 +58,8 @@ def unimportable_packages(root: Path) -> list[Path]:
 
 
 def root_manifest(text: str) -> str | None:
-    """Return the manifest a generated root file names, for the current and the 0.9 form."""
-    if not text.startswith((GENERATED_HEADER, LEGACY_HEADER)):
+    """Return the manifest a generated root file names."""
+    if not text.startswith(GENERATED_HEADER):
         return None
     return marker(text, MANIFEST_MARKER, "metadata")
 
@@ -138,7 +136,6 @@ class Declaration:
     kind: Kind | None
     class_name: str | None
     revision: str | None
-    field_refs: bool = False
     problem: str = ""
     other_identities: tuple[str, ...] = ()
 
@@ -151,7 +148,6 @@ class _Declarer(NamedTuple):
     kind: Kind
     class_name: str
     revision: str | None
-    field_refs: bool
 
 
 def _assignment(node: ast.stmt) -> tuple[str | None, ast.expr | None]:
@@ -184,18 +180,16 @@ def _declarers(tree: ast.Module) -> dict[str, list[_Declarer]]:
         if not isinstance(node, ast.ClassDef):
             continue
         values: dict[str, str | None] = {}
-        field_refs = False
         for item in node.body:
             name, value = _assignment(item)
             if name in (*attributes, "__source_digest__"):
                 values[name] = _string(value, constants)
                 if values[name] is None:
                     raise ValueError(f"{node.name}.{name} is not a string literal or constant")
-            field_refs |= name == "__field_refs__"
         for kind, spec in KINDS.items():
             identity = values.get(spec.attribute)
             if identity:
-                declarer = _Declarer(kind, node.name, values.get("__source_digest__"), field_refs)
+                declarer = _Declarer(kind, node.name, values.get("__source_digest__"))
                 declared.setdefault(identity, []).append(declarer)
                 break
     return declared
@@ -216,17 +210,12 @@ def read_declaration(path: Path) -> Declaration:
         return Declaration.unreadable(f"cannot be parsed: {exc.msg} (line {exc.lineno})")
     except ValueError as exc:
         return Declaration.unreadable(str(exc))
-    legacy = marker(text, RECORD_SET_MARKER, "id")
-    if not declared and legacy:
-        return Declaration(legacy, "recordSet", None, None)
     top = sorted(i for i in declared if not any(i.startswith(other + "/") for other in declared if other != i))
     candidates = top
     if len(top) > 1:
         with_revision = [i for i in top if any(declarer.revision for declarer in declared[i])]
         if len(with_revision) == 1:
             top = with_revision
-        elif legacy in top:
-            top = [legacy]
     if not top:
         return Declaration.unreadable("declares no __record_set__, __file_object__ or __file_set__")
     if len(top) > 1:
@@ -238,7 +227,7 @@ def read_declaration(path: Path) -> Declaration:
         return Declaration.unreadable(f"several classes declare {identity!r}: {names}", identity)
     [declarer] = declarers
     others = tuple(other for other in candidates if other != identity)
-    return Declaration(identity, declarer.kind, declarer.class_name, declarer.revision, declarer.field_refs, "", others)
+    return Declaration(identity, declarer.kind, declarer.class_name, declarer.revision, "", others)
 
 
 @dataclass(frozen=True)

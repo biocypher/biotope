@@ -1,0 +1,8 @@
+/data/**
+!/data/**/
+!/data/**/*.biotope.yaml
+!/data/extracted/**
+__pycache__/
+*.pyc
+.venv/
+.env

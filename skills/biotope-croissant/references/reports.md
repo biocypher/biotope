@@ -19,8 +19,7 @@ way to notice it. A failed build is incomplete even if it produced some files.
 
 ## Read the run record
 
-`graph/build/run.json` is `schema_version` 2; Biotope still reads and replaces
-version 1 reports.
+`graph/build/run.json` has `schema_version` 2.
 
 | Field in `run.json`             | Review it for                                                                                                                    |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |

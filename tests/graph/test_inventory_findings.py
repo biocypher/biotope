@@ -63,7 +63,7 @@ def test_a_malformed_field_invalidates_its_manifest_whether_or_not_its_package_e
         assert "biotope:nullable must be true or false" in message
 
 
-def test_an_unscoped_field_fails_a_selected_schema_unless_it_binds_through_field_refs(project):
+def test_an_unscoped_field_fails_a_selected_schema_until_it_is_excluded(project):
     unscoped = {"@id": "u", "field": [{"@id": "elsewhere/z", "name": "z", "dataType": "sc:Text"}]}
     project.generate(project.manifest("study", [unscoped]))
     schema = project.sources / "study/u/schema.py"
@@ -72,11 +72,6 @@ def test_an_unscoped_field_fails_a_selected_schema_unless_it_binds_through_field
     assert project.codes("error") == {"source.unscoped_field": ["study/u"], "source.contract": ["study/u"]}
     project.exclude({"study/u": "Rescoped in the next manifest revision"})
     assert "source.unscoped_field" not in project.codes()
-    project.exclude({})
-    field_refs = '    __field_refs__: ClassVar[dict[str, str]] = {"z": "elsewhere/z"}\n'
-    text = schema.read_text().replace("source_field(None, default=None)", "None")
-    schema.write_text(text.replace("    __missing_values__", field_refs + "    __missing_values__"))
-    assert project.codes("error") == {}
 
 
 def test_excluded_sources_are_not_validated_and_their_drift_only_warns(project):

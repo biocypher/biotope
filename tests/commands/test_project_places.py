@@ -265,15 +265,14 @@ def ignoring_project(root, repository):
 
 
 def warnings_of():
-    contract = ".biotope/contracts/"
     manifest = ".biotope/datasets/data/things.jsonld"
     pages = [".biotope/datasets/data/pages.jsonld", "data/pages/.biotope.yaml"]
     yield ("add", "data/things", "data/pages"), [manifest, "data/things/.biotope.yaml", *pages]
     yield ("annotate", "set", "data/things", "description=Two tables."), [manifest, "data/things/.biotope.yaml"]
-    yield ("source", "generate", manifest, "--out", "graph/sources"), [contract]
+    yield ("source", "generate", manifest, "--out", "graph/sources"), []
     yield ("mark", "data/things", "mapped"), [manifest]
     records = ["data/extracted/profile.jsonl", ".biotope/datasets/data/extracted/profile.jsonl.jsonld"]
-    yield ("extract", "run", "profile"), [*records, ".biotope/extraction/profile.json"]
+    yield ("extract", "run", "profile"), records
     yield ("mv", "data/things/first.csv", "data/things/renamed.csv"), [manifest]
     yield ("rm", "-f", "data/things/second.csv"), [manifest]
 

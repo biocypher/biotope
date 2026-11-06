@@ -1,81 +1,55 @@
 # Biotope
 
-Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations.
-Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a massive organization. You can give raw data and **the purpose statemet** to the biotope agent and it will iteratively build the graph topology, mapping, entity and conflict resolution, following the industry best practices.
-
 [![PyPI](https://img.shields.io/pypi/v/biotope.svg)](https://pypi.org/project/biotope/)
 [![Python](https://img.shields.io/pypi/pyversions/biotope.svg)](https://pypi.org/project/biotope/)
-[![Documentation](https://github.com/biocypher/biotope/actions/workflows/docs_mkdocs.yaml/badge.svg)](https://biocypher.github.io/biotope/)
-[![License](https://img.shields.io/pypi/l/biotope.svg)](LICENSE)
+[![Documentation](https://github.com/biocypher/biotope/actions/workflows/docs_mkdocs.yaml/badge.svg)](https://biocypher.github.io/biotope/latest/)
+[![License](https://img.shields.io/pypi/l/biotope.svg)](https://github.com/biocypher/biotope/blob/main/LICENSE)
 
-Biotope is under active development. The 0.10 release generates a complete source
-inventory, reports source drift, and retires validation checks and the query
-context;
+<!-- --8<-- [start:headline] -->
+Biotope is a framework that helps your AI agents build and maintain purpose-driven knowledge representations.
+Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a distributed organization. You can give raw data and **the purpose statement** to the biotope agent and it will build the graph topology, mapping, entity and conflict resolution, following the industry best practices. Biotope simplifies the process of building and maintaining the data project, but semantic authority and final decisions on the representation stays with the human.
+<!-- --8<-- [end:headline] -->
 
-## How it works
+<!-- --8<-- [start:handles] -->
+How data projects that are created by the biotope agent work:
 
-Biotope builds knowledge representations from local data. It uses [croissant-baker](https://pypi.org/project/croissant-baker/)
-to describe sources, gives every described input a typed Python source package from
-the reviewed Croissant metadata, and checks project-owned loaders, mappings and graph
-pipelines. Builds export [BioCypher](https://biocypher.org/) files with provenance and
-a record of the run.
+- **Inputs.** Structured files are described automatically using croissant-baker: CSV, TSV, Excel, Parquet, JSON, HDF5 and AnnData, FHIR, VCF, BAM, FASTA, DICOM, NIfTI, images and more. Unstructured documents, such as papers and web pages, become records through an extractor the agent writes, and each value keeps the quote it came from.
+- **Output.** Neo4j import files or one SQLite file. Every node and edge names the source rows it came from.
+- **Maintainability.** The biotope-created data project is plain Python in a fixed layout and static type-checking for all entities and mappings. New data of the same shape rebuilds with commands only, and a change in the data's structure is reported before the build.
+- **Versioning.** Everything Biotope writes is a plain file that you commit with your own git. Each build records its code, data revisions and library versions.
+<!-- --8<-- [end:handles] -->
 
-(add info about maintabilty structure, support for structured and unstructured data and versioning)
+## Get started
 
-## Install
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and an agentic harness (e.g Claude Code, Codex, open-code, etc.).
 
-Use Python 3.10–3.12. These commands use [uv](https://docs.astral.sh/uv/getting-started/installation/)
-and a POSIX shell:
+1. In your agentic harness, add the Biotope marketplace and install the plugin:
 
-```bash
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python 'biotope[graph]>=0.10,<0.11'
-source .venv/bin/activate
-biotope --version
-```
+    <!-- x-release-please-start-version -->
+    ```text
+    /plugin marketplace add biocypher/biotope#biotope-v1.0.0
+    /plugin install biotope@biotope
+    ```
+    <!-- x-release-please-end -->
 
-This installs the published croissant-baker dependency automatically. Graph type
-checking also needs Node.js on `PATH`; alternatively, install `pyright[nodejs]`
-in this environment. See [installation](docs/installation.md) for other setups.
+2. Start your agent in your project folder.
+3. Tell it where the data is and what the graph is for:
 
-## Build a graph
+    > Use biotope to build a knowledge graph from the files in `data/`. It is for our institute's staff, who look up who works on which topic, in which group and on which projects.
 
-(using with the agent is an intended use. manual use is not recommended.)
+The agent installs Biotope into the project's own environment, agrees the purpose with you and asks for the decisions only you can make. [Get started](https://biocypher.github.io/biotope/latest/get-started/) walks through each step, including Cursor and Codex.
 
-1. Initialize a project with `biotope init my-kg`, then enter `my-kg`, or run
-   `biotope init .` at the root of an existing repository. Biotope never writes to git.
-1. Describe selected local data with `biotope add <path>`, review the Croissant metadata,
-   and write what you know about each dataset into its annotation file.
-1. Run `biotope graph scaffold`, then give every described input a source package with
-   `biotope source generate <manifest> --out graph/sources`.
-1. Select or exclude each source, then define the graph's schemas, loaders, topology,
-   mappings and pipeline in Python.
-1. Run `biotope graph check`, then `biotope graph build`, which writes `graph/build/`.
-1. Review the exported values, descriptions and provenance against the research question,
-   reading the sources themselves; checks establish structure, not scientific correctness.
+## Documentation
 
-The scaffold's README describes its layout. The [tutorial](docs/tutorial.md)
-provides a complete synthetic project you can run immediately.
-
-- [Typed graph guide](docs/mapping.md): source curation, authoring and review.
-- [Commands](docs/commands.md): metadata, extraction and graph workflows.
-- [Project layout](docs/project.md): where biotope writes, annotation files, IDs and refreshes.
-- [Architecture](docs/architecture.md): responsibilities and execution boundaries.
-- [Published documentation](https://biocypher.github.io/biotope/).
-
-## Use with a coding agent
-
-The repository includes a `biotope-croissant` skill for this workflow and a
-`biocypher` skill for standalone BioCypher projects. Follow the
-[agent setup guide](docs/plugin.md) for Claude Code, Cursor or Codex.
-Skills guide the agent; install the Python package in the project environment too.
+- [Working with the agent](https://biocypher.github.io/biotope/latest/agent/): the purpose statement, your decisions and the review.
+- [Use the result](https://biocypher.github.io/biotope/latest/result/): load the graph into Neo4j or query it in SQLite.
+- [Your project](https://biocypher.github.io/biotope/latest/project/): what to commit and how to rebuild after new data.
+- [CLI reference](https://biocypher.github.io/biotope/latest/cli/).
 
 ## Contribute
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, checks and release conventions.
-Report reproducible problems through [GitHub issues](https://github.com/biocypher/biotope/issues).
+See [CONTRIBUTING.md](https://github.com/biocypher/biotope/blob/main/CONTRIBUTING.md). Report problems through [GitHub issues](https://github.com/biocypher/biotope/issues).
 
-Typed authoring and modular topology construction were informed by Paul Ka Po To's
-`kg-build-system`. Biotope does not depend on that engine.
+Typed authoring and modular topology construction were informed by Paul Ka Po To's `kg-build-system`. Biotope does not depend on that engine.
 
-Copyright © 2025–2026 BioCypher Team. [Apache 2.0](LICENSE).
+Copyright © 2025–2026 BioCypher Team. [Apache 2.0](https://github.com/biocypher/biotope/blob/main/LICENSE).

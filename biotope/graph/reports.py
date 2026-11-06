@@ -10,7 +10,6 @@ Phase = Callable[[str], None]
 Severity = Literal["error", "warning", "info"]
 
 REPORT_SCHEMA_VERSION = 2
-READABLE_REPORT_VERSIONS = frozenset({1, REPORT_SCHEMA_VERSION})
 
 
 @dataclass(frozen=True)

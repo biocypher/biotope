@@ -102,7 +102,7 @@ def add(
     status_override: str | None,
     derived_from: tuple[str, ...],
 ) -> None:
-    """Add data files or rooted directories to a biotope project."""
+    """Describe data files or folders as datasets, and create the annotation file of each."""
     with AddOutput(as_json) as reporter:
         if not paths:
             ctx = click.get_current_context()

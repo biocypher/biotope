@@ -36,13 +36,14 @@ def authored(tmp_path):
 from dataclasses import dataclass
 from typing import ClassVar
 
+from biotope.graph import source_field
+
 @dataclass(frozen=True)
 class Row:
     __record_set__: ClassVar[str] = "table"
     __source_digest__: ClassVar[str] = {manifest_targets(data)[0].revision!r}
-    __field_refs__: ClassVar[dict[str, str]] = {{"gene_symbol": "table/Gene", "expression_state": "table/low"}}
-    gene_symbol: str
-    expression_state: str
+    gene_symbol: str = source_field("Gene")
+    expression_state: str = source_field("low")
 
 @dataclass(frozen=True)
 class Facts:
@@ -98,23 +99,6 @@ def test_invalid_value_policy_blocks_definition_check(authored, monkeypatch, ali
         check_pipeline(pipeline, static=False)
     assert any(
         f["code"] == "source.contract" and "value aliases" in f["message"] for f in failure.value.report["findings"]
-    )
-
-
-@pytest.mark.parametrize(
-    "bindings",
-    [
-        pytest.param({"gene_symbol": "table/Gene"}, id="omitted-field"),
-        pytest.param({"typo": "table/Gene", "expression_state": "table/low"}, id="unknown-attribute"),
-    ],
-)
-def test_bad_field_coverage_blocks_definition_check(authored, monkeypatch, bindings):
-    _, module, pipeline = authored
-    monkeypatch.setattr(module.Row, "__field_refs__", bindings)
-    with pytest.raises(CheckFailed) as failure:
-        check_pipeline(pipeline, static=False)
-    assert any(
-        f["code"] == "source.contract" and "field coverage" in f["message"] for f in failure.value.report["findings"]
     )
 
 

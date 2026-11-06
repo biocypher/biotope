@@ -21,20 +21,21 @@ from biotope.extraction.run import (
     Outcome,
     Source,
     described_files,
+    described_origin,
     document_status,
     extract_all,
     failure,
     identity,
     placeholders,
+    records_entry,
     records_path,
     run,
     sha256,
     sources,
-    state_path,
 )
 from biotope.graph.sources import refresh_description, write_description
 from biotope.graph.workspace import Workspace, select_workspace
-from biotope.metadata import FILE_OBJECT_TYPE, STATUS_PROCESSED, get_derived_from, manifest_for
+from biotope.metadata import STATUS_PROCESSED, get_derived_from, manifest_for
 from biotope.utils import find_biotope_root, ignored_by_git, unreported
 
 
@@ -75,7 +76,7 @@ class Output:
             sys.exit(1)
 
 
-@click.group(help="Extract records from documents with the extractions listed in graph/extraction/__init__.py.")
+@click.group(name="extract", help="Extract records from documents with the extractions listed in graph/extraction.")
 def extract_group() -> None:
     pass
 
@@ -131,7 +132,7 @@ def try_command(name: str, files: tuple[Path, ...], as_json: bool) -> None:
 @extract_group.command(
     "run",
     help="Run the extractions NAMES, or every listed extraction, store their records in "
-    "data/extracted/<name>.jsonl and register each as a processed dataset. Records mirror the files the "
+    "data/extracted/NAME.jsonl and register each as a processed dataset. Records mirror the files the "
     "extraction's patterns match now; unchanged documents reuse their stored records.",
 )
 @click.argument("names", nargs=-1)
@@ -179,10 +180,11 @@ def _run_one(
     _header(output, "Extract", f"{extraction.name} -> {relative}", schema, named)
     result = run(root, extraction, schema, found, redo, output.progress)
     dataset_ids = sorted({source.dataset for source in found})
+    origin = described_origin(result.documents, schema, named)
     manifest = manifest_for(target, root)
-    if not _registered(root, target, manifest, schema, dataset_ids, result.records):
-        _register(root, target, manifest, schema, dataset_ids, result.records)
-    ignored = ignored_by_git(root, [target, manifest, state_path(root, extraction.name)])
+    if not _registered(root, target, manifest, schema, dataset_ids, origin):
+        _register(root, target, manifest, schema, dataset_ids, origin)
+    ignored = ignored_by_git(root, [target, manifest])
     report = {
         "name": extraction.name,
         "schema": _schema_report(schema),
@@ -263,7 +265,7 @@ def _count(records: int) -> str:
 
 
 def _register(
-    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
+    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], origin: dict[str, Any]
 ) -> None:
     overrides = {
         "name": target.relative_to(root).as_posix(),
@@ -275,34 +277,25 @@ def _register(
     if not add_file(target, root, datasets_dir, True, overrides, reporter=AddOutput(as_json=True)):
         raise click.ClickException(f"{target} could not be registered")
     metadata = annotation.restored(refresh_description(manifest))
-    file_object = _file_object(root, target, metadata)
+    file_object = records_entry(root, target, metadata)
     if file_object is None:
         raise click.ClickException(f"{manifest} does not list {target}")
-    describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
+    describe(metadata, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), origin)
     write_description(manifest, metadata)
 
 
 def _registered(
-    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], records: list[dict[str, Any]]
+    root: Path, target: Path, manifest: Path, schema: Schema, dataset_ids: list[str], origin: dict[str, Any]
 ) -> bool:
     if not manifest.is_file():
         return False
     metadata = annotation.restored(refresh_description(manifest))
-    file_object = _file_object(root, target, metadata)
+    file_object = records_entry(root, target, metadata)
     if file_object is None or file_object.get("sha256") != sha256(target) or get_derived_from(metadata) != dataset_ids:
         return False
     described = copy.deepcopy(metadata)
-    describe(described, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), records)
+    describe(described, schema, file_object["@id"], table_id(file_object["@id"], stem(target.name)), origin)
     return described == metadata
-
-
-def _file_object(root: Path, target: Path, metadata: dict[str, Any]) -> dict[str, Any] | None:
-    relative = target.relative_to(root).as_posix()
-    entries = cast(list[dict[str, Any]], metadata.get("distribution", []))
-    return next(
-        (entry for entry in entries if entry.get("@type") == FILE_OBJECT_TYPE and entry.get("contentUrl") == relative),
-        None,
-    )
 
 
 def _project_path(root: Path, file: Path) -> str:

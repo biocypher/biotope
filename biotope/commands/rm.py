@@ -49,7 +49,7 @@ console = Console()
 @click.option(
     "--keep-data",
     is_flag=True,
-    help="Drop from tracking but leave the data on disk (cf. `git rm --cached`).",
+    help="Keep the data on disk.",
 )
 @click.option(
     "--force",
@@ -58,12 +58,10 @@ console = Console()
     help="Skip the confirmation prompt.",
 )
 def rm(target: Path, keep_data: bool, force: bool) -> None:
-    """Remove a dataset or a file from biotope tracking.
+    """Remove a dataset or a file from Biotope, with its data unless --keep-data is given.
 
-    Symmetric with `biotope add`: a directory argument removes the whole
-    dataset (data + manifest); a file argument drops just that file's
-    `cr:FileObject` from its owning manifest. If the manifest then has no
-    distribution entries left, it's deleted too.
+    A dataset's path removes its data and its description. A file's path removes the file from its dataset's
+    description, and the description goes when no file is left.
     """
     biotope_root = find_biotope_root()
     if biotope_root is None:

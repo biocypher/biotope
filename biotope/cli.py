@@ -23,7 +23,7 @@ from biotope.commands.status import status as status_cmd
 @click.version_option(version=__version__, prog_name="biotope")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
-    """biotope: Croissant-driven knowledge-graph projects for the BioCypher ecosystem."""
+    """Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations."""
     ctx.ensure_object(dict)
     ctx.obj = {"version": __version__}
 

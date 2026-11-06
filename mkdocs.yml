@@ -1,23 +1,18 @@
 site_name: Biotope
-site_description: Build typed Python knowledge graphs from reviewed Croissant metadata, with provenance for every exported node and edge.
+site_description: Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations.
 site_author: BioCypher Team
 site_url: https://biocypher.github.io/biotope/
 
 markdown_extensions:
-  - admonition
-  - attr_list
   - toc:
       permalink: true
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.tabbed:
-      alternate_style: true
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      check_paths: true
+  - mkdocs-click
 
 theme:
   features:
@@ -44,16 +39,15 @@ theme:
 
 nav:
   - Home: index.md
-  - Installation: installation.md
+  - Get started: get-started.md
+  - Working with the agent: agent.md
+  - Use the result: result.md
+  - Your project: project.md
+  - Documents: extraction.md
   - Tutorial: tutorial.md
-  - Agent setup: plugin.md
-  - Commands: commands.md
-  - Project layout: project.md
-  - Extraction: extraction.md
-  - Typed graph projects: mapping.md
-  - Architecture: architecture.md
-  - Migration: migration.md
-  - Roadmap: roadmap.md
+  - Reference:
+      - CLI: cli.md
+      - Changelog: changelog.md
 
 validation:
   links:
@@ -63,13 +57,12 @@ plugins:
   - search
 
 extra:
+  version:
+    provider: mike
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/biocypher
       name: BioCypher Team
-
-extra_css:
-  - stylesheets/extra.css
 
 copyright: Copyright &copy; 2025–2026 BioCypher Team
 
@@ -79,3 +72,5 @@ edit_uri: edit/main/docs
 
 watch:
   - biotope
+  - README.md
+  - CHANGELOG.md

@@ -1,147 +1,79 @@
-# Build the typed example
+# Tutorial: explore a finished project
 
-This tutorial joins three synthetic samples to two people. It demonstrates the
-source inventory, typed mappings, exclusions, provenance, BioCypher export and
-source drift.
+This tutorial explores a small finished project: six airports, five airlines, and the notes an operations desk keeps on them. The graph shows which airline uses which airport as a hub or a focus city. You see what an agent leaves in a project, then check and build it yourself. You write no code. You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and git.
 
 ## Set up
 
-Use Python 3.12, [uv](https://docs.astral.sh/uv/getting-started/installation/), Git
-and Node.js on `PATH`. Clone the example from the release matching the package:
+Copy the example from the Biotope release and install its environment:
+
+<!-- x-release-please-start-version -->
+```bash
+git clone --depth 1 --branch biotope-v1.0.0 https://github.com/biocypher/biotope.git
+```
+<!-- x-release-please-end -->
 
 ```bash
-git clone --depth 1 --branch biotope-v0.10.0 https://github.com/biocypher/biotope.git biotope-example
-cd biotope-example
-uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python 'biotope[graph]==0.10.0'
-source .venv/bin/activate
+cp -R biotope/examples/airports my-airports
+cd my-airports
+uv sync --project graph
 ```
 
-If Node.js is unavailable, install `pyright[nodejs]` in this environment as
-shown in [installation](installation.md).
+## The data
 
-Copy the example to a temporary project and initialize it:
+The project has two kinds of data:
+
+- `data/airports/` holds three CSV tables: the airports, the airlines, and which airline has a hub at which airport.
+- `data/notes/airport-notes.md` holds the desk's notes, one section per airport. Each section states its roles in sentences such as "Hub for Delta Air Lines." and "Focus city for Alaska Airlines."
+
+The two sources disagree once. `hubs.csv` lists Alaska Airlines as a hub at SFO, and the notes call SFO a focus city for Alaska Airlines.
+
+## Read the project
+
+The agent agreed the purpose with the desk, described the data, wrote an extractor for the notes and asked how to resolve the disagreement. These files hold the result:
+
+- `.biotope/project.yaml` holds the purpose and its typical questions.
+- `data/.biotope.yaml` describes each table and column.
+- `graph/extraction/airport_notes.py` declares the record the notes yield and reads them with regular expressions. The notes are internal, so no model reads them.
+- `graph/ASSUMPTIONS.md` lists the questions the agent asked and the desk's answers.
+- `graph/alignment/airlines.py` matches the airline names in the notes to the codes in `airlines.csv`.
+- `graph/mappings/role.py` takes each role from the notes and leaves out the row of `hubs.csv` they contradict.
+
+## Extract from the notes
 
 ```bash
-example=$(mktemp -d)
-cp -R examples/typed_graph/. "$example/"
-cd "$example"
-biotope init . --no-prompt
+uv run --project graph biotope extract try airport_role_claims data/notes/airport-notes.md
 ```
 
-Initialization writes `.biotope/` and a root `.gitignore`; it runs no git command.
-The example supplies a completed `graph/` workspace, a Croissant description of its
-two CSV files written by hand in `metadata/study.jsonld`, and a `project.yaml` with
-its purpose, which its pipeline names as its intent. In a new project,
-`biotope add` describes the data and `biotope graph scaffold` creates an empty
-layout to complete.
-
-## Register and generate sources
-
-The description covers both CSV record sets. Because it is written by hand rather
-than baked from the data, `source register` registers it:
-
-```bash
-biotope source register metadata/study.jsonld --name study
-biotope source generate .biotope/datasets/study.jsonld --out graph/sources
-biotope map inspect .biotope/datasets/study.jsonld
-```
-
-The example already contains a package per record set,
-`graph/sources/study/people/` and `graph/sources/study/samples/`, so generation
-reports both as current and writes nothing except their contract revisions in
-`.biotope/contracts/`. In a new project it would scaffold each package: a
-`schema.py` to edit, a `SOURCE` registration and a placeholder loader. It never
-rewrites an existing schema, registration or loader.
-
-Read these files to follow the transformation:
-
-| File                                    | Role                                                               |
-| --------------------------------------- | ------------------------------------------------------------------ |
-| `graph/sources/study/samples/schema.py` | Declares the source fields, their types and the reviewed revision. |
-| `graph/sources/study/samples/loader.py` | Reads CSV and decodes the score as a float.                        |
-| `graph/sources/__init__.py`             | Selects every source of the inventory; excludes none.              |
-| `graph/mappings/sample.py`              | Doubles the score and constructs namespaced graph IDs.             |
-| `graph/pipelines/build_graph.py`        | Joins samples to people and records exclusions.                    |
-
-The `SOURCES`, `TOPOLOGY` and `MAPPINGS` registries select the definitions used by
-the pipeline. See the [authoring guide](mapping.md) for the full layout.
+The output lists 12 records, each with the sentence and the line it comes from. Nothing in the project changes. The agent stored the same records with `biotope extract run` in `data/extracted/airport_role_claims.jsonl`, and the graph reads them from there.
 
 ## Check and build
 
 ```bash
-biotope graph check
-biotope graph build --out graph/build/first
-biotope graph build --out graph/build/second
+uv run --project graph biotope graph check
+uv run --project graph biotope graph build
 ```
 
-Expect **three domain nodes and two domain edges**: Ada, samples s1 and s2, and
-their relations. The sample scores are **3.0 and 5.0**. Checks warn about the
-illustrative `example:` namespace.
+The build also prints BioCypher's log lines and, on the first run, warnings from the rdflib library. You can ignore both. The build writes 11 nodes and 12 edges to `graph/build/`: the six airports, the five airlines, and one edge for each role an airline has at an airport. `graph/build/run.json` lists one excluded record under the rule `hub_row_superseded_by_notes`: line 13 of `hubs.csv`, where Alaska Airlines is a hub at SFO. [Use the result](result.md) explains each file the build writes.
 
-Sample s3 has no matching person; Bea has no selected sample. Both exclusions
-appear in `run.json`. Ada's provenance includes her people row and the two
-contributing sample rows.
-
-## Review the result
-
-Inside `graph/build/first/`:
-
-- Read `run.json` for completion, scope, policies, counts, exclusions and audits.
-- Read `schema_config.yaml` for each exported label (`Sample`, `Person`, `FromPerson`)
-  with its concept ID and the concept and property descriptions.
-- Pair each `biocypher/*-header.csv` with its `*-part000.csv` to inspect exported values.
-- Follow a row's `biotope_provenance_id` into `provenance.json` for its mappings and
-  source locations.
-
-Compare `graph_digest` in both run records; it should match despite different
-output paths and timestamps. Without `--out`, `biotope graph build` writes
-`graph/build/` and replaces it on the next successful build. It refuses a
-`graph/build/` that holds other directories, such as the two builds above, so
-delete them first.
-
-To view the topology with build observations:
+## View the topology
 
 ```bash
-biotope graph metagraph --report graph/build/first/run.json
+uv run --project graph biotope graph metagraph --report graph/build/run.json
 ```
 
-Open `graph/metagraph.html` in a browser. The viewer works offline.
+Open `graph/metagraph.html` in a browser to see the node and edge types with their descriptions and counts.
 
-## Change a source contract
+## Build it with the agent
 
-No bake regenerates a description written by hand, so registering it again is how
-it changes. Change the score's declared type in `metadata/study.jsonld` from
-`sc:Float` to `sc:Integer`, register the edited description in place of the old
-one, and reconcile the sources:
+To see how an agent arrives at such a project, give it the raw data in a new folder:
 
 ```bash
-rm .biotope/datasets/study.jsonld
-biotope source register metadata/study.jsonld --name study
-biotope source generate .biotope/datasets/study.jsonld --out graph/sources
-biotope status
-biotope graph check
+mkdir -p ../my-own/data
+cp -R data/airports data/notes ../my-own/data/
 ```
 
-Generation reports `graph/sources/study/samples` as drifted and does not rewrite
-the schema; people stays current. `biotope status` marks `study` as changed. The
-check fails with `source.drift` for `study/samples`, naming the change:
+Start Claude Code in `my-own` and use the example's purpose:
 
-```text
-field samples/score: dataType "sc:Float" -> "sc:Integer"
-changed /recordSet/0/field/3/dataType: "sc:Float" -> "sc:Integer"
-```
+> Use biotope to build a knowledge graph from the files in `data/`. Purpose: our operations team looks up which airlines use which airports as hubs or focus cities. Typical questions: which airlines have a hub at JFK? Where does United have hubs? Which airports are a focus city, and for which airline? The notes are internal, so extract from them with code, not with a model.
 
-Review what the change means for the schema, the loader and the mappings. Here the
-loader keeps parsing the score as a float, so only the acknowledgement remains:
-set `__source_digest__` in `graph/sources/study/samples/schema.py` to the revision
-the finding names, then run `biotope graph check` again. It passes.
-
-In a project whose data `biotope add` describes, the same drift follows a new
-column or a changed column type in the data after `biotope add --rebake`, or a key
-in the dataset's annotation file. Descriptions and equivalent properties change no
-revision; see [project layout](project.md#source-revisions-cover-structure).
-
-The temporary project can be retained for experimentation. `graph/build/` and
-`graph/metagraph.html` are derived outputs; keep `.biotope/`, with its
-descriptions and contract history, and the authored code to reproduce a run.
+The sources leave open which of them is right about SFO and how a name in the notes matches an airline code, so expect the agent to ask. Compare its node and edge types and its exclusions with this example.

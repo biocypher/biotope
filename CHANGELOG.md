@@ -5,8 +5,8 @@
 
 ### ⚠ BREAKING CHANGES
 
-* **graph:** project validation callbacks and per-capability states are gone, so builds no longer verify scientific expectations; structural checks are not equivalent, and review-time independent reads replace them. interpretation no longer travels inside the graph; concept and property descriptions in schema_config.yaml, run.json policies and scope, and graph/ASSUMPTIONS.md replace the query context, so graph/build/ must travel with the graph. `biotope graph quality` prints its results instead of writing graph/reports/quality.json; `biotope graph metagraph` writes graph/metagraph.html by default. schemas are never re-rendered. Generated and 0.9 schemas no longer follow manifest changes; each change surfaces as source.drift for review. Authored types are not compared with Croissant dataType or nullability. new scaffolds bind fields through @ids scoped under their RecordSet; other ids produce source.unscoped_field, while an existing __field_refs__ mapping still binds them. a new package's name depends on the directories that already exist, so it can differ from a from-scratch generation. removed keywords such as SourceContract(generated=) and Pipeline(query_context=) fail with ordinary TypeErrors; run.json and definition reports are schema_version 2 (replacement and --report accept 1 and 2). See docs/migration.md for the 0.9 migration steps.
-* **graph:** builds no longer write topology.json, ontology.ttl, query_context.json, provenance.jsonl or BiotopeQueryContext rows. Provenance is reached through each object's biotope_provenance_id in provenance.json. `biotope graph build` defaults to <graph>/build and replaces the previous generated build instead of requiring a new --out directory; --out still chooses another location. Export is headless and labels drop the namespace (for example Gene rather than CvdGene), so Entity is no longer reserved.
+* **graph:** project validation callbacks and per-capability states are gone, so builds no longer verify scientific expectations; structural checks are not equivalent, and review-time independent reads replace them. interpretation no longer travels inside the graph; concept and property descriptions in schema_config.yaml, run.json policies and scope, and graph/ASSUMPTIONS.md replace the query context, so graph/build/ must travel with the graph. `biotope graph quality` prints its results instead of writing graph/reports/quality.json; `biotope graph metagraph` writes graph/metagraph.html by default. schemas are never re-rendered. Generated and 0.9 schemas no longer follow manifest changes; each change surfaces as source.drift for review. Authored types are not compared with Croissant dataType or nullability. new scaffolds bind fields through @ids scoped under their RecordSet; other ids produce source.unscoped_field, while an existing `__field_refs__` mapping still binds them. a new package's name depends on the directories that already exist, so it can differ from a from-scratch generation. removed keywords such as SourceContract(generated=) and Pipeline(query_context=) fail with ordinary TypeErrors; run.json and definition reports are schema_version 2 (replacement and --report accept 1 and 2). See docs/migration.md for the 0.9 migration steps.
+* **graph:** builds no longer write topology.json, ontology.ttl, query_context.json, provenance.jsonl or BiotopeQueryContext rows. Provenance is reached through each object's biotope_provenance_id in provenance.json. `biotope graph build` defaults to `<graph>/build` and replaces the previous generated build instead of requiring a new --out directory; --out still chooses another location. Export is headless and labels drop the namespace (for example Gene rather than CvdGene), so Entity is no longer reserved.
 
 ### Features
 
@@ -151,18 +151,3 @@
 - streamline metadata context retrieval in Croissant file creation ([28001cb](https://github.com/biocypher/biotope/commit/28001cbbffffe01abb52af87e8a2b2634bc02b0f))
 - streamline test setup and metadata handling ([4898529](https://github.com/biocypher/biotope/commit/4898529060560eab214161b1ce6dbded11dfa806))
 - use sha256 to have the same hashes in different python sessions ([0ca1a16](https://github.com/biocypher/biotope/commit/0ca1a163862449b72178fab66a4acfdeaa6bc145))
-
-## Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## \[Unreleased\]
-
-- Upcoming features and fixes
-
-## \[0.1.0\] - (1979-01-01)
-
-- First release

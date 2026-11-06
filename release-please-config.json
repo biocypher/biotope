@@ -4,7 +4,6 @@
       "release-type": "python",
       "package-name": "biotope",
       "version-file": "pyproject.toml",
-      "bump-minor-pre-major": true,
       "extra-files": [
         {
           "type": "toml",
@@ -15,7 +14,10 @@
           "type": "json",
           "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
-        }
+        },
+        {"type": "generic", "path": "README.md"},
+        {"type": "generic", "path": "docs/get-started.md"},
+        {"type": "generic", "path": "docs/tutorial.md"}
       ],
       "changelog-sections": [
         {"type": "feat", "section": "Features"},

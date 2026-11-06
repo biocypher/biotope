@@ -11,9 +11,8 @@ from typing import Any
 from biotope.croissant.ids import renamer
 from biotope.graph.discovery import discover_packages, discover_roots
 from biotope.graph.render import relative_path, render_root
-from biotope.graph.revisions import ContractStore
 from biotope.graph.sources import write_module, write_text_atomic
-from biotope.graph.targets import Target, manifest_targets
+from biotope.graph.targets import manifest_targets
 
 
 def _rewritten(text: str, revisions: dict[str, str], renamed: Callable[[str], str]) -> str:
@@ -40,12 +39,11 @@ def _rewritten(text: str, revisions: dict[str, str], renamed: Callable[[str], st
 
 def planned_ids(
     sources: Path, manifest: Path, before: dict[str, Any], after: dict[str, Any], mapping: dict[str, str]
-) -> tuple[dict[Path, str], list[Target]]:
+) -> dict[Path, str]:
     renamed = renamer(mapping)
     old = {target.identity: target for target in manifest_targets(before)}
     new = {target.identity: target for target in manifest_targets(after)}
     schemas: dict[Path, str] = {}
-    revised: list[Target] = []
     for root in discover_roots(sources):
         if root.metadata != manifest.resolve():
             continue
@@ -59,20 +57,11 @@ def planned_ids(
             if current.identity == previous.identity and current.revision == previous.revision:
                 continue
             schemas[package.schema] = _rewritten(package.schema.read_text(encoding="utf-8"), revisions, renamed)
-            revised += [current] if revisions else []
-    return schemas, revised
+    return schemas
 
 
-def write_ids(manifest: Path, schemas: dict[Path, str], revised: list[Target]) -> list[Path]:
-    written = [write_module(path, text) for path, text in schemas.items()]
-    store = ContractStore.for_manifest(manifest)
-    recorded = [store.record(target.kind, target.definition) for target in revised] if store is not None else []
-    return written + [path for path in recorded if path is not None]
-
-
-def contract_files(manifest: Path, revised: list[Target]) -> list[Path]:
-    store = ContractStore.for_manifest(manifest)
-    return [store.path(target.revision) for target in revised] if store is not None else []
+def write_ids(schemas: dict[Path, str]) -> list[Path]:
+    return [write_module(path, text) for path, text in schemas.items()]
 
 
 def package_files(sources: Path, manifest: Path) -> list[Path]:

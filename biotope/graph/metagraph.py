@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from biotope.graph.artifacts import HTML_MARKER
-from biotope.graph.reports import READABLE_REPORT_VERSIONS
+from biotope.graph.reports import REPORT_SCHEMA_VERSION
 from biotope.graph.sources import digest
 from biotope.graph.topology import Topology, concept_id
 
@@ -45,7 +45,7 @@ def describe_metagraph(
     run: dict[str, Any] | None = None
     mappings: dict[str, Any] = {}
     if report is not None:
-        if report.get("schema_version") not in READABLE_REPORT_VERSIONS:
+        if report.get("schema_version") != REPORT_SCHEMA_VERSION:
             raise ValueError(f"Unsupported report schema_version {report.get('schema_version')!r}")
         definitions: dict[str, Any] = report.get("definitions") or {}
         if definitions.get("topology_digest") != revision:

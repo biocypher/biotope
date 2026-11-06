@@ -42,6 +42,8 @@ class Schema:
         if not fields:
             raise ValueError(f"{schema.__name__} declares no fields")
         names = {item.name: item for item in fields}
+        if reserved := sorted(names.keys() & {"id", "document"}):
+            raise ValueError(f"{schema.__name__}.{reserved[0]}: id and document name every record's ID and document")
         key = tuple(cast(tuple[str, ...], getattr(schema, "__record_key__", ())))
         for name in key:
             if name not in names:

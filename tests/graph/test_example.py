@@ -48,7 +48,7 @@ def test_the_example_checks_builds_records_its_dependencies_and_reports_a_failed
     shutil.copytree(EXAMPLE / "raw", root / "raw")
     (root / "raw/people.csv").write_text('person_id,name\np1,"Ada ""A"""\np2,Bea\n')
     pyproject = root / "graph/pyproject.toml"
-    pyproject.write_text(pyproject.read_text().replace('<0.11"]', '<0.11", "rich>=13", "click>=8"]'))
+    pyproject.write_text(pyproject.read_text().replace('<2"]', '<2", "rich>=13", "click>=8"]'))
     paths = root / "graph/paths.py"
     paths.write_text(
         paths.read_text() + "\nimport json\n\nimport yaml\nfrom rich.markup import escape\n\n"
@@ -66,7 +66,7 @@ def test_the_example_checks_builds_records_its_dependencies_and_reports_a_failed
         "provenance.json",
         "biocypher",
     }
-    assert {p.name for p in root.iterdir()} == {"graph", "metadata", "raw", "project.yaml", ".biotope"}
+    assert {p.name for p in root.iterdir()} == {"graph", "metadata", "raw", ".biotope", ".gitignore"}
     assert report["definitions"]["type_check"]["filesAnalyzed"] == len(report["definitions"]["code_digests"])
     assert report["graph_objects"] == {"nodes": 3, "edges": 2} and len(report["findings"]) == 2
     assert len(report["dependencies"]["biotope"]["source_digest"]) == 64

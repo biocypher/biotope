@@ -21,7 +21,7 @@ body:
 
           * **what** you tried to achieve,
           * **how** you went about it (referring to the code sample), and
-          * **why** the current behaviour is a problem and what output you expected instead.
+          * **why** the current behavior is a problem and what output you expected instead.
     validations:
       required: false
 
