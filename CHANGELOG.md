@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/biocypher/biotope/compare/biotope-v1.0.0...biotope-v1.0.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **docs:** make the docs pages build in the combined BioCypher site ([0364f45](https://github.com/biocypher/biotope/commit/0364f45d1cdf1d5f708e566c82e76c48d7255e11))
+* **docs:** make the docs pages build in the combined BioCypher site ([f936300](https://github.com/biocypher/biotope/commit/f936300ca9b8a1d3645d5d1e87ab332440b0ce7b))
+
 ## [1.0.0](https://github.com/biocypher/biotope/compare/biotope-v0.10.0...biotope-v1.0.0) (2026-11-06)
 
 
