@@ -1,6 +1,6 @@
 {
   "name": "biotope",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations.",
   "author": {
     "name": "BioCypher Team"

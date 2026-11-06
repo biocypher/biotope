@@ -14,7 +14,7 @@ In Claude Code (or any other agent harness), add the Biotope marketplace and ins
 
 <!-- x-release-please-start-version -->
 ```text
-/plugin marketplace add biocypher/biotope#biotope-v1.0.0
+/plugin marketplace add biocypher/biotope#biotope-v1.0.1
 /plugin install biotope@biotope
 ```
 <!-- x-release-please-end -->
