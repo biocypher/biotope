@@ -31,7 +31,7 @@ documents ── project extractors ── records file (registered as a dataset
 
 Inside `biotope.graph`:
 
-- Sources: `targets.py` lists what a manifest describes. `inventory.py` plans and writes packages, `render.py` renders them, `survey.py` reads them back and reports inventory findings, `revisions.py` stores contract revisions and computes drift, and `moves.py` rewrites IDs for `biotope mv`.
+- Sources: `targets.py` lists what a manifest describes. `inventory.py` plans and writes packages, `render.py` renders them, `survey.py` reads them back and reports inventory findings, `revisions.py` formats revisions and current contracts for drift findings, and `moves.py` rewrites IDs for `biotope mv`.
 - Checks: `workspace.py` imports the workspace, `check.py` runs the definition checks and Pyright, `signatures.py` checks mapping signatures, `topology.py` checks the topology, `standardization.py` checks terms and field bindings, and `dependencies.py` compares imports with `graph/pyproject.toml`.
 - Execution and output: `runtime.py` holds `RunContext`, `build.py` runs a pipeline, `quality.py` measures the result, `provenance.py` collects evidence, `output.py` writes BioCypher or SQLite output, and `reports.py` and `artifacts.py` hold reports and build folders.
 
@@ -58,8 +58,9 @@ Tests guard each of these. Read the named tests before changing the behavior.
 
 ## The extraction runner
 
-- An extraction's run state, `.biotope/extraction/<name>.json`, records the files it matched and, per document, the checksum, schema revision and extractor of its stored records.
+- The records file's description lists under `isBasedOn` each document the extraction read, with the checksum it had, and names the run's schema revision and extractor. A document that failed has no checksum. Each stored record also carries its document's checksum, schema revision and extractor. The next run compares both with the current ones to decide what to extract again, so a document that gave no records is reused too.
+- `source generate` and `graph check` read `isBasedOn` without importing project code, so these documents get no package.
 - A document is extracted again only when its checksum, the schema revision, or the extractor's name, version or settings change, or when `--redo` names it.
 - Biotope creates the extractor once per run, and only when a document needs extraction, so a run that reuses every record needs no API key.
-- Each finished document's records go to `.biotope/progress/` at once. The records file and the run state are written only when the run completes, so an interrupted run changes neither, and the next run reuses what it finished.
+- Each finished document's records go to `.biotope/progress/` at once. The records file and its description are written only when the run completes, so an interrupted run changes neither, and the next run reuses what it finished.
 - A record's ID is its dataset's name, the document's path within the dataset and its key values. Moving a whole dataset folder therefore keeps the IDs.

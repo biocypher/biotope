@@ -26,7 +26,6 @@ def prepare(tmp_path):
         result = biotope(root, *command)
         assert result.returncode == 0, result.stdout + result.stderr
     assert {path: path.read_bytes() for path in (root / "graph/sources").rglob("*.py")} == sources
-    assert len(list((root / ".biotope/contracts").iterdir())) == 2
     return root
 
 

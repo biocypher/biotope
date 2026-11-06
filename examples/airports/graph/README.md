@@ -70,8 +70,7 @@ out.
    `push_people_csv_people` for the table `push/people.csv#people` and
    `report_html` for the document `docs/report.html`. Generation creates missing
    files only; it never rewrites a schema, registration or loader, and only
-   `biotope mv` updates the IDs in them. It records every contract revision in
-   `.biotope/contracts/`.
+   `biotope mv` updates the IDs in them.
 
 1. Select sources in `sources/__init__.py`. A source that is not used goes into
    `EXCLUDED_SOURCES` with a reason; every inventoried source is one or the other.
@@ -125,7 +124,7 @@ biotope graph build
 Move data files with `biotope mv`, which updates every ID that names them. When
 the structure changes, such as a new column, a changed type or a key in the
 annotation file, `biotope graph check` reports `source.drift` for each affected
-schema and explains the change. Review it, update the schema, then set its
+schema with its current fields. Update the schema, then set its
 `__source_digest__` to the revision the finding names. Descriptions and a file's
 changed content never cause drift.
 

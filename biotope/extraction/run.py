@@ -18,16 +18,14 @@ from biotope.extraction.contract import Document, Extraction, ExtractionError, E
 from biotope.extraction.schema import Schema
 from biotope.graph.discovery import is_placeholder
 from biotope.graph.sources import refresh_description, write_text_atomic
-from biotope.metadata import FILE_OBJECT_TYPE, dataset_dir_for_manifest, dataset_id, resolve_content_url
+from biotope.metadata import FILE_OBJECT_TYPE, dataset_dir_for_manifest, dataset_id, manifest_for, resolve_content_url
 
 
-STATES = Path(".biotope/extraction")
 PROGRESS = Path(".biotope/progress")
 RECORDS = Path("data/extracted")
-
-
-def state_path(root: Path, name: str) -> Path:
-    return root / STATES / f"{name}.json"
+BASED_ON = "isBasedOn"
+SCHEMA_REVISION = "biotope:schemaRevision"
+EXTRACTOR = "biotope:extractor"
 
 
 def records_path(root: Path, name: str) -> Path:
@@ -39,21 +37,32 @@ def progress_path(root: Path, name: str) -> Path:
 
 
 def records_files(root: Path) -> set[Path]:
-    return {records_path(root, state.stem) for state in (root / STATES).glob("*.json")}
+    return set((root / RECORDS).glob("*.jsonl"))
+
+
+def records_entry(root: Path, target: Path, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    relative = target.relative_to(root).as_posix()
+    entries = cast(list[dict[str, Any]], metadata.get("distribution", []))
+    return next(
+        (entry for entry in entries if entry.get("@type") == FILE_OBJECT_TYPE and entry.get("contentUrl") == relative),
+        None,
+    )
 
 
 def extracted_files(root: Path) -> set[str]:
-    found: set[str] = set()
-    for state in (root / STATES).glob("*.json"):
-        files = _read_json(state).get("files")
-        if isinstance(files, list):
-            found.update(str(path) for path in cast(list[object], files))
-    return found
+    return {document["contentUrl"] for path in records_files(root) for document in _read(_described(root, path))}
+
+
+def described_origin(documents: list[Outcome], schema: Schema, extractor: dict[str, Any]) -> dict[str, Any]:
+    read = [
+        {"contentUrl": outcome.path} | ({} if outcome.status == "failed" else {"sha256": outcome.sha256})
+        for outcome in sorted(documents, key=lambda outcome: outcome.path)
+    ]
+    return {BASED_ON: read, SCHEMA_REVISION: schema.revision, EXTRACTOR: extractor}
 
 
 def forget(root: Path, records_file: Path) -> None:
     if records_file.resolve() in {path.resolve() for path in records_files(root)}:
-        state_path(root, records_file.stem).unlink(missing_ok=True)
         progress_path(root, records_file.stem).unlink(missing_ok=True)
 
 
@@ -326,10 +335,10 @@ def run(
     announce: Callable[[int, int, str], None] = lambda index, total, path: None,
 ) -> Result:
     output = records_path(root, extraction.name)
-    state_file = state_path(root, extraction.name)
     progress = progress_path(root, extraction.name)
     previous = _read_records(output)
-    previous_state = cast(dict[str, Any], _read_json(state_file).get("documents", {})) if output.is_file() else {}
+    previous_state = _described_state(_described(root, output)) if output.is_file() else {}
+    previous_state.update({record["document"]: _stamp(record["provenance"]) for record in previous})
     by_document: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in previous:
         by_document[record["document"]].append(record)
@@ -338,7 +347,6 @@ def run(
         previous_state[finished["document"]] = finished["state"]
     stamp = {"schema_revision": schema.revision, "extractor": identity(extraction.extractor)}
     registered = {source.path for source in found}
-    state: dict[str, Any] = {}
     records: list[dict[str, Any]] = []
     outcomes: list[Outcome] = []
     moved: list[dict[str, str]] = []
@@ -347,8 +355,6 @@ def run(
     waiting: list[tuple[int, str]] = []
 
     def keep(path: str) -> int:
-        if path in previous_state:
-            state[path] = previous_state[path]
         kept = by_document.get(path, [])
         records.extend(kept)
         return len(kept)
@@ -368,7 +374,6 @@ def run(
             if relocated:
                 pairs = zip(by_document[origin], reused)
                 moved += [{"from": old["id"], "to": new["id"]} for old, new in pairs if old["id"] != new["id"]]
-            state[source.path] = wanted
             records += reused
             outcomes.append(
                 Outcome(
@@ -385,14 +390,13 @@ def run(
         if isinstance(extracted, BaseException):
             outcomes[position] = Outcome(path, "failed", failure(extracted), digest, keep(path))
             continue
-        state[path] = {"sha256": digest, **stamp}
-        _remember(root, progress, path, state[path], extracted)
+        _remember(root, progress, path, {"sha256": digest, **stamp}, extracted)
         records += extracted
         outcomes[position] = Outcome(path, document_status(extracted), "", digest, len(extracted))
     records.sort(key=lambda record: record["id"])
     old = {record["id"] for record in previous}
     new = {record["id"] for record in records}
-    _store(output, state_file, extraction, schema, records, state, sorted(registered))
+    _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
     progress.unlink(missing_ok=True)
     return Result(
         outcomes,
@@ -401,6 +405,31 @@ def run(
         sorted(old - new - {pair["from"] for pair in moved}),
         moved,
     )
+
+
+def _described(root: Path, records: Path) -> dict[str, Any]:
+    return records_entry(root, records, _read_json(manifest_for(records, root))) or {}
+
+
+def _read(described: dict[str, Any]) -> list[dict[str, Any]]:
+    return cast(list[dict[str, Any]], described.get(BASED_ON, []))
+
+
+def _described_state(described: dict[str, Any]) -> dict[str, Any]:
+    stamp = {"schema_revision": described.get(SCHEMA_REVISION), "extractor": described.get(EXTRACTOR)}
+    return {
+        document["contentUrl"]: {"sha256": document["sha256"], **stamp}
+        for document in _read(described)
+        if "sha256" in document
+    }
+
+
+def _stamp(provenance: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sha256": provenance["document_sha256"],
+        "schema_revision": provenance["schema_revision"],
+        "extractor": provenance["extractor"],
+    }
 
 
 def _ignored_directory(directory: Path) -> None:
@@ -451,25 +480,6 @@ def _read_records(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     return [cast(dict[str, Any], json.loads(line)) for line in path.read_text(encoding="utf-8").splitlines() if line]
-
-
-def _store(
-    output: Path,
-    state_file: Path,
-    extraction: Extraction,
-    schema: Schema,
-    records: list[dict[str, Any]],
-    state: dict[str, Any],
-    files: list[str],
-) -> None:
-    _write(output, "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
-    stored = {
-        "extraction": extraction.name,
-        "schema": schema.name,
-        "files": files,
-        "documents": dict(sorted(state.items())),
-    }
-    _write(state_file, json.dumps(stored, indent=2) + "\n")
 
 
 def _write(path: Path, text: str) -> None:

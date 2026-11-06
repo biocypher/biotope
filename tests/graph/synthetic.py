@@ -72,11 +72,6 @@ class Project:
     def sources(self) -> Path:
         return self.graph / "sources"
 
-    @property
-    def store(self) -> set[str]:
-        directory = self.root / ".biotope/contracts"
-        return {path.name for path in directory.iterdir()} if directory.is_dir() else set()
-
     def manifest(self, name, record_sets=(), distribution=()) -> Path:
         path = self.root / ".biotope/datasets" / f"{name}.jsonld"
         data = {

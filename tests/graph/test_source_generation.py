@@ -408,14 +408,14 @@ def test_a_generated_file_that_is_authored_or_symlinked_is_a_conflict(project, o
 )
 def test_a_shared_or_missing_manifest_id_is_a_conflict_that_writes_nothing(project, distribution, detail):
     manifest = project.manifest("study", [record_set("rows", "x")], distribution)
-    files, history = project.snapshot(), set(project.store)
+    files = project.snapshot()
     plan = plan_sources(manifest, project.sources)
     [conflict] = plan.conflicts
     assert detail in conflict.detail
     assert {status.identity: status.state for status in plan.statuses} == {None: "conflict", "rows": "created"}
     with pytest.raises(ValueError, match=re.escape(detail)):
         project.generate(manifest)
-    assert project.snapshot() == files and set(project.store) == history
+    assert project.snapshot() == files
 
 
 def claim_another_source(project):

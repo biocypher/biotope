@@ -9,10 +9,10 @@ from pathlib import Path
 
 from biotope.graph.contracts import Pipeline, SourceContract
 from biotope.graph.discovery import Package, Root, discover_packages, discover_roots, generated_root, is_placeholder
-from biotope.graph.inventory import PackageStatus, SourcePlan, plan_sources, unrecorded
+from biotope.graph.inventory import PackageStatus, SourcePlan, plan_sources
 from biotope.graph.render import relative_path
 from biotope.graph.reports import Finding, Location, Severity
-from biotope.graph.revisions import DRIFT_LINE_LIMIT, describe_contract, project_root, short_revision
+from biotope.graph.revisions import describe_contract, project_root, short_revision
 from biotope.graph.sources import KINDS
 from biotope.graph.targets import unscoped_fields
 
@@ -49,7 +49,7 @@ class Survey:
     def reports_drift(self, schema: Path, metadata: Path) -> bool:
         """Whether an inventory finding explains how ``schema`` drifted from ``metadata``."""
         return any(
-            status.drift is not None
+            status.drifted
             and (status.path / "schema.py").resolve() == schema.resolve()
             and plan.metadata.resolve() == metadata.resolve()
             for plan in self.plans
@@ -90,9 +90,8 @@ def _finding(
     subject: str,
     message: str,
     path: Path | None = None,
-    examples: tuple[dict[str, object], ...] = (),
 ) -> Finding:
-    return Finding(code, severity, subject, message, Location(str(path)) if path is not None else None, examples)
+    return Finding(code, severity, subject, message, Location(str(path)) if path is not None else None)
 
 
 @dataclass(frozen=True)
@@ -157,23 +156,16 @@ def _status_findings(plan: SourcePlan, status: PackageStatus, registrations: _Re
         yield _finding("inventory.stale", "error", subject, message, status.path)
     elif status.state == "orphaned":
         yield _finding("inventory.orphan", registrations.severity(status.path), subject, status.detail, status.path)
-    if status.drift is None:
+    if not status.drifted:
         return
+    [target] = [target for target in plan.targets if target.identity == status.identity]
     message = (
         f"{status.identity!r} changed since revision {short_revision(status.acknowledged)} was acknowledged "
         f"(manifest now {short_revision(status.revision)}). Review the change, update the schema, then set "
-        f"__source_digest__ to {status.revision!r}:\n" + "\n".join(status.drift.lines(DRIFT_LINE_LIMIT))
+        f"__source_digest__ to {status.revision!r}. The current contract is:\n"
+        + "\n".join(describe_contract(target.definition))
     )
-    examples = tuple(change.to_json() for change in status.drift.changes)
-    schema = status.path / "schema.py"
-    yield _finding("source.drift", registrations.severity(status.path), subject, message, schema, examples)
-    if not status.drift.available:
-        [target] = [target for target in plan.targets if target.identity == status.identity]
-        message = (
-            "the acknowledged revision is not recorded, so the change cannot be itemized; the current contract is:\n"
-            + "\n".join(describe_contract(target.definition))
-        )
-        yield _finding("source.revision_unavailable", "warning", subject, message, schema)
+    yield _finding("source.drift", registrations.severity(status.path), subject, message, status.path / "schema.py")
 
 
 def _unscoped_findings(plan: SourcePlan, registrations: _Registrations) -> Iterator[Finding]:
@@ -207,14 +199,6 @@ def _command(plan: SourcePlan) -> str:
 def _plan_findings(plan: SourcePlan, registrations: _Registrations) -> Iterator[Finding]:
     for status in plan.statuses:
         yield from _status_findings(plan, status, registrations)
-    for status in unrecorded(plan):
-        yield _finding(
-            "source.revision_unrecorded",
-            "warning",
-            f"{plan.root.name}/{status.package}",
-            f"revision {short_revision(status.revision)} is acknowledged but not recorded; run {_command(plan)}",
-            status.path / "schema.py",
-        )
     for path in plan.generated_files:
         message = f"{path.name} is missing or not in the current generated form; run {_command(plan)}"
         yield _finding("inventory.stale", "error", plan.root.name, message, path)

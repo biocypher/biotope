@@ -71,7 +71,7 @@ EXTRACTIONS: tuple[Extraction, ...] = (
 )
 ```
 
-- `name` starts with a lowercase letter and holds only lowercase letters, digits and underscores. It names the records file, `data/extracted/<name>.jsonl`, and the run state, `.biotope/extraction/<name>.json`.
+- `name` starts with a lowercase letter and holds only lowercase letters, digits and underscores. It names the records file, `data/extracted/<name>.jsonl`.
 - `files` are path patterns relative to the project root, as `pathlib` globs them. They route documents by folder or name, such as `data/pages/*.html` or `data/inbox/contract_*.pdf`. Hidden files and annotation files never match. A pattern that matches no file fails the run, and so does a matched file that no dataset describes, such as a copy `biotope add` skipped as identical to another file. Narrow the patterns to leave such copies out.
 - `parallel`, 1 by default, is how many documents the extractor gets at once, each in its own thread. Above 1, guard any library that is not thread-safe with a lock, or keep it at 1.
 
@@ -124,7 +124,7 @@ class PaperReader(Extractor):
 
 ### Stored records
 
-`biotope extract run` writes `data/extracted/<name>.jsonl`, one record per line, sorted by ID, and the run state `.biotope/extraction/<name>.json`, which records the files the extraction matched and what produced each document's records. Both are committed with the project; the `.gitignore` that `biotope init` writes keeps `data/extracted/` in git. Loaders read this shape:
+`biotope extract run` writes `data/extracted/<name>.jsonl`, one record per line, sorted by ID. It is committed with the project; the `.gitignore` that `biotope init` writes keeps `data/extracted/` in git. Loaders read this shape:
 
 ```json
 {
@@ -147,9 +147,9 @@ class PaperReader(Extractor):
 - `document`: the document's path from the project root.
 - Each value's `evidence`: the extractor's `quote` and `locator`, or `null` when it gave neither.
 
-The records file is registered as `.biotope/datasets/data/extracted/<name>.jsonl.jsonld`, with status `processed`, `prov:wasDerivedFrom` the datasets of its documents, and a RecordSet keyed by `id`. Its fields are `id`, `document` and one field per schema field, with the schema's types and descriptions, so `source generate` produces one flat record class. The quotes, locators and provenance stay in the records file for the loader's evidence. Its creator and license come from the project defaults that `biotope config set-project-metadata` sets. Its annotation file, `data/extracted/<name>.jsonl.biotope.yaml`, overrides them and holds other dataset fields, for example `biotope annotate set data/extracted/<name>.jsonl description="..."`. A folder dataset that holds the records file, as `biotope add data` holds `data/extracted/`, leaves the file out. `source generate` writes no package for a document an extraction has read, and reports a package generated for it before the run as orphaned: delete that package.
+The records file is registered as `.biotope/datasets/data/extracted/<name>.jsonl.jsonld`, with status `processed`, `prov:wasDerivedFrom` the datasets of its documents, `isBasedOn` each document the extraction read with the checksum it had, `biotope:schemaRevision` and `biotope:extractor` the schema revision and extractor of the run, and a RecordSet keyed by `id`. Its fields are `id`, `document` and one field per schema field, with the schema's types and descriptions, so `source generate` produces one flat record class. The quotes, locators and provenance stay in the records file for the loader's evidence. Its creator and license come from the project defaults that `biotope config set-project-metadata` sets. Its annotation file, `data/extracted/<name>.jsonl.biotope.yaml`, overrides them and holds other dataset fields, for example `biotope annotate set data/extracted/<name>.jsonl description="..."`. A folder dataset that holds the records file, as `biotope add data` holds `data/extracted/`, leaves the file out. `source generate` writes no package for a document an extraction has read, and reports a package generated for it before the run as orphaned: delete that package.
 
-The records file always sits at `data/extracted/<name>.jsonl`, and `biotope mv` refuses to move it. To rename an extraction, rename it, run it and remove the old records file with `biotope rm data/extracted/<old name>.jsonl`. To drop an extraction, delete it from the list and remove its records file the same way; `biotope rm` also removes its run state, so its documents get packages again.
+The records file always sits at `data/extracted/<name>.jsonl`, and `biotope mv` refuses to move it. To rename an extraction, rename it, run it and remove the old records file with `biotope rm data/extracted/<old name>.jsonl`. To drop an extraction, delete it from the list and remove its records file the same way; `biotope rm` also removes its description, so its documents get packages again.
 
 ### Reuse and the report
 

@@ -78,12 +78,16 @@ def test_run_stores_every_listed_extraction_with_its_evidence_and_registers_it(s
     assert described_fields(registered)["profile.jsonl#profile/name"] == (
         "The researcher's full name, without academic titles."
     )
-    assert json.loads((study.root / ".biotope/extraction/profile.json").read_text())["files"] == [LIND, OKAFOR]
-    tracked = [
-        "data/extracted/profile.jsonl",
-        ".biotope/datasets/data/extracted/profile.jsonl.jsonld",
-        ".biotope/extraction/profile.json",
+    stored = registered["distribution"][0]
+    assert stored["isBasedOn"] == [
+        {"contentUrl": LIND, "sha256": profile["documents"][0]["sha256"]},
+        {"contentUrl": OKAFOR, "sha256": profile["documents"][1]["sha256"]},
     ]
+    assert (stored["biotope:schemaRevision"], stored["biotope:extractor"]) == (
+        profile["schema"]["revision"],
+        lind["provenance"]["extractor"],
+    )
+    tracked = ["data/extracted/profile.jsonl", ".biotope/datasets/data/extracted/profile.jsonl.jsonld"]
     assert subprocess.run(["git", "check-ignore", *tracked], cwd=study.root).returncode == 1
 
 
@@ -243,6 +247,7 @@ def test_failed_empty_and_removed_documents(study):
     assert statuses(report) == {LIND: "extracted", OKAFOR: "failed"}
     assert extraction(report)["documents"][1]["reason"] == "the page is marked to fail"
     assert [record["id"] for record in study.records("profile")] == ["pages/lind.html"]
+    assert manifest(study)["distribution"][0]["isBasedOn"][1] == {"contentUrl": OKAFOR}
 
     study.edit(OKAFOR, "<main><!-- fail -->", "<main>")
     study.edit(OKAFOR, "<h1>Chidi Okafor</h1>", "")
@@ -266,6 +271,9 @@ def test_failed_empty_and_removed_documents(study):
     assert result.exit_code == 0, result.output
     assert extraction(report)["disappeared"] == ["pages/lind.html"] and statuses(report) == {OKAFOR: "reused"}
     assert study.records("profile") == []
+    study.edit(READERS, VERSION, VERSION.replace('"1"', '"2"'))
+    result, report = study.extract("run", "profile")
+    assert result.exit_code == 0 and statuses(report) == {OKAFOR: "empty"}
 
 
 def test_an_unreadable_document_fails_and_keeps_its_records(study):
@@ -382,7 +390,6 @@ def test_generation_follows_the_documents_an_extraction_has_read(study):
     (study.root / LISTED).write_text("".join(line for line in listed if 'name="profile"' not in line))
     removed = study.run("rm", "-f", "data/extracted/profile.jsonl")
     assert removed.exit_code == 0, removed.output
-    assert not (study.root / ".biotope/extraction/profile.json").exists()
     assert generated()[0] == ["lind_html", "okafor_html"]
 
 
@@ -542,7 +549,7 @@ def test_parallel_extraction_changes_neither_output_nor_report(study):
     outcomes = []
     for old, new in (("parallel=2", "parallel=1"), ("parallel=1", "parallel=3")):
         study.edit(LISTED, old, new)
-        for stored in ("data/extracted", ".biotope/extraction", ".biotope/datasets/data/extracted"):
+        for stored in ("data/extracted", ".biotope/datasets/data/extracted"):
             shutil.rmtree(study.root / stored, ignore_errors=True)
         result, report = study.extract("run", "profile")
         assert result.exit_code == 0, result.output

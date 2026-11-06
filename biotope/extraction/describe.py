@@ -8,7 +8,7 @@ from biotope.extraction.schema import Schema
 CROISSANT_TYPES = {"string": "sc:Text", "integer": "sc:Integer", "number": "sc:Float", "boolean": "sc:Boolean"}
 
 
-def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str) -> None:
+def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str, origin: dict[str, Any]) -> None:
     def column(
         field: str, path: str, description: str, data_type: str, *, nullable: bool = False, many: bool = False
     ) -> dict[str, Any]:
@@ -54,3 +54,5 @@ def describe(metadata: dict[str, Any], schema: Schema, file_id: str, name: str) 
     record_set["description"] = f"{schema.name} records extracted from documents. {schema.description}".strip()
     record_set["key"] = {"@id": f"{name}/id"}
     record_set["field"] = fields
+    entries = cast(list[dict[str, Any]], metadata["distribution"])
+    next(entry for entry in entries if entry.get("@id") == file_id).update(origin)

@@ -241,7 +241,8 @@ def test_a_hand_edit_of_the_annotation_file_reaches_graph_check_and_build(projec
     annotation.write_text(annotation.read_text() + "    key: person_id\n")
     checked = invoke("graph", "check", "--json")
     assert checked.exit_code != 0
-    assert [finding["code"] for finding in findings(checked) if finding["severity"] == "error"] == ["source.drift"]
+    [drift] = [finding for finding in findings(checked) if finding["severity"] == "error"]
+    assert drift["code"] == "source.drift" and f'key: {{"@id": "{PEOPLE}/person_id"}}' in drift["message"]
     assert table(described(project), PEOPLE)["key"] == {"@id": f"{PEOPLE}/person_id"}
     assert invoke("graph", "build").exit_code != 0
 

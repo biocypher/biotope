@@ -57,10 +57,22 @@
       "contentSize": "10208",
       "contentUrl": "data/extracted/airport_role_claims.jsonl",
       "encodingFormat": "application/jsonl",
-      "sha256": "af0f7fff97a27d85ebd182a520196180d6b78bb95002dca7bdff287b86d2dabe"
+      "sha256": "af0f7fff97a27d85ebd182a520196180d6b78bb95002dca7bdff287b86d2dabe",
+      "isBasedOn": [
+        {
+          "contentUrl": "data/notes/airport-notes.md",
+          "sha256": "ba573ff50eea8676271ee9705a31b8fd6c1409504cc69647e9e975605676257e"
+        }
+      ],
+      "biotope:schemaRevision": "5c80a8d703fedf4e9cb98ad1546b5be4ac7c663d967cb4e5e7f9dc7f6304afb1",
+      "biotope:extractor": {
+        "name": "airport-notes-reader",
+        "version": "1",
+        "settings": {}
+      }
     }
   ],
-  "dateCreated": "2026-11-05T15:34:10.170857+00:00",
+  "dateCreated": "2026-11-06T10:20:25.588240+00:00",
   "conformsTo": "http://mlcommons.org/croissant/1.1",
   "creator": {
     "@type": "Person",

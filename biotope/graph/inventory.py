@@ -34,7 +34,7 @@ from biotope.graph.render import (
     render_root,
     render_schema,
 )
-from biotope.graph.revisions import ContractStore, Drift, explain_drift, project_root
+from biotope.graph.revisions import project_root
 from biotope.graph.sources import (
     KINDS,
     RESERVED_NAMES,
@@ -68,7 +68,7 @@ class PackageStatus:
     detail: str = ""
     acknowledged: str | None = None
     revision: str | None = None
-    drift: Drift | None = None
+    drifted: bool = False
 
 
 def _conflict(path: Path, detail: str, package: str = "", identity: str | None = None) -> PackageStatus:
@@ -82,7 +82,6 @@ class SourcePlan:
     metadata: Path
     sources: Path
     root: Path
-    store: ContractStore | None
     targets: tuple[Target, ...]
     packages: tuple[Package, ...] = ()
     statuses: tuple[PackageStatus, ...] = ()
@@ -325,7 +324,7 @@ def _reconcile_existing(plan: SourcePlan, target: Target, package: Package) -> t
         _created(missing) if missing else "",
         declaration.revision,
         target.revision,
-        explain_drift(plan.store, declaration.revision, target.definition) if drifted else None,
+        drifted,
     )
     return status, missing
 
@@ -458,7 +457,7 @@ def plan_sources(metadata: Path, output: Path, package: str | None = None) -> So
     every = manifest_targets(data)
     targets = _unextracted(metadata, every)
     extracted = {target.identity for target in every} - {target.identity for target in targets}
-    plan = SourcePlan(metadata, output, root, ContractStore.for_manifest(metadata), targets, packages)
+    plan = SourcePlan(metadata, output, root, targets, packages)
     contested_root = _root_conflicts(metadata, output, root)
     if contested_root:
         return replace(plan, statuses=tuple(contested_root))
@@ -562,29 +561,8 @@ def apply_plan(plan: SourcePlan) -> tuple[Path, ...]:
     return tuple(written)
 
 
-def record_revisions(plan: SourcePlan) -> tuple[Path, ...]:
-    """Snapshot every target's current revision into the project's contract store."""
-    if plan.store is None:
-        return ()
-    written = (plan.store.record(target.kind, target.definition) for target in plan.targets)
-    return tuple(path for path in written if path is not None)
-
-
-def unrecorded(plan: SourcePlan) -> list[PackageStatus]:
-    """Packages whose acknowledged revision is current but was never snapshotted."""
-    if plan.store is None:
-        return []
-    store = plan.store
-    return [
-        status
-        for status in plan.statuses
-        if status.state == "current" and status.revision and store.get(status.revision) is None
-    ]
-
-
 def generate_source_packages(metadata: Path, output: Path, package: str | None = None) -> SourcePlan:
-    """Reconcile one manifest and write the result: refuse on conflict, create what is missing, record revisions."""
+    """Reconcile one manifest and write the result: refuse on conflict, create what is missing."""
     plan = plan_sources(metadata, output, package)
     apply_plan(plan)
-    record_revisions(plan)
     return plan

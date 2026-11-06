@@ -17,7 +17,6 @@ from biotope.extraction.run import records_files
 from biotope.graph.inventory import declared_files
 from biotope.graph.moves import (
     carry_description,
-    contract_files,
     existing_folder,
     kept,
     package_files,
@@ -26,7 +25,6 @@ from biotope.graph.moves import (
     write_ids,
 )
 from biotope.graph.sources import description_text, write_text_atomic
-from biotope.graph.targets import Target
 from biotope.metadata import (
     FILE_OBJECT_TYPE,
     dataset_id,
@@ -42,7 +40,7 @@ from biotope.utils import find_biotope_root, is_file_tracked, warn_ignored
 @click.option("--force", "-f", is_flag=True, help="Overwrite destination if it exists")
 @click.option("--recursive", "-r", is_flag=True, help="Move directories recursively")
 def mv(source: Path, destination: Path, force: bool, recursive: bool) -> None:
-    """Move a tracked file or directory and update every description, source package and state that names it."""
+    """Move a tracked file or directory and update every description and source package that names it."""
     console = Console()
     biotope_root = find_biotope_root()
     if not biotope_root:
@@ -127,7 +125,6 @@ class _Plan:
     annotation_target: Path | None
     annotation_text: str | None
     schemas: dict[Path, str]
-    revised: list[Target]
 
 
 def _planned(source: Path, destination: Path, moves: dict[Path, Path], biotope_root: Path) -> list[_Plan]:
@@ -253,10 +250,10 @@ def _plan(
             item["name"] = new_name
     text = annotation.renamed(found, renamer(mapping)) if found is not None else None
     after = annotation.current(metadata, annotation.parsed(found, text) if found and text else annotation.read(found))
-    schemas, revised = planned_ids(biotope_root / "graph/sources", manifest, before, after, mapping)
+    schemas = planned_ids(biotope_root / "graph/sources", manifest, before, after, mapping)
     moved_annotation = _follows(found, source, destination) if found is not None else None
     target = manifest if staying else manifest_for(carried, biotope_root)
-    return _Plan(manifest, target, description_text(after), found, moved_annotation, text, schemas, revised)
+    return _Plan(manifest, target, description_text(after), found, moved_annotation, text, schemas)
 
 
 def _normal(path: Path) -> Path:
@@ -332,7 +329,6 @@ def _apply(
     paths = {
         *(path for plan in plans for path in (plan.manifest, plan.target, plan.annotation) if path is not None),
         *(path for plan in plans for path in package_files(biotope_root / "graph/sources", plan.manifest)),
-        *(path for plan in plans for path in contract_files(plan.manifest, plan.revised)),
         *(path for pair in annotations.items() for path in pair),
     }
     written: list[Path] = []
@@ -344,7 +340,7 @@ def _apply(
                     write_text_atomic(plan.annotation, plan.annotation_text)
                     written.append(plan.annotation_target or plan.annotation)
                 write_text_atomic(plan.manifest, plan.text)
-                written += [plan.target, *write_ids(plan.manifest, plan.schemas, plan.revised)]
+                written += [plan.target, *write_ids(plan.schemas)]
                 if plan.target != plan.manifest:
                     written += carry_description(biotope_root, plan.manifest, plan.target)
             for old, new in annotations.items():

@@ -6,7 +6,7 @@ Biotope keeps its state in plain files in your project folder. This page says wh
 
 Commit these files and folders with the rest of the project:
 
-- `.biotope/`: the project's purpose, the creator and license that apply to every dataset, the [manifests](get-started.md#concepts), the source revisions and the extraction state.
+- `.biotope/`: the project's purpose, the creator and license that apply to every dataset, and the [manifests](get-started.md#concepts).
 - `graph/`: the [graph workspace](get-started.md#concepts), with the project's code, `graph/pyproject.toml` and `graph/uv.lock`. Git ignores the build in `graph/build/` and the viewer `graph/metagraph.html`.
 - `data/extracted/`: the records extracted from [documents](extraction.md).
 - The annotation file next to each dataset.

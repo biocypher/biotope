@@ -1,10 +1,7 @@
-import json
 import re
 import shutil
 
 from synthetic import record_set
-
-from biotope.graph.inventory import plan_sources
 
 
 def generate(project, manifest, *flags):
@@ -16,35 +13,28 @@ def test_generate_refuses_a_conflict_and_names_what_it_would_have_created(projec
     project.generate(manifest)
     shutil.copytree(project.sources / "study/rows", project.sources / "study/copy")
     project.edit(manifest, lambda data: data["recordSet"].append(record_set("more", "y")))
-    files, history = project.snapshot(), set(project.store)
+    files = project.snapshot()
     for flags in ([], ["--check"]):
         result = generate(project, manifest, *flags)
         assert result.exit_code != 0 and "nothing was written" in result.output
         assert "Would create graph/sources/study/more" in result.stdout and "Created" not in result.stdout
-        assert project.snapshot() == files and set(project.store) == history
+        assert project.snapshot() == files
 
 
-def test_generate_check_only_warns_about_drift_orphans_and_missing_history(project, tmp_path):
+def test_generate_check_only_warns_about_drift_and_orphans(project):
     manifest = project.implemented_study(record_set("rows", "x"), record_set("drifting", "y"), record_set("gone", "z"))
-    [rows] = [status for status in plan_sources(manifest, project.sources).statuses if status.package == "rows"]
-    (project.root / f".biotope/contracts/{rows.revision}.json").unlink()
 
     def change(data):
         data["recordSet"].pop()
         data["recordSet"][1]["field"][0]["dataType"] = "sc:Integer"
 
     project.edit(manifest, change)
-    files, history = project.snapshot(), set(project.store)
+    files = project.snapshot()
     checked = generate(project, manifest, "--check")
     assert checked.exit_code == 0, checked.output
     assert re.search(r"^Drift +graph/sources/study/drifting$", checked.output, re.MULTILINE)
     assert re.search(r"^Orphaned +graph/sources/study/gone$", checked.output, re.MULTILINE)
-    assert "is acknowledged but not recorded" in checked.output
-    assert project.snapshot() == files and set(project.store) == history
-    loose = tmp_path / "loose.jsonld"
-    loose.write_text(json.dumps({"recordSet": [record_set("r", "x")], "distribution": []}))
-    unmanaged = project.run("source", "generate", str(loose), "--out", str(tmp_path / "sources"))
-    assert unmanaged.exit_code == 0 and "no contract history is kept" in unmanaged.output
+    assert project.snapshot() == files
 
 
 def test_generate_reports_nothing_as_created_when_writing_fails(project, monkeypatch):
