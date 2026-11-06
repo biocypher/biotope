@@ -1,0 +1,1970 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Biotope is a framework that helps AI agents build and maintain purpose-driven knowledge representations.">
+      
+      
+        <meta name="author" content="BioCypher Team">
+      
+      
+        <link rel="canonical" href="https://biocypher.github.io/biotope/1.0.0/changelog/">
+      
+      
+        <link rel="prev" href="../cli/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Changelog - Biotope</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Biotope" class="md-header__button md-logo" aria-label="Biotope" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Biotope
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="light-blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="blue-grey" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/biocypher/biotope" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    biocypher/biotope
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Biotope" class="md-nav__button md-logo" aria-label="Biotope" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Biotope
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/biocypher/biotope" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    biocypher/biotope
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../get-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Working with the agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../result/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Use the result
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../extraction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#100-2026-11-06" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.0.0 (2026-11-06)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.0.0 (2026-11-06)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠ BREAKING CHANGES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refactoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Miscellaneous
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0100-2026-09-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.10.0 (2026-09-28)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.10.0 (2026-09-28)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠ BREAKING CHANGES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-system_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactoring_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refactoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#091-2026-09-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.9.1 (2026-09-15)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.9.1 (2026-09-15)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#090-2026-09-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.9.0 (2026-09-15)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.9.0 (2026-09-15)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#080-2026-06-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.8.0 (2026-06-29)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.8.0 (2026-06-29)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#071-2026-05-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.1 (2026-05-28)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.1 (2026-05-28)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentation_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-05-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 (2026-05-25)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.0 (2026-05-25)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#061-2026-05-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.1 (2026-05-25)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.1 (2026-05-25)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentation_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-05-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 (2026-05-19)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.0 (2026-05-19)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-system_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactoring_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refactoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#100-2026-11-06" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.0.0 (2026-11-06)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.0.0 (2026-11-06)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠ BREAKING CHANGES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refactoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#miscellaneous" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Miscellaneous
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0100-2026-09-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.10.0 (2026-09-28)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.10.0 (2026-09-28)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠ BREAKING CHANGES
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-system_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactoring_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refactoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#091-2026-09-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.9.1 (2026-09-15)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.9.1 (2026-09-15)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#090-2026-09-15" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.9.0 (2026-09-15)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.9.0 (2026-09-15)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#080-2026-06-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.8.0 (2026-06-29)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.8.0 (2026-06-29)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#071-2026-05-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.1 (2026-05-28)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.1 (2026-05-28)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentation_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-05-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 (2026-05-25)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.0 (2026-05-25)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#061-2026-05-25" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.1 (2026-05-25)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.1 (2026-05-25)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentation_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-05-19" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 (2026-05-19)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.0 (2026-05-19)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#features_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-system_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build System
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#refactoring_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Refactoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<h2 id="100-2026-11-06"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.10.0...biotope-v1.0.0">1.0.0</a> (2026-11-06)<a class="headerlink" href="#100-2026-11-06" title="Permanent link">&para;</a></h2>
+<h3 id="breaking-changes">⚠ BREAKING CHANGES<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>remove the contract store and the extraction run state</li>
+<li><strong>field_refs</strong>, the 0.9 root header and record-set comment, version 1 run reports and the sc:FileObject check are removed.</li>
+<li>annotate set --table refuses the readable form of a table ID.</li>
+<li>refuse overlapping datasets and name what add and extract leave out</li>
+<li>let projects write their extractors and list their extractions</li>
+<li>let project.yaml hold one purpose text</li>
+<li>remove the requirement binding and its check</li>
+<li>stop writing config keys nothing reads</li>
+<li>let the agent set project metadata with options</li>
+<li>remove annotation validation</li>
+<li>biotope mv no longer moves data to another filesystem.</li>
+<li>key a records file's extraction state by its whole name</li>
+<li>read project.yaml only from .biotope</li>
+<li>drop add --force, which did what --rebake does</li>
+<li>name each manifest after its data's whole path</li>
+<li>one annotation file per dataset holds what people write about it</li>
+<li>biotope mv carries a moved file's IDs into its source packages</li>
+<li>give files and tables IDs from their paths in the dataset</li>
+<li>biotope writes only in its own places and never to git</li>
+<li>a source revision covers structure only</li>
+<li>retire Pipeline.dependencies; run.json records declared distributions</li>
+<li>graph check enforces the topology layout</li>
+</ul>
+<h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h3>
+<ul>
+<li>a source revision covers structure only (<a href="https://github.com/biocypher/biotope/commit/b7a398bbec8aaff81748edc4a2b2f74f0fbe2d2c">b7a398b</a>)</li>
+<li>biotope mv carries a moved file's IDs into its source packages (<a href="https://github.com/biocypher/biotope/commit/396bbc4786c9680aef9b7d6a49693981fbeaa471">396bbc4</a>)</li>
+<li>biotope writes only in its own places and never to git (<a href="https://github.com/biocypher/biotope/commit/79150fb15c3af27b498ea376c9d415c1efc931d4">79150fb</a>)</li>
+<li>extract records from local documents under a reviewed schema (<a href="https://github.com/biocypher/biotope/commit/2c0cd49e3be71cbe0aaa13cc74a4c059d6cf0265">2c0cd49</a>)</li>
+<li>give files and tables IDs from their paths in the dataset (<a href="https://github.com/biocypher/biotope/commit/a3587116a46a9ad7c5ba32dfd80094b3a706a66b">a358711</a>)</li>
+<li>graph check enforces the topology layout (<a href="https://github.com/biocypher/biotope/commit/21a35ad56bb2d6c38beb395c7b7278c5d9ca359a">21a35ad</a>)</li>
+<li>graph check reports topology properties the export reserves (<a href="https://github.com/biocypher/biotope/commit/fa18e5b4c8b2b076bdb2c78e036660376b4f174e">fa18e5b</a>)</li>
+<li><strong>graph:</strong> export the graph as one SQLite database (<a href="https://github.com/biocypher/biotope/commit/e828f793005f2fe04241a726cd51c02eb7ead0a5">e828f79</a>)</li>
+<li><strong>graph:</strong> export the graph as one SQLite database (<a href="https://github.com/biocypher/biotope/commit/b5947bb5bb8af3066eed80dd4190ee79b88b1b5d">b5947bb</a>)</li>
+<li>let project.yaml hold one purpose text (<a href="https://github.com/biocypher/biotope/commit/9dea646b30ac1b7e4e639a1737bb142acef40c17">9dea646</a>)</li>
+<li>let projects write their extractors and list their extractions (<a href="https://github.com/biocypher/biotope/commit/fc9998eff2d2bd2371f98c0a6247ef096fbbc0a8">fc9998e</a>)</li>
+<li>let the agent set project metadata with options (<a href="https://github.com/biocypher/biotope/commit/06bdc73694ea625258b5d8c6687d2ec2c131a496">06bdc73</a>)</li>
+<li>make extraction reviewable and recoverable after the AC-12 trial (<a href="https://github.com/biocypher/biotope/commit/be70e891f6a8004a0fd6120daaf1f0cfc00c816d">be70e89</a>)</li>
+<li>name the datasets and table IDs a refusal means, and drop redone (<a href="https://github.com/biocypher/biotope/commit/bdc49524b9ddbead82bfe421acdcf3b83a352429">bdc4952</a>)</li>
+<li>one annotation file per dataset holds what people write about it (<a href="https://github.com/biocypher/biotope/commit/7c5d00878724e751a8b76a043e072c0632369d43">7c5d008</a>)</li>
+<li>queue, mark and map inspect read descriptions with their annotation files (<a href="https://github.com/biocypher/biotope/commit/bce8fc218e99b57622d8db83d97cb1414113cf05">bce8fc2</a>)</li>
+<li>refuse overlapping datasets and name what add and extract leave out (<a href="https://github.com/biocypher/biotope/commit/c2aa740f3cd030deb593aef62dda6dab09d019c6">c2aa740</a>)</li>
+<li>remove annotation validation (<a href="https://github.com/biocypher/biotope/commit/6957b7524dc367a734306d2611871d0590777eb0">6957b75</a>)</li>
+<li>remove the requirement binding and its check (<a href="https://github.com/biocypher/biotope/commit/5d8be478f2fc3cce575aab5c480c41be9f20308d">5d8be47</a>)</li>
+<li>retire Pipeline.dependencies; run.json records declared distributions (<a href="https://github.com/biocypher/biotope/commit/1dab7d5685180c81d404432b8bd048eca697ff10">1dab7d5</a>)</li>
+<li>scaffold an extraction template marked as a placeholder (<a href="https://github.com/biocypher/biotope/commit/1cabbf7ece19e5c6957e90806b2b77b71691df6c">1cabbf7</a>)</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>a table read from a file set gets a loader that reads no single path (<a href="https://github.com/biocypher/biotope/commit/f7c7e2a5f73fd5c1a40288af463cf80c9d084f83">f7c7e2a</a>)</li>
+<li>accept a table's ID without percent-encoding in annotate set --table (<a href="https://github.com/biocypher/biotope/commit/551539911026853f1a37dab71f8579cf37521fa0">5515399</a>)</li>
+<li>an annotation file keeps its quotes, line width and indentation when biotope writes into it (<a href="https://github.com/biocypher/biotope/commit/b351cbdb4e54c1184a255f97cd68f3fe22980065">b351cbd</a>)</li>
+<li>annotate names a new file by its path, not its content hash (<a href="https://github.com/biocypher/biotope/commit/e0a9d877b0e7d17d9c40d34ec1f5ad7405453b03">e0a9d87</a>)</li>
+<li>answer the architect and Codex reviews of extraction (<a href="https://github.com/biocypher/biotope/commit/709872ca3df2d536f21f9e5773e6b379bfd30dcb">709872c</a>)</li>
+<li>apply an annotation that names a column with a number (<a href="https://github.com/biocypher/biotope/commit/565f2a97686cdfe41027f7f2760a0d58f68344e3">565f2a9</a>)</li>
+<li>check a move's new IDs for collisions before mv moves anything (<a href="https://github.com/biocypher/biotope/commit/20dbae1ab663d4dfc21b074e77c9723ce8cce727">20dbae1</a>)</li>
+<li>check the annotation file before add takes over a description, and undo a failed takeover (<a href="https://github.com/biocypher/biotope/commit/11ddee4582dabea5fcb0ad13d72b08ac94bffb30">11ddee4</a>)</li>
+<li>close the second AC-12 run's extraction faults and extract in parallel (<a href="https://github.com/biocypher/biotope/commit/8748423734315fb00cc36900d305413c86eaa3b7">8748423</a>)</li>
+<li>commit extraction output only when a run completes, and realign evidence after a conversion change (<a href="https://github.com/biocypher/biotope/commit/4e55b76e0ea2508fad64a0a8ffefcaf9ccca95ef">4e55b76</a>)</li>
+<li>create the description's folder when add takes over a moved file's description (<a href="https://github.com/biocypher/biotope/commit/65b56457a419f2a3d461fec4b9f263519c896af4">65b5645</a>)</li>
+<li>describe an empty JSON object as a file, not a table without columns (<a href="https://github.com/biocypher/biotope/commit/687f7dd9d27f486704ae3ea5221dc31560ad58a7">687f7dd</a>)</li>
+<li>describe an extractor setting only when all stored records agree on its type (<a href="https://github.com/biocypher/biotope/commit/0bf1b32f570cf94d03029c923bda5ac603eeeda3">0bf1b32</a>)</li>
+<li>fail the check after a single file moves outside biotope under its own name (<a href="https://github.com/biocypher/biotope/commit/e9c31315a0dca3f947e2feac5abd2d136696b14b">e9c3131</a>)</li>
+<li>find the modules of distributions without top_level.txt on Python 3.10 (<a href="https://github.com/biocypher/biotope/commit/f93b7a54bbbe57b9e1ae0d3f9fb0a1913d98241b">f93b7a5</a>)</li>
+<li>flag records answered from memory and runs on an untried schema (<a href="https://github.com/biocypher/biotope/commit/8ee4f3ef7c30db16265d917dc21d2a93200f13e3">8ee4f3e</a>)</li>
+<li>flag running-head evidence and store each document as it finishes (<a href="https://github.com/biocypher/biotope/commit/942ce7675a860f49d148f8aa92e9e5c4a4fc9618">942ce76</a>)</li>
+<li>generate a renamed description into the root that already holds it (<a href="https://github.com/biocypher/biotope/commit/aa64128ce931951997a9a0a2a8d3d8cde2b2f078">aa64128</a>)</li>
+<li><strong>graph:</strong> fit SQLite export to node columns and case-insensitive names (<a href="https://github.com/biocypher/biotope/commit/6e9956ada4f0048e254e18bfd18aa72b4f9852fd">6e9956a</a>)</li>
+<li>ignore the folders a graph build stages in (<a href="https://github.com/biocypher/biotope/commit/11d4f3e5344aed044336db464d5b9ee1e673d10b">11d4f3e</a>)</li>
+<li>ignore the metagraph page and staging folders in the example graph (<a href="https://github.com/biocypher/biotope/commit/f11250b21d1ecb4146d3d06e001dab7c100ef7d8">f11250b</a>)</li>
+<li>keep a moved file's checksum, date and size in its description (<a href="https://github.com/biocypher/biotope/commit/a719c3fcef6b7b727d62707f6e392790f8bfbe04">a719c3f</a>)</li>
+<li>keep a single file's move history through the next rebake (<a href="https://github.com/biocypher/biotope/commit/674d0ac4680d68fb06c759b5dc2c57b2877f7e64">674d0ac</a>)</li>
+<li>keep a single file's original path through every takeover (<a href="https://github.com/biocypher/biotope/commit/dcee07077eb2d43e8e1f1d71336a766ecff09d5e">dcee070</a>)</li>
+<li>keep a workbook's sheet name when mv renames the workbook (<a href="https://github.com/biocypher/biotope/commit/9211090e181534267d5a489d7ae0cafd44260432">9211090</a>)</li>
+<li>keep every earlier ID of a file moved outside biotope again (<a href="https://github.com/biocypher/biotope/commit/332a8cd66cf9296f4696a969a83be57592a85115">332a8cd</a>)</li>
+<li>keep extracted records out of a folder dataset that holds them (<a href="https://github.com/biocypher/biotope/commit/31c771b1e15ccd439b4d40c714ba79f1bfb9dff9">31c771b</a>)</li>
+<li>keep the lineage and status people give through a rebake (<a href="https://github.com/biocypher/biotope/commit/517b3f5e24f41fd5121796e605d6a4902b7d4ec1">517b3f5</a>)</li>
+<li>keep the name of a table inside a file when the file gains a second table (<a href="https://github.com/biocypher/biotope/commit/f872412f77bf0a606e93551b7b6e137d64a8825d">f872412</a>)</li>
+<li>key a records file's extraction state by its whole name (<a href="https://github.com/biocypher/biotope/commit/fd872b111d712a28a5dc4646b0e72563aa011bb8">fd872b1</a>)</li>
+<li>leave out exactly the copies and records a bake skips (<a href="https://github.com/biocypher/biotope/commit/6ec9231693d7ad3ccf126b5714d73f76dcdc1b03">6ec9231</a>)</li>
+<li>let mv move a package's revision only when it was current before the move (<a href="https://github.com/biocypher/biotope/commit/cb1ac485d9f6d3c32e2c3de6cf2c3cc80728f4a3">cb1ac48</a>)</li>
+<li>let mv put extraction records into a folder dataset's folder (<a href="https://github.com/biocypher/biotope/commit/17c82eccdea6f17db4cbd58508f2be9a0cf95361">17c82ec</a>)</li>
+<li>let the annotation file rename one of two file sets that share a name (<a href="https://github.com/biocypher/biotope/commit/f5adec4f07bd8236806ddd5b54b482e2b35f1550">f5adec4</a>)</li>
+<li>load extracted records through generated sources (<a href="https://github.com/biocypher/biotope/commit/bc4a62af21bcb68c1209e6b26d928250e3f75019">bc4a62a</a>)</li>
+<li>load extracted records through generated sources (<a href="https://github.com/biocypher/biotope/commit/382670cfce0804c3a7f8a14233aeebaa0d4a85f8">382670c</a>), closes <a href="https://github.com/biocypher/biotope/issues/59">#59</a></li>
+<li>make extraction fail loudly on empty patterns and leftover state (<a href="https://github.com/biocypher/biotope/commit/71b3be2259a26f861a8802f2a6b6cbfb26beaf04">71b3be2</a>)</li>
+<li>make mv's advice for a move into another dataset keep the data (<a href="https://github.com/biocypher/biotope/commit/61a2c7cb7f2306f124a06b2dad9b0eb6a5ee678c">61a2c7c</a>)</li>
+<li>move the data last in mv, so a failed mv never loses the file it would replace (<a href="https://github.com/biocypher/biotope/commit/0ba31a7b232b2b1b8a075103d9fcd9c554afea47">0ba31a7</a>)</li>
+<li>mv writes a description as UTF-8 and the ID check skips entries without one (<a href="https://github.com/biocypher/biotope/commit/b4730e459bf4fdeebd9fc803a0884d8e0f35a1f4">b4730e4</a>)</li>
+<li>name a package for deletion only while its loader is a placeholder (<a href="https://github.com/biocypher/biotope/commit/68d4ca3a25e8739ba1916c5c218bbe7db42c19c8">68d4ca3</a>)</li>
+<li>name a records file as the topology layout names the class (<a href="https://github.com/biocypher/biotope/commit/626166b97aec43e8eb99e85f98a33116dc951fae">626166b</a>)</li>
+<li>name each manifest after its data's whole path (<a href="https://github.com/biocypher/biotope/commit/a784bd94d20f0342db545fa270305cd548f86758">a784bd9</a>)</li>
+<li>name graph check in the next steps mv prints (<a href="https://github.com/biocypher/biotope/commit/2dfdfa55363287db852ed559133d4fa95761d87d">2dfdfa5</a>)</li>
+<li>name packages and record classes after the decoded path (<a href="https://github.com/biocypher/biotope/commit/eb3cff9752c1784dba57407b9ffb935585b85825">eb3cff9</a>)</li>
+<li>name the old and new ID after a single file moves outside biotope (<a href="https://github.com/biocypher/biotope/commit/fbefc42cd4e7d92af6197ea8e056ce808ccf9737">fbefc42</a>)</li>
+<li>name the package to delete when a file moved outside biotope (<a href="https://github.com/biocypher/biotope/commit/fa7ffa99fbc5de39fbc9d38e157daded1a639d80">fa7ffa9</a>)</li>
+<li>never leave a described file out of a rebake as an identical copy (<a href="https://github.com/biocypher/biotope/commit/603f3f58509298e2564b1de2333af3770f47ad7f">603f3f5</a>)</li>
+<li>plan every move, file or folder, before mv touches the data (<a href="https://github.com/biocypher/biotope/commit/d26908c4e26694ad94004248ef6b33fd40028efe">d26908c</a>)</li>
+<li>prepare every change of a move before mv touches the data (<a href="https://github.com/biocypher/biotope/commit/bef0238fb4849133fc789a04d96848503d917d55">bef0238</a>)</li>
+<li>put every file and folder back when mv fails (<a href="https://github.com/biocypher/biotope/commit/c4906265c2fab93d38f30af9fc9003fcaadaee8a">c490626</a>)</li>
+<li>read a folder dataset's contentUrls from its folder in mv (<a href="https://github.com/biocypher/biotope/commit/6bad7611bc968713c21a6c940d70da6d3332afcb">6bad761</a>)</li>
+<li>read annotation dates as written and write mark's description atomically (<a href="https://github.com/biocypher/biotope/commit/bbbe93b3ee4797ad250a2797551518172c202191">bbbe93b</a>)</li>
+<li>read project.yaml only from .biotope (<a href="https://github.com/biocypher/biotope/commit/bb2b626e4a9936b609b7efaf6e84264b41c3eb3b">bb2b626</a>)</li>
+<li>record where the packages last declared a single file's path (<a href="https://github.com/biocypher/biotope/commit/633d147d20d55481dd2977df04d6473a923f89bd">633d147</a>)</li>
+<li>refuse a move to a path that differs only in case from an identical copy (<a href="https://github.com/biocypher/biotope/commit/8c8951f99cf834035b1b287cb11d7f06708926f1">8c8951f</a>)</li>
+<li>refuse an mv --force onto a file another description holds (<a href="https://github.com/biocypher/biotope/commit/79e1fae9bed950f3b6f5ba6f8c015678a9ba8710">79e1fae</a>)</li>
+<li>refuse an mv whose destination already has an annotation file (<a href="https://github.com/biocypher/biotope/commit/09155e92312f1f535618ec9201175fc5b67fe0f2">09155e9</a>)</li>
+<li>refuse mv of a dataset into the folder of another dataset (<a href="https://github.com/biocypher/biotope/commit/cd0d4a09417b87bb9d73a039f9168a2af9e66532">cd0d4a0</a>)</li>
+<li>refuse mv of a file whose move outside biotope is unresolved (<a href="https://github.com/biocypher/biotope/commit/ea4d433659ec57bf07f2b2a10b9b6e6640c0ef6f">ea4d433</a>)</li>
+<li>reject paths that differ only in case before leaving out identical copies (<a href="https://github.com/biocypher/biotope/commit/81ec187a2d50360c37b260197e69bc361decf162">81ec187</a>)</li>
+<li>rename a table on mv only when the bake named it after its file (<a href="https://github.com/biocypher/biotope/commit/c27dc5d28eb0dea7dcf9cc33d7f4df8bc740985a">c27dc5d</a>)</li>
+<li>rename moved data without copying it (<a href="https://github.com/biocypher/biotope/commit/b34cdaf8952614490a750ed60fdd0deb7b36e010">b34cdaf</a>)</li>
+<li>source generate makes no separate source from a sameAs copy (<a href="https://github.com/biocypher/biotope/commit/174e0d029f75645e6c504caaf4b622ae951e173d">174e0d0</a>)</li>
+<li>stop writing config keys nothing reads (<a href="https://github.com/biocypher/biotope/commit/c81ebc28a02e6b8a748555c1356dea4b947abb2c">c81ebc2</a>)</li>
+<li>take packages_distributions from importlib-metadata below Python 3.12 (<a href="https://github.com/biocypher/biotope/commit/25b1c211624219c8af6f5ef91b274284d7fea1e9">25b1c21</a>)</li>
+<li>warn once about each ignored file a command writes (<a href="https://github.com/biocypher/biotope/commit/cbe88f2077e8854f7780101603aec0409f084961">cbe88f2</a>)</li>
+<li>warn when a refresh rewrites a description that git ignores (<a href="https://github.com/biocypher/biotope/commit/c8def9086536d32f39c45b173c7c8dd69dfc623d">c8def90</a>)</li>
+<li>write every description through write_description (<a href="https://github.com/biocypher/biotope/commit/ab7cf16584217773b0edd5fba609fba5c7cc9671">ab7cf16</a>)</li>
+<li>write graph check's Pyright configuration outside the project (<a href="https://github.com/biocypher/biotope/commit/7ee04a3f66b534d2e87fad529d261bb4db133758">7ee04a3</a>)</li>
+</ul>
+<h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>add system_docs for agents that develop Biotope (<a href="https://github.com/biocypher/biotope/commit/c903d365882833deeaacb24d6312897ae870cb3b">c903d36</a>)</li>
+<li>add the agent guide, the spec format and the B1 extraction spec (<a href="https://github.com/biocypher/biotope/commit/aa4e3efc6f5291403b9722ed7236fb8d7eaab63f">aa4e3ef</a>)</li>
+<li>add the B2 and B3 specs (<a href="https://github.com/biocypher/biotope/commit/26a798d7affb7b53caae186e2ec47bbf98eedce6">26a798d</a>)</li>
+<li>add the B2 spec (project layout, annotation file, stable IDs) (<a href="https://github.com/biocypher/biotope/commit/911b21aa9a76873eacef3be4795246c4f2f1ad2d">911b21a</a>)</li>
+<li>add the roadmap for data products (<a href="https://github.com/biocypher/biotope/commit/05c5c0fee72ee2c5978e7f6cf92d6b7b26d23f60">05c5c0f</a>)</li>
+<li>agree the purpose's questions before modelling (<a href="https://github.com/biocypher/biotope/commit/a8491bfb16c92d09987ed53c6171907d762f9943">a8491bf</a>)</li>
+<li>answer the first review of the B2 and B3 specs (<a href="https://github.com/biocypher/biotope/commit/4c5f9a409cd7b06ae968afc4825984277038e6f6">4c5f9a4</a>)</li>
+<li>answer the second review of the B2 and B3 specs (<a href="https://github.com/biocypher/biotope/commit/a68c75a9d3d61e4389469be41b9d03762d43969b">a68c75a</a>)</li>
+<li>delete the B2 spec before merge (<a href="https://github.com/biocypher/biotope/commit/d1323971d759a37e56e037bd9aefd83002a7509f">d132397</a>)</li>
+<li>delete the withdrawn B2 and B3 specs and their research note (<a href="https://github.com/biocypher/biotope/commit/ef9164521f1f2b81e6bb9965a9e28e9de4d5894d">ef91645</a>)</li>
+<li>describe the graph workspace rules on the project layout page (<a href="https://github.com/biocypher/biotope/commit/a2be17f0594b76102353cf977c4ea5937439b9b9">a2be17f</a>)</li>
+<li>document extraction and route documents through it in the skill (<a href="https://github.com/biocypher/biotope/commit/6455f375c17230d6d2740e2c1095843d9f4dac0b">6455f37</a>)</li>
+<li>document where projects write, the annotation file, stable IDs and the refresh (<a href="https://github.com/biocypher/biotope/commit/3219caee81e6fea0035bad5a23b2f9d3715a8f36">3219cae</a>)</li>
+<li>drop deleted pages from the navigation (<a href="https://github.com/biocypher/biotope/commit/714854ccd37585a8dd0b4d5526e739c3e87e761a">714854c</a>)</li>
+<li>give extract run every dataset the schema reads in the refresh (<a href="https://github.com/biocypher/biotope/commit/a292b453baae2fe1e7ca05143e3b636a232e4dab">a292b45</a>)</li>
+<li>have the agent ground schemas in questions and check try output (<a href="https://github.com/biocypher/biotope/commit/2764489384780f9103e75b1e0853af82a543e9dc">2764489</a>)</li>
+<li>limit B1's interfaces to its seams and answer the second review (<a href="https://github.com/biocypher/biotope/commit/6cf4461f5c1d1f0f52a9323983da2b1410894367">6cf4461</a>)</li>
+<li>list mv's refusals of unresolved moves and moves into another dataset (<a href="https://github.com/biocypher/biotope/commit/08854294185a9bf6c3fc2adb76389bae47ca9909">0885429</a>)</li>
+<li>make decisions an input dataset and reuse Croissant hashes for releases (<a href="https://github.com/biocypher/biotope/commit/57e2f6296b32d1f7a7006715819d10d7ab9b324a">57e2f62</a>)</li>
+<li>make natural keys aliases in registered kinds in roadmap decision 10 (<a href="https://github.com/biocypher/biotope/commit/ca1279ba561785ab6a507c5afb626e3e80cd2dc1">ca1279b</a>)</li>
+<li>make the B1 spec buildable after the first review (<a href="https://github.com/biocypher/biotope/commit/4881f3960eb793c082003d25c26457ad78f7c4d2">4881f39</a>)</li>
+<li>make the extraction skill re-check schema changes and redo wrong documents (<a href="https://github.com/biocypher/biotope/commit/46d318e9f9429ec31465c2c41f1e94c0fecca784">46d318e</a>)</li>
+<li>move the extraction contract and the install route into the skill (<a href="https://github.com/biocypher/biotope/commit/eab872c2b80b12d2c149cd86d84e81f47519a0a0">eab872c</a>)</li>
+<li>name a source root with --package when two datasets share a last name (<a href="https://github.com/biocypher/biotope/commit/66a273770425d51b3dfb5a8007555c530025d634">66a2737</a>)</li>
+<li>name REACH, the ELIXIR Atlas and InTRAC in AGENTS.md as <a href="https://github.com/biocypher/biotope/issues/53">#53</a> does (<a href="https://github.com/biocypher/biotope/commit/2fec510f98a61d04e9cc8ac05847d77fc6d65989">2fec510</a>)</li>
+<li>name the unanchored data/ rule in the .gitignore advice (<a href="https://github.com/biocypher/biotope/commit/a7b699afa779dd338d542e536f4b8b191db36660">a7b699a</a>)</li>
+<li>narrow mv's refusal of moves into another dataset to what its bake describes (<a href="https://github.com/biocypher/biotope/commit/cbeef442cced7b2d024c3ab6fb2b8572a933cf26">cbeef44</a>)</li>
+<li>open every spec with its gap and what biotope already does (<a href="https://github.com/biocypher/biotope/commit/0e868ec37937645698c89fc6c62d7dc86b604cb6">0e868ec</a>)</li>
+<li>point agents to <a href="https://github.com/biocypher/biotope/issues/53">#53</a> as the source of truth for new work (<a href="https://github.com/biocypher/biotope/commit/e5c37f7dde47bd937e2e5914b2d63eea89a190f1">e5c37f7</a>)</li>
+<li>read stable IDs back from where they are stored (<a href="https://github.com/biocypher/biotope/commit/d5787d583f3b841776ce4b879f0538be288367aa">d5787d5</a>)</li>
+<li>record B1 research on extraction tools and models (<a href="https://github.com/biocypher/biotope/commit/a321239103bbbf03b5ede51f4ef53995b56c1956">a321239</a>)</li>
+<li>remove the development ideas page (<a href="https://github.com/biocypher/biotope/commit/ed4cd1a4afbd29b4f1eee7c4a3eb6eb0fe5aef49">ed4cd1a</a>)</li>
+<li>research what B2 and B3 can reuse (<a href="https://github.com/biocypher/biotope/commit/6aa976c8b5a3112ab9418fa485732be5b4f82f57">6aa976c</a>)</li>
+<li>rewrite the B1 spec around goals, scope and interfaces (<a href="https://github.com/biocypher/biotope/commit/ff193e63a666c279ce3a25ade32d631b8e0ed22d">ff193e6</a>)</li>
+<li>rewrite the public docs for using Biotope through an agent (<a href="https://github.com/biocypher/biotope/commit/8dbdfc0348519d1ebecbdb4598f7c28c0f46bae6">8dbdfc0</a>)</li>
+<li>roadmap from the north star in <a href="https://github.com/biocypher/biotope/issues/53">#53</a>, retire the 22 October plan (<a href="https://github.com/biocypher/biotope/commit/05aa413c84688206bf5976ea0ffe07cb3d39d146">05aa413</a>)</li>
+<li>run extract run in the refresh and after mv of documents (<a href="https://github.com/biocypher/biotope/commit/c89f9520423a513a4172778c7fdfe6d2ce9747d1">c89f952</a>)</li>
+<li>run extract run in the scaffold's refresh recipe (<a href="https://github.com/biocypher/biotope/commit/4b67e41515a22e4bdead56295bb1e2e22d4cca56">4b67e41</a>)</li>
+<li>say a build writes CSV, Parquet or SQLite (<a href="https://github.com/biocypher/biotope/commit/fd2ef9cd2e5c6afac20912d60f63987033a8af2b">fd2ef9c</a>)</li>
+<li>say generation skips a document once an extraction has read it (<a href="https://github.com/biocypher/biotope/commit/6ee813a1cb4f73ef6b5d562ce809dfc85117cc9a">6ee813a</a>)</li>
+<li>say that a file whose table has no columns is a file (<a href="https://github.com/biocypher/biotope/commit/f551464a8cf9ad847b0faea4963c0cf3b75e1b03">f551464</a>)</li>
+<li>say that a move outside biotope only warns for an excluded source (<a href="https://github.com/biocypher/biotope/commit/73100e8d1d7c3fb73bdadb7ee42cd98dbec1ab78">73100e8</a>)</li>
+<li>say what mv refuses to do (<a href="https://github.com/biocypher/biotope/commit/6caa4d5b0c2a330576b40580cc289408ab1017cd">6caa4d5</a>)</li>
+<li>settle leaves, record IDs and curated manifests in the B1 spec (<a href="https://github.com/biocypher/biotope/commit/cf3f0e33caeb490355cbda9a0d84bb44bccf10d4">cf3f0e3</a>)</li>
+<li>stable IDs come back from where they are stored, and B3 closes (<a href="https://github.com/biocypher/biotope/commit/27b3b06191dda713d009630b09055cf14f757931">27b3b06</a>)</li>
+<li>state the spec rule and delete the B1 spec (<a href="https://github.com/biocypher/biotope/commit/61d51425e9e639eb6625cb7abf4a4953d1e8179c">61d5142</a>)</li>
+<li>teach the skill and the scaffold the annotation file, the topology layout and the refresh (<a href="https://github.com/biocypher/biotope/commit/32fdaa204aa2c3a16298d0c49f73eee4a9bbddb5">32fdaa2</a>)</li>
+<li>write mappings in named modules (<a href="https://github.com/biocypher/biotope/commit/fac6ebb27c4c84925d65602a99bcaad9035c1a29">fac6ebb</a>)</li>
+<li>write the roadmap from scratch from the north star in <a href="https://github.com/biocypher/biotope/issues/53">#53</a> (<a href="https://github.com/biocypher/biotope/commit/99e497762391381f0735f759a17d55cac95cdbd9">99e4977</a>)</li>
+</ul>
+<h3 id="build-system">Build System<a class="headerlink" href="#build-system" title="Permanent link">&para;</a></h3>
+<ul>
+<li>require croissant-baker 0.8.1 (<a href="https://github.com/biocypher/biotope/commit/acd67cfcb9040ded78b1bd5257b21f4d66bdfb2c">acd67cf</a>)</li>
+<li>take packages_distributions from importlib-metadata on Python 3.10 (<a href="https://github.com/biocypher/biotope/commit/ff59ff45a888f541f2c5b54dbcebba3a11808835">ff59ff4</a>)</li>
+<li>type-check the extraction package strictly (<a href="https://github.com/biocypher/biotope/commit/9cf6c5fe010edc8412f44a4c5667e756079f5906">9cf6c5f</a>)</li>
+</ul>
+<h3 id="refactoring">Refactoring<a class="headerlink" href="#refactoring" title="Permanent link">&para;</a></h3>
+<ul>
+<li>delete DatasetStats and summarize_metadata (<a href="https://github.com/biocypher/biotope/commit/dd68cdd6b4197a119dd7dbe1289aeadce16c7807">dd68cdd</a>)</li>
+<li>delete update_manifest_status, which nothing calls (<a href="https://github.com/biocypher/biotope/commit/be49aaa46401f7f5619a3ae129317973d09f5d11">be49aaa</a>)</li>
+<li>drop add --force, which did what --rebake does (<a href="https://github.com/biocypher/biotope/commit/6e292bd49618d9d84ac5b1cca99f5bd62472bb5c">6e292bd</a>)</li>
+<li>drop the overrides that a folder bake never receives (<a href="https://github.com/biocypher/biotope/commit/188b268d662c6adc52c0e9f59608b4a1b40693f0">188b268</a>)</li>
+<li>drop the unbuilt settings layers from the project model (<a href="https://github.com/biocypher/biotope/commit/2d09947c009ec3edb16d10e3bfc945c9531358ed">2d09947</a>)</li>
+<li>keep one helper for the files a table reads (<a href="https://github.com/biocypher/biotope/commit/7a371b80e480efaf02007cb5cc9c5b6313d12fcb">7a371b8</a>)</li>
+<li>keep the reserved property names in the topology module (<a href="https://github.com/biocypher/biotope/commit/cd2707a90f0e489ba503d0d546fc76d5f20d7f57">cd2707a</a>)</li>
+<li>leave the scaffold's extraction package empty (<a href="https://github.com/biocypher/biotope/commit/ca94ba8afe5337b4adac5fd346e14ce8869d7195">ca94ba8</a>)</li>
+<li>name the description reader for the write it makes (<a href="https://github.com/biocypher/biotope/commit/94d290ec047342829adac3d9da73515ba2f08220">94d290e</a>)</li>
+<li>name the reserved property check's set intersection (<a href="https://github.com/biocypher/biotope/commit/84046f6b405cf23348b6a47d0b86540020b9eaa4">84046f6</a>)</li>
+<li>remove support for files written by Biotope 0.9 and 0.10 (<a href="https://github.com/biocypher/biotope/commit/b3314943f60b020e0e85eee4b8ba474153f60774">b331494</a>)</li>
+<li>remove the contract store and the extraction run state (<a href="https://github.com/biocypher/biotope/commit/1e70dbdda44e11bad947054a321a76f893582a43">1e70dbd</a>)</li>
+<li>type the extract command's helpers (<a href="https://github.com/biocypher/biotope/commit/35aabf69674eb0efcc63b5f730914c71a06a5701">35aabf6</a>)</li>
+</ul>
+<h3 id="miscellaneous">Miscellaneous<a class="headerlink" href="#miscellaneous" title="Permanent link">&para;</a></h3>
+<ul>
+<li>release 1.0.0 (<a href="https://github.com/biocypher/biotope/commit/14235dc477c92b70bece69926bf5e48a2428017c">14235dc</a>)</li>
+</ul>
+<h2 id="0100-2026-09-28"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.9.1...biotope-v0.10.0">0.10.0</a> (2026-09-28)<a class="headerlink" href="#0100-2026-09-28" title="Permanent link">&para;</a></h2>
+<h3 id="breaking-changes_1">⚠ BREAKING CHANGES<a class="headerlink" href="#breaking-changes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>graph:</strong> project validation callbacks and per-capability states are gone, so builds no longer verify scientific expectations; structural checks are not equivalent, and review-time independent reads replace them. interpretation no longer travels inside the graph; concept and property descriptions in schema_config.yaml, run.json policies and scope, and graph/ASSUMPTIONS.md replace the query context, so graph/build/ must travel with the graph. <code>biotope graph quality</code> prints its results instead of writing graph/reports/quality.json; <code>biotope graph metagraph</code> writes graph/metagraph.html by default. schemas are never re-rendered. Generated and 0.9 schemas no longer follow manifest changes; each change surfaces as source.drift for review. Authored types are not compared with Croissant dataType or nullability. new scaffolds bind fields through @ids scoped under their RecordSet; other ids produce source.unscoped_field, while an existing <code>__field_refs__</code> mapping still binds them. a new package's name depends on the directories that already exist, so it can differ from a from-scratch generation. removed keywords such as SourceContract(generated=) and Pipeline(query_context=) fail with ordinary TypeErrors; run.json and definition reports are schema_version 2 (replacement and --report accept 1 and 2). See docs/migration.md for the 0.9 migration steps.</li>
+<li><strong>graph:</strong> builds no longer write topology.json, ontology.ttl, query_context.json, provenance.jsonl or BiotopeQueryContext rows. Provenance is reached through each object's biotope_provenance_id in provenance.json. <code>biotope graph build</code> defaults to <code>&lt;graph&gt;/build</code> and replaces the previous generated build instead of requiring a new --out directory; --out still chooses another location. Export is headless and labels drop the namespace (for example Gene rather than CvdGene), so Entity is no longer reserved.</li>
+</ul>
+<h3 id="features_1">Features<a class="headerlink" href="#features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>graph:</strong> generate complete source inventories and check drift, retire validation and query context (<a href="https://github.com/biocypher/biotope/commit/957b2ce2fda2174bf5c91b0a54b46e6dd3c1ae38">957b2ce</a>)</li>
+<li><strong>graph:</strong> integrate authored source contracts, staged builds and a provenance catalog (<a href="https://github.com/biocypher/biotope/commit/468691669127d343f0fbb008afd76d388b966e90">4686916</a>)</li>
+</ul>
+<h3 id="bug-fixes_1">Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>add:</strong> register byte-identical files once (<a href="https://github.com/biocypher/biotope/commit/90a283896c1f02a7ae59dae03c7fe53d3f313e1f">90a2838</a>)</li>
+<li><strong>add:</strong> register byte-identical files that Baker parses once (<a href="https://github.com/biocypher/biotope/commit/160e2ae9bf463ec690ec55537a4ce4eb2128f6f5">160e2ae</a>)</li>
+<li><strong>add:</strong> skip byte-identical copies before Baker parses them (<a href="https://github.com/biocypher/biotope/commit/287bef05d4ddc43d4bf2e3b7d791012b5ba16cf3">287bef0</a>)</li>
+<li><strong>graph:</strong> check exported objects in a write that no build context checked (<a href="https://github.com/biocypher/biotope/commit/924c06c24657c3688b1be9ef03695b5b39fccf7d">924c06c</a>)</li>
+<li><strong>graph:</strong> end a failed run with its error and log phases without a terminal (<a href="https://github.com/biocypher/biotope/commit/845a229d4960a9b51c48b4ad3e1e8eb2606bb8df">845a229</a>)</li>
+<li><strong>graph:</strong> end a failed run with its finding code and log one line per phase (<a href="https://github.com/biocypher/biotope/commit/907792e4428f80a894f8e14e9b32c20fe5649b7a">907792e</a>)</li>
+<li><strong>graph:</strong> keep descriptions of node properties named source or target (<a href="https://github.com/biocypher/biotope/commit/bea90ae04e874b748c07268bd2e00a999ab8e37b">bea90ae</a>)</li>
+<li><strong>graph:</strong> record the libraries graph code imports and warn when they are undeclared (<a href="https://github.com/biocypher/biotope/commit/789da09d77a9d0f4ea7d868426b2282c85f4449b">789da09</a>)</li>
+<li><strong>graph:</strong> refuse unexportable values when a mapping emits them (<a href="https://github.com/biocypher/biotope/commit/7b4bdf19ab3f708e6dc48358b0fbf89043a452a5">7b4bdf1</a>)</li>
+<li><strong>graph:</strong> size the Neo4j read buffer to the export's longest line (<a href="https://github.com/biocypher/biotope/commit/c2f6757e71616d63ddea615aec48ae5bd20f9bd9">c2f6757</a>)</li>
+<li><strong>graph:</strong> state the oversized-value threshold in characters and document the read buffer (<a href="https://github.com/biocypher/biotope/commit/e2b5e8210a7854931c82abddf9103346c2f74a1c">e2b5e82</a>)</li>
+</ul>
+<h3 id="performance-improvements">Performance Improvements<a class="headerlink" href="#performance-improvements" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>graph:</strong> validate each value once per step and drop repeated work (<a href="https://github.com/biocypher/biotope/commit/1fc51b7a055acdc604d5bc16eb1b2f2bd609e910">1fc51b7</a>)</li>
+</ul>
+<h3 id="documentation_1">Documentation<a class="headerlink" href="#documentation_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>document the 0.10 graph project shape and how to migrate to it (<a href="https://github.com/biocypher/biotope/commit/31ee7180422fca8e6d2becbfc84f4ab8e8376887">31ee718</a>)</li>
+<li><strong>skills:</strong> describe structured files Baker cannot parse as record sets (<a href="https://github.com/biocypher/biotope/commit/d70ae3ddcc095f5113b7ffdb2dbb7d5a0935a33a">d70ae3d</a>)</li>
+<li><strong>skills:</strong> install reader libraries from graph/pyproject.toml (<a href="https://github.com/biocypher/biotope/commit/683efbb1a2fc75d5ee812d898094521966f91aac">683efbb</a>)</li>
+<li><strong>skills:</strong> rework biotope-croissant around the generated source inventory (<a href="https://github.com/biocypher/biotope/commit/a1d8c92d46f7fb56da1735b6da521c359a52a2a0">a1d8c92</a>)</li>
+<li><strong>skills:</strong> say that aliases and missing-value tokens are declarations only (<a href="https://github.com/biocypher/biotope/commit/5a7ffcee319c71a04ddfd7513bee0ad36698fa58">5a7ffce</a>)</li>
+</ul>
+<h3 id="build-system_1">Build System<a class="headerlink" href="#build-system_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>release:</strong> release breaking changes before 1.0 as a minor version and describe the package (<a href="https://github.com/biocypher/biotope/commit/df3fa1733e86a8c4dd2ad903f198ed93e3cfdacd">df3fa17</a>)</li>
+</ul>
+<h3 id="refactoring_1">Refactoring<a class="headerlink" href="#refactoring_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>graph:</strong> raise value problems in one helper and share the item loop (<a href="https://github.com/biocypher/biotope/commit/3c4e7dc375f2beff125df2e96b354f15703cd5f2">3c4e7dc</a>)</li>
+</ul>
+<h2 id="091-2026-09-15"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.9.0...biotope-v0.9.1">0.9.1</a> (2026-09-15)<a class="headerlink" href="#091-2026-09-15" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes_2">Bug Fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>correct validation examples and documentation publishing (<a href="https://github.com/biocypher/biotope/commit/b355807d75525e0a2c3ebfdb680c83e3a925d7bf">b355807</a>)</li>
+</ul>
+<h3 id="documentation_2">Documentation<a class="headerlink" href="#documentation_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>prepare Biotope documentation for the public release (<a href="https://github.com/biocypher/biotope/commit/aa3884629a0642d8709a8935ef564ea7eac301b1">aa38846</a>)</li>
+<li>prepare documentation for the public release (<a href="https://github.com/biocypher/biotope/commit/17dd52db8b4c439f98a3802a4c4dbb186522e7ff">17dd52d</a>)</li>
+</ul>
+<h2 id="090-2026-09-15"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.8.0...biotope-v0.9.0">0.9.0</a> (2026-09-15)<a class="headerlink" href="#090-2026-09-15" title="Permanent link">&para;</a></h2>
+<h3 id="features_2">Features<a class="headerlink" href="#features_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>add typed Python graph pipelines and update croissant-baker (<a href="https://github.com/biocypher/biotope/commit/7c0b5646b4a94dc9a79b8ae083f27cf7b3493fbe">7c0b564</a>)</li>
+<li>show bake progress, stream the baker's warnings, keep every checksum (<a href="https://github.com/biocypher/biotope/commit/0360e5fa26af00843c2f0299ec321ffb782189d4">0360e5f</a>)</li>
+</ul>
+<h3 id="bug-fixes_3">Bug Fixes<a class="headerlink" href="#bug-fixes_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>ci:</strong> install published baker and honor Python matrix (<a href="https://github.com/biocypher/biotope/commit/c75828733b7fc6e5a7e47d8f85218fa5f4fe292e">c758287</a>)</li>
+<li>work with croissant-baker's compression-decoupling refactor (<a href="https://github.com/biocypher/biotope/commit/73975fd3b8e41ca4237463378a8fe443019b4ef2">73975fd</a>)</li>
+</ul>
+<h3 id="documentation_3">Documentation<a class="headerlink" href="#documentation_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>finalize typed graph engine specification (<a href="https://github.com/biocypher/biotope/commit/7a3614ac15b07fbaf5b82939dbd8723da84569c5">7a3614a</a>)</li>
+<li>note the claims() refusal channel as deferred (<a href="https://github.com/biocypher/biotope/commit/94658175a519362ef437c1db96783320e83cd0be">9465817</a>)</li>
+</ul>
+<h2 id="080-2026-06-29"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.7.1...biotope-v0.8.0">0.8.0</a> (2026-06-29)<a class="headerlink" href="#080-2026-06-29" title="Permanent link">&para;</a></h2>
+<h3 id="features_3">Features<a class="headerlink" href="#features_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>decouple biotope runtime from biochatter and biocypher (<a href="https://github.com/biocypher/biotope/commit/1a100f8e4c2a2a34d61349b0e3c0de2138b6dde3">1a100f8</a>)</li>
+<li>decouple biotope runtime from biochatter and biocypherinitial commit (<a href="https://github.com/biocypher/biotope/commit/11eb5f06f54974b74638a99aa390a20d86ba72de">11eb5f0</a>)</li>
+</ul>
+<h2 id="071-2026-05-28"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.7.0...biotope-v0.7.1">0.7.1</a> (2026-05-28)<a class="headerlink" href="#071-2026-05-28" title="Permanent link">&para;</a></h2>
+<h3 id="documentation_4">Documentation<a class="headerlink" href="#documentation_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>landing:</strong> align commands surface and link tutorial as canonical onboarding (<a href="https://github.com/biocypher/biotope/issues/28">#28</a>) (<a href="https://github.com/biocypher/biotope/commit/2862055c7d5f6a3cdd635fcc76df88696d3c2de7">2862055</a>)</li>
+<li><strong>tutorial:</strong> admonition fixes + terminal-styled console blocks (<a href="https://github.com/biocypher/biotope/issues/30">#30</a>) (<a href="https://github.com/biocypher/biotope/commit/5e864b49555c8f74200ba371080971216fb0e24c">5e864b4</a>)</li>
+</ul>
+<h2 id="070-2026-05-25"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.6.1...biotope-v0.7.0">0.7.0</a> (2026-05-25)<a class="headerlink" href="#070-2026-05-25" title="Permanent link">&para;</a></h2>
+<h3 id="features_4">Features<a class="headerlink" href="#features_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>API:</strong> Croissant-driven KG workflow + agent-supported knowledge ingestion (<a href="https://github.com/biocypher/biotope/issues/23">#23</a>) (<a href="https://github.com/biocypher/biotope/commit/57f18728b71383712f9415c99f7d07cdeb81dd5e">57f1872</a>)</li>
+</ul>
+<h2 id="061-2026-05-25"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.6.0...biotope-v0.6.1">0.6.1</a> (2026-05-25)<a class="headerlink" href="#061-2026-05-25" title="Permanent link">&para;</a></h2>
+<h3 id="documentation_5">Documentation<a class="headerlink" href="#documentation_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>examples:</strong> add airports-notes.md and airport-hubs.csv (<a href="https://github.com/biocypher/biotope/issues/24">#24</a>) (<a href="https://github.com/biocypher/biotope/commit/29b14878f177a408b03d2cffacc53b4a69f29ed6">29b1487</a>)</li>
+</ul>
+<h2 id="060-2026-05-19"><a href="https://github.com/biocypher/biotope/compare/biotope-v0.5.0...biotope-v0.6.0">0.6.0</a> (2026-05-19)<a class="headerlink" href="#060-2026-05-19" title="Permanent link">&para;</a></h2>
+<h3 id="features_5">Features<a class="headerlink" href="#features_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>add bio.tools registry integration to search command (<a href="https://github.com/biocypher/biotope/commit/72b996cf190c02e3c35dba147cf10e5717bfc78c">72b996c</a>)</li>
+<li>add composite scoring option to search command (<a href="https://github.com/biocypher/biotope/commit/d3c7d681573cc32dd04041dd7d0ab7eb7bc074bf">d3c7d68</a>)</li>
+<li>Add GitHub star count ranking to biotope search (<a href="https://github.com/biocypher/biotope/commit/7439f2bf064289ffea5a5f571f7abd0e925c9179">7439f2b</a>)</li>
+<li>add MCP registry status to biotope status command (<a href="https://github.com/biocypher/biotope/commit/668e720d33b7f2a5873efbc8811884f02453dd8c">668e720</a>)</li>
+<li>enhance add and annotate commands to skip biotope's own annotation files (<a href="https://github.com/biocypher/biotope/commit/f38063ef473335a9032fcc9d5471e15289f88a09">f38063e</a>)</li>
+<li>enhance bio.tools integration with smart column labeling and composite scoring (<a href="https://github.com/biocypher/biotope/commit/9d32b83a9aee094f0da89aed501885586c072de0">9d32b83</a>)</li>
+<li>enhance file management capabilities with mv command and improved metadata handling (<a href="https://github.com/biocypher/biotope/issues/6">#6</a>) (<a href="https://github.com/biocypher/biotope/commit/21c9e3d30aa83f0826045fa7e8357a2cda8c2c9a">21c9e3d</a>)</li>
+<li><strong>get:</strong> Add file download and annotation command (<a href="https://github.com/biocypher/biotope/commit/25de2a1850d973190482888e547005446212fa6f">25de2a1</a>)</li>
+<li>git-like metadata management (<a href="https://github.com/biocypher/biotope/commit/1cea6f6ad8d289a68737138d958daab4e660d6e1">1cea6f6</a>)</li>
+<li>git-like metadata management (<a href="https://github.com/biocypher/biotope/commit/1cea6f6ad8d289a68737138d958daab4e660d6e1">1cea6f6</a>)</li>
+<li>implement biotope search command for MCP registry integration (<a href="https://github.com/biocypher/biotope/commit/1aabef155cbab52df7c31f11f6b41fbe96dba740">1aabef1</a>)</li>
+<li>implement registry infrastructure for BioContext integration (<a href="https://github.com/biocypher/biotope/commit/dfebf6d2e5286da15eee9594a20a4e505cb579ff">dfebf6d</a>)</li>
+<li>improve relevance scoring and GitHub API integration (<a href="https://github.com/biocypher/biotope/commit/64ac804308373ff6f7d11c23e48a943efbd23278">64ac804</a>)</li>
+<li>setuptools entry point (<a href="https://github.com/biocypher/biotope/commit/7e1f4c56478d7fb884b68feeb21fcae97dc3b0cd">7e1f4c5</a>)</li>
+<li>update init to more comprehensive workflow (<a href="https://github.com/biocypher/biotope/issues/4">#4</a>) (<a href="https://github.com/biocypher/biotope/commit/bab0fc7f7e3d42a45d3702a98e196cdd0c8550ef">bab0fc7</a>)</li>
+<li>upgrade to git-on-top process, test battery, docs (<a href="https://github.com/biocypher/biotope/commit/5531d10f938a008c9f5de5f16c830f00ec3daf60">5531d10</a>)</li>
+</ul>
+<h3 id="bug-fixes_4">Bug Fixes<a class="headerlink" href="#bug-fixes_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>improve error handling for registry cache loading (<a href="https://github.com/biocypher/biotope/commit/efc1053c4fc0e7c6c6994999783676a8adbd13c2">efc1053</a>)</li>
+<li>preserve registry ranking in combined search (<a href="https://github.com/biocypher/biotope/commit/5106907d39490ebcf51263e099a2e8bfcf3111a7">5106907</a>)</li>
+</ul>
+<h3 id="build-system_2">Build System<a class="headerlink" href="#build-system_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>add release-please for automated version bumping (<a href="https://github.com/biocypher/biotope/commit/6f82ebad2d8406866acc74764a1e8cdba0a473a2">6f82eba</a>)</li>
+</ul>
+<h3 id="refactoring_2">Refactoring<a class="headerlink" href="#refactoring_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>optimize score normalization in BioToolsRegistry (<a href="https://github.com/biocypher/biotope/commit/c7d3791d5f3a305c7a445cfa7433ba7b7cb12518">c7d3791</a>)</li>
+<li>streamline metadata context retrieval in Croissant file creation (<a href="https://github.com/biocypher/biotope/commit/28001cbbffffe01abb52af87e8a2b2634bc02b0f">28001cb</a>)</li>
+<li>streamline test setup and metadata handling (<a href="https://github.com/biocypher/biotope/commit/4898529060560eab214161b1ce6dbded11dfa806">4898529</a>)</li>
+<li>use sha256 to have the same hashes in different python sessions (<a href="https://github.com/biocypher/biotope/commit/0ca1a163862449b72178fab66a4acfdeaa6bc145">0ca1a16</a>)</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025–2026 BioCypher Team
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/biocypher" target="_blank" rel="noopener" title="BioCypher Team" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.annotate", "content.code.copy", "navigation.indexes", "navigation.instant", "navigation.tracking", "navigation.top"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
