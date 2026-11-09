@@ -72,7 +72,7 @@ mkdir -p ../my-own/data
 cp -R data/airports data/notes ../my-own/data/
 ```
 
-Start Claude Code in `my-own` and use the example's purpose:
+Start your agent in `my-own` and use the example's purpose:
 
 > Use biotope to build a knowledge graph from the files in `data/`. Purpose: our operations team looks up which airlines use which airports as hubs or focus cities. Typical questions: which airlines have a hub at JFK? Where does United have hubs? Which airports are a focus city, and for which airline? The notes are internal, so extract from them with code, not with a model.
 
