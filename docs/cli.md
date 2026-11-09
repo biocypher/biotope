@@ -10,7 +10,7 @@ Run each command from the project folder as `uv run --project graph biotope …`
 | `add` | Describes data files or folders as datasets and creates the annotation file of each. |
 | `annotate set` | Writes KEY=VALUE pairs into the annotation file of a dataset. |
 | `annotate validate` | Validates a Croissant metadata file. |
-| `config set-project-metadata` | Sets the project metadata, such as the creator and license, that `add` applies to every dataset. |
+| `config set-project-metadata` | Sets the project metadata, such as the creator and licence, that `add` applies to every dataset. |
 | `config show-project-metadata` | Shows that project metadata. |
 | `mv` | Moves a tracked file or folder and updates every description and source package that names it. |
 | `rm` | Removes a dataset or a file from Biotope, with its data unless `--keep-data` is given. |

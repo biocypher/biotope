@@ -2,7 +2,7 @@
 
 Papers, web pages, contracts and other unstructured documents become structured records through extraction. The agent writes one extractor for each kind of document. Biotope runs it, keeps the quote or location behind each value, and stores the records as a dataset that the graph reads like any table.
 
-After the extraction, the document will be treated like just another structured document and will become part of the knowledge representation through standard topology mapping.
+After extraction, the records are treated like any other structured dataset and enter the graph through the usual topology mapping.
 
 ## What you decide
 

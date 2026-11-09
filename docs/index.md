@@ -1,13 +1,13 @@
 # Biotope
 
 Biotope is a framework that helps your AI agents build and maintain purpose-driven knowledge representations.
-Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a distributed organization. You can give raw data and **the purpose statement** to the biotope agent and it will build the graph topology, mapping, entity and conflict resolution, following the industry best practices. Biotope simplifies the process of building and maintaining the data project, but semantic authority and final decisions on the representation stays with the human.
+Imagine you need to build a knowledge graph that uses messy clinical data to find promising drug targets, or maintain a database of all people, events, and resources of a distributed organisation. You give raw data and **the purpose statement** to the Biotope agent, and it builds the graph topology, the mappings, and the entity and conflict resolution, following industry best practices. Biotope simplifies building and maintaining the data project, but semantic authority and final decisions on the representation stay with the human.
 
-How data projects that are created by the biotope agent work:
+How data projects created by the Biotope agent work:
 
 - **Inputs.** Structured files are described automatically using croissant-baker: CSV, TSV, Excel, Parquet, JSON, HDF5 and AnnData, FHIR, VCF, BAM, FASTA, DICOM, NIfTI, images and more. Unstructured documents, such as papers and web pages, become records through an extractor the agent writes, and each value keeps the quote it came from.
 - **Output.** Neo4j import files or one SQLite file. Every node and edge names the source rows it came from.
-- **Maintainability.** The biotope-created data project is plain Python in a fixed layout and static type-checking for all entities and mappings. New data of the same shape rebuilds with commands only, and a change in the data's structure is reported before the build.
+- **Maintainability.** The data project is plain Python in a fixed layout, with static type checking for all entities and mappings. New data of the same shape rebuilds with commands only, and a change in the data's structure is reported before the build.
 - **Versioning.** Everything Biotope writes is a plain file that you commit with your own git. Each build records its code, data revisions and library versions.
 
 ## Start here

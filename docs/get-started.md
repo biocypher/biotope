@@ -4,13 +4,13 @@ You should use Biotope through a coding agent. You give it the data and the purp
 
 ## Before you start
 
-- Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and [Claude Code](https://code.claude.com/docs/en/setup). uv installs Python 3.10, 3.11 or 3.12 for the project when needed.
+- Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and a coding agent, such as Claude Code, Codex, Cursor or OpenCode. uv installs Python 3.10, 3.11 or 3.12 for the project when needed.
 - Choose the project folder: your repository, or a new folder. Put the data in it, for example under `data/`.
 - Keep each dataset at a fixed path. A file's ID in Biotope is its path, so a dataset saved to a new folder on each download gets new IDs, and the agent has to update the project.
 
 ## Install the plugin
 
-In Claude Code (or any other agent harness), add the Biotope marketplace and install the plugin:
+The plugin contains the `biotope-croissant` skill, which tells the agent how to use Biotope. In agents that install plugins from a marketplace, such as Claude Code, add the Biotope marketplace and install the plugin:
 
 <!-- x-release-please-start-version -->
 ```text
@@ -19,15 +19,17 @@ In Claude Code (or any other agent harness), add the Biotope marketplace and ins
 ```
 <!-- x-release-please-end -->
 
-Install it for your user to use it in every project. To check it, type `/` in Claude Code: `/biotope:biotope-croissant` is in the list.
+Install it at user scope to use it in every project. To check the installation, look for the `biotope-croissant` skill in your agent's list of skills. In Claude Code, type `/`: `/biotope:biotope-croissant` is in the list.
+
+For agents without plugin support, see [Other agents](#other-agents).
 
 ## Start a project
 
-Start Claude Code with `claude` in the project folder. Tell it where the data is and what the graph is for. For an organization:
+Start your agent in the project folder. Tell it where the data is and what the graph is for. For an organisation:
 
 > Use biotope to build a knowledge graph from the files in `data/`. It is for our institute's staff, who look up who works on which topic, in which group and on which projects.
 
-Example, for a biomedical project:
+For a biomedical project:
 
 > Use biotope to build a knowledge graph from the clinical tables and papers in `data/`. It is for our target-discovery team, who rank genes by the evidence that links them to liver fibrosis.
 
@@ -40,14 +42,14 @@ The agent then installs Biotope into an environment for the project:
 
 ## Other agents
 
-Cursor and Codex use the same skill. Copy the folder `skills/biotope-croissant` from the [Biotope repository](https://github.com/biocypher/biotope) into your project's `.cursor/skills/` for Cursor or `.agents/skills/` for Codex.
+Agents without the plugin use the same skill. Copy the folder `skills/biotope-croissant` from the [Biotope repository](https://github.com/biocypher/biotope) into the folder your agent reads skills from, for example `.cursor/skills/` for Cursor or `.agents/skills/` for Codex.
 
 ## Concepts
 
 - **[Croissant](https://docs.mlcommons.org/croissant/docs/croissant-spec.html)**: a standard format for describing datasets: their files, tables and fields.
 - **croissant-baker**: the tool that reads your data files and writes their Croissant description. Describing a dataset again after its data changed is a **rebake**.
 - **Manifest**: the Croissant description of one dataset, in `.biotope/datasets/`. Biotope writes it from the data and the annotation file.
-- **Annotation file**: the file next to a dataset, `.biotope.yaml`, where people and the agent write what they know about it, such as descriptions, keys, the creator and the license.
+- **Annotation file**: the file next to a dataset, `.biotope.yaml`, where people and the agent write what they know about it, such as descriptions, keys, the creator and the licence.
 - **Table**: the rows of one file, or of one sheet or part of a file. Croissant calls it a record set.
 - **Structured file**: a file that code can read into records, such as a CSV, Excel or Parquet file.
 - **Unstructured document**: a file that needs reading, such as a paper or a web page. **Extraction** turns it into records.
