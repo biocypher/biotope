@@ -154,6 +154,7 @@ entity and the relations pointing at it stay in lockstep:
 
 ```yaml
 ids:
+  isbn_curie:   { field: isbn,      transform: as_curie, args: { prefix: isbn } }
   author_curie: { field: author_id, transform: as_curie, args: { prefix: orcid } }
 
 entities:
@@ -201,7 +202,7 @@ relation with far fewer edges than expected signals an id-namespace mismatch.
 Most graph errors come from inconsistent ids or stale manifests. Follow these
 rules before building:
 
-- Pick one id column for each entity and use it in every source. Normalize
+- Pick one id column for each entity and use it in every source. Normalise
   disagreeing forms (`UBERON_0002107` vs `UBERON:0002107`) in a committed
   preprocessing step, and keep alternate ids as properties. Use an ontology
   namespace where one exists.

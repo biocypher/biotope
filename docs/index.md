@@ -9,7 +9,7 @@ with version-controlled metadata.
 
 ## Start with a coding agent
 
-Install the [biotope plugin](plugin.md), then invoke `/biotope-croissant` or ask:
+Install the [biotope plugin](plugin.md), then invoke the `biotope-croissant` skill or ask:
 
 > What does biotope do? I want to build a graph from my data.
 

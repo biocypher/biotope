@@ -11,7 +11,7 @@ current flags and examples. This page shows how commands fit into the pipeline.
 
 - `biotope get <url>`: download a file, optionally into `--output-dir`, and
   track it unless you pass `--no-add`.
-- `biotope add <path>`: stage data files or rooted directories. Baker writes
+- `biotope add <path>`: stage data files or rooted directories. croissant-baker writes
   Croissant metadata under `.biotope/datasets/`. `--derived-from` records
   provenance for extracted files. For metadata that does not fit in CLI flags,
   such as citations or per-record-set fields, `add` also writes a

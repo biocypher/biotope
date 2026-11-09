@@ -59,14 +59,14 @@ data files
 ```
 
 `biotope add` uses
-[croissant-baker](https://github.com/biocypher/croissant-baker) to infer
+[croissant-baker](https://github.com/MIT-LCP/croissant-baker) to infer
 structural metadata where possible. Mapping connects Croissant record sets and
 fields to graph entities and relations. `build` compiles resolved mappings into
 BioCypher tuple streams.
 
 ## Semantic decisions and determinism
 
-Biotope catalogs fields, validates mappings, and previews tuples. A human or
+Biotope catalogues fields, validates mappings, and previews tuples. A human or
 agent chooses record sets, identifiers, transforms, entities, and relations.
 `build` rejects unresolved mapping slots and the removed `nodes`/`edges`
 mapping schema.

@@ -144,7 +144,7 @@ biotope annotate validate \
   --jsonld .biotope/datasets/data/report_tables.jsonld
 ```
 
-Keep the raw input for provenance. Add extracted, baker-supported artifacts
+Keep the raw input for provenance. Add extracted, baker-supported artefacts
 with `--derived-from`, then review their metadata before marking work complete.
 Plugin users can run this loop with the
 [`biotope-croissant` skill](plugin.md).

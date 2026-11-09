@@ -31,4 +31,4 @@ Chicago O'Hare International. A major hub for both United and American.
 ## SFO
 
 San Francisco International. United Airlines' primary trans-Pacific
-hub; also served as an Alaska Airlines focus city.
+hub and an Alaska Airlines focus city.

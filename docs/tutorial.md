@@ -11,8 +11,8 @@ extract those facts into a CSV, first as a manual task and then with an agent.
 Both paths produce the same file and use the same mapping.
 
 If you have the [biotope plugin](plugin.md) installed, jump to the
-[agent shortcut](#agent-shortcut) at the end. Invoke `/biotope-croissant` or
-ask your agent to help build the graph.
+[agent shortcut](#agent-shortcut) at the end. Invoke the `biotope-croissant`
+skill or ask your agent to help build the graph.
 
 ## Prerequisites
 
@@ -21,18 +21,21 @@ Recommended path: install the [biotope plugin](plugin.md) in your coding agent.
 To use the CLI directly, install it:
 
 ```bash
-uv add "biotope>=0.8.0"        # if in uv-managed venv
+uv add "biotope>=0.8.0"        # inside a uv-managed project
 # OR
 pipx install "biotope>=0.8.0"  # global installation
 ```
 
-You can also use `uvx biotope init` with no prior install. Below we use `uvx` for initialisation (from a parent directory) and `uv` inside the project. Substitute your own package workflow if you prefer.
+You can also run `uvx biotope init` with no prior install. This tutorial uses
+`uvx` to initialise the project (from the parent directory) and `uv run` inside
+it. Substitute your own package workflow if you prefer.
 
 ## 1. Initialise a project
 
-First run `biotope init` and choose a project name and purpose. For this
-tutorial, our name will be `airports` and our purpose is to "`Find which US airports are most connected and which airlines use them as their hubs.`".
-Or, fully CLI-based:
+`biotope init` asks for a project name and purpose. For this tutorial, the
+name is `airports` and the purpose is "Find which US airports are most
+connected and which airlines use them as their hubs." To skip the prompts, pass
+both on the command line:
 
 ```bash
 uvx biotope init airports \
@@ -43,11 +46,11 @@ cd airports
 
 This creates `.biotope/` (manifests + config), `data/` (empty; for your
 files), `mappings/` (empty; for the semantic mapping files), and a minimal
-`pyproject.toml`. A coding agent picks up the project contract from the
-biotope plugin skills (biotope-croissant → biocypher → biochatter). A fresh `git` repo is initialised in the same
-directory.
+`pyproject.toml`, and initialises a `git` repository in the same directory.
+A coding agent picks up the project contract from the biotope plugin skills
+(biotope-croissant → biocypher → biochatter).
 
-Finally, we have to install the venv for our new project:
+Then create the project's virtual environment:
 
 ```bash
 uv sync
@@ -181,8 +184,8 @@ mapped.
 ## 6. Declare what the graph should contain
 
 To represent the data according to our purpose, the graph should express a
-small, fixed vocabulary: this could be, for instance, two nouns (`airport`,
-`airline`) and two verbs (`number of flights`, `is hub for`).
+small, fixed vocabulary: two entities (`airport`, `airline`) and two relations
+(`number of flights`, `is hub for`).
 
 !!! info "Declaring intent"
 
@@ -300,8 +303,8 @@ one relation); the other two follow the same pattern.
 
         Record sets
         # │ Name             │ Fields
-        1 │ airports          │ iata, name, city, state, country, latitude, longitude
-        2 │ flights-airport   │ origin, destination, count
+        1 │ airports         │ iata, name, city, state, country, latitude, longitude
+        2 │ flights-airport  │ origin, destination, count
         Pick record set (1): 1
 
         Scan kind — (r)ow, (e)xplode one, (m)ulti-axis (r): r
@@ -362,7 +365,7 @@ one relation); the other two follow the same pattern.
         Croissant: 1
 
         Pick record set (1): 1            # airport-hubs
-        Scan kind (r/e/m) (r): r
+        Scan kind — (r)ow, (e)xplode one, (m)ulti-axis (r): r
 
         ── Source endpoint ──
         Entity: airport
@@ -383,7 +386,7 @@ one relation); the other two follow the same pattern.
 
         The `airport` endpoint reuses the entity already bound in the
         flights mapping. Both sides mint `iata:<code>` IDs, so
-        BioCypher dedups them at build. The `airline` endpoint is the
+        BioCypher deduplicates them at build. The `airline` endpoint is the
         first reference to that entity; bind its full properties when
         you do slot 2.
 
@@ -430,7 +433,7 @@ The flights mapping owns the rich Airport records (full properties); the
 airport-hubs mapping declares a *minimal* Airport (id only) so its
 `is_hub_for` relation has something to point at on the source side. Both
 mint Airport IDs the same way (`iata:<code>`), so BioCypher's writer
-dedups the two emissions into one Airport node per IATA code, merging
+deduplicates the two emissions into one Airport node per IATA code, merging
 properties from the richer side.
 
 ### Verify
@@ -501,7 +504,7 @@ targets. See the BioCypher docs for import instructions.
 
 Everything above is delegable. After `biotope init`, `cd` into the project,
 open your agent with the [biotope plugin](plugin.md) installed,
-invoke `/biotope-croissant` or say:
+invoke the `biotope-croissant` skill or say:
 
 > *What does biotope do? Help me build the KG.*
 

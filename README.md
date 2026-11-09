@@ -1,6 +1,6 @@
 # biotope
 
-Turn tables, CSVs, and mixed biomedical data into a queryable knowledge graph — with version-controlled metadata. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
+Turn tables, CSVs, and mixed biomedical data into a queryable knowledge graph, with version-controlled metadata. **Best used with a coding agent:** install the plugin, describe what you want the graph to answer, and let the agent run the pipeline.
 
 |         |                                                                                                                                                                                                                                                                                                                                              |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -11,15 +11,16 @@ Turn tables, CSVs, and mixed biomedical data into a queryable knowledge graph �
 
 ## Install the plugin
 
-Pick your agent harness. All paths use this repo: [github.com/biocypher/biotope](https://github.com/biocypher/biotope).
+Pick your coding agent. All paths use this repo: [github.com/biocypher/biotope](https://github.com/biocypher/biotope).
 
-| Harness | Setup |
+| Agent | Setup |
 | ------- | ----- |
 | **Claude Code** | `/plugin marketplace add biocypher/biotope` then `/plugin install biotope@biotope` |
 | **Cursor** | [Add a team marketplace](https://cursor.com/docs/plugins#add-a-team-marketplace) → import `biocypher/biotope` |
 | **Codex** | [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli) pointing at this repo |
+| **Other agents** | Copy the skills (see below) |
 
-**Skills only:** copy the folder(s) you need from [`skills/`](skills/) into your project — e.g. `.cursor/skills/`, `.claude/skills/`. Start with `biotope-croissant`; add `biocypher` or `biochatter` when you reach those stages.
+**Skills only:** copy the folders you need from [`skills/`](skills/) into the skills directory your agent reads (see its documentation). Start with `biotope-croissant`; add `biocypher` or `biochatter` when you reach those stages.
 
 ## Use it
 
@@ -31,7 +32,7 @@ The plugin ships three skills that chain as the pipeline progresses:
 | **biocypher** | Tuning export backends, schema config, Neo4j import |
 | **biochatter** | Natural-language queries over a loaded graph |
 
-You do not need to learn the CLI first. In chat, invoke a skill (e.g. `/biotope-croissant`) or just ask:
+You do not need to learn the CLI first. In chat, invoke the `biotope-croissant` skill (the syntax depends on your agent) or just ask:
 
 > *What does biotope do? I want to build a graph from my data.*
 
@@ -44,14 +45,14 @@ The agent reads the skill contract and runs `biotope` commands for you.
 If you prefer the terminal or need CI:
 
 ```bash
-uvx biotope init my-kg    # no install — ephemeral venv for scaffolding
+uvx biotope init my-kg    # no install; runs in a temporary environment
 pipx install biotope      # global install
-uv add biotope              # inside a uv-managed project
+uv add biotope            # inside a uv-managed project
 ```
 
 Typical flow: `init` → `add` (or `get`) → `map` → `build` → `view`. Command overview: [docs/commands.md](docs/commands.md).
 
-**Worked example:** [15-minute tutorial](docs/tutorial.md) — hands-on airport/flight knowledge graph, step by step in the terminal.
+**Worked example:** [15-minute tutorial](docs/tutorial.md): a hands-on airport/flight knowledge graph, step by step in the terminal.
 
 ## For developers
 
@@ -59,7 +60,7 @@ biotope is a CLI for the [BioCypher](https://biocypher.org/) ecosystem: Croissan
 
 | Layer | Module | Role |
 | ----- | ------ | ---- |
-| Project & VCS | `biotope.commands.*` | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` — metadata workflow |
+| Project & VCS | `biotope.commands.*` | `init`, `add`, `commit`, `status`, `log`, `push`, `pull` (metadata workflow) |
 | KG construction | `biotope.croissant.*` | Croissant → BioCypher project (`map`, `build`, `alignment`, …) |
 
 Agent contract lives in `skills/` (not `AGENTS.md`). `biotope.croissant.api` exposes pure functions; CLI verbs are thin wrappers. See [how biotope works](https://biocypher.github.io/biotope/architecture/) and the [command overview](https://biocypher.github.io/biotope/commands/).

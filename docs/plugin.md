@@ -23,9 +23,9 @@ API or MCP server is involved.
     [Add a marketplace from the CLI](https://developers.openai.com/codex/plugins/build#add-a-marketplace-from-the-cli)
     using `https://github.com/biocypher/biotope`.
 
-To install skills without the plugin, copy the folders you need from
-[`skills/`](https://github.com/biocypher/biotope/tree/main/skills) into your
-agent's skills directory, such as `.cursor/skills/` or `.claude/skills/`.
+For any other agent, or to install skills without the plugin, copy the folders
+you need from [`skills/`](https://github.com/biocypher/biotope/tree/main/skills)
+into the skills directory your agent reads (see its documentation).
 
 ## Choose a skill
 
@@ -40,8 +40,8 @@ those stages.
 
 ## Work with the agent
 
-Invoke `/biotope-croissant` to load the skill, or just describe the goal and
-let the agent trigger it:
+Invoke the `biotope-croissant` skill (the syntax depends on your agent, often
+`/biotope-croissant`), or describe the goal and let the agent load it:
 
 > Turn the CSVs in `data/` into a knowledge graph of genes and diseases.
 
