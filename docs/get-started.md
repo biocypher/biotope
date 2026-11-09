@@ -14,7 +14,7 @@ The plugin contains the `biotope-croissant` skill, which tells the agent how to 
 
 <!-- x-release-please-start-version -->
 ```text
-/plugin marketplace add biocypher/biotope#biotope-v1.0.1
+/plugin marketplace add biocypher/biotope#biotope-v1.0.2
 /plugin install biotope@biotope
 ```
 <!-- x-release-please-end -->

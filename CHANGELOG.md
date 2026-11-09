@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/biocypher/biotope/compare/biotope-v1.0.1...biotope-v1.0.2) (2026-11-09)
+
+
+### Documentation
+
+* fix typos, make agent setup agent-neutral, use British spelling ([#95](https://github.com/biocypher/biotope/issues/95)) ([e2239d6](https://github.com/biocypher/biotope/commit/e2239d653c18de034b909565be8e291bbcac7c51))
+
 ## [1.0.1](https://github.com/biocypher/biotope/compare/biotope-v1.0.0...biotope-v1.0.1) (2026-11-06)
 
 

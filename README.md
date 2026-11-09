@@ -23,7 +23,7 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a cod
 
     <!-- x-release-please-start-version -->
     ```text
-    /plugin marketplace add biocypher/biotope#biotope-v1.0.1
+    /plugin marketplace add biocypher/biotope#biotope-v1.0.2
     /plugin install biotope@biotope
     ```
     <!-- x-release-please-end -->
