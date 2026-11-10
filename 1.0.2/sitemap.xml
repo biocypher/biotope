@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/agent/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/cli/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/extraction/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/get-started/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/project/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/result/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+    <url>
+         <loc>https://biocypher.github.io/biotope/1.0.2/tutorial/</loc>
+         <lastmod>2026-11-10</lastmod>
+    </url>
+</urlset>
