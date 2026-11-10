@@ -8,7 +8,7 @@ Copy the example from the Biotope release and install its environment:
 
 <!-- x-release-please-start-version -->
 ```bash
-git clone --depth 1 --branch biotope-v1.0.1 https://github.com/biocypher/biotope.git
+git clone --depth 1 --branch biotope-v1.0.2 https://github.com/biocypher/biotope.git
 ```
 <!-- x-release-please-end -->
 
